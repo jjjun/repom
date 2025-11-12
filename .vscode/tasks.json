@@ -1,0 +1,160 @@
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Pytest/local",
+      "type": "shell",
+      "command": "poetry run pytest -q --pdb tests/test_local.py",
+      "group": {
+        "kind": "none",
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Pytest/benchmark",
+      "type": "shell",
+      "command": "poetry run pytest --benchmark-columns=mean,rounds,iterations --benchmark-only -m run_benchmark",
+      "group": {
+        "kind": "none",
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Pytest/all",
+      "type": "shell",
+      "command": "poetry run pytest tests/unit_tests; poetry run pytest tests/_mine_task; poetry run pytest tests/_sample",
+      "group": {
+        "kind": "test"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Pytest/custom",
+      "type": "shell",
+      // "command": "poetry run pytest -k 'test_ani_wiki_tv_list_'",
+      // "command": "poetry run pytest 'docs/pytest/tests/test_note1.py'",
+      // "command": "poetry run pytest -k 'test_note1.py or test_note2.py'",
+      // "command": "poetry run pytest 'docs/pytest/sample_スコープ/sample1.py' 'docs/pytest/sample_スコープ//sample2.py'",
+      "command": "poetry run pytest 'docs/pytest/sample_スコープ/sample5.py' 'docs/pytest/sample_スコープ/sample6.py'",
+      // "command": "poetry run pytest 'docs/pytest/sample_スコープ/sample1.py'",
+      "group": {
+        "kind": "test"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "⭐Pytest/mine_task",
+      "type": "shell",
+      // "command": "poetry run pytest tests/_mine_task",
+      // "command": "poetry run pytest tests/_mine_task/test_yt.py",
+      // "command": "poetry run pytest tests/_mine_task/test_task.py",
+      // "command": "poetry run pytest tests/_mine_task/test_rtx.py",
+      // "command": "poetry run pytest tests/_mine_task/test_fin.py",
+      // "command": "poetry run pytest tests/_mine_task/test_dropbox.py",
+      // "command": "poetry run pytest tests/_mine_task/test_ani_wiki.py",
+      // "command": "poetry run pytest tests/_mine_task/mixin/test_video_link_mixin.py",
+      "command": "poetry run pytest tests/_mine_task/test_ani_video.py",
+      // "command": "poetry run pytest tests/_mine_task/test_ani_jw.py",
+      "group": {
+        "kind": "test"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Pytest/sample",
+      "type": "shell",
+      "command": "poetry run pytest tests/_sample",
+      "group": {
+        "kind": "test",
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "⭐Pytest/unit_tests",
+      "type": "shell",
+      // "command": "poetry run pytest tests/unit_tests",
+      // "command": "poetry run pytest tests/unit_tests/test_model.py",
+      // "command": "poetry run pytest tests/unit_tests/test_repository.py",
+      // "command": "poetry run pytest tests/unit_tests/custom_types",
+      "command": "poetry run pytest tests/unit_tests/custom_types/test_listjson.py",
+      "group": {
+        "kind": "test",
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Poetry/db_create_master",
+      "type": "shell",
+      "command": "poetry run db_create_master",
+      "group": {
+        "kind": "none",
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "💾Poetry/db_backup",
+      "type": "shell",
+      "command": "poetry run db_backup",
+      "group": {
+        "kind": "none",
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Poetry/db_create",
+      "type": "shell",
+      "command": "$env:EXEC_ENV='dev'; poetry run db_create; $env:EXEC_ENV='prod'; poetry run db_create",
+      "group": {
+        "kind": "none",
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Poetry/db_delete",
+      "type": "shell",
+      "command": "poetry run db_delete",
+      "group": {
+        "kind": "none",
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🤖Poetry/scaffold",
+      "type": "shell",
+      "command": "poetry run scaffold",
+      "group": {
+        "kind": "none",
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Alembic/generate/migration_file",
+      "type": "shell",
+      "command": "poetry run alembic revision --autogenerate -m 'comment'",
+      "group": {
+        "kind": "none",
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Alembic/migration",
+      "type": "shell",
+      "command": "poetry run alembic upgrade head",
+      "group": {
+        "kind": "none",
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Alembic/migration/dev",
+      "type": "shell",
+      "command": "$env:EXEC_ENV='dev'; poetry run alembic upgrade head",
+      "group": {
+        "kind": "none",
+      },
+      "problemMatcher": []
+    },
+  ]
+}

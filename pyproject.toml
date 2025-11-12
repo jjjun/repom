@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "repom"
+version = "0.1.0"
+description = "Repository pattern + ORM utilities for FastAPI with automatic schema generation"
+authors = ["jj <soft.management943@gmail.com>"]
+readme = "README.md"
+packages = [{include = "repom"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+sqlalchemy = "^2.0.36"
+alembic = "^1.14.0"
+python-dotenv = "^1.0.1"
+inflect = "^7.5.0"
+pydantic = "^2.11.3"
+
+# 親プロジェクトの _ パッケージを追加
+underscore-utils = { path = "../../src/_", develop = true }
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+pytest-sqlalchemy = "^0.2.1"
+pytest-benchmark = "^5.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+db_create = "repom.scripts.db_create:main"
+db_remove = "repom.scripts.db_delete:main"
+db_backup = "repom.scripts.db_backup:main"
