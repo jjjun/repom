@@ -1,4 +1,4 @@
-"""Tests for BaseModelAuto with use_id and use_composite_pk"""
+"""Tests for BaseModelAuto with use_id フラグ"""
 
 from tests._init import *
 from sqlalchemy import Column, String, Integer, Date, Time, inspect
@@ -45,10 +45,10 @@ class AutoModelWithoutId(BaseModelAuto):
 
 
 class AutoModelWithCompositePK(BaseModelAuto):
-    """BaseModelAutoを継承し、use_composite_pk=Trueを指定したモデル"""
+    """BaseModelAutoを継承し、use_id=False で複合主キーを使用するモデル"""
     __tablename__ = 'auto_model_with_composite_pk'
 
-    use_composite_pk = True  # 複合主キーを使用
+    # use_id は BaseModelAuto のデフォルト (False) を継承
     use_created_at = True
     use_updated_at = True
 
@@ -124,11 +124,11 @@ def test_auto_model_without_id_primary_key():
 
 
 # ========================================
-# use_composite_pk=True のテスト
+# 複合主キー（use_id=False）のテスト
 # ========================================
 
 def test_auto_model_with_composite_pk_has_no_id_column():
-    """BaseModelAutoでuse_composite_pk=Trueの場合、idカラムが存在しないことを確認"""
+    """BaseModelAutoで複合主キーの場合、idカラムが存在しないことを確認"""
     mapper = inspect(AutoModelWithCompositePK)
     column_names = [col.key for col in mapper.columns]
 
@@ -144,7 +144,7 @@ def test_auto_model_with_composite_pk_has_no_id_column():
 
 
 def test_auto_model_with_composite_pk_primary_keys():
-    """BaseModelAutoでuse_composite_pk=Trueの場合、複合主キーが正しく設定されることを確認"""
+    """BaseModelAutoで複合主キーが正しく設定されることを確認"""
     mapper = inspect(AutoModelWithCompositePK)
     primary_keys = [col.name for col in mapper.primary_key]
 
@@ -158,7 +158,7 @@ def test_auto_model_with_composite_pk_primary_keys():
 
 
 def test_auto_model_with_composite_pk_database_structure(db_test):
-    """BaseModelAutoでuse_composite_pk=Trueのモデルがデータベースで正しく作成されることを確認"""
+    """BaseModelAutoで複合主キーのモデルがデータベースで正しく作成されることを確認"""
     from sqlalchemy import inspect as sqla_inspect
     from repom.db import engine
 

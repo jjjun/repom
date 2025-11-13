@@ -23,22 +23,46 @@ class BaseModel(Base):
     use_created_at = False
     # デフォルトでは updated_at を使用しない
     use_updated_at = False
-    # 複合主キーを使用する場合は True に設定（use_id より優先）
-    use_composite_pk = False
 
     # Pydanticレスポンススキーマのキャッシュ
     _response_schemas: Dict[str, Type[Any]] = {}
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(
+        cls,
+        use_id=None,
+        use_created_at=None,
+        use_updated_at=None,
+        **kwargs
+    ):
+        """
+        サブクラス作成時に呼ばれる。
+
+        クラス定義時にパラメータとして指定することで、デフォルト値を上書きできる：
+            class MyModel(BaseModel, use_id=False, use_created_at=True):
+                ...
+
+        または、従来通りクラス属性として指定することも可能：
+            class MyModel(BaseModel):
+                use_id = False
+                use_created_at = True
+
+        パラメータ指定が優先され、次にクラス属性、最後に親クラスの値が使われる。
+
+        複合主キーを使用する場合は use_id=False を指定し、
+        各カラムに primary_key=True を設定してください。
+        """
         super().__init_subclass__(**kwargs)
 
-        # 複合主キーの場合は id カラムを追加しない（最優先）
-        if cls.use_composite_pk:
-            # 既に id カラムが追加されている場合は削除
-            if hasattr(cls, 'id') and isinstance(getattr(cls, 'id', None), Column):
-                delattr(cls, 'id')
-        elif cls.use_id:
-            # 通常の id カラムを追加
+        # パラメータで明示的に指定された場合は上書き（最優先）
+        if use_id is not None:
+            cls.use_id = use_id
+        if use_created_at is not None:
+            cls.use_created_at = use_created_at
+        if use_updated_at is not None:
+            cls.use_updated_at = use_updated_at
+
+        # use_id が True の場合のみ id カラムを追加
+        if cls.use_id:
             cls.id = Column(Integer, primary_key=True)
 
         if cls.use_created_at:

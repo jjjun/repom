@@ -28,7 +28,7 @@ from repom.base_model import BaseModel
 from repom.db import inspect
 
 
-class BaseModelAuto(BaseModel):
+class BaseModelAuto(BaseModel, use_id=False, use_created_at=False, use_updated_at=False):
     """自動スキーマ生成機能を持つ BaseModel 拡張
 
     Column の info パラメータに以下のキーを指定することで、
@@ -44,19 +44,12 @@ class BaseModelAuto(BaseModel):
     - 明示的除外: info={'in_create': False} または info={'in_update': False}
 
     注意: 
-    - BaseModelAuto 自体は use_id=False を設定して id カラムを持たない。
-    - サブクラスで use_id=True を設定することで id を追加できる。
-    - 複合主キーの場合は use_composite_pk=True を設定する（use_id より優先）
+    - BaseModelAuto はデフォルトで use_id=False（id カラムを持たない）
+    - サブクラスで use_id=True を設定することで id を追加できる
+    - 複合主キーの場合は use_id=False を指定し、各カラムに primary_key=True を設定する
     """
 
     __abstract__ = True
-
-    # BaseModelAuto 自体は id を持たない（サブクラスで個別に設定可能）
-    use_id = False
-    use_created_at = False
-    use_updated_at = False
-    # 複合主キーのデフォルトは False（サブクラスで設定可能）
-    use_composite_pk = False
 
     # スキーマキャッシュ
     _create_schemas: Dict[str, Type[Any]] = {}

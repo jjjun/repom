@@ -24,10 +24,10 @@ class ModelWithId(BaseModel):
 
 
 class ModelWithCompositePK(BaseModel):
-    """use_composite_pk=Trueを指定したモデル（複合主キー）"""
+    """use_id=False で複合主キーを使用するモデル"""
     __tablename__ = 'model_with_composite_pk'
 
-    use_composite_pk = True  # 複合主キーを使用（use_idより優先）
+    use_id = False  # 複合主キーを使用
 
     date = Column(Date, primary_key=True)
     time = Column(Time, primary_key=True)
@@ -144,11 +144,11 @@ def test_model_with_id_to_dict():
 
 
 # ========================================
-# use_composite_pk のテスト
+# 複合主キー（use_id=False）のテスト
 # ========================================
 
 def test_model_with_composite_pk_has_no_id_column():
-    """use_composite_pk=Trueの場合、idカラムが存在しないことを確認"""
+    """use_id=False で複合主キーの場合、idカラムが存在しないことを確認"""
     mapper = inspect(ModelWithCompositePK)
     column_names = [col.key for col in mapper.columns]
 
@@ -161,7 +161,7 @@ def test_model_with_composite_pk_has_no_id_column():
 
 
 def test_model_with_composite_pk_primary_keys():
-    """use_composite_pk=Trueの場合、複合主キーが正しく設定されることを確認"""
+    """use_id=False で複合主キーが正しく設定されることを確認"""
     mapper = inspect(ModelWithCompositePK)
     primary_keys = [col.name for col in mapper.primary_key]
 
@@ -175,7 +175,7 @@ def test_model_with_composite_pk_primary_keys():
 
 
 def test_model_with_composite_pk_database_structure(db_test):
-    """use_composite_pk=Trueのモデルがデータベースで正しく作成されることを確認"""
+    """use_id=False で複合主キーのモデルがデータベースで正しく作成されることを確認"""
     from sqlalchemy import inspect as sqla_inspect
     from repom.db import engine
 
@@ -200,7 +200,7 @@ def test_model_with_composite_pk_database_structure(db_test):
 
 
 def test_model_with_composite_pk_to_dict():
-    """use_composite_pk=Trueのモデルのto_dict()にidが含まれないことを確認"""
+    """use_id=False で複合主キーのモデルのto_dict()にidが含まれないことを確認"""
     from datetime import date, time
     model = ModelWithCompositePK(
         date=date(2025, 11, 13),

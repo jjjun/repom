@@ -705,6 +705,8 @@ class MyModel(BaseModel):
 
 ### アプリ固有モデルの例
 
+#### 基本的なモデル定義
+
 ```python
 from sqlalchemy import Column, String
 from repom.base_model import BaseModel
@@ -727,6 +729,128 @@ class Task(BaseModel):
 - `use_updated_at = True` で `updated_at` カラムを追加
 - `to_dict()`: モデルを辞書に変換
 - `update_from_dict()`: 辞書からモデルを更新
+
+### カラム制御フラグの指定方法
+
+`BaseModel` では、`use_id`、`use_created_at`、`use_updated_at` の各フラグを使ってカラムの自動追加を制御できます。
+
+#### ✅ 推奨：パラメータ方式（新バージョン）
+
+クラス定義時にパラメータとして指定する方式です。特に**中間基底クラス**（`BaseModelAuto` など）を作成する際に推奨されます。
+
+```python
+from repom.base_model import BaseModel
+
+# 例1: ID とタイムスタンプを使用するモデル
+class User(BaseModel, use_id=True, use_created_at=True, use_updated_at=True):
+    __tablename__ = "users"
+    name = Column(String(100))
+    email = Column(String(255))
+
+# 例2: ID を使わないモデル（カスタム主キー）
+class Product(BaseModel, use_id=False):
+    __tablename__ = "products"
+    code = Column(String(50), primary_key=True)
+    name = Column(String(100))
+
+# 例3: 複合主キーを使うモデル（use_id=False で実現）
+class TimeBlock(BaseModel, use_id=False, use_created_at=True):
+    __tablename__ = "time_blocks"
+    date = Column(Date, primary_key=True)
+    start_time = Column(Time, primary_key=True)
+    activity = Column(String(100))
+
+# 例4: 拡張基底クラスを作る場合
+class MyCustomBase(BaseModel, use_id=False, use_created_at=True):
+    """カスタム基底クラス：デフォルトで ID なし、created_at あり"""
+    __abstract__ = True
+
+class MyModel(MyCustomBase):
+    """MyCustomBase を継承（use_id=False を継承）"""
+    __tablename__ = "my_models"
+    code = Column(String(50), primary_key=True)
+    name = Column(String(100))
+```
+
+**パラメータ方式のメリット:**
+- ✅ コードが簡潔（クラス本体に重複記述不要）
+- ✅ 継承関係が明確
+- ✅ 拡張基底クラスの作成が容易
+
+#### 従来方式：クラス属性による指定
+
+従来通り、クラス属性として指定することも可能です。既存のコードとの互換性があります。
+
+```python
+from repom.base_model import BaseModel
+
+# 例1: クラス属性で指定
+class Task(BaseModel):
+    __tablename__ = "tasks"
+    
+    use_id = True
+    use_created_at = True
+    use_updated_at = True
+    
+    title = Column(String(255), nullable=False)
+    description = Column(String, nullable=True)
+
+# 例2: ID を使わない
+class Config(BaseModel):
+    __tablename__ = "config"
+    
+    use_id = False
+    
+    key = Column(String(100), primary_key=True)
+    value = Column(String(500))
+
+# 例3: 複合主キー（use_id=False で実現）
+class Attendance(BaseModel):
+    __tablename__ = "attendance"
+    
+    use_id = False  # ID カラムを追加しない
+    
+    user_id = Column(Integer, primary_key=True)
+    date = Column(Date, primary_key=True)
+    hours = Column(Integer)
+```
+
+**従来方式のメリット:**
+- ✅ 既存コードとの互換性
+- ✅ 慣れた書き方で直感的
+
+#### 両方のスタイルの共存
+
+パラメータ方式と従来方式は**共存可能**です。プロジェクトのコーディング規約に合わせて選択してください。
+
+```python
+# パラメータ方式で継承し、クラス属性で上書きも可能
+class FlexibleModel(BaseModel, use_id=False):
+    __tablename__ = "flexible"
+    use_created_at = True  # クラス属性で追加指定
+    code = Column(String(50), primary_key=True)
+```
+
+#### 優先順位
+
+フラグの優先順位は以下の通りです：
+
+1. **パラメータ方式**（クラス定義時の引数）
+2. **クラス属性**（クラス本体での定義）
+3. **親クラスから継承された値**
+
+#### フラグの説明
+
+| フラグ | 説明 | デフォルト値 |
+|--------|------|-------------|
+| `use_id` | 整数型の `id` カラム（主キー）を自動追加 | `True` |
+| `use_created_at` | `created_at` カラムを自動追加 | `False` |
+| `use_updated_at` | `updated_at` カラムを自動追加 | `False` |
+
+**複合主キーについて:**
+- 複合主キーを使う場合は `use_id=False` を指定してください
+- 手動で複数のカラムに `primary_key=True` を設定します
+- 例: `date = Column(Date, primary_key=True)` と `time = Column(Time, primary_key=True)`
 
 ### リポジトリクラスの例
 
