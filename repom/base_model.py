@@ -184,14 +184,6 @@ class BaseModel(Base):
         # フィールド定義を収集
         field_definitions = {}
 
-        # SQLAlchemy マッパーを事前に初期化（relationship 解決問題を防ぐ）
-        from sqlalchemy.orm import configure_mappers
-        try:
-            configure_mappers()
-        except Exception:
-            # 既に設定済みの場合やその他の問題はスキップ
-            pass
-
         # 1. カラムフィールド（SQLAlchemy から自動取得）
         for column in inspect(cls).mapper.column_attrs:
             col = column.columns[0]
