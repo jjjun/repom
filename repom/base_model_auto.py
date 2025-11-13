@@ -43,10 +43,10 @@ class BaseModelAuto(BaseModel, use_id=False, use_created_at=False, use_updated_a
     - 外部キー: *_id (ForeignKey を持つカラム)
     - 明示的除外: info={'in_create': False} または info={'in_update': False}
 
-    注意: 
-    - BaseModelAuto はデフォルトで use_id=False（id カラムを持たない）
-    - サブクラスで use_id=True を設定することで id を追加できる
-    - 複合主キーの場合は use_id=False を指定し、各カラムに primary_key=True を設定する
+    注意:
+    - BaseModelAuto はデフォルトで use_id=False, use_created_at=False, use_updated_at=False
+    - サブクラスで必要に応じて use_id=True などを指定可能
+    - 複合主キーの場合は use_id=False のまま、各カラムに primary_key=True を設定する
     """
 
     __abstract__ = True

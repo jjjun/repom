@@ -6,13 +6,9 @@ from tests.db_test_fixtures import db_test
 from repom.base_model_auto import BaseModelAuto
 
 
-class AutoModelWithId(BaseModelAuto):
+class AutoModelWithId(BaseModelAuto, use_id=True, use_created_at=True, use_updated_at=True):
     """BaseModelAutoを継承し、use_id=Trueを指定したモデル"""
     __tablename__ = 'auto_model_with_id'
-
-    use_id = True  # IDカラムを使用
-    use_created_at = True
-    use_updated_at = True
 
     name = Column(
         String(100),
@@ -27,10 +23,8 @@ class AutoModelWithId(BaseModelAuto):
 
 
 class AutoModelWithoutId(BaseModelAuto):
-    """BaseModelAutoを継承し、use_id=Falseを指定したモデル（デフォルト）"""
+    """BaseModelAutoを継承し、デフォルトのuse_id=Falseを使用したモデル"""
     __tablename__ = 'auto_model_without_id'
-
-    # use_id は BaseModelAuto のデフォルト (False) を継承
 
     code = Column(
         String(50),
@@ -44,13 +38,9 @@ class AutoModelWithoutId(BaseModelAuto):
     )
 
 
-class AutoModelWithCompositePK(BaseModelAuto):
-    """BaseModelAutoを継承し、use_id=False で複合主キーを使用するモデル"""
+class AutoModelWithCompositePK(BaseModelAuto, use_created_at=True, use_updated_at=True):
+    """BaseModelAutoを継承し、複合主キーを使用するモデル（use_id=Falseはデフォルト）"""
     __tablename__ = 'auto_model_with_composite_pk'
-
-    # use_id は BaseModelAuto のデフォルト (False) を継承
-    use_created_at = True
-    use_updated_at = True
 
     date = Column(
         Date,
@@ -102,7 +92,7 @@ def test_auto_model_with_id_primary_key():
 # ========================================
 
 def test_auto_model_without_id_has_no_id_column():
-    """BaseModelAutoでuse_id=False（デフォルト）の場合、idカラムが存在しないことを確認"""
+    """BaseModelAutoはデフォルトでuse_id=Falseなので、idカラムが存在しないことを確認"""
     mapper = inspect(AutoModelWithoutId)
     column_names = [col.key for col in mapper.columns]
 
