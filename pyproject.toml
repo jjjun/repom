@@ -14,9 +14,6 @@ python-dotenv = "^1.0.1"
 inflect = "^7.5.0"
 pydantic = "^2.11.3"
 
-# 親プロジェクトの _ パッケージを追加
-# underscore-utils = { path = "../../src/_", develop = true }
-
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.4"
 pytest-sqlalchemy = "^0.2.1"
