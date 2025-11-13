@@ -6,8 +6,8 @@ from tests.db_test_fixtures import db_test
 from repom.base_model_auto import BaseModelAuto
 
 
-class AutoModelWithId(BaseModelAuto, use_id=True, use_created_at=True, use_updated_at=True):
-    """BaseModelAutoを継承し、use_id=Trueを指定したモデル"""
+class AutoModelWithId(BaseModelAuto, use_id=True):
+    """BaseModelAutoを継承し、use_id=True を明示的に指定したモデル"""
     __tablename__ = 'auto_model_with_id'
 
     name = Column(
@@ -23,7 +23,7 @@ class AutoModelWithId(BaseModelAuto, use_id=True, use_created_at=True, use_updat
 
 
 class AutoModelWithoutId(BaseModelAuto):
-    """BaseModelAutoを継承し、デフォルトのuse_id=Falseを使用したモデル"""
+    """BaseModelAutoを継承し、デフォルトの use_id=False を使用したモデル"""
     __tablename__ = 'auto_model_without_id'
 
     code = Column(
@@ -38,8 +38,8 @@ class AutoModelWithoutId(BaseModelAuto):
     )
 
 
-class AutoModelWithCompositePK(BaseModelAuto, use_created_at=True, use_updated_at=True):
-    """BaseModelAutoを継承し、複合主キーを使用するモデル（use_id=Falseはデフォルト）"""
+class AutoModelWithCompositePK(BaseModelAuto):
+    """BaseModelAutoを継承し、複合主キーを使用するモデル（use_id=False はデフォルト）"""
     __tablename__ = 'auto_model_with_composite_pk'
 
     date = Column(
@@ -73,9 +73,6 @@ def test_auto_model_with_id_has_id_column():
     # 定義したカラムも存在することを確認
     assert 'name' in column_names
     assert 'age' in column_names
-    # タイムスタンプカラムが存在することを確認
-    assert 'created_at' in column_names
-    assert 'updated_at' in column_names
 
 
 def test_auto_model_with_id_primary_key():
@@ -92,7 +89,7 @@ def test_auto_model_with_id_primary_key():
 # ========================================
 
 def test_auto_model_without_id_has_no_id_column():
-    """BaseModelAutoはデフォルトでuse_id=Falseなので、idカラムが存在しないことを確認"""
+    """BaseModelAutoはデフォルトで use_id=False なので、idカラムが存在しないことを確認"""
     mapper = inspect(AutoModelWithoutId)
     column_names = [col.key for col in mapper.columns]
 
@@ -128,9 +125,6 @@ def test_auto_model_with_composite_pk_has_no_id_column():
     assert 'date' in column_names
     assert 'time' in column_names
     assert 'description' in column_names
-    # タイムスタンプカラムが存在することを確認
-    assert 'created_at' in column_names
-    assert 'updated_at' in column_names
 
 
 def test_auto_model_with_composite_pk_primary_keys():

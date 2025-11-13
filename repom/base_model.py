@@ -9,6 +9,10 @@ from repom.custom_types.CreatedAt import CreatedAt
 _EXTRA_FIELDS_REGISTRY: WeakKeyDictionary[type, Dict[str, Any]] = WeakKeyDictionary()
 
 
+# センチネル値（パラメータが指定されていないことを示す）
+_UNSET = object()
+
+
 class BaseModel(Base):
     """
     モデルの基底クラス
@@ -17,48 +21,47 @@ class BaseModel(Base):
     # このクラスは抽象基底クラスとして定義する際に abstract=True を指定する
     __abstract__ = True
 
-    # デフォルトで id を使用する
-    use_id = True
-    # デフォルトでは created_at を使用しない
-    use_created_at = False
-    # デフォルトでは updated_at を使用しない
-    use_updated_at = False
-
     # Pydanticレスポンススキーマのキャッシュ
     _response_schemas: Dict[str, Type[Any]] = {}
 
     def __init_subclass__(
         cls,
-        use_id=None,
-        use_created_at=None,
-        use_updated_at=None,
+        use_id=_UNSET,
+        use_created_at=_UNSET,
+        use_updated_at=_UNSET,
         **kwargs
     ):
         """
         サブクラス作成時に呼ばれる。
 
-        クラス定義時にパラメータとして指定することで、デフォルト値を上書きできる：
+        クラス定義時にパラメータとして指定することで、デフォルト値を制御できる：
             class MyModel(BaseModel, use_id=False, use_created_at=True):
                 ...
 
-        または、従来通りクラス属性として指定することも可能：
-            class MyModel(BaseModel):
-                use_id = False
-                use_created_at = True
-
-        パラメータ指定が優先され、次にクラス属性、最後に親クラスの値が使われる。
+        デフォルト値:
+        - use_id: True（自動採番の id カラムを追加）
+        - use_created_at: False（created_at カラムを追加しない）
+        - use_updated_at: False（updated_at カラムを追加しない）
 
         複合主キーを使用する場合は use_id=False を指定し、
         各カラムに primary_key=True を設定してください。
         """
         super().__init_subclass__(**kwargs)
 
-        # パラメータで明示的に指定された場合は上書き（最優先）
-        if use_id is not None:
+        # パラメータが指定されていない場合は親クラスの値を継承、なければデフォルト値を使用
+        if use_id is _UNSET:
+            cls.use_id = getattr(cls, 'use_id', True)
+        else:
             cls.use_id = use_id
-        if use_created_at is not None:
+
+        if use_created_at is _UNSET:
+            cls.use_created_at = getattr(cls, 'use_created_at', False)
+        else:
             cls.use_created_at = use_created_at
-        if use_updated_at is not None:
+
+        if use_updated_at is _UNSET:
+            cls.use_updated_at = getattr(cls, 'use_updated_at', False)
+        else:
             cls.use_updated_at = use_updated_at
 
         # use_id が True の場合のみ id カラムを追加

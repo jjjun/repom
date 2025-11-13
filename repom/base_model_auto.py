@@ -28,7 +28,7 @@ from repom.base_model import BaseModel
 from repom.db import inspect
 
 
-class BaseModelAuto(BaseModel, use_id=False, use_created_at=False, use_updated_at=False):
+class BaseModelAuto(BaseModel, use_id=False):
     """自動スキーマ生成機能を持つ BaseModel 拡張
 
     Column の info パラメータに以下のキーを指定することで、
@@ -44,9 +44,9 @@ class BaseModelAuto(BaseModel, use_id=False, use_created_at=False, use_updated_a
     - 明示的除外: info={'in_create': False} または info={'in_update': False}
 
     注意:
-    - BaseModelAuto はデフォルトで use_id=False, use_created_at=False, use_updated_at=False
-    - サブクラスで必要に応じて use_id=True などを指定可能
-    - 複合主キーの場合は use_id=False のまま、各カラムに primary_key=True を設定する
+    - BaseModelAuto はデフォルトで use_id=False（SQLAlchemyのカラム継承制約により明示的に指定）
+    - サブクラスで use_id=True を指定することで id カラムを追加可能
+    - 複合主キーの場合は use_id=False のまま（指定不要）、各カラムに primary_key=True を設定する
     """
 
     __abstract__ = True
