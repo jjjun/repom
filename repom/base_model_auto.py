@@ -43,8 +43,10 @@ class BaseModelAuto(BaseModel):
     - 外部キー: *_id (ForeignKey を持つカラム)
     - 明示的除外: info={'in_create': False} または info={'in_update': False}
 
-    注意: BaseModelAuto 自体は use_id=False を設定して id カラムを持たない。
-    サブクラスで use_id=True を設定することで id を追加できる。
+    注意: 
+    - BaseModelAuto 自体は use_id=False を設定して id カラムを持たない。
+    - サブクラスで use_id=True を設定することで id を追加できる。
+    - 複合主キーの場合は use_composite_pk=True を設定する（use_id より優先）
     """
 
     __abstract__ = True
@@ -53,6 +55,8 @@ class BaseModelAuto(BaseModel):
     use_id = False
     use_created_at = False
     use_updated_at = False
+    # 複合主キーのデフォルトは False（サブクラスで設定可能）
+    use_composite_pk = False
 
     # スキーマキャッシュ
     _create_schemas: Dict[str, Type[Any]] = {}
