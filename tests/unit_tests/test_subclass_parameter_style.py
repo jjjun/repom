@@ -87,8 +87,14 @@ class ModelFromCustomBaseParamOverride(CustomBaseParam, use_id=True):
 # ===== BaseModelAuto のテスト =====
 
 class ModelFromAutoDefault(BaseModelAuto):
-    """BaseModelAuto のデフォルト（use_id=False）を継承"""
+    """BaseModelAuto のデフォルト（use_id=True）を継承"""
     __tablename__ = "model_from_auto_default"
+    name = Column(String(100))
+
+
+class ModelFromAutoWithoutId(BaseModelAuto, use_id=False):
+    """BaseModelAuto を継承し、パラメータで use_id=False"""
+    __tablename__ = "model_from_auto_without_id"
     code = Column(String(50), primary_key=True)
     name = Column(String(100))
 
@@ -205,9 +211,9 @@ def test_custom_base_param_override():
 # ===== BaseModelAuto のテスト =====
 
 def test_base_model_auto_default_no_id():
-    """BaseModelAuto のデフォルト（use_id=False）を継承した場合、id がない"""
-    assert not hasattr(ModelFromAutoDefault, 'id') or ModelFromAutoDefault.id is None
-    assert 'id' not in [col.name for col in ModelFromAutoDefault.__table__.columns]
+    """BaseModelAuto のデフォルト（use_id=True）を継承した場合、id がある"""
+    assert hasattr(ModelFromAutoDefault, 'id')
+    assert 'id' in [col.name for col in ModelFromAutoDefault.__table__.columns]
 
 
 def test_base_model_auto_with_id_classattr():

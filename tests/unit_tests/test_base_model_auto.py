@@ -6,8 +6,8 @@ from tests.db_test_fixtures import db_test
 from repom.base_model_auto import BaseModelAuto
 
 
-class AutoModelWithId(BaseModelAuto, use_id=True):
-    """BaseModelAutoを継承し、use_id=True を明示的に指定したモデル"""
+class AutoModelWithId(BaseModelAuto):
+    """BaseModelAutoを継承し、デフォルトの use_id=True を使用したモデル"""
     __tablename__ = 'auto_model_with_id'
 
     name = Column(
@@ -22,8 +22,8 @@ class AutoModelWithId(BaseModelAuto, use_id=True):
     )
 
 
-class AutoModelWithoutId(BaseModelAuto):
-    """BaseModelAutoを継承し、デフォルトの use_id=False を使用したモデル"""
+class AutoModelWithoutId(BaseModelAuto, use_id=False):
+    """BaseModelAutoを継承し、use_id=False を明示的に指定したモデル"""
     __tablename__ = 'auto_model_without_id'
 
     code = Column(
@@ -38,8 +38,8 @@ class AutoModelWithoutId(BaseModelAuto):
     )
 
 
-class AutoModelWithCompositePK(BaseModelAuto):
-    """BaseModelAutoを継承し、複合主キーを使用するモデル（use_id=False はデフォルト）"""
+class AutoModelWithCompositePK(BaseModelAuto, use_id=False):
+    """BaseModelAutoを継承し、複合主キーを使用するモデル（use_id=False を明示的に指定）"""
     __tablename__ = 'auto_model_with_composite_pk'
 
     date = Column(

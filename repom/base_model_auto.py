@@ -28,7 +28,7 @@ from repom.base_model import BaseModel
 from repom.db import inspect
 
 
-class BaseModelAuto(BaseModel, use_id=False):
+class BaseModelAuto(BaseModel):
     """自動スキーマ生成機能を持つ BaseModel 拡張
 
     Column の info パラメータに以下のキーを指定することで、
@@ -43,11 +43,23 @@ class BaseModelAuto(BaseModel, use_id=False):
     - 外部キー: *_id (ForeignKey を持つカラム)
     - 明示的除外: info={'in_create': False} または info={'in_update': False}
 
+    使用例:
+        # 通常モデル（id カラムあり、デフォルト）
+        class User(BaseModelAuto):
+            __tablename__ = 'users'
+            name = Column(String(100), info={'in_create': True, 'in_update': True})
+
+        # 複合主キーモデル（id カラムなし）
+        class OrderItem(BaseModelAuto, use_id=False):
+            __tablename__ = 'order_items'
+            order_id = Column(Integer, primary_key=True)
+            product_id = Column(Integer, primary_key=True)
+
     注意:
-    - BaseModelAuto はデフォルトで use_id=False（SQLAlchemyのカラム継承制約により明示的に指定）
-    - サブクラスで use_id=True を指定することで id カラムを追加可能
-    - 複合主キーの場合は use_id=False のまま（指定不要）、各カラムに primary_key=True を設定する
+    - BaseModelAuto は抽象クラスなので、カラム継承の問題は発生しません
+    - サブクラスで use_id=False を指定すれば、id カラムは追加されません
     """
+    __abstract__ = True
 
     __abstract__ = True
 

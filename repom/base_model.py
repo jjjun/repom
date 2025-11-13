@@ -45,6 +45,11 @@ class BaseModel(Base):
 
         複合主キーを使用する場合は use_id=False を指定し、
         各カラムに primary_key=True を設定してください。
+
+        重要:
+        - 抽象クラス（__tablename__ がないクラス）にはカラムを追加しません
+        - 具象クラス（__tablename__ を持つクラス）のみカラムを追加します
+        - これにより、中間の抽象クラスでカラム継承の問題を回避できます
         """
         super().__init_subclass__(**kwargs)
 
@@ -64,7 +69,15 @@ class BaseModel(Base):
         else:
             cls.use_updated_at = use_updated_at
 
-        # use_id が True の場合のみ id カラムを追加
+        # 重要: 抽象クラス（__tablename__ がない）にはカラムを追加しない
+        # 具象クラス（__tablename__ がある）のみカラムを追加する
+        # これにより、中間の抽象クラスで use_id=False を指定しても、
+        # そのサブクラスで use_id=True を指定できるようになる
+        if not hasattr(cls, '__tablename__'):
+            # 抽象クラスなので、カラムを追加せずに終了
+            return
+
+        # 具象クラスのみ、use_id が True の場合に id カラムを追加
         if cls.use_id:
             cls.id = Column(Integer, primary_key=True)
 
