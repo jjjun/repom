@@ -1,4 +1,4 @@
-from mine_db.config import config
+from repom.config import config
 import os
 import shutil
 from datetime import datetime

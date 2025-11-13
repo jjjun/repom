@@ -3,7 +3,7 @@ from sqlalchemy import Column, Integer, inspect
 from datetime import datetime
 
 from tests.db_test_fixtures import db_test
-from mine_db.base_model import BaseModel
+from repom.base_model import BaseModel
 
 
 class CreatedAtModel(BaseModel):

@@ -5,8 +5,8 @@ from sqlalchemy import (
 )
 from datetime import datetime
 
-from mine_db.base_model import BaseModel
-from mine_db.utility import get_plural_tablename
+from repom.base_model import BaseModel
+from repom.utility import get_plural_tablename
 
 
 class SampleModel(BaseModel):

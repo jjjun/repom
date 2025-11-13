@@ -1,6 +1,8 @@
-"""Tests for :mod:`mine_db.config`."""
+"""Tests for :mod:`repom.config`."""
 
 from __future__ import annotations
+from repom.config import MineDbConfig
+import pytest
 
 from pathlib import Path
 import sys
@@ -9,10 +11,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.append(str(SRC_PATH))
-
-import pytest
-
-from mine_db.config import MineDbConfig
 
 
 @pytest.fixture()
@@ -30,7 +28,7 @@ def test_db_path_defaults_to_data_path(config_factory, tmp_path):
 
     config = config_factory()
 
-    expected_default = Path(tmp_path) / "data" / "mine_db"
+    expected_default = Path(tmp_path) / "data" / "repom"
     assert config.db_path == str(expected_default)
 
     override = tmp_path / "custom_db"
@@ -101,4 +99,3 @@ def test_db_backup_path_defaults_to_backups_dir(config_factory, tmp_path):
     override = tmp_path / "custom_backups"
     config.db_backup_path = str(override)
     assert config.db_backup_path == str(override)
-

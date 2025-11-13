@@ -9,7 +9,7 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 # from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import declarative_base
 
-from mine_db.config import config
+from repom.config import config
 
 engine = create_engine(config.db_url)
 

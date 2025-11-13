@@ -1,8 +1,8 @@
 from typing import Optional, Union, List, Callable
 from sqlalchemy import select, desc, and_
-from mine_db._sample.models.sample import SampleModel
-from mine_db.base_repository import BaseRepository, FilterParams
-from mine_db.db import db_session
+from repom.models.sample import SampleModel
+from repom.base_repository import BaseRepository, FilterParams
+from repom.db import db_session
 
 
 class SampleFilterParams(FilterParams):

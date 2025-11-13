@@ -1,10 +1,10 @@
 from tests._init import *
 from sqlalchemy import Column, Integer, func
 from sqlalchemy.exc import StatementError
-from mine_db.custom_types.ListJSON import ListJSON, listjson_filter
+from repom.custom_types.ListJSON import ListJSON, listjson_filter
 from tests.db_test_fixtures import db_test
-from mine_db.base_model import BaseModel
-from mine_db.base_repository import BaseRepository, FilterParams
+from repom.base_model import BaseModel
+from repom.base_repository import BaseRepository, FilterParams
 from typing import Optional, List
 
 

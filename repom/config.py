@@ -5,7 +5,10 @@ from pathlib import Path
 from typing import Optional
 
 from pathlib import Path
-from _.ConfigHook import load_hook_function, get_config_from_hook, Config
+try:
+    from _.config_hook import load_hook_function, get_config_from_hook, Config
+except ImportError:
+    from repom.config_hook import load_hook_function, get_config_from_hook, Config
 from dataclasses import dataclass, field
 
 
@@ -21,19 +24,19 @@ def load_models() -> None:
     # Importing the ``models`` package has the side-effect of registering every
     # SQLAlchemy model defined by the application.  The import is intentionally
     # local so the module is only loaded when the CLI needs it.
-    from mine_db import models  # noqa: F401  # pylint: disable=unused-import
+    from repom import models  # noqa: F401  # pylint: disable=unused-import
 
 
 @dataclass
 class MineDbConfig(Config):
-    package_name: str = field(default="mine_db", init=False)
+    package_name: str = field(default="repom", init=False)
 
     _alembic_path: Optional[str] = field(default=None, init=False, repr=False)
     # デフォルトで ALEMBIC_PATH / versions に入る
     _alembic_versions_path: Optional[str] = field(default=None, init=False, repr=False)
 
     # モデルが格納されてるディレクトリ
-    set_models_hook: Optional[str] = field(default='mine_db.config:load_models', init=False, repr=False)
+    set_models_hook: Optional[str] = field(default='repom.config:load_models', init=False, repr=False)
 
     # DBの格納ディレクトリ (デフォルトで data_path に入る)
     _db_path: Optional[str] = field(default=None, init=False, repr=False)

@@ -2,8 +2,8 @@ import json
 from typing import Callable, Type, Any, Dict, Optional
 from weakref import WeakKeyDictionary
 from sqlalchemy import Column, Integer
-from mine_db.db import Base, inspect
-from mine_db.custom_types.CreatedAt import CreatedAt
+from repom.db import Base, inspect
+from repom.custom_types.CreatedAt import CreatedAt
 
 # グローバルレジストリ: クラスオブジェクトをキーとして extra response fields を管理
 _EXTRA_FIELDS_REGISTRY: WeakKeyDictionary[type, Dict[str, Any]] = WeakKeyDictionary()
@@ -23,14 +23,24 @@ class BaseModel(Base):
     use_created_at = False
     # デフォルトでは updated_at を使用しない
     use_updated_at = False
+    # 複合主キーを使用する場合は True に設定（use_id より優先）
+    use_composite_pk = False
 
     # Pydanticレスポンススキーマのキャッシュ
     _response_schemas: Dict[str, Type[Any]] = {}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        if cls.use_id:
+
+        # 複合主キーの場合は id カラムを追加しない（最優先）
+        if cls.use_composite_pk:
+            # 既に id カラムが追加されている場合は削除
+            if hasattr(cls, 'id') and isinstance(getattr(cls, 'id', None), Column):
+                delattr(cls, 'id')
+        elif cls.use_id:
+            # 通常の id カラムを追加
             cls.id = Column(Integer, primary_key=True)
+
         if cls.use_created_at:
             cls.created_at = Column(CreatedAt)
         if cls.use_updated_at:

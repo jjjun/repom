@@ -11,8 +11,8 @@ from tests.utils import (
     save_model_instances
 )
 from tests.db_test_fixtures import db_test
-from mine_db.db import Base
-from mine_db.db import db_session
+from repom.db import Base
+from repom.db import db_session
 
 
 """

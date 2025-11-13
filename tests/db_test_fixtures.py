@@ -1,7 +1,7 @@
 import pytest
-from mine_db.db import db_session
-from mine_db.scripts.db_create import main as db_create
-from mine_db.scripts.db_delete import main as db_delete
+from repom.db import db_session
+from repom.scripts.db_create import main as db_create
+from repom.scripts.db_delete import main as db_delete
 
 """
 scope
