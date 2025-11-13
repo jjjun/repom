@@ -61,8 +61,6 @@ class BaseModelAuto(BaseModel):
     """
     __abstract__ = True
 
-    __abstract__ = True
-
     # スキーマキャッシュ
     _create_schemas: Dict[str, Type[Any]] = {}
     _update_schemas: Dict[str, Type[Any]] = {}

@@ -34,8 +34,18 @@ class BaseModel(Base):
         """
         サブクラス作成時に呼ばれる。
 
-        クラス定義時にパラメータとして指定することで、デフォルト値を制御できる：
+        クラス定義時にパラメータまたはクラス属性で指定することで、デフォルト値を制御できます。
+
+        パラメータ方式（推奨）:
             class MyModel(BaseModel, use_id=False, use_created_at=True):
+                __tablename__ = 'my_table'
+                ...
+
+        クラス属性方式（従来の方法）:
+            class MyModel(BaseModel):
+                __tablename__ = 'my_table'
+                use_id = False
+                use_created_at = True
                 ...
 
         デフォルト値:
@@ -50,6 +60,8 @@ class BaseModel(Base):
         - 抽象クラス（__tablename__ がないクラス）にはカラムを追加しません
         - 具象クラス（__tablename__ を持つクラス）のみカラムを追加します
         - これにより、中間の抽象クラスでカラム継承の問題を回避できます
+        - パラメータ方式とクラス属性方式の両方がサポートされます
+        - パラメータが指定された場合、パラメータが優先されます
         """
         super().__init_subclass__(**kwargs)
 
