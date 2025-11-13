@@ -11,7 +11,7 @@ from sqlalchemy import (
     text,
 )
 from tests.db_test_fixtures import db_test
-from mine_db.db import engine, inspector, db_session, Base
+from repom.db import engine, inspector, db_session, Base
 
 
 """

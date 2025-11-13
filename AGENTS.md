@@ -1,8 +1,8 @@
-# AGENTS.md - mine_db Project
+# AGENTS.md - repom Project
 
 ## Project Overview
 
-**mine_db** ships a shared SQLAlchemy foundation (base model, repository, static helpers, and utilities) that applications can extend to suit their own domains. App-specific models and repositories have intentionally been removed from this package.
+**repom** ships a shared SQLAlchemy foundation (base model, repository, static helpers, and utilities) that applications can extend to suit their own domains. App-specific models and repositories have intentionally been removed from this package.
 
 ## Technology Stack
 
@@ -16,8 +16,8 @@
 ## Project Structure
 
 ```
-mine_db/
-├── mine_db/                    # Main package
+repom/
+├── repom/                      # Main package
 │   ├── custom_types/          # Reusable custom SQLAlchemy types
 │   ├── scripts/               # CLI scripts (Poetry entry points)
 │   ├── base_model.py          # Base SQLAlchemy model helpers
@@ -103,8 +103,8 @@ poetry run pytest tests/behavior_tests
 
 ## Configuration
 
-- **Database Config**: `mine_db/config.py`
-- **Database Connection**: `mine_db/db.py`
+- **Database Config**: `repom/config.py`
+- **Database Connection**: `repom/db.py`
 - **Alembic Config**: `alembic.ini` and `alembic/env.py`
 - **Test Config**: `pytest.ini` and `tests/conftest.py`
 

@@ -1,5 +1,5 @@
-from mine_db.db import db_session
-from mine_db.config import load_set_model_hook_function
+from repom.db import db_session
+from repom.config import load_set_model_hook_function
 
 
 def main():

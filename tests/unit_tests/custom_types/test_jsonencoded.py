@@ -1,9 +1,9 @@
 from tests._init import *
 from sqlalchemy import Column, Integer
 from sqlalchemy.exc import StatementError
-from mine_db.custom_types.JSONEncoded import JSONEncoded
+from repom.custom_types.JSONEncoded import JSONEncoded
 from tests.db_test_fixtures import db_test
-from mine_db.base_model import BaseModel
+from repom.base_model import BaseModel
 from datetime import datetime
 
 

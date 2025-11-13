@@ -15,7 +15,7 @@ inflect = "^7.5.0"
 pydantic = "^2.11.3"
 
 # 親プロジェクトの _ パッケージを追加
-underscore-utils = { path = "../../src/_", develop = true }
+# underscore-utils = { path = "../../src/_", develop = true }
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.4"

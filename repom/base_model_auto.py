@@ -24,8 +24,8 @@
 
 from typing import Type, Any, Optional, Dict, List
 from pydantic import BaseModel as PydanticBaseModel, create_model, Field
-from mine_db.base_model import BaseModel
-from mine_db.db import inspect
+from repom.base_model import BaseModel
+from repom.db import inspect
 
 
 class BaseModelAuto(BaseModel):

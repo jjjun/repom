@@ -1,4 +1,4 @@
-from mine_db.models.sample import SampleModel
+from repom.models.sample import SampleModel
 
 __all__ = [
     "SampleModel",

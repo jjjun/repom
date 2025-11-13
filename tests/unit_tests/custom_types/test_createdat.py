@@ -1,8 +1,8 @@
 from tests._init import *
 from sqlalchemy import Column, Integer
-from mine_db.custom_types.CreatedAt import CreatedAt
+from repom.custom_types.CreatedAt import CreatedAt
 from tests.db_test_fixtures import db_test
-from mine_db.base_model import BaseModel
+from repom.base_model import BaseModel
 from datetime import datetime, timedelta
 
 

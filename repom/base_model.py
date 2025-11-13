@@ -2,8 +2,8 @@ import json
 from typing import Callable, Type, Any, Dict, Optional
 from weakref import WeakKeyDictionary
 from sqlalchemy import Column, Integer
-from mine_db.db import Base, inspect
-from mine_db.custom_types.CreatedAt import CreatedAt
+from repom.db import Base, inspect
+from repom.custom_types.CreatedAt import CreatedAt
 
 # グローバルレジストリ: クラスオブジェクトをキーとして extra response fields を管理
 _EXTRA_FIELDS_REGISTRY: WeakKeyDictionary[type, Dict[str, Any]] = WeakKeyDictionary()

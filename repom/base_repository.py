@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
-from mine_db.db import db_session
+from repom.db import db_session
 import inspect
 
 T = TypeVar('T')
