@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Repository pattern + ORM utilities for FastAPI with automatic schema generation"
 authors = ["jj <soft.management943@gmail.com>"]
 readme = "README.md"
-packages = [{include = "repom"}]
+packages = [{ include = "repom" }]
 
 [tool.poetry.dependencies]
 python = "^3.12"
