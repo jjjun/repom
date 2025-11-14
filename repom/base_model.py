@@ -215,6 +215,7 @@ class BaseModel(Base):
             )
         """
         from pydantic import BaseModel as PydanticBaseModel, create_model
+        from typing import List, Dict, Optional, Set, Tuple, Union
 
         # to_dictメソッドから_response_fieldsを読み取り、レジストリに登録
         if cls not in _EXTRA_FIELDS_REGISTRY:
@@ -275,14 +276,28 @@ class BaseModel(Base):
         )
 
         # 前方参照を解決（文字列型アノテーションを実際の型に変換）
+        # 標準型を自動的に含める
+        standard_types = {
+            'List': List,
+            'Dict': Dict,
+            'Optional': Optional,
+            'Set': Set,
+            'Tuple': Tuple,
+            'Union': Union,
+        }
+
+        # ユーザー指定の forward_refs と標準型をマージ
+        types_namespace = {**standard_types}
         if forward_refs:
-            try:
-                schema.model_rebuild(_types_namespace=forward_refs)
-            except Exception as e:
-                # デバッグ用にエラーを出力
-                import warnings
-                warnings.warn(f"Failed to rebuild {schema_name}: {e}")
-                pass
+            types_namespace.update(forward_refs)
+
+        try:
+            schema.model_rebuild(_types_namespace=types_namespace)
+        except Exception as e:
+            # デバッグ用にエラーを出力
+            import warnings
+            warnings.warn(f"Failed to rebuild {schema_name}: {e}")
+            pass
 
         # キャッシュに保存
         cls._response_schemas[cache_key] = schema
