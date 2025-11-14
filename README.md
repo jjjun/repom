@@ -912,6 +912,124 @@ query = repo.set_find_option(query, offset=10, limit=20, order_by='created_at.de
 
 ---
 
+## FastAPI 統合（response_model）
+
+`BaseModel.get_response_schema()` を使用すると、FastAPI の `response_model` として使用できる Pydantic スキーマを自動生成できます。
+
+### 基本的な使い方
+
+```python
+from fastapi import APIRouter
+from typing import List
+from your_project.models import Task
+
+# モジュールレベルでスキーマを生成（推奨）
+TaskResponse = Task.get_response_schema()
+
+router = APIRouter()
+
+@router.get("/tasks/{task_id}", response_model=TaskResponse)
+def get_task(task_id: int):
+    task = repo.get_by_id(task_id)
+    return task.to_dict()
+
+@router.get("/tasks", response_model=List[TaskResponse])
+def get_tasks():
+    tasks = repo.find()
+    return [task.to_dict() for task in tasks]
+```
+
+### 追加フィールドの定義
+
+`@response_field` デコレータで、`to_dict()` が返す追加フィールドを型付きで宣言できます：
+
+```python
+from repom.base_model import BaseModel
+from typing import List, Optional
+
+class Task(BaseModel):
+    __tablename__ = 'tasks'
+    use_id = True
+    
+    title = Column(String(200), nullable=False)
+    completed = Column(Boolean, default=False)
+    
+    @BaseModel.response_field(
+        tags=List[str],           # リスト型
+        metadata=Optional[dict]   # オプショナルな辞書
+    )
+    def to_dict(self):
+        data = super().to_dict()
+        data.update({
+            'tags': ['work', 'urgent'],
+            'metadata': None
+        })
+        return data
+
+# スキーマ生成
+TaskResponse = Task.get_response_schema()
+# → id, title, completed, tags, metadata を含むスキーマが生成される
+```
+
+### 前方参照の解決（カスタム型）
+
+**Phase 1 改善（2025-11-14）**: 標準型（`List`, `Dict`, `Optional` など）は自動的に解決されるため、`forward_refs` に含める必要はありません。カスタムモデルの前方参照のみ指定してください。
+
+```python
+# レビューモデル（書籍への参照を含む）
+class Review(BaseModel):
+    @BaseModel.response_field(
+        related_books=List['BookResponse']  # 文字列で前方参照
+    )
+    def to_dict(self):
+        ...
+
+# スキーマ生成（カスタム型だけ指定）
+BookResponse = Book.get_response_schema()
+ReviewResponse = Review.get_response_schema(
+    forward_refs={'BookResponse': BookResponse}  # カスタム型のみ
+    # 'List' は自動的に解決されるため不要
+)
+```
+
+### GenericListResponse パターン
+
+リストエンドポイントでページネーション情報を含める場合：
+
+```python
+from pydantic import BaseModel as PydanticBaseModel
+from typing import Generic, TypeVar, List
+
+T = TypeVar('T')
+
+class GenericListResponse(PydanticBaseModel, Generic[T]):
+    items: List[T]
+    total: int
+    page: int = 1
+    page_size: int = 10
+
+# FastAPI で使用
+TaskResponse = Task.get_response_schema()
+
+@router.get("/tasks", response_model=GenericListResponse[TaskResponse])
+def get_tasks(page: int = 1, page_size: int = 10):
+    tasks = repo.find(offset=(page-1)*page_size, limit=page_size)
+    return {
+        'items': [task.to_dict() for task in tasks],
+        'total': repo.count(),
+        'page': page,
+        'page_size': page_size
+    }
+```
+
+### 詳細なドキュメント
+
+- **技術詳細**: [docs/get_response_schema_technical.md](docs/get_response_schema_technical.md)
+- **テストガイド**: [docs/get_response_schema_testing_guide.md](docs/get_response_schema_testing_guide.md)
+- **Phase 1 改善内容**: [docs/issue/get_response_schema_forward_refs_improvement.md](docs/issue/get_response_schema_forward_refs_improvement.md)
+
+---
+
 ## トラブルシューティング
 
 ### テスト関連
