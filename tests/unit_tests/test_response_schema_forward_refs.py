@@ -887,20 +887,20 @@ def test_phase1_improvement_optional_no_longer_required():
 def test_phase2_extract_undefined_types():
     """Phase 2: extract_undefined_types() ヘルパー関数のテスト"""
     from repom.base_model import _extract_undefined_types
-    
+
     # Test case 1: Single undefined type
     error_msg = "name 'BookResponse' is not defined"
     result = _extract_undefined_types(error_msg)
     assert result == {'BookResponse'}
     print(f"[Phase 2] ✅ 単一の未定義型を検出: {result}")
-    
+
     # Test case 2: Multiple undefined types
     error_msg = "name 'AssetItemResponse' is not defined, name 'LogResponse' is not defined"
     result = _extract_undefined_types(error_msg)
     assert 'AssetItemResponse' in result
     assert 'LogResponse' in result
     print(f"[Phase 2] ✅ 複数の未定義型を検出: {result}")
-    
+
     # Test case 3: No undefined types
     error_msg = "Some other error"
     result = _extract_undefined_types(error_msg)
@@ -912,32 +912,32 @@ def test_phase2_error_message_in_dev_environment(monkeypatch):
     """Phase 2: 開発環境でエラーメッセージが例外として投げられることを確認"""
     import pytest
     from repom.base_model import SchemaGenerationError
-    
+
     # Set EXEC_ENV to 'dev'
     monkeypatch.setenv('EXEC_ENV', 'dev')
-    
+
     # Create a model with unresolved forward reference
     class TestModel(BaseModel):
         __tablename__ = 'test_error_dev'
         id = Column(Integer, primary_key=True)
-        
+
         @BaseModel.response_field(
             book="BookResponse"  # Undefined type
         )
         def to_dict(self):
             return {'id': self.id, 'book': None}
-    
+
     # Should raise SchemaGenerationError in dev environment
     with pytest.raises(SchemaGenerationError) as exc_info:
         TestModel.get_response_schema()
-    
+
     # Verify error message contains helpful information
     error_msg = str(exc_info.value)
     assert "Failed to generate Pydantic schema" in error_msg
     assert "BookResponse" in error_msg
     assert "forward_refs" in error_msg
     assert "Solution:" in error_msg
-    
+
     print("[Phase 2] ✅ 開発環境で詳細なエラーメッセージと例外発生を確認")
     print(f"Error message preview:\n{error_msg[:300]}...")
 
@@ -946,41 +946,41 @@ def test_phase2_error_message_in_prod_environment(monkeypatch, caplog):
     """Phase 2: 本番環境でエラーメッセージがログに出力され、警告のみが表示されることを確認"""
     import warnings
     import logging
-    
+
     # Set EXEC_ENV to 'prod'
     monkeypatch.setenv('EXEC_ENV', 'prod')
-    
+
     # Enable logging capture
     caplog.set_level(logging.ERROR)
-    
+
     # Create a model with unresolved forward reference
     class TestModel(BaseModel):
         __tablename__ = 'test_error_prod'
         id = Column(Integer, primary_key=True)
-        
+
         @BaseModel.response_field(
             asset="AssetResponse"  # Undefined type
         )
         def to_dict(self):
             return {'id': self.id, 'asset': None}
-    
+
     # Should NOT raise exception in prod environment, but should warn
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         schema = TestModel.get_response_schema()
-        
+
         # Verify warning was issued
         assert len(w) > 0
         assert "Failed to rebuild" in str(w[0].message)
         print(f"[Phase 2] ✅ 本番環境で警告を確認: {w[0].message}")
-    
+
     # Verify detailed error was logged
     assert len(caplog.records) > 0
     log_message = caplog.records[0].message
     assert "Failed to generate Pydantic schema" in log_message
     assert "AssetResponse" in log_message
     assert "Solution:" in log_message
-    
+
     print("[Phase 2] ✅ 本番環境で詳細なエラーログを確認")
     print(f"Log message preview:\n{log_message[:300]}...")
 
@@ -990,37 +990,37 @@ def test_phase2_helpful_error_suggestions():
     import pytest
     from repom.base_model import SchemaGenerationError
     import os
-    
+
     # Temporarily set to dev environment
     original_env = os.getenv('EXEC_ENV')
     os.environ['EXEC_ENV'] = 'dev'
-    
+
     try:
         class TestModelSuggestions(BaseModel):
             __tablename__ = 'test_suggestions_unique'
             id = Column(Integer, primary_key=True)
-            
+
             @BaseModel.response_field(
                 item="ItemResponseUnique"
             )
             def to_dict(self):
                 return {'id': self.id, 'item': None}
-        
+
         with pytest.raises(SchemaGenerationError) as exc_info:
             TestModelSuggestions.get_response_schema()
-        
+
         error_msg = str(exc_info.value)
-        
+
         # Verify undefined type is mentioned
         assert "ItemResponseUnique" in error_msg
-        
+
         # Verify solution includes code example
         assert "forward_refs={" in error_msg
         assert "'ItemResponseUnique': ItemResponseUnique," in error_msg
-        
+
         print("[Phase 2] ✅ エラーメッセージに具体的なコード例が含まれることを確認")
         print(f"\nGenerated solution:\n{error_msg}")
-        
+
     finally:
         # Restore original environment
         if original_env:
