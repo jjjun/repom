@@ -2,32 +2,71 @@
 
 このディレクトリは、repom プロジェクトの改善提案と課題管理のためのドキュメントを格納します。
 
-## 📋 現在の Issue 一覧
+## � ディレクトリ構造
+
+```
+docs/issue/
+├── README.md              # このファイル（Issue 管理インデックス）
+├── completed/             # 完了・解決済み Issue
+│   └── 001_*.md          # Issue #1（完了）
+├── in_progress/           # 作業中の Issue
+└── backlog/               # 計画中・未着手の Issue
+```
+
+## Issue ライフサイクル
+
+```
+backlog/       → 計画と優先度付け
+    ↓
+in_progress/   → 実装作業中
+    ↓
+completed/     → 実装完了・テスト済み
+```
+
+## 📋 完了済み Issue
 
 ### Issue #1: get_response_schema() の前方参照改善
 
-**ファイル**: `get_response_schema_forward_refs_improvement.md`
+**ファイル**: `completed/001_get_response_schema_forward_refs_improvement.md`
 
-**ステータス**: ✅ Phase 1 & 2 完了（2025-11-14）
+**ステータス**: ✅ 完了（2025-11-14）
 
 **概要**:
-`BaseModel.get_response_schema()` メソッドの前方参照解決を改善し、標準型（List, Dict, Optional 等）を自動的に含め、エラーメッセージを改善。
+`BaseModel.get_response_schema()` メソッドの前方参照解決改善。Phase 1（標準型の自動解決）と Phase 2（エラーメッセージ改善 + 環境別エラーハンドリング）を実装。
 
-**優先度**: 高
+**結果**:
+- Phase 1: 標準型（List, Dict, Optional 等）の自動解決
+- Phase 2: 未定義型の自動検出とエラーメッセージ改善
+- テスト: 31/31 パス（Phase 1: 3テスト + Phase 2: 4テスト）
+- ドキュメント: 包括的な README セクション + research ディレクトリ
 
-**実装内容**:
-- ✅ Phase 1: 標準型の自動追加（完了）
-- ✅ Phase 2: エラーメッセージの改善 + 未解決型の自動検出（完了）
-- ⏭️ Phase 3: ドキュメント改善（オプション）
-- 🔬 将来: 完全自動依存解決（調査中 - `docs/research/`）
+**関連ドキュメント**:
+- 調査: `docs/research/auto_forward_refs_resolution.md`
+- 実装: メイン `README.md` の Phase 1 & 2 セクション参照
 
-**テスト結果**:
-- 31/31 テスト全てパス
-- 既存テスト（27）+ Phase 1 改善効果テスト（3）+ Phase 2 テスト（4）
+## 🚧 作業中の Issue
 
-**関連ファイル**:
-- `repom/base_model.py` - 実装ファイル（**Phase 1 & 2 実装済み**）
-- `tests/unit_tests/test_response_field.py` - 基本テスト（13テスト）
+*現在作業中の Issue はありません*
+
+## 📝 Backlog
+
+*現在計画中の Issue はありません*
+
+---
+
+## 新しい Issue の作成
+
+新しい Issue を作成する際は:
+
+1. **Backlog 段階**: `backlog/XXX_issue_name.md` にファイル作成
+2. **作業開始**: 着手時に `in_progress/XXX_issue_name.md` へ移動
+3. **完了**: 完了時に `completed/XXX_issue_name.md` へ移動
+
+完了済み Issue には連番（001, 002, 003...）を付与してください。
+
+---
+
+*最終更新: 2025-11-14*
 - `tests/unit_tests/test_response_schema_forward_refs.py` - 前方参照テスト（**31テスト**）
 - `tests/unit_tests/test_response_schema_fastapi.py` - FastAPI統合テスト（9テスト）
 - `docs/get_response_schema_technical.md` - 技術ドキュメント
