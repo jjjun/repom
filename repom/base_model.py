@@ -26,13 +26,13 @@ class SchemaGenerationError(Exception):
 def _extract_undefined_types(error_message: str) -> Set[str]:
     """
     Extract undefined type names from Pydantic error messages.
-    
+
     Args:
         error_message: The exception message from model_rebuild()
-        
+
     Returns:
         Set of undefined type names
-        
+
     Examples:
         >>> _extract_undefined_types("name 'BookResponse' is not defined")
         {'BookResponse'}
@@ -328,7 +328,7 @@ class BaseModel(Base):
         except Exception as e:
             # Extract undefined types from error message
             undefined_types = _extract_undefined_types(str(e))
-            
+
             # Build detailed error message
             error_details = [
                 f"Failed to generate Pydantic schema for '{schema_name}'.",
@@ -338,7 +338,7 @@ class BaseModel(Base):
                 "  1. A custom type is referenced as a string but not provided in forward_refs",
                 "  2. A type is not importable in the current context",
             ]
-            
+
             if undefined_types:
                 error_details.extend([
                     "",
@@ -362,12 +362,12 @@ class BaseModel(Base):
                     "  - Check that all referenced types are imported",
                     "  - Verify type annotations are correct",
                 ])
-            
+
             error_msg = "\n".join(error_details)
-            
+
             # Log detailed error
             logger.error(error_msg)
-            
+
             # Development environment: raise exception to stop execution
             if os.getenv('EXEC_ENV') == 'dev':
                 raise SchemaGenerationError(error_msg) from e
