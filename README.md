@@ -1024,7 +1024,8 @@ def get_tasks(page: int = 1, page_size: int = 10):
 
 - **技術詳細**: [docs/get_response_schema_technical.md](docs/get_response_schema_technical.md)
 - **テストガイド**: [docs/get_response_schema_testing_guide.md](docs/get_response_schema_testing_guide.md)
-- **Phase 1 改善内容**: [docs/issue/get_response_schema_forward_refs_improvement.md](docs/issue/get_response_schema_forward_refs_improvement.md)
+- **Phase 1 & 2 実装内容**: [docs/issue/get_response_schema_forward_refs_improvement.md](docs/issue/get_response_schema_forward_refs_improvement.md)
+- **将来の改善（調査中）**: [docs/research/auto_forward_refs_resolution.md](docs/research/auto_forward_refs_resolution.md)
 
 ### エラーハンドリング（Phase 2 改善）
 

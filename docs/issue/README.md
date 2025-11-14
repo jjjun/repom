@@ -8,36 +8,41 @@
 
 **ファイル**: `get_response_schema_forward_refs_improvement.md`
 
-**ステータス**: ✅ Phase 1 完了（2025-11-14）
+**ステータス**: ✅ Phase 1 & 2 完了（2025-11-14）
 
 **概要**:
-`BaseModel.get_response_schema()` メソッドの前方参照解決を改善し、標準型（List, Dict, Optional 等）を自動的に含めるように実装。
+`BaseModel.get_response_schema()` メソッドの前方参照解決を改善し、標準型（List, Dict, Optional 等）を自動的に含め、エラーメッセージを改善。
 
 **優先度**: 高
 
 **実装内容**:
 - ✅ Phase 1: 標準型の自動追加（完了）
-- ⏭️ Phase 2: エラーメッセージの改善（未実装）
-- ⏭️ Phase 3: ドキュメント改善（未実装）
+- ✅ Phase 2: エラーメッセージの改善 + 未解決型の自動検出（完了）
+- ⏭️ Phase 3: ドキュメント改善（オプション）
+- 🔬 将来: 完全自動依存解決（調査中 - `docs/research/`）
 
 **テスト結果**:
-- 40/40 テスト全てパス
-- 既存テスト（37）+ Phase 1 改善効果テスト（3）
+- 31/31 テスト全てパス
+- 既存テスト（27）+ Phase 1 改善効果テスト（3）+ Phase 2 テスト（4）
 
 **関連ファイル**:
-- `repom/base_model.py` - 実装ファイル（**Phase 1 実装済み**）
+- `repom/base_model.py` - 実装ファイル（**Phase 1 & 2 実装済み**）
 - `tests/unit_tests/test_response_field.py` - 基本テスト（13テスト）
-- `tests/unit_tests/test_response_schema_forward_refs.py` - 前方参照テスト（**27テスト**）
+- `tests/unit_tests/test_response_schema_forward_refs.py` - 前方参照テスト（**31テスト**）
 - `tests/unit_tests/test_response_schema_fastapi.py` - FastAPI統合テスト（9テスト）
 - `docs/get_response_schema_technical.md` - 技術ドキュメント
 - `docs/get_response_schema_testing_guide.md` - テストガイド
+- `docs/research/auto_forward_refs_resolution.md` - 将来の自動依存解決の調査
 
 **完了したステップ**:
 1. ✅ テスト戦略の確立
 2. ✅ 包括的なテストの作成（27テスト）
 3. ✅ ドキュメント化
-4. ✅ Phase 1 改善提案の実装
+4. ✅ Phase 1 改善提案の実装（標準型の自動解決）
 5. ✅ 改善効果の検証（3テスト追加）
+6. ✅ Phase 2 改善提案の実装（エラーメッセージ + 未解決型検出）
+7. ✅ Phase 2 テストの追加（4テスト）
+8. ✅ README への反映
 
 ---
 
