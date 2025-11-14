@@ -1,5 +1,8 @@
 import json
-from typing import Callable, Type, Any, Dict, Optional
+import re
+import logging
+import os
+from typing import Callable, Type, Any, Dict, Optional, Set
 from weakref import WeakKeyDictionary
 from sqlalchemy import Column, Integer
 from repom.db import Base, inspect
@@ -8,9 +11,38 @@ from repom.custom_types.CreatedAt import CreatedAt
 # グローバルレジストリ: クラスオブジェクトをキーとして extra response fields を管理
 _EXTRA_FIELDS_REGISTRY: WeakKeyDictionary[type, Dict[str, Any]] = WeakKeyDictionary()
 
+# Logger
+logger = logging.getLogger(__name__)
 
 # センチネル値（パラメータが指定されていないことを示す）
 _UNSET = object()
+
+
+class SchemaGenerationError(Exception):
+    """Raised when schema generation fails due to unresolved forward references"""
+    pass
+
+
+def _extract_undefined_types(error_message: str) -> Set[str]:
+    """
+    Extract undefined type names from Pydantic error messages.
+    
+    Args:
+        error_message: The exception message from model_rebuild()
+        
+    Returns:
+        Set of undefined type names
+        
+    Examples:
+        >>> _extract_undefined_types("name 'BookResponse' is not defined")
+        {'BookResponse'}
+        >>> _extract_undefined_types("name 'AssetItemResponse' is not defined")
+        {'AssetItemResponse'}
+    """
+    # Match pattern: name 'TypeName' is not defined
+    pattern = r"name '([^']+)' is not defined"
+    matches = re.findall(pattern, error_message)
+    return set(matches)
 
 
 class BaseModel(Base):
@@ -294,10 +326,56 @@ class BaseModel(Base):
         try:
             schema.model_rebuild(_types_namespace=types_namespace)
         except Exception as e:
-            # デバッグ用にエラーを出力
-            import warnings
-            warnings.warn(f"Failed to rebuild {schema_name}: {e}")
-            pass
+            # Extract undefined types from error message
+            undefined_types = _extract_undefined_types(str(e))
+            
+            # Build detailed error message
+            error_details = [
+                f"Failed to generate Pydantic schema for '{schema_name}'.",
+                f"Error: {e}",
+                "",
+                "This usually happens when:",
+                "  1. A custom type is referenced as a string but not provided in forward_refs",
+                "  2. A type is not importable in the current context",
+            ]
+            
+            if undefined_types:
+                error_details.extend([
+                    "",
+                    f"Undefined types detected: {', '.join(sorted(undefined_types))}",
+                    "",
+                    "Solution:",
+                    f"  Add missing types to forward_refs parameter:",
+                    f"  schema = {cls.__name__}.get_response_schema(",
+                    f"      forward_refs={{",
+                ])
+                for type_name in sorted(undefined_types):
+                    error_details.append(f"          '{type_name}': {type_name},")
+                error_details.extend([
+                    f"      }}",
+                    f"  )",
+                ])
+            else:
+                error_details.extend([
+                    "",
+                    "Solution:",
+                    "  - Check that all referenced types are imported",
+                    "  - Verify type annotations are correct",
+                ])
+            
+            error_msg = "\n".join(error_details)
+            
+            # Log detailed error
+            logger.error(error_msg)
+            
+            # Development environment: raise exception to stop execution
+            if os.getenv('EXEC_ENV') == 'dev':
+                raise SchemaGenerationError(error_msg) from e
+            else:
+                # Production environment: warn and continue
+                import warnings
+                warnings.warn(f"Failed to rebuild {schema_name}. See logs for details.")
+                pass
 
         # キャッシュに保存
         cls._response_schemas[cache_key] = schema

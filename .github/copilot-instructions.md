@@ -20,7 +20,7 @@ This is **repom** - a shared SQLAlchemy foundation package for Python projects.
 - Test scope: `function` (default), `module`, or `session`
 
 ### Configuration
-- Use environment variables: `EXEC_ENV` or `PYMINE__CORE__ENV` (dev/test/prod)
+- Use environment variable: `EXEC_ENV` (dev/test/prod)
 - Config class: `MineDbConfig` from `repom.config`
 - Database files: `db.dev.sqlite3`, `db.test.sqlite3`, `db.sqlite3`
 

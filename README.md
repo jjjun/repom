@@ -438,7 +438,7 @@ SQLite は `ALTER TABLE` に制限があるため、複雑な変更は `batch_al
 
 ### 環境変数一覧
 
-#### `EXEC_ENV` / `PYMINE__CORE__ENV`
+#### `EXEC_ENV`
 
 実行環境を指定する環境変数です。
 
@@ -451,11 +451,9 @@ SQLite は `ALTER TABLE` に制限があるため、複雑な変更は `batch_al
 ```powershell
 # PowerShell
 $env:EXEC_ENV='dev'
-$env:PYMINE__CORE__ENV='dev'  # 新しい推奨形式
 
 # Unix系
 export EXEC_ENV=dev
-export PYMINE__CORE__ENV=dev
 ```
 
 **環境別のデータベースファイル:**

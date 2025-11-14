@@ -1,10 +1,12 @@
 # Issue #1: get_response_schema() の前方参照改善
 
-**ステータス**: ✅ Phase 1 実装完了
+**ステータス**: ✅ Phase 1 & Phase 2 実装完了
 
 **作成日**: 2025-11-14
 
-**実装日**: 2025-11-14
+**Phase 1 実装日**: 2025-11-14
+
+**Phase 2 実装日**: 2025-11-14
 
 **優先度**: 高
 
@@ -602,13 +604,141 @@ def get_response_schema(cls, schema_name=None, forward_refs=None):
 
 ---
 
+### Phase 2: エラーメッセージの改善【実装済み】
+
+**実装日**: 2025-11-14
+
+**変更内容**:
+
+```python
+# repom/base_model.py
+
+# 新規追加: カスタム例外クラス
+class SchemaGenerationError(Exception):
+    """Raised when schema generation fails due to unresolved forward references"""
+    pass
+
+# 新規追加: 未解決型の抽出ヘルパー
+def _extract_undefined_types(error_message: str) -> Set[str]:
+    """Extract undefined type names from Pydantic error messages"""
+    pattern = r"name '([^']+)' is not defined"
+    matches = re.findall(pattern, error_message)
+    return set(matches)
+
+# get_response_schema() のエラーハンドリング改善
+try:
+    schema.model_rebuild(_types_namespace=types_namespace)
+except Exception as e:
+    # Extract undefined types from error message
+    undefined_types = _extract_undefined_types(str(e))
+    
+    # Build detailed error message
+    error_details = [
+        f"Failed to generate Pydantic schema for '{schema_name}'.",
+        f"Error: {e}",
+        "",
+        "This usually happens when:",
+        "  1. A custom type is referenced as a string but not provided in forward_refs",
+        "  2. A type is not importable in the current context",
+    ]
+    
+    if undefined_types:
+        error_details.extend([
+            "",
+            f"Undefined types detected: {', '.join(sorted(undefined_types))}",
+            "",
+            "Solution:",
+            f"  Add missing types to forward_refs parameter:",
+            f"  schema = {cls.__name__}.get_response_schema(",
+            f"      forward_refs={{",
+        ])
+        for type_name in sorted(undefined_types):
+            error_details.append(f"          '{type_name}': {type_name},")
+        error_details.extend([
+            f"      }}",
+            f"  )",
+        ])
+    
+    error_msg = "\n".join(error_details)
+    
+    # Log detailed error
+    logger.error(error_msg)
+    
+    # Development environment: raise exception to stop execution
+    if os.getenv('EXEC_ENV') == 'dev':
+        raise SchemaGenerationError(error_msg) from e
+    else:
+        # Production environment: warn and continue
+        import warnings
+        warnings.warn(f"Failed to rebuild {schema_name}. See logs for details.")
+```
+
+**テスト結果**:
+- ✅ 既存テスト: 27/27 パス
+- ✅ Phase 1 テスト: 3/3 パス
+- ✅ Phase 2 テスト（新規）: 4/4 パス
+  - `test_phase2_extract_undefined_types`: ヘルパー関数の動作確認
+  - `test_phase2_error_message_in_dev_environment`: 開発環境で例外発生を確認
+  - `test_phase2_error_message_in_prod_environment`: 本番環境でログ出力を確認
+  - `test_phase2_helpful_error_suggestions`: 具体的な解決策の提示を確認
+- ✅ **合計**: 31/31 テスト全てパス
+
+**改善効果**:
+
+1. **開発環境で問題を早期発見**
+   ```python
+   # EXEC_ENV=dev の場合
+   # SchemaGenerationError 例外が発生し、処理が停止
+   # → 開発者が問題に気づきやすい
+   ```
+
+2. **本番環境で詳細ログ + 警告**
+   ```python
+   # EXEC_ENV=prod の場合
+   # logger.error() で詳細ログを出力
+   # warnings.warn() で警告を表示
+   # → OpenAPI 定義生成時に問題が分かる
+   ```
+
+3. **具体的な解決策の提示**
+   ```
+   Failed to generate Pydantic schema for 'VoiceScriptResponse'.
+   Error: name 'AssetItemResponse' is not defined
+   
+   This usually happens when:
+     1. A custom type is referenced as a string but not provided in forward_refs
+     2. A type is not importable in the current context
+   
+   Undefined types detected: AssetItemResponse
+   
+   Solution:
+     Add missing types to forward_refs parameter:
+     schema = VoiceScriptModel.get_response_schema(
+         forward_refs={
+             'AssetItemResponse': AssetItemResponse,
+         }
+     )
+   ```
+
+4. **未解決型の自動検出**
+   - エラーメッセージから型名を正規表現で抽出
+   - 複数の未解決型がある場合も全て表示
+   - コピー＆ペーストできるコード例を生成
+
+**互換性**:
+- ✅ 既存のコードは変更なしで動作
+- ✅ ロギングを設定していない場合でも動作（標準出力に出力される）
+- ✅ `EXEC_ENV` が未設定の場合は本番環境として動作
+
+---
+
 ## 📋 残りの提案（未実装）
 
-### 提案2: エラーメッセージの改善【Phase 2】
+### 提案2（旧）: 前方参照の自動検出【Phase 3 候補】
 
-**優先度**: 中
+**優先度**: 低
 
-**概要**: 前方参照の解決に失敗した場合、より詳細なエラーメッセージを表示
+**概要**: フィールド定義から文字列参照を自動検出して警告
 
 **利点**:
 - 問題の診断が簡単になる
@@ -663,6 +793,7 @@ except Exception as e:
 - `docs/get_response_schema_technical.md` - 技術的な詳細
 - `docs/get_response_schema_testing_guide.md` - テストガイド
 - `docs/issue/README.md` - Issue 管理インデックス
+- `README.md` - FastAPI 統合セクション（Phase 1 改善内容を含む）
 
 ### 参考資料
 
@@ -676,4 +807,6 @@ except Exception as e:
 
 **Phase 1 実装完了**: 2025-11-14
 
-**次のステップ**: Phase 2（エラーメッセージ改善）または Phase 3（ドキュメント改善）
+**Phase 2 実装完了**: 2025-11-14
+
+**次のステップ**: Phase 3（ドキュメント改善）または 完了

@@ -41,16 +41,16 @@ repom/
 
 ## Environment Management
 
-Configuration is now wired through the `CONFIG_HOOK`, allowing consumers to inject their own settings while the project uses environment-specific databases controlled by the `PYMINE__CORE__ENV` environment variable (legacy `EXEC_ENV` values are still honoured):
+Configuration is wired through the `CONFIG_HOOK`, allowing consumers to inject their own settings while the project uses environment-specific databases controlled by the `EXEC_ENV` environment variable:
 
 - **Production**: `db.sqlite3` (default)
-- **Development**: `db.dev.sqlite3` (`PYMINE__CORE__ENV=dev`)
-- **Test**: `db.test.sqlite3` (`PYMINE__CORE__ENV=test`)
+- **Development**: `db.dev.sqlite3` (`EXEC_ENV=dev`)
+- **Test**: `db.test.sqlite3` (`EXEC_ENV=test`)
 
 ### Setting Environment (Windows PowerShell)
 ```powershell
-$env:PYMINE__CORE__ENV='dev'  # for development
-$env:PYMINE__CORE__ENV='prod' # for production
+$env:EXEC_ENV='dev'  # for development
+$env:EXEC_ENV='prod' # for production
 ```
 
 ## Available Commands (Poetry Scripts)
