@@ -1026,6 +1026,121 @@ def get_tasks(page: int = 1, page_size: int = 10):
 - **テストガイド**: [docs/get_response_schema_testing_guide.md](docs/get_response_schema_testing_guide.md)
 - **Phase 1 改善内容**: [docs/issue/get_response_schema_forward_refs_improvement.md](docs/issue/get_response_schema_forward_refs_improvement.md)
 
+### エラーハンドリング（Phase 2 改善）
+
+スキーマ生成時に前方参照が解決できない場合、環境に応じて異なる動作をします。
+
+#### 開発環境（`EXEC_ENV=dev`）
+
+**動作**: 例外を発生させて処理を停止
+
+```python
+from repom.base_model import SchemaGenerationError
+
+try:
+    TaskResponse = Task.get_response_schema(
+        forward_refs={'MissingType': MissingType}  # 未定義型
+    )
+except SchemaGenerationError as e:
+    print(e)
+    # 出力例:
+    # Failed to generate Pydantic schema for 'TaskResponse'.
+    # Error: name 'MissingType' is not defined
+    #
+    # Undefined types detected: MissingType
+    #
+    # Solution:
+    #   Add missing types to forward_refs parameter:
+    #   schema = Task.get_response_schema(
+    #       forward_refs={
+    #           'MissingType': MissingType,
+    #       }
+    #   )
+```
+
+**メリット**:
+- 問題を即座に検出し、開発中のバグを防ぐ
+- エラーメッセージに具体的な解決策が含まれる
+- 未定義型の名前が自動的に抽出される
+
+#### 本番環境（`EXEC_ENV=prod` または未設定）
+
+**動作**: ログにエラーを記録し、警告を表示して処理を続行
+
+```python
+# 本番環境では例外を投げずに警告のみ
+TaskResponse = Task.get_response_schema(
+    forward_refs={'MissingType': MissingType}
+)
+# 警告: Failed to rebuild TaskResponse. See logs for details.
+```
+
+**ログファイルの確認**:
+```python
+# Python 標準の logging モジュールでログが出力される
+import logging
+
+# ログレベルを設定してログファイルに出力
+logging.basicConfig(
+    level=logging.ERROR,
+    filename='app.log',
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+```
+
+**ログ出力内容**:
+```
+2025-11-14 12:00:00 - repom.base_model - ERROR - Failed to generate Pydantic schema for 'TaskResponse'.
+Error: name 'MissingType' is not defined
+
+This usually happens when:
+  1. A custom type is referenced as a string but not provided in forward_refs
+  2. A type is not importable in the current context
+
+Undefined types detected: MissingType
+
+Solution:
+  Add missing types to forward_refs parameter:
+  schema = Task.get_response_schema(
+      forward_refs={
+          'MissingType': MissingType,
+      }
+  )
+```
+
+**メリット**:
+- OpenAPI スキーマ生成時のエラーでもアプリケーションが停止しない
+- ログファイルで詳細なエラー情報を確認できる
+- AI エージェントがログファイルを解析して問題を診断できる
+
+#### ベストプラクティス
+
+1. **開発環境で先にテスト**
+   ```bash
+   $env:EXEC_ENV='dev'
+   poetry run python -c "from your_app.models import Task; Task.get_response_schema()"
+   ```
+
+2. **ログファイルの設定**
+   ```python
+   # アプリケーション起動時にログ設定
+   import logging
+   
+   logging.basicConfig(
+       level=logging.ERROR,
+       filename='data/repom/logs/app.log',
+       format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+   )
+   ```
+
+3. **forward_refs の指定漏れを防ぐ**
+   - カスタム型は必ず `forward_refs` に含める
+   - 標準型（`List`, `Dict`, `Optional` など）は自動解決されるため不要
+
+4. **エラーログの監視**
+   - 本番環境では定期的にログファイルを確認
+   - CI/CD パイプラインでログをチェック
+
 ---
 
 ## トラブルシューティング
