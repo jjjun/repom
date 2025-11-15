@@ -1,69 +1,69 @@
-# Schema Validation Command
+# スキーマ検証コマンド
 
-## Status
-- **Stage**: Idea
-- **Priority**: Medium
-- **Complexity**: Low
-- **Created**: 2025-11-14
-- **Last Updated**: 2025-11-14
+## ステータス
+- **段階**: アイディア
+- **優先度**: 中
+- **複雑度**: 低
+- **作成日**: 2025-11-14
+- **最終更新**: 2025-11-14
 
-## Overview
+## 概要
 
-Create a CLI command to validate all model schemas at build/deployment time, catching schema generation errors before they reach production.
+ビルド/デプロイ時にすべてのモデルスキーマを検証する CLI コマンドを作成し、本番環境に到達する前にスキーマ生成エラーを検出します。
 
-## Motivation
+## モチベーション
 
-Currently, schema generation errors only occur when `get_response_schema()` is called at runtime. This means:
-- Errors may not be discovered until production
-- CI/CD pipelines cannot catch schema issues early
-- Developers must manually test all response endpoints
+現在、スキーマ生成エラーは実行時に `get_response_schema()` が呼び出されたときにのみ発生します。これは以下を意味します:
+- エラーが本番環境まで発見されない可能性がある
+- CI/CD パイプラインがスキーマの問題を早期に検出できない
+- 開発者はすべてのレスポンスエンドポイントを手動でテストする必要がある
 
-A validation command would enable:
-- **CI/CD Integration**: Run as part of automated testing
-- **Pre-deployment Validation**: Catch issues before release
-- **Development Workflow**: Quick validation during development
+検証コマンドにより以下が可能になります:
+- **CI/CD 統合**: 自動テストの一部として実行
+- **デプロイ前の検証**: リリース前に問題を検出
+- **開発ワークフロー**: 開発中の迅速な検証
 
-## Use Cases
+## ユースケース
 
-### 1. CI/CD Pipeline
+### 1. CI/CD パイプライン
 ```yaml
 # .github/workflows/test.yml
 - name: Validate Model Schemas
   run: poetry run repom validate-schemas
 ```
 
-### 2. Pre-commit Hook
+### 2. プレコミットフック
 ```bash
 # .git/hooks/pre-commit
 poetry run repom validate-schemas || exit 1
 ```
 
-### 3. Development Workflow
+### 3. 開発ワークフロー
 ```bash
-# Quick validation during development
+# 開発中の迅速な検証
 poetry run repom validate-schemas
-# ✓ All schemas validated successfully (15 models)
+# ✓ すべてのスキーマが正常に検証されました（15モデル）
 ```
 
-## Potential Approaches
+## 検討可能なアプローチ
 
-### Approach 1: Scan and Validate
-**Description**: Auto-discover all BaseModel subclasses and call `get_response_schema()`
+### アプローチ 1: スキャンと検証
+**説明**: すべての BaseModel サブクラスを自動検出し、`get_response_schema()` を呼び出す
 
-**Pros**:
-- Comprehensive validation
-- No manual configuration
-- Catches all schema errors
+**長所**:
+- 包括的な検証
+- 手動設定不要
+- すべてのスキーマエラーを検出
 
-**Cons**:
-- May discover models not intended for responses
-- Requires model imports (side effects?)
+**短所**:
+- レスポンス用でないモデルも検出する可能性
+- モデルインポートが必要（副作用？）
 
-**Example**:
+**例**:
 ```python
 # repom/scripts/validate_schemas.py
 def validate_all_schemas():
-    models = discover_base_models()  # Scan all BaseModel subclasses
+    models = discover_base_models()  # すべての BaseModel サブクラスをスキャン
     for model_cls in models:
         try:
             model_cls.get_response_schema()
@@ -74,39 +74,39 @@ def validate_all_schemas():
     return True
 ```
 
-### Approach 2: Explicit Registration
-**Description**: Require models to be registered for validation
+### アプローチ 2: 明示的な登録
+**説明**: 検証するモデルを登録することを要求
 
-**Pros**:
-- Explicit control over what's validated
-- No unexpected side effects
-- Clear intent
+**長所**:
+- 検証対象の明示的な制御
+- 予期しない副作用なし
+- 意図が明確
 
-**Cons**:
-- Manual registration required
-- May miss models
+**短所**:
+- 手動登録が必要
+- モデルを見逃す可能性
 
-**Example**:
+**例**:
 ```python
-# In model files
+# モデルファイル内
 @register_for_validation
 class MyModel(BaseModel):
     pass
 ```
 
-### Approach 3: Configuration File
-**Description**: List models to validate in a configuration file
+### アプローチ 3: 設定ファイル
+**説明**: 設定ファイルに検証するモデルをリストアップ
 
-**Pros**:
-- Centralized configuration
-- Easy to include/exclude models
-- No code changes needed
+**長所**:
+- 集中管理された設定
+- モデルの包含/除外が容易
+- コード変更不要
 
-**Cons**:
-- Additional configuration to maintain
-- May become outdated
+**短所**:
+- 保守する追加設定
+- 古くなる可能性
 
-**Example**:
+**例**:
 ```yaml
 # repom.validation.yml
 models:
@@ -114,81 +114,81 @@ models:
   - repom.models.user_session.UserSession
 ```
 
-## Technical Considerations
+## 技術的考慮事項
 
-### Implementation
-- Use existing `get_response_schema()` method
-- Leverage Phase 2 error handling (dev environment behavior)
-- Report all errors, not just the first one
-- Provide summary statistics
+### 実装
+- 既存の `get_response_schema()` メソッドを使用
+- Phase 2 エラーハンドリング（dev 環境の動作）を活用
+- 最初のエラーだけでなく、すべてのエラーを報告
+- サマリー統計を提供
 
-### Performance
-- Schema generation may be slow for large models
-- Consider parallel validation for multiple models
-- Cache results if possible
+### パフォーマンス
+- 大きなモデルではスキーマ生成が遅い可能性
+- 複数モデルの並列検証を検討
+- 可能であれば結果をキャッシュ
 
-### Dependencies
-- No new dependencies required
-- Uses existing repom infrastructure
-- Compatible with Poetry scripts
+### 依存関係
+- 新しい依存関係不要
+- 既存の repom インフラを使用
+- Poetry スクリプトと互換性あり
 
-### Output Format
-- Console output with colors (✓/✗)
-- JSON format option for CI/CD parsing
-- Exit code: 0 (success) or 1 (failure)
+### 出力フォーマット
+- 色付きコンソール出力（✓/✗）
+- CI/CD パース用の JSON フォーマットオプション
+- 終了コード: 0（成功）または 1（失敗）
 
-## Integration Points
+## 統合ポイント
 
-### Affected Components
-- `repom/scripts/` - New script: `validate_schemas.py`
-- `pyproject.toml` - Add Poetry script entry point
-- `README.md` - Document new command
+### 影響を受けるコンポーネント
+- `repom/scripts/` - 新規スクリプト: `validate_schemas.py`
+- `pyproject.toml` - Poetry スクリプトエントリーポイントを追加
+- `README.md` - 新しいコマンドをドキュメント化
 
-### Interaction with Existing Features
-- Uses `BaseModel.get_response_schema()`
-- Leverages Phase 2 error detection
-- Compatible with EXEC_ENV environment variable
+### 既存機能との相互作用
+- `BaseModel.get_response_schema()` を使用
+- Phase 2 エラー検出を活用
+- EXEC_ENV 環境変数と互換性あり
 
-### Example Output
+### 出力例
 ```
 $ poetry run repom validate-schemas
 
-Validating model schemas...
+モデルスキーマを検証中...
 
 ✓ Sample (repom.models.sample)
 ✗ UserSession (repom.models.user_session)
-  Error: Type 'SessionData' is not defined
-  Suggestion: Add 'from typing import ForwardRef' and define type
+  エラー: 型 'SessionData' が定義されていません
+  提案: 'from typing import ForwardRef' を追加して型を定義してください
   
 ✓ Product (myapp.models.product)
 ✗ Order (myapp.models.order)
-  Error: Type 'OrderItem' is not defined
-  Suggestion: Import OrderItem or use string literal 'OrderItem'
+  エラー: 型 'OrderItem' が定義されていません
+  提案: OrderItem をインポートするか、文字列リテラル 'OrderItem' を使用してください
 
-Summary: 2/4 models validated successfully
-Exit code: 1
+サマリー: 2/4 モデルが正常に検証されました
+終了コード: 1
 ```
 
-## Next Steps
+## 次のステップ
 
-- [ ] Research auto-discovery mechanisms (inspect, pkgutil)
-- [ ] Prototype Approach 1 (scan and validate)
-- [ ] Test with repom's own models
-- [ ] Design CLI interface and output format
-- [ ] Consider JSON output option for CI/CD
-- [ ] Evaluate performance with large model sets
-- [ ] Move to `docs/research/` for detailed implementation plan
+- [ ] 自動検出メカニズムを調査（inspect、pkgutil）
+- [ ] アプローチ 1（スキャンと検証）のプロトタイプ
+- [ ] repom 自身のモデルでテスト
+- [ ] CLI インターフェースと出力フォーマットを設計
+- [ ] CI/CD 用の JSON 出力オプションを検討
+- [ ] 大規模モデルセットでのパフォーマンスを評価
+- [ ] 詳細な実装計画のため `docs/research/` に移動
 
-## Related Documents
+## 関連ドキュメント
 
-- `docs/issue/completed/get_response_schema_forward_refs_improvement.md` - Phase 2 error handling
-- `README.md` - Phase 2 implementation details
-- `repom/base_model.py` - BaseModel implementation with error handling
+- `docs/issue/completed/001_get_response_schema_forward_refs_improvement.md` - Phase 2 エラーハンドリング
+- `README.md` - Phase 2 実装詳細
+- `repom/base_model.py` - エラーハンドリング付き BaseModel 実装
 
-## Questions to Resolve
+## 解決すべき質問
 
-1. Should validation respect EXEC_ENV (dev/prod behavior)?
-2. How to handle models in consuming projects vs. repom package?
-3. Should validation run automatically in test suite?
-4. What about models with complex dependencies or database connections?
-5. Should we validate only response schemas, or all Pydantic schemas?
+1. 検証は EXEC_ENV を尊重すべきか（dev/prod の動作）？
+2. 使用するプロジェクトのモデル vs. repom パッケージのモデルをどう扱うか？
+3. 検証はテストスイートで自動的に実行すべきか？
+4. 複雑な依存関係やデータベース接続を持つモデルはどうするか？
+5. レスポンススキーマのみを検証すべきか、すべての Pydantic スキーマを検証すべきか？

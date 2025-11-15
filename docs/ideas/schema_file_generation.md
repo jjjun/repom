@@ -1,64 +1,127 @@
-# Schema File Generation
+# スキーマファイル生成
 
-## Status
-- **Stage**: Idea
-- **Priority**: Low
-- **Complexity**: Low
-- **Created**: 2025-11-14
-- **Last Updated**: 2025-11-14
+## ステータス
+- **段階**: アイディア
+- **優先度**: 低
+- **複雑度**: 低
+- **作成日**: 2025-11-14
+- **最終更新**: 2025-11-14
 
-## Overview
+## 概要
 
-Generate JSON Schema files from repom models to support API documentation tools, contract testing, and frontend TypeScript generation.
+repom モデルから JSON Schema ファイルを生成し、API ドキュメントツール、契約テスト、フロントエンド TypeScript 生成をサポートします。
 
-## Motivation
+## モチベーション
 
-When building APIs with repom models, developers often need:
-- **OpenAPI/Swagger Documentation**: JSON schemas for API specs
-- **Frontend Types**: Generate TypeScript interfaces from schemas
-- **Contract Testing**: Validate API responses against schemas
-- **External Integration**: Share schemas with non-Python services
+repom モデルで API を構築する際、開発者は以下を必要とすることが多いです:
+- **OpenAPI/Swagger ドキュメント**: API 仕様用の JSON スキーマ
+- **フロントエンドの型**: スキーマから TypeScript インターフェースを生成
+- **契約テスト**: スキーマに対して API レスポンスを検証
+- **外部統合**: 非 Python サービスとスキーマを共有
 
-Currently:
-- Schemas exist only in Python code
-- Must manually create JSON Schema files
-- No automated sync between models and schemas
+現在:
+- スキーマは Python コード内にのみ存在
+- JSON Schema ファイルを手動で作成する必要がある
+- モデルとスキーマ間の自動同期がない
 
-With schema file generation:
-- Automatically export schemas to files
-- Keep documentation in sync with models
-- Enable tooling integration (OpenAPI, TypeScript generators)
+スキーマファイル生成により:
+- スキーマを自動的にファイルにエクスポート
+- ドキュメントをモデルと同期させる
+- ツール統合を可能にする（OpenAPI、TypeScript ジェネレータ）
 
-## Use Cases
+## ユースケース
 
-### 1. OpenAPI Documentation
+### 1. OpenAPI ドキュメント
 ```bash
-# Generate schemas for API documentation
+# API ドキュメント用のスキーマを生成
 poetry run repom generate-schemas --output schemas/
 
-# Use in OpenAPI spec
-# openapi.yml references schemas/Sample.json
+# OpenAPI 仕様で使用
+# openapi.yml が schemas/Sample.json を参照
 ```
 
-### 2. Frontend TypeScript Generation
+### 2. フロントエンド TypeScript 生成
 ```bash
-# Generate schemas
+# スキーマを生成
 poetry run repom generate-schemas --output schemas/
 
-# Convert to TypeScript
+# TypeScript に変換
 npx json-schema-to-typescript schemas/*.json --output src/types/
 ```
 
-### 3. Contract Testing
+### 3. 契約テスト
 ```python
-# Validate API responses against generated schemas
+# 生成されたスキーマに対して API レスポンスを検証
 import json
 from jsonschema import validate
 
 with open('schemas/Sample.json') as f:
     schema = json.load(f)
     
-validate(api_response, schema)  # Ensure response matches model
+validate(api_response, schema)  # レスポンスがモデルと一致することを確認
+```
+
+## 検討可能なアプローチ
+
+### アプローチ 1: Pydantic の model_json_schema()
+**説明**: Pydantic のビルトイン JSON Schema エクスポートを使用
+
+**長所**:
+- ネイティブな Pydantic サポート
+- 標準的な JSON Schema フォーマット
+- カスタムシリアライゼーション不要
+
+**短所**:
+- repom のカスタム型をうまく扱えない可能性
+- TypeDecorator でのテストが必要
+
+**例**:
+```python
+schema = MyModel.get_response_schema().model_json_schema()
+with open('schemas/MyModel.json', 'w') as f:
+    json.dump(schema, f, indent=2)
+```
+
+### アプローチ 2: カスタムスキーマシリアライザ
+**説明**: repom 固有の型のためのカスタムシリアライゼーションを構築
+
+**長所**:
+- 出力フォーマットの完全な制御
+- カスタム TypeDecorator を処理可能
+- repom 固有のメタデータを追加可能
+
+**短所**:
+- 実装作業が増える
+- シリアライゼーションロジックの保守が必要
+
+**例**:
+```python
+def serialize_schema(model_cls: Type[BaseModel]) -> dict:
+    schema = model_cls.get_response_schema().model_json_schema()
+    # repom 型のカスタムハンドリングを追加
+    schema = enhance_custom_types(schema)
+    return schema
+```
+
+### アプローチ 3: テンプレート付き CLI
+**説明**: カスタマイズ可能なテンプレートでスキーマを生成
+
+**長所**:
+- 柔軟な出力フォーマット
+- 複数のフォーマット（JSON Schema、OpenAPI など）を生成可能
+- テンプレートベースのカスタマイズ
+
+**短所**:
+- より複雑な実装
+- テンプレートの保守
+
+**例**:
+```bash
+poetry run repom generate-schemas \
+  --format json-schema \
+  --template openapi \
+  --output schemas/
+```
 ```
 
 ## Potential Approaches
@@ -123,66 +186,66 @@ poetry run repom generate-schemas \
   --output schemas/
 ```
 
-## Technical Considerations
+## 技術的考慮事項
 
-### Custom Type Handling
-repom uses custom TypeDecorators that may not serialize well:
-- `ISO8601DateTime` → Should export as ISO 8601 string format
-- `JSONEncoded` → Should export as object type
-- `ListJSON` → Should export as array type
-- `CreatedAt` → Should export as datetime string
+### カスタム型の処理
+repom はうまくシリアライズされない可能性があるカスタム TypeDecorator を使用:
+- `ISO8601DateTime` → ISO 8601 文字列フォーマットとしてエクスポート
+- `JSONEncoded` → オブジェクト型としてエクスポート
+- `ListJSON` → 配列型としてエクスポート
+- `CreatedAt` → datetime 文字列としてエクスポート
 
-**Solution**: Add custom serialization rules for each TypeDecorator
+**解決策**: 各 TypeDecorator にカスタムシリアライゼーションルールを追加
 
-### File Organization
+### ファイル構成
 ```
 schemas/
-├── Sample.json                 # Individual model schemas
+├── Sample.json                 # 個別モデルのスキーマ
 ├── UserSession.json
-├── combined.json              # All schemas in one file (optional)
-└── openapi/                   # OpenAPI-specific format (optional)
+├── combined.json              # すべてのスキーマを1つのファイルに（オプショナル）
+└── openapi/                   # OpenAPI 固有のフォーマット（オプショナル）
     └── components.yml
 ```
 
-### Schema Format Options
-- **JSON Schema Draft 7/2020**: Standard format
-- **OpenAPI 3.0/3.1**: API-specific format
-- **TypeScript**: Direct TS interface generation
+### スキーマフォーマットオプション
+- **JSON Schema Draft 7/2020**: 標準フォーマット
+- **OpenAPI 3.0/3.1**: API 固有のフォーマット
+- **TypeScript**: 直接 TS インターフェース生成
 
-### Dependencies
-- **jsonschema**: Validation and schema manipulation
-- **pyyaml** (optional): YAML output format
-- No additional heavy dependencies
+### 依存関係
+- **jsonschema**: バリデーションとスキーマ操作
+- **pyyaml**（オプショナル）: YAML 出力フォーマット
+- 追加の重い依存関係なし
 
-## Integration Points
+## 統合ポイント
 
-### Affected Components
-- `repom/scripts/` - New script: `generate_schemas.py`
-- `pyproject.toml` - Add Poetry script entry point
-- `repom/base_model.py` - Potential schema serialization helpers
-- `README.md` - Document new command
+### 影響を受けるコンポーネント
+- `repom/scripts/` - 新規スクリプト: `generate_schemas.py`
+- `pyproject.toml` - Poetry スクリプトエントリーポイントを追加
+- `repom/base_model.py` - スキーマシリアライゼーションヘルパーの可能性
+- `README.md` - 新しいコマンドをドキュメント化
 
-### Interaction with Existing Features
-- Uses `BaseModel.get_response_schema()`
-- Compatible with Phase 2 error handling
-- Works with all repom custom types
+### 既存機能との相互作用
+- `BaseModel.get_response_schema()` を使用
+- Phase 2 エラーハンドリングと互換性あり
+- すべての repom カスタム型と動作
 
-### Example Command
+### コマンド例
 ```bash
-# Generate all schemas
+# すべてのスキーマを生成
 poetry run repom generate-schemas
 
-# Generate specific models
+# 特定のモデルを生成
 poetry run repom generate-schemas Sample UserSession
 
-# Specify output directory
+# 出力ディレクトリを指定
 poetry run repom generate-schemas --output ./api/schemas/
 
-# Different format
+# 異なるフォーマット
 poetry run repom generate-schemas --format openapi-yaml
 ```
 
-### Example Output
+### 出力例
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
@@ -207,37 +270,37 @@ poetry run repom generate-schemas --format openapi-yaml
 }
 ```
 
-## Next Steps
+## 次のステップ
 
-- [ ] Research Pydantic's `model_json_schema()` output format
-- [ ] Test with repom's custom TypeDecorators
-- [ ] Prototype basic schema generation
-- [ ] Evaluate need for custom serialization
-- [ ] Design CLI interface (arguments, output format)
-- [ ] Test with OpenAPI tools and TypeScript generators
-- [ ] Consider watch mode for automatic regeneration
-- [ ] Move to `docs/research/` if implementing
+- [ ] Pydantic の `model_json_schema()` 出力フォーマットを調査
+- [ ] repom のカスタム TypeDecorator でテスト
+- [ ] 基本的なスキーマ生成のプロトタイプ
+- [ ] カスタムシリアライゼーションの必要性を評価
+- [ ] CLI インターフェース設計（引数、出力フォーマット）
+- [ ] OpenAPI ツールと TypeScript ジェネレータでテスト
+- [ ] 自動再生成のためのウォッチモードを検討
+- [ ] 実装する場合は `docs/research/` に移動
 
-## Related Documents
+## 関連ドキュメント
 
-- `repom/custom_types/` - Custom type implementations
-- `README.md` - BaseModel documentation
-- Pydantic documentation: [JSON Schema](https://docs.pydantic.dev/latest/concepts/json_schema/)
+- `repom/custom_types/` - カスタム型の実装
+- `README.md` - BaseModel ドキュメント
+- Pydantic ドキュメント: [JSON Schema](https://docs.pydantic.dev/latest/concepts/json_schema/)
 
-## Questions to Resolve
+## 解決すべき質問
 
-1. Should schemas be committed to version control?
-2. What's the best format for consuming projects (JSON vs YAML)?
-3. Should we support incremental generation (only changed models)?
-4. How to handle relationships between models (foreign keys)?
-5. Should we include database-specific metadata (table names, indexes)?
-6. Should schemas include validation rules (min/max, patterns)?
-7. How to handle models with circular references?
+1. スキーマをバージョン管理にコミットすべきか？
+2. 使用するプロジェクトに最適なフォーマットは何か（JSON vs YAML）？
+3. 増分生成（変更されたモデルのみ）をサポートすべきか？
+4. モデル間のリレーションシップ（外部キー）をどう扱うか？
+5. データベース固有のメタデータ（テーブル名、インデックス）を含めるべきか？
+6. スキーマにバリデーションルール（最小/最大、パターン）を含めるべきか？
+7. 循環参照を持つモデルをどう扱うか？
 
-## Additional Ideas
+## 追加アイディア
 
-### Schema Versioning
-Track schema versions for API compatibility:
+### スキーマバージョニング
+API 互換性のためにスキーマバージョンを追跡:
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
@@ -248,14 +311,14 @@ Track schema versions for API compatibility:
 }
 ```
 
-### Documentation Integration
-Generate markdown documentation from schemas:
+### ドキュメント統合
+スキーマから markdown ドキュメントを生成:
 ```bash
 poetry run repom generate-docs --from-schemas
 ```
 
-### Watch Mode
-Automatically regenerate schemas on file changes:
+### ウォッチモード
+ファイル変更時にスキーマを自動再生成:
 ```bash
 poetry run repom generate-schemas --watch
 ```

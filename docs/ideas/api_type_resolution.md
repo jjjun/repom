@@ -1,63 +1,63 @@
-# API Type Resolution in FastAPI/Flask
+# FastAPI/Flask での API 型解決
 
-## Status
-- **Stage**: Idea
-- **Priority**: Low
-- **Complexity**: Medium
-- **Created**: 2025-11-14
-- **Last Updated**: 2025-11-14
+## ステータス
+- **段階**: アイディア
+- **優先度**: 低
+- **複雑度**: 中
+- **作成日**: 2025-11-14
+- **最終更新**: 2025-11-14
 
-## Overview
+## 概要
 
-Automatically resolve repom model types when used as FastAPI/Flask response models, eliminating manual schema generation in API routes.
+FastAPI/Flask のレスポンスモデルとして repom モデルを使用する際に、型を自動的に解決し、API ルート内での手動スキーマ生成を不要にします。
 
-## Motivation
+## モチベーション
 
-When using repom models in API frameworks:
+API フレームワークで repom モデルを使用する場合:
 
-**Current Workflow** (Manual):
+**現在のワークフロー**（手動）:
 ```python
 @app.get("/samples/{id}", response_model=Sample.get_response_schema())
 def get_sample(id: int):
     return sample_repo.get_by_id(id)
 ```
 
-**Desired Workflow** (Automatic):
+**理想のワークフロー**（自動）:
 ```python
 @app.get("/samples/{id}", response_model=Sample)
 def get_sample(id: int) -> Sample:
     return sample_repo.get_by_id(id)
 ```
 
-**Problems with Current Approach**:
-- Must call `get_response_schema()` for every route
-- Verbose and error-prone
-- Type hints don't match actual return type
-- Inconsistent with standard FastAPI patterns
+**現在のアプローチの問題点**:
+- すべてのルートで `get_response_schema()` を呼び出す必要がある
+- 冗長でエラーが発生しやすい
+- 型ヒントが実際の戻り値の型と一致しない
+- 標準的な FastAPI パターンと一貫性がない
 
-**Benefits of Automatic Resolution**:
-- Cleaner, more idiomatic code
-- Correct type hints for IDEs
-- Less boilerplate
-- Standard FastAPI patterns work naturally
+**自動解決の利点**:
+- よりクリーンで慣用的なコード
+- IDE 向けの正しい型ヒント
+- ボイラープレートの削減
+- 標準的な FastAPI パターンが自然に動作
 
-## Use Cases
+## ユースケース
 
-### 1. FastAPI Integration
+### 1. FastAPI 統合
 ```python
 from fastapi import FastAPI
 from repom.integrations.fastapi import use_repom_models
 
 app = FastAPI()
-use_repom_models(app)  # Enable automatic resolution
+use_repom_models(app)  # 自動解決を有効化
 
 @app.get("/samples/{id}", response_model=Sample)
 def get_sample(id: int) -> Sample:
     return sample_repo.get_by_id(id)
-# FastAPI automatically calls Sample.get_response_schema()
+# FastAPI が自動的に Sample.get_response_schema() を呼び出す
 ```
 
-### 2. Flask Integration
+### 2. Flask 統合
 ```python
 from flask import Flask
 from repom.integrations.flask import RepomSchema
@@ -71,31 +71,31 @@ def get_sample(id: int):
     return sample_repo.get_by_id(id)
 ```
 
-### 3. Automatic OpenAPI Documentation
+### 3. OpenAPI ドキュメント自動生成
 ```python
-# OpenAPI docs automatically generated with correct schemas
-# No manual schema specification needed
+# OpenAPI ドキュメントが正しいスキーマで自動生成される
+# 手動でスキーマを指定する必要なし
 @app.get("/samples/", response_model=list[Sample])
 def list_samples() -> list[Sample]:
     return sample_repo.get_all()
 ```
 
-## Potential Approaches
+## 検討可能なアプローチ
 
-### Approach 1: FastAPI Response Model Hook
-**Description**: Intercept FastAPI's response model resolution
+### アプローチ 1: FastAPI レスポンスモデルフック
+**説明**: FastAPI のレスポンスモデル解決をインターセプト
 
-**Pros**:
-- Works with existing FastAPI patterns
-- No changes to route definitions
-- Transparent to developers
+**長所**:
+- 既存の FastAPI パターンと連携
+- ルート定義の変更不要
+- 開発者にとって透過的
 
-**Cons**:
-- Requires FastAPI-specific implementation
-- May conflict with FastAPI updates
-- Complex integration point
+**短所**:
+- FastAPI 固有の実装が必要
+- FastAPI のアップデートと競合する可能性
+- 複雑な統合ポイント
 
-**Example**:
+**例**:
 ```python
 # repom/integrations/fastapi.py
 from fastapi import FastAPI
@@ -113,20 +113,20 @@ def use_repom_models(app: FastAPI):
     app.add_api_route = wrapped_add_api_route
 ```
 
-### Approach 2: Custom Decorator
-**Description**: Provide decorator that handles schema resolution
+### アプローチ 2: カスタムデコレータ
+**説明**: スキーマ解決を処理するデコレータを提供
 
-**Pros**:
-- Explicit and clear
-- Framework-agnostic
-- Easy to implement
+**長所**:
+- 明示的で明確
+- フレームワーク非依存
+- 実装が容易
 
-**Cons**:
-- Additional decorator required
-- Not standard FastAPI pattern
-- More boilerplate
+**短所**:
+- 追加のデコレータが必要
+- 標準的な FastAPI パターンではない
+- ボイラープレートが増える
 
-**Example**:
+**例**:
 ```python
 from repom.integrations import repom_response
 
@@ -136,19 +136,19 @@ def get_sample(id: int):
     return sample_repo.get_by_id(id)
 ```
 
-### Approach 3: Response Class Wrapper
-**Description**: Wrap FastAPI Response classes to handle repom models
+### アプローチ 3: レスポンスクラスラッパー
+**説明**: FastAPI の Response クラスをラップして repom モデルを処理
 
-**Pros**:
-- Works with FastAPI's response system
-- Can handle multiple response types
-- Maintains FastAPI patterns
+**長所**:
+- FastAPI のレスポンスシステムと連携
+- 複数のレスポンスタイプを処理可能
+- FastAPI パターンを維持
 
-**Cons**:
-- More complex implementation
-- Requires custom Response classes
+**短所**:
+- より複雑な実装
+- カスタム Response クラスが必要
 
-**Example**:
+**例**:
 ```python
 from repom.integrations.fastapi import RepomResponse
 
@@ -157,55 +157,55 @@ def get_sample(id: int) -> RepomResponse[Sample]:
     return sample_repo.get_by_id(id)
 ```
 
-## Technical Considerations
+## 技術的考慮事項
 
-### FastAPI Integration Points
-- **Route Registration**: Intercept `add_api_route()`
-- **Response Model Resolution**: Hook into response model processing
-- **OpenAPI Schema Generation**: Ensure schemas appear in docs
-- **Type Validation**: Maintain Pydantic validation behavior
+### FastAPI 統合ポイント
+- **ルート登録**: `add_api_route()` をインターセプト
+- **レスポンスモデル解決**: レスポンスモデル処理にフックを追加
+- **OpenAPI スキーマ生成**: スキーマがドキュメントに表示されることを保証
+- **型バリデーション**: Pydantic のバリデーション動作を維持
 
-### Flask Integration Points
-- **View Decorators**: Custom decorator for response schemas
-- **Response Serialization**: Convert SQLAlchemy models to dicts
-- **JSON Encoding**: Handle custom types (datetime, JSON fields)
-- **Error Handling**: Integrate with Flask error handlers
+### Flask 統合ポイント
+- **ビューデコレータ**: レスポンススキーマ用のカスタムデコレータ
+- **レスポンスシリアライゼーション**: SQLAlchemy モデルを辞書に変換
+- **JSON エンコーディング**: カスタム型（datetime、JSON フィールド）を処理
+- **エラーハンドリング**: Flask エラーハンドラーと統合
 
-### Compatibility Concerns
-- **FastAPI Versions**: Support 0.100+ (current patterns)
-- **Pydantic Versions**: Already compatible with Pydantic 2.x
-- **Type Hints**: Maintain correct type hints for IDEs
-- **Generic Types**: Handle `list[Sample]`, `dict[str, Sample]`, etc.
+### 互換性の懸念
+- **FastAPI バージョン**: 0.100+（現在のパターン）をサポート
+- **Pydantic バージョン**: すでに Pydantic 2.x と互換性あり
+- **型ヒント**: IDE 向けの正しい型ヒントを維持
+- **ジェネリック型**: `list[Sample]`、`dict[str, Sample]` などを処理
 
-### Performance
-- Schema generation is cached in `get_response_schema()`
-- No additional overhead per request
-- One-time resolution during route registration
+### パフォーマンス
+- スキーマ生成は `get_response_schema()` でキャッシュされる
+- リクエストごとの追加オーバーヘッドなし
+- ルート登録時の一度だけの解決
 
-### Error Handling
-- Use Phase 2 error handling (SchemaGenerationError)
-- Fail fast during app startup (dev mode)
-- Log warnings in production
-- Provide clear error messages
+### エラーハンドリング
+- Phase 2 エラーハンドリング（SchemaGenerationError）を使用
+- アプリ起動時にフェイルファスト（dev モード）
+- 本番環境では警告をログ出力
+- 明確なエラーメッセージを提供
 
-## Integration Points
+## 統合ポイント
 
-### Affected Components
-- **New Package**: `repom/integrations/` (FastAPI, Flask modules)
-- `pyproject.toml` - Add optional dependencies
-- `README.md` - Document integration patterns
-- `repom/base_model.py` - May need integration hooks
+### 影響を受けるコンポーネント
+- **新規パッケージ**: `repom/integrations/`（FastAPI、Flask モジュール）
+- `pyproject.toml` - オプショナル依存関係を追加
+- `README.md` - 統合パターンをドキュメント化
+- `repom/base_model.py` - 統合フックが必要になる可能性
 
-### Example Package Structure
+### パッケージ構造例
 ```
 repom/integrations/
 ├── __init__.py
-├── fastapi.py              # FastAPI integration
-├── flask.py                # Flask integration (future)
-└── common.py               # Shared utilities
+├── fastapi.py              # FastAPI 統合
+├── flask.py                # Flask 統合（将来）
+└── common.py               # 共有ユーティリティ
 ```
 
-### Optional Dependencies
+### オプショナル依存関係
 ```toml
 [tool.poetry.extras]
 fastapi = ["fastapi>=0.100.0"]
@@ -213,47 +213,47 @@ flask = ["flask>=2.0.0"]
 all = ["fastapi>=0.100.0", "flask>=2.0.0"]
 ```
 
-### Installation
+### インストール
 ```bash
-# Install with FastAPI integration
+# FastAPI 統合付きでインストール
 poetry add repom[fastapi]
 
-# Install with all integrations
+# すべての統合付きでインストール
 poetry add repom[all]
 ```
 
-## Next Steps
+## 次のステップ
 
-- [ ] Research FastAPI route registration internals
-- [ ] Prototype Approach 1 (response model hook)
-- [ ] Test with various response types (single, list, dict)
-- [ ] Test with generic types (`list[Sample]`, `Optional[Sample]`)
-- [ ] Verify OpenAPI documentation generation
-- [ ] Test with FastAPI dependency injection
-- [ ] Consider Flask integration approach
-- [ ] Evaluate impact on existing projects
-- [ ] Move to `docs/research/` for detailed implementation plan
+- [ ] FastAPI ルート登録の内部を調査
+- [ ] アプローチ 1（レスポンスモデルフック）のプロトタイプ
+- [ ] 様々なレスポンスタイプでテスト（単一、リスト、辞書）
+- [ ] ジェネリック型でテスト（`list[Sample]`、`Optional[Sample]`）
+- [ ] OpenAPI ドキュメント生成を検証
+- [ ] FastAPI 依存性注入でテスト
+- [ ] Flask 統合アプローチを検討
+- [ ] 既存プロジェクトへの影響を評価
+- [ ] 詳細な実装計画のため `docs/research/` に移動
 
-## Related Documents
+## 関連ドキュメント
 
-- `repom/base_model.py` - BaseModel with `get_response_schema()`
-- `README.md` - Current usage patterns
-- FastAPI documentation: [Response Model](https://fastapi.tiangolo.com/tutorial/response-model/)
+- `repom/base_model.py` - `get_response_schema()` を持つ BaseModel
+- `README.md` - 現在の使用パターン
+- FastAPI ドキュメント: [Response Model](https://fastapi.tiangolo.com/tutorial/response-model/)
 
-## Questions to Resolve
+## 解決すべき質問
 
-1. Should this be a separate package (`repom-fastapi`) or integrated?
-2. How to handle models with complex relationships (joins, lazy loading)?
-3. Should we support FastAPI's `response_model_exclude`, `response_model_include`?
-4. How to handle async vs sync repository methods?
-5. Should we provide middleware for automatic model-to-dict conversion?
-6. How to handle nested models and circular references?
-7. Should we support FastAPI's background tasks with repom models?
+1. これを別パッケージ（`repom-fastapi`）にすべきか、統合すべきか？
+2. 複雑なリレーションシップ（結合、遅延読み込み）を持つモデルをどう扱うか？
+3. FastAPI の `response_model_exclude`、`response_model_include` をサポートすべきか？
+4. 非同期 vs 同期リポジトリメソッドをどう扱うか？
+5. モデルから辞書への自動変換のためのミドルウェアを提供すべきか？
+6. ネストされたモデルと循環参照をどう扱うか？
+7. FastAPI のバックグラウンドタスクと repom モデルをサポートすべきか？
 
-## Additional Ideas
+## 追加アイディア
 
-### Middleware for Automatic Conversion
-Automatically convert SQLAlchemy instances to Pydantic models:
+### 自動変換のためのミドルウェア
+SQLAlchemy インスタンスを Pydantic モデルに自動変換:
 ```python
 from repom.integrations.fastapi import RepomMiddleware
 
@@ -262,12 +262,12 @@ app.add_middleware(RepomMiddleware)
 
 @app.get("/samples/{id}")
 def get_sample(id: int):
-    # Returns SQLAlchemy instance - automatically converted
+    # SQLAlchemy インスタンスを返す - 自動的に変換される
     return sample_repo.get_by_id(id)
 ```
 
-### Dependency Injection Helpers
-Integrate repom repositories with FastAPI dependencies:
+### 依存性注入ヘルパー
+repom リポジトリを FastAPI の依存性と統合:
 ```python
 from repom.integrations.fastapi import RepomDepends
 
@@ -279,18 +279,18 @@ def get_sample(
     return repo.get_by_id(id)
 ```
 
-### WebSocket Support
-Handle repom models in WebSocket connections:
+### WebSocket サポート
+WebSocket 接続で repom モデルを処理:
 ```python
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     sample = sample_repo.get_by_id(1)
-    # Automatically serialize for WebSocket
+    # WebSocket 用に自動的にシリアライズ
     await websocket.send_json(sample)
 ```
 
-### GraphQL Integration
-Extend to Strawberry/Ariadne GraphQL:
+### GraphQL 統合
+Strawberry/Ariadne GraphQL に拡張:
 ```python
 import strawberry
 from repom.integrations.graphql import from_repom_model
