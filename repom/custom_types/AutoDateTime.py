@@ -12,7 +12,7 @@ class AutoDateTime(TypeDecorator):
 
     使用例:
         from sqlalchemy.orm import Mapped, mapped_column
-        
+
         created_at: Mapped[datetime] = mapped_column(AutoDateTime, nullable=False)
         updated_at: Mapped[datetime] = mapped_column(AutoDateTime, nullable=False)
 

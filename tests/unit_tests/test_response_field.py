@@ -1,10 +1,11 @@
 """Tests for BaseModelAuto.response_field decorator and get_response_schema"""
 
 from tests._init import *
-from sqlalchemy import Column, String, Integer, inspect
+from sqlalchemy import String, Integer, inspect
+from sqlalchemy.orm import Mapped, mapped_column
+from typing import List, Optional
 from tests.db_test_fixtures import db_test
 from repom.base_model_auto import BaseModelAuto
-from typing import List
 
 
 class ResponseModelWithId(BaseModelAuto):
@@ -13,8 +14,8 @@ class ResponseModelWithId(BaseModelAuto):
 
     use_id = True
 
-    name = Column(String(100), nullable=False)
-    count = Column(Integer, nullable=False, default=0)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     @property
     def is_active(self) -> bool:
@@ -40,8 +41,8 @@ class ResponseModelWithoutId(BaseModelAuto):
 
     use_id = False
 
-    code = Column(String(50), primary_key=True)
-    value = Column(Integer, nullable=False)
+    code: Mapped[str] = mapped_column(String(50), primary_key=True)
+    value: Mapped[int] = mapped_column(Integer, nullable=False)
 
     @BaseModelAuto.response_field(
         doubled_value=int,

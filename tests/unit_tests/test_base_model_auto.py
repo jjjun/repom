@@ -1,7 +1,10 @@
 """Tests for BaseModelAuto with use_id フラグ"""
 
 from tests._init import *
-from sqlalchemy import Column, String, Integer, Date, Time, inspect
+from sqlalchemy import String, Integer, Date, Time, inspect
+from sqlalchemy.orm import Mapped, mapped_column
+from typing import Optional
+from datetime import date as date_type, time as time_type
 from tests.db_test_fixtures import db_test
 from repom.base_model_auto import BaseModelAuto
 
@@ -10,12 +13,12 @@ class AutoModelWithId(BaseModelAuto):
     """BaseModelAutoを継承し、デフォルトの use_id=True を使用したモデル"""
     __tablename__ = 'auto_model_with_id'
 
-    name = Column(
+    name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
         info={'description': '名前'}
     )
-    age = Column(
+    age: Mapped[Optional[int]] = mapped_column(
         Integer,
         nullable=True,
         info={'description': '年齢'}
@@ -26,12 +29,12 @@ class AutoModelWithoutId(BaseModelAuto, use_id=False):
     """BaseModelAutoを継承し、use_id=False を明示的に指定したモデル"""
     __tablename__ = 'auto_model_without_id'
 
-    code = Column(
+    code: Mapped[str] = mapped_column(
         String(50),
         primary_key=True,
         info={'description': 'コード'}
     )
-    name = Column(
+    name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
         info={'description': '名前'}
@@ -42,17 +45,17 @@ class AutoModelWithCompositePK(BaseModelAuto, use_id=False):
     """BaseModelAutoを継承し、複合主キーを使用するモデル（use_id=False を明示的に指定）"""
     __tablename__ = 'auto_model_with_composite_pk'
 
-    date = Column(
+    date: Mapped[date_type] = mapped_column(
         Date,
         primary_key=True,
         info={'description': '日付'}
     )
-    time = Column(
+    time: Mapped[time_type] = mapped_column(
         Time,
         primary_key=True,
         info={'description': '時刻'}
     )
-    description = Column(
+    description: Mapped[Optional[str]] = mapped_column(
         String(255),
         nullable=True,
         info={'description': '説明'}

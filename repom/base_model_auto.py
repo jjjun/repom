@@ -85,7 +85,7 @@ class BaseModelAuto(BaseModel):
 
     使用例:
         from sqlalchemy.orm import Mapped, mapped_column
-        
+
         # 通常モデル（id カラムあり、デフォルト）
         class User(BaseModelAuto):
             __tablename__ = 'users'

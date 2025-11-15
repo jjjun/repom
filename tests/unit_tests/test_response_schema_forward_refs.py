@@ -5,10 +5,10 @@
 """
 
 from tests._init import *
-from sqlalchemy import Column, String, Integer, ForeignKey
-from sqlalchemy.orm import relationship
-from repom.base_model_auto import BaseModelAuto
+from sqlalchemy import String, Integer, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import List, Optional, Dict, Any
+from repom.base_model_auto import BaseModelAuto
 from pydantic import ValidationError
 import pytest
 
@@ -24,8 +24,8 @@ class AuthorModel(BaseModelAuto):
     use_id = True
     use_created_at = True
 
-    name = Column(String(100), nullable=False)
-    email = Column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
 
 
 class BookModel(BaseModelAuto):
@@ -35,9 +35,9 @@ class BookModel(BaseModelAuto):
     use_id = True
     use_created_at = True
 
-    title = Column(String(200), nullable=False)
-    author_id = Column(Integer, ForeignKey('authors.id'), nullable=False)
-    price = Column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    author_id: Mapped[int] = mapped_column(Integer, ForeignKey('authors.id'), nullable=False)
+    price: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # リレーションシップ（テストでは使用しない場合もある）
     # author = relationship('AuthorModel', backref='books')
@@ -63,9 +63,9 @@ class ReviewModel(BaseModelAuto):
 
     use_id = True
 
-    book_id = Column(Integer, ForeignKey('books.id'), nullable=False)
-    rating = Column(Integer, nullable=False)
-    comment = Column(String(500), nullable=True)
+    book_id: Mapped[int] = mapped_column(Integer, ForeignKey('books.id'), nullable=False)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    comment: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     @BaseModelAuto.response_field(
         book_title=str,                    # 書籍タイトル
