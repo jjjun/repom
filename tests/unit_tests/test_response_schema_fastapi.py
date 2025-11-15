@@ -35,7 +35,7 @@ pytestmark = pytest.mark.skipif(
 if FASTAPI_AVAILABLE:
     from tests._init import *
     from sqlalchemy import Column, String, Integer
-    from repom.base_model import BaseModel
+    from repom.base_model_auto import BaseModelAuto
     from typing import List, Generic, TypeVar
     from pydantic import BaseModel as PydanticBaseModel
 
@@ -43,7 +43,7 @@ if FASTAPI_AVAILABLE:
     # テスト用モデル定義
     # ========================================
 
-    class ProductModel(BaseModel):
+    class ProductModel(BaseModelAuto):
         """商品モデル"""
         __tablename__ = 'products'
 
@@ -54,7 +54,7 @@ if FASTAPI_AVAILABLE:
         price = Column(Integer, nullable=False)
         stock = Column(Integer, nullable=False, default=0)
 
-        @BaseModel.response_field(
+        @BaseModelAuto.response_field(
             is_available=bool,
             tags=List[str]
         )
@@ -268,14 +268,14 @@ if FASTAPI_AVAILABLE:
     # Level 3-3: 複雑な前方参照のFastAPIテスト
     # ========================================
 
-    class CategoryModel(BaseModel):
+    class CategoryModel(BaseModelAuto):
         """カテゴリモデル"""
         __tablename__ = 'categories'
 
         use_id = True
         name = Column(String(100), nullable=False)
 
-        @BaseModel.response_field(
+        @BaseModelAuto.response_field(
             products=List['ProductResponse']  # 前方参照
         )
         def to_dict(self):

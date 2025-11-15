@@ -1,13 +1,13 @@
-"""Tests for BaseModel.response_field decorator and get_response_schema"""
+"""Tests for BaseModelAuto.response_field decorator and get_response_schema"""
 
 from tests._init import *
 from sqlalchemy import Column, String, Integer, inspect
 from tests.db_test_fixtures import db_test
-from repom.base_model import BaseModel
+from repom.base_model_auto import BaseModelAuto
 from typing import List
 
 
-class ResponseModelWithId(BaseModel):
+class ResponseModelWithId(BaseModelAuto):
     """use_id=Trueのモデルで@response_fieldを使用"""
     __tablename__ = 'response_model_with_id'
 
@@ -21,7 +21,7 @@ class ResponseModelWithId(BaseModel):
         """カスタムプロパティ"""
         return self.count > 0
 
-    @BaseModel.response_field(
+    @BaseModelAuto.response_field(
         is_active=bool,
         total_count=int
     )
@@ -34,7 +34,7 @@ class ResponseModelWithId(BaseModel):
         return data
 
 
-class ResponseModelWithoutId(BaseModel):
+class ResponseModelWithoutId(BaseModelAuto):
     """use_id=Falseのモデルで@response_fieldを使用"""
     __tablename__ = 'response_model_without_id'
 
@@ -43,7 +43,7 @@ class ResponseModelWithoutId(BaseModel):
     code = Column(String(50), primary_key=True)
     value = Column(Integer, nullable=False)
 
-    @BaseModel.response_field(
+    @BaseModelAuto.response_field(
         doubled_value=int,
         code_upper=str
     )

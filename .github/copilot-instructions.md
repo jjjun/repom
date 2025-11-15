@@ -70,6 +70,113 @@ items = repo.get_by(name="example")
 - Always test changes with `poetry run pytest`
 - Keep dependencies minimal
 
+## 📚 重要なドキュメントファイル
+
+### Core Documentation (必ず参照)
+
+- **README.md**: プロジェクトの基本情報、セットアップ、コマンドリファレンス
+- **AGENTS.md**: プロジェクト構造、技術スタック、開発ガイドライン
+
+### Feature-Specific Guides (機能実装時に参照)
+
+#### BaseModelAuto & スキーマ自動生成
+**ファイル**: `docs/guides/base_model_auto_guide.md`
+
+**対象機能**:
+- BaseModelAuto による Pydantic スキーマ自動生成
+- get_create_schema() / get_update_schema() / get_response_schema()
+- @response_field デコレータの使い方
+- 前方参照の解決方法
+- スキーマ生成ルール表
+- FastAPI 統合の実装例
+
+**使用タイミング**:
+- SQLAlchemy モデルから Pydantic スキーマを生成する場合
+- FastAPI のエンドポイントで response_model を定義する場合
+- Create/Update/Response スキーマが必要な場合
+
+**ユーザーへの指示例**:
+```
+「docs/guides/base_model_auto_guide.md を見て、
+ User モデルに FastAPI スキーマを追加してください」
+```
+
+---
+
+#### BaseRepository, FilterParams & Utilities
+**ファイル**: `docs/guides/repository_and_utilities_guide.md`
+
+**対象機能**:
+- BaseRepository（データアクセス層）
+- FilterParams（検索パラメータ）
+- as_query_depends()（FastAPI 統合）
+- auto_import_models（モデル自動インポート）
+
+**使用タイミング**:
+- データベース操作を実装する場合
+- 検索・フィルタ機能を実装する場合
+- FastAPI のクエリパラメータを型安全に扱いたい場合
+- モデルの自動インポートを設定する場合
+
+**ユーザーへの指示例**:
+```
+「docs/guides/repository_and_utilities_guide.md を見て、
+ FilterParams を使った検索機能を実装してください」
+```
+
+---
+
+### Technical Deep Dive (トラブルシューティング時に参照)
+
+- **docs/technical/get_response_schema_technical.md**: スキーマ生成の内部実装
+- **docs/technical/ai_context_management.md**: AI コンテキスト管理の解説
+
+### Issue Tracking
+
+- **docs/issue/README.md**: Issue 管理システムの使い方
+
+---
+
+## 🤖 AI エージェント作業パターン
+
+### パターン1: BaseModelAuto を使ったモデル作成
+
+```
+1. README.md を読んで基本を理解
+2. docs/guides/base_model_auto_guide.md を読んで詳細を把握
+3. 実装開始
+```
+
+**ユーザーからの指示**:
+```
+「docs/guides/base_model_auto_guide.md を参考にして、
+ Task モデルに Create/Update/Response スキーマを追加してください」
+```
+
+### パターン2: FastAPI エンドポイント実装
+
+```
+1. README.md でプロジェクト構造を確認
+2. docs/guides/base_model_auto_guide.md でスキーマ生成方法を確認
+3. docs/guides/repository_and_utilities_guide.md で検索パラメータ実装を確認
+4. 実装開始
+```
+
+**ユーザーからの指示**:
+```
+「docs/guides/base_model_auto_guide.md と
+ docs/guides/repository_and_utilities_guide.md を参考にして、
+ Task の CRUD エンドポイントと検索機能を実装してください」
+```
+
+### パターン3: トラブルシューティング
+
+```
+1. README.md のトラブルシューティングセクションを確認
+2. 問題が複雑な場合は docs/technical/ を参照
+3. Issue として記録 (docs/issue/)
+```
+
 ## 📚 Documentation Structure & AI Workflow
 
 ### Directory Organization

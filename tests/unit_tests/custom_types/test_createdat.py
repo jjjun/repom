@@ -1,6 +1,6 @@
 from tests._init import *
 from sqlalchemy import Column, Integer
-from repom.custom_types.CreatedAt import CreatedAt
+from repom.custom_types.AutoDateTime import AutoDateTime
 from tests.db_test_fixtures import db_test
 from repom.base_model import BaseModel
 from datetime import datetime, timedelta
@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 class CreatedAtModel(BaseModel):
     __tablename__ = 'test_model_createdat'
     id = Column(Integer, primary_key=True)
-    created_at = Column(CreatedAt, default=datetime.now)
+    created_at = Column(AutoDateTime, default=datetime.now)
 
 
 def test_created_at_default_now(db_test):

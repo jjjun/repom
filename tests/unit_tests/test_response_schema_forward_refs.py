@@ -7,7 +7,7 @@
 from tests._init import *
 from sqlalchemy import Column, String, Integer, ForeignKey
 from sqlalchemy.orm import relationship
-from repom.base_model import BaseModel
+from repom.base_model_auto import BaseModelAuto
 from typing import List, Optional, Dict, Any
 from pydantic import ValidationError
 import pytest
@@ -17,7 +17,7 @@ import pytest
 # テスト用モデル定義
 # ========================================
 
-class AuthorModel(BaseModel):
+class AuthorModel(BaseModelAuto):
     """著者モデル"""
     __tablename__ = 'authors'
 
@@ -28,7 +28,7 @@ class AuthorModel(BaseModel):
     email = Column(String(255), nullable=False)
 
 
-class BookModel(BaseModel):
+class BookModel(BaseModelAuto):
     """書籍モデル（著者への参照を持つ）"""
     __tablename__ = 'books'
 
@@ -42,7 +42,7 @@ class BookModel(BaseModel):
     # リレーションシップ（テストでは使用しない場合もある）
     # author = relationship('AuthorModel', backref='books')
 
-    @BaseModel.response_field(
+    @BaseModelAuto.response_field(
         author=Dict[str, Any],  # 著者情報を辞書として含める
         tags=List[str],         # タグのリスト
         is_available=bool       # 在庫があるか
@@ -57,7 +57,7 @@ class BookModel(BaseModel):
         return data
 
 
-class ReviewModel(BaseModel):
+class ReviewModel(BaseModelAuto):
     """レビューモデル（書籍への参照を持つ - 循環参照のテスト用）"""
     __tablename__ = 'reviews'
 
@@ -67,7 +67,7 @@ class ReviewModel(BaseModel):
     rating = Column(Integer, nullable=False)
     comment = Column(String(500), nullable=True)
 
-    @BaseModel.response_field(
+    @BaseModelAuto.response_field(
         book_title=str,                    # 書籍タイトル
         related_books=List['BookResponse']  # 前方参照（文字列）
     )
@@ -178,7 +178,7 @@ def test_forward_refs_validation_with_custom_model():
 # Level 2-3: 複雑な前方参照のテスト
 # ========================================
 
-class ComplexModel(BaseModel):
+class ComplexModel(BaseModelAuto):
     """複雑な前方参照を持つモデル"""
     __tablename__ = 'complex_models'
 
@@ -186,7 +186,7 @@ class ComplexModel(BaseModel):
 
     name = Column(String(100), nullable=False)
 
-    @BaseModel.response_field(
+    @BaseModelAuto.response_field(
         nested_list=List[List[str]],           # ネストしたリスト
         optional_dict=Optional[Dict[str, int]],  # Optional な Dict
         mixed_data=List[Dict[str, Any]]        # 複雑なネスト
@@ -230,12 +230,12 @@ def test_forward_refs_nested_types_validation():
 
 def test_forward_refs_optional_validation():
     """Optional フィールドが None を許容することを確認"""
-    class OptionalModel(BaseModel):
+    class OptionalModel(BaseModelAuto):
         __tablename__ = 'optional_models'
         use_id = True
         name = Column(String(100))
 
-        @BaseModel.response_field(
+        @BaseModelAuto.response_field(
             optional_value=Optional[int],
             optional_list=Optional[List[str]]
         )
@@ -413,7 +413,7 @@ def test_forward_refs_generic_list_response_pattern():
 # Level 2-8: カスタム型（ListJSON）のテスト
 # ========================================
 
-class ModelWithListJSON(BaseModel):
+class ModelWithListJSON(BaseModelAuto):
     """ListJSON カスタム型を使用するモデル"""
     __tablename__ = 'model_with_listjson'
 
@@ -426,7 +426,7 @@ class ModelWithListJSON(BaseModel):
     tags = Column(ListJSON, nullable=False)
     categories = Column(ListJSON, nullable=True)
 
-    @BaseModel.response_field(
+    @BaseModelAuto.response_field(
         tag_count=int,
         all_tags=List[str]  # to_dict() で List[str] を返す
     )
@@ -527,7 +527,7 @@ def test_listjson_type_annotation_resolution():
 # Level 2-9: 文字列型アノテーションのテスト（本番環境の問題を再現）
 # ========================================
 
-class AssetItemModel(BaseModel):
+class AssetItemModel(BaseModelAuto):
     """アセットアイテムモデル（テスト用）"""
     __tablename__ = 'asset_items'
 
@@ -535,7 +535,7 @@ class AssetItemModel(BaseModel):
     name = Column(String(100), nullable=False)
 
 
-class VoiceScriptLineLogModel(BaseModel):
+class VoiceScriptLineLogModel(BaseModelAuto):
     """ログモデル（テスト用）"""
     __tablename__ = 'voice_script_line_logs'
 
@@ -543,14 +543,14 @@ class VoiceScriptLineLogModel(BaseModel):
     message = Column(String(500), nullable=False)
 
 
-class VoiceScriptModel(BaseModel):
+class VoiceScriptModel(BaseModelAuto):
     """本番環境と同じパターンのモデル"""
     __tablename__ = 'voice_scripts'
 
     use_id = True
     text = Column(String(500), nullable=True)
 
-    @BaseModel.response_field(
+    @BaseModelAuto.response_field(
         text=str | None,
         api_params=dict | None,
         asset_item="AssetItemResponse | None",  # ← 文字列で型指定
@@ -824,12 +824,12 @@ def test_phase1_improvement_list_no_longer_required():
 
 def test_phase1_improvement_dict_no_longer_required():
     """Phase 1 改善: forward_refs に Dict を含めなくても動作することを確認"""
-    class ConfigModel(BaseModel):
+    class ConfigModel(BaseModelAuto):
         __tablename__ = 'test_config_phase1'
         id = Column(Integer, primary_key=True)
         name = Column(String)
 
-        @BaseModel.response_field(settings="Dict[str, Any]")
+        @BaseModelAuto.response_field(settings="Dict[str, Any]")
         def to_dict(self):
             result = {
                 'id': self.id,
@@ -853,12 +853,12 @@ def test_phase1_improvement_dict_no_longer_required():
 
 def test_phase1_improvement_optional_no_longer_required():
     """Phase 1 改善: forward_refs に Optional を含めなくても動作することを確認"""
-    class ItemModel(BaseModel):
+    class ItemModel(BaseModelAuto):
         __tablename__ = 'test_item_phase1'
         id = Column(Integer, primary_key=True)
         name = Column(String)
 
-        @BaseModel.response_field(description="Optional[str]")
+        @BaseModelAuto.response_field(description="Optional[str]")
         def to_dict(self):
             result = {
                 'id': self.id,
@@ -917,11 +917,11 @@ def test_phase2_error_message_in_dev_environment(monkeypatch):
     monkeypatch.setenv('EXEC_ENV', 'dev')
 
     # Create a model with unresolved forward reference
-    class TestModel(BaseModel):
+    class TestModel(BaseModelAuto):
         __tablename__ = 'test_error_dev'
         id = Column(Integer, primary_key=True)
 
-        @BaseModel.response_field(
+        @BaseModelAuto.response_field(
             book="BookResponse"  # Undefined type
         )
         def to_dict(self):
@@ -954,11 +954,11 @@ def test_phase2_error_message_in_prod_environment(monkeypatch, caplog):
     caplog.set_level(logging.ERROR)
 
     # Create a model with unresolved forward reference
-    class TestModel(BaseModel):
+    class TestModel(BaseModelAuto):
         __tablename__ = 'test_error_prod'
         id = Column(Integer, primary_key=True)
 
-        @BaseModel.response_field(
+        @BaseModelAuto.response_field(
             asset="AssetResponse"  # Undefined type
         )
         def to_dict(self):
@@ -996,11 +996,11 @@ def test_phase2_helpful_error_suggestions():
     os.environ['EXEC_ENV'] = 'dev'
 
     try:
-        class TestModelSuggestions(BaseModel):
+        class TestModelSuggestions(BaseModelAuto):
             __tablename__ = 'test_suggestions_unique'
             id = Column(Integer, primary_key=True)
 
-            @BaseModel.response_field(
+            @BaseModelAuto.response_field(
                 item="ItemResponseUnique"
             )
             def to_dict(self):

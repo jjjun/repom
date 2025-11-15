@@ -1,48 +1,11 @@
 import json
-import re
-import logging
-import os
-from typing import Callable, Type, Any, Dict, Optional, Set
-from weakref import WeakKeyDictionary
-from sqlalchemy import Column, Integer
+from sqlalchemy import Column, Integer, event
+from datetime import datetime
 from repom.db import Base, inspect
-from repom.custom_types.CreatedAt import CreatedAt
-
-# グローバルレジストリ: クラスオブジェクトをキーとして extra response fields を管理
-_EXTRA_FIELDS_REGISTRY: WeakKeyDictionary[type, Dict[str, Any]] = WeakKeyDictionary()
-
-# Logger
-logger = logging.getLogger(__name__)
+from repom.custom_types.AutoDateTime import AutoDateTime
 
 # センチネル値（パラメータが指定されていないことを示す）
 _UNSET = object()
-
-
-class SchemaGenerationError(Exception):
-    """Raised when schema generation fails due to unresolved forward references"""
-    pass
-
-
-def _extract_undefined_types(error_message: str) -> Set[str]:
-    """
-    Extract undefined type names from Pydantic error messages.
-
-    Args:
-        error_message: The exception message from model_rebuild()
-
-    Returns:
-        Set of undefined type names
-
-    Examples:
-        >>> _extract_undefined_types("name 'BookResponse' is not defined")
-        {'BookResponse'}
-        >>> _extract_undefined_types("name 'AssetItemResponse' is not defined")
-        {'AssetItemResponse'}
-    """
-    # Match pattern: name 'TypeName' is not defined
-    pattern = r"name '([^']+)' is not defined"
-    matches = re.findall(pattern, error_message)
-    return set(matches)
 
 
 class BaseModel(Base):
@@ -52,9 +15,6 @@ class BaseModel(Base):
 
     # このクラスは抽象基底クラスとして定義する際に abstract=True を指定する
     __abstract__ = True
-
-    # Pydanticレスポンススキーマのキャッシュ
-    _response_schemas: Dict[str, Type[Any]] = {}
 
     def __init_subclass__(
         cls,
@@ -126,9 +86,9 @@ class BaseModel(Base):
             cls.id = Column(Integer, primary_key=True)
 
         if cls.use_created_at:
-            cls.created_at = Column(CreatedAt)
+            cls.created_at = Column(AutoDateTime)
         if cls.use_updated_at:
-            cls.updated_at = Column(CreatedAt)
+            cls.updated_at = Column(AutoDateTime)
 
     def to_dict(self):
         return {c.key: getattr(self, c.key) for c in inspect(self).mapper.column_attrs}
@@ -150,8 +110,9 @@ class BaseModel(Base):
         Returns:
             bool: 変更があった場合は True、なければ False。
         """
-        # 更新を拒否するデフォルトのフィールド
-        default_exclude_fields = {'id'}
+        # 更新を拒否するデフォルトのフィールド（システムカラム）
+        # セキュリティ上、これらは常に除外される（exclude_fields で指定しても除外）
+        default_exclude_fields = {'id', 'created_at', 'updated_at'}
         # 引数で指定されたフィールドを追加
         if exclude_fields:
             exclude_fields = set(exclude_fields)
@@ -170,223 +131,25 @@ class BaseModel(Base):
                 updated = True
         return updated
 
-    @classmethod
-    def response_field(cls, **fields):
-        """
-        デコレータ: to_dict()で追加されるフィールドを宣言
 
-        このデコレータは、to_dict()メソッドが返すフィールドの型情報を宣言します。
-        宣言された型情報は get_response_schema() で Pydantic スキーマ生成に使用されます。
+# SQLAlchemy Event: updated_at の自動更新
+@event.listens_for(BaseModel, 'before_update', propagate=True)
+def receive_before_update(mapper, connection, target):
+    """
+    更新前に updated_at を自動設定
 
-        注意:
-        - リレーションシップフィールドの循環参照を避けるため、文字列型アノテーション ('ModelResponse') を使用できます
-        - デコレータはメタデータを保存するだけで、to_dict() の実行には影響しません（パフォーマンス影響なし）
+    このイベントは全ての BaseModel サブクラスに自動的に適用されます（propagate=True）。
+    レコード更新時に updated_at カラムがあれば、現在時刻で自動更新します。
 
-        使用例:
-            from typing import List, Any
+    動作:
+    - SQLite を含むすべてのデータベースで動作
+    - updated_at カラムを持つモデルのみ対象
+    - 更新のたびに自動実行される
 
-            @BaseModel.response_field(
-                is_paid=bool,
-                total_amount=int,
-                num_cashflows=int,
-                fin_hama_cfs=List['FinHamaCFResponse']  # 文字列で前方参照
-            )
-            def to_dict(self):
-                data = super().to_dict()
-                data.update({
-                    'is_paid': True,
-                    'total_amount': 1000,
-                    'num_cashflows': 5,
-                    'fin_hama_cfs': [cf.to_dict() for cf in self.related_items]
-                })
-                return data
-
-        Args:
-            **fields: フィールド名と型のマッピング
-
-        Returns:
-            Callable: デコレートされた to_dict() メソッド
-        """
-        def decorator(to_dict_method: Callable):
-            # メソッドにメタデータを付与
-            to_dict_method._response_fields = fields
-            return to_dict_method
-        return decorator
-
-    @classmethod
-    def get_response_schema(
-        cls,
-        schema_name: str = None,
-        forward_refs: Dict[str, Type[Any]] = None
-    ) -> Type[Any]:
-        """
-        to_dict() の結果から動的に Pydantic レスポンススキーマを生成
-
-        このメソッドは、SQLAlchemy モデルのカラム情報と @response_field デコレータで
-        宣言された追加フィールドから、Pydantic スキーマを自動生成します。
-
-        生成されたスキーマは自動的にキャッシュされ、同じ引数での再呼び出しは
-        キャッシュから返されます（パフォーマンス最適化）。
-
-        Args:
-            schema_name: 生成するスキーマ名（省略時は {ModelName}Response）
-            forward_refs: 前方参照を解決するための型マッピング
-                例: {'FinHamaCFResponse': FinHamaCFResponse}
-                List['FinHamaCFResponse'] のような文字列型参照を解決します
-
-        Returns:
-            Type[BaseModel]: 生成された Pydantic スキーマクラス
-
-        使用例:
-            # 基本的な使用
-            FinHamaCFResponse = FinHamaCFModel.get_response_schema()
-
-            # 前方参照を解決
-            FinHamaCFGResponse = FinHamaCFGModel.get_response_schema(
-                forward_refs={'FinHamaCFResponse': FinHamaCFResponse}
-            )
-        """
-        from pydantic import BaseModel as PydanticBaseModel, create_model
-        from typing import List, Dict, Optional, Set, Tuple, Union
-
-        # to_dictメソッドから_response_fieldsを読み取り、レジストリに登録
-        if cls not in _EXTRA_FIELDS_REGISTRY:
-            to_dict_method = getattr(cls, 'to_dict', None)
-            if to_dict_method and hasattr(to_dict_method, '_response_fields'):
-                _EXTRA_FIELDS_REGISTRY[cls] = to_dict_method._response_fields
-
-        if schema_name is None:
-            schema_name = f"{cls.__name__.replace('Model', '')}Response"
-
-        # キャッシュキー（forward_refsも含める）
-        cache_key = f"{cls.__name__}::{schema_name}"
-        if forward_refs:
-            cache_key += f"::{','.join(sorted(forward_refs.keys()))}"
-
-        if cache_key in cls._response_schemas:
-            return cls._response_schemas[cache_key]
-
-        # フィールド定義を収集
-        field_definitions = {}
-
-        # 1. カラムフィールド（SQLAlchemy から自動取得）
-        for column in inspect(cls).mapper.column_attrs:
-            col = column.columns[0]
-
-            # 型を取得（カスタム型の場合はフォールバック）
-            try:
-                python_type = col.type.python_type
-            except NotImplementedError:
-                # カスタム型の場合は Any にフォールバック
-                from datetime import datetime
-                # CreatedAt などのカスタム型は datetime として扱う
-                if 'created_at' in col.name or 'updated_at' in col.name:
-                    python_type = datetime
-                else:
-                    python_type = Any
-
-            if col.nullable:
-                field_definitions[col.name] = (Optional[python_type], None)
-            else:
-                field_definitions[col.name] = (python_type, ...)
-
-        # 2. to_dict()の追加フィールド（@response_field デコレータから取得）
-        # グローバルレジストリから、このクラス専用のフィールドを取得
-        extra_fields = _EXTRA_FIELDS_REGISTRY.get(cls, {})
-        field_definitions.update({
-            name: (field_type, ...)
-            for name, field_type in extra_fields.items()
-        })
-
-        # Pydantic スキーマを動的生成
-        from pydantic import ConfigDict
-
-        schema = create_model(
-            schema_name,
-            __config__=ConfigDict(from_attributes=True),
-            **field_definitions
-        )
-
-        # 前方参照を解決（文字列型アノテーションを実際の型に変換）
-        # 標準型を自動的に含める
-        standard_types = {
-            'List': List,
-            'Dict': Dict,
-            'Optional': Optional,
-            'Set': Set,
-            'Tuple': Tuple,
-            'Union': Union,
-        }
-
-        # ユーザー指定の forward_refs と標準型をマージ
-        types_namespace = {**standard_types}
-        if forward_refs:
-            types_namespace.update(forward_refs)
-
-        try:
-            schema.model_rebuild(_types_namespace=types_namespace)
-        except Exception as e:
-            # Extract undefined types from error message
-            undefined_types = _extract_undefined_types(str(e))
-
-            # Build detailed error message
-            error_details = [
-                f"Failed to generate Pydantic schema for '{schema_name}'.",
-                f"Error: {e}",
-                "",
-                "This usually happens when:",
-                "  1. A custom type is referenced as a string but not provided in forward_refs",
-                "  2. A type is not importable in the current context",
-            ]
-
-            if undefined_types:
-                error_details.extend([
-                    "",
-                    f"Undefined types detected: {', '.join(sorted(undefined_types))}",
-                    "",
-                    "Solution:",
-                    f"  Add missing types to forward_refs parameter:",
-                    f"  schema = {cls.__name__}.get_response_schema(",
-                    f"      forward_refs={{",
-                ])
-                for type_name in sorted(undefined_types):
-                    error_details.append(f"          '{type_name}': {type_name},")
-                error_details.extend([
-                    f"      }}",
-                    f"  )",
-                ])
-            else:
-                error_details.extend([
-                    "",
-                    "Solution:",
-                    "  - Check that all referenced types are imported",
-                    "  - Verify type annotations are correct",
-                ])
-
-            error_msg = "\n".join(error_details)
-
-            # Log detailed error
-            logger.error(error_msg)
-
-            # Development environment: raise exception to stop execution
-            if os.getenv('EXEC_ENV') == 'dev':
-                raise SchemaGenerationError(error_msg) from e
-            else:
-                # Production environment: warn and continue
-                import warnings
-                warnings.warn(f"Failed to rebuild {schema_name}. See logs for details.")
-                pass
-
-        # キャッシュに保存
-        cls._response_schemas[cache_key] = schema
-        return schema
-
-    @classmethod
-    def get_extra_fields_debug(cls) -> Dict[str, Any]:
-        """
-        デバッグ用: このクラスの extra response fields を表示
-
-        Returns:
-            Dict[str, Any]: フィールド名と型のマッピング
-        """
-        return _EXTRA_FIELDS_REGISTRY.get(cls, {})
+    Args:
+        mapper: SQLAlchemy mapper
+        connection: データベース接続
+        target: 更新対象のモデルインスタンス
+    """
+    if hasattr(target, 'updated_at'):
+        target.updated_at = datetime.now()
