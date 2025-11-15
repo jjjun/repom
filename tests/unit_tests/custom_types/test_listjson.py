@@ -1,5 +1,6 @@
 from tests._init import *
-from sqlalchemy import Column, Integer, func
+from sqlalchemy import Integer, func
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.exc import StatementError
 from repom.custom_types.ListJSON import ListJSON, listjson_filter
 from tests.db_test_fixtures import db_test
@@ -10,8 +11,8 @@ from typing import Optional, List
 
 class ListModel(BaseModel):
     __tablename__ = 'test_model_listjson'
-    id = Column(Integer, primary_key=True)
-    option_list = Column(ListJSON)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    option_list: Mapped[List] = mapped_column(ListJSON)
 
 
 class ListModelFilterParams(FilterParams):

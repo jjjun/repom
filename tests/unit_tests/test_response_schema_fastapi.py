@@ -34,7 +34,8 @@ pytestmark = pytest.mark.skipif(
 
 if FASTAPI_AVAILABLE:
     from tests._init import *
-    from sqlalchemy import Column, String, Integer
+    from sqlalchemy import String, Integer
+    from sqlalchemy.orm import Mapped, mapped_column
     from repom.base_model_auto import BaseModelAuto
     from typing import List, Generic, TypeVar
     from pydantic import BaseModel as PydanticBaseModel
@@ -50,9 +51,9 @@ if FASTAPI_AVAILABLE:
         use_id = True
         use_created_at = True
 
-        name = Column(String(100), nullable=False)
-        price = Column(Integer, nullable=False)
-        stock = Column(Integer, nullable=False, default=0)
+        name: Mapped[str] = mapped_column(String(100), nullable=False)
+        price: Mapped[int] = mapped_column(Integer, nullable=False)
+        stock: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
         @BaseModelAuto.response_field(
             is_available=bool,
@@ -273,7 +274,7 @@ if FASTAPI_AVAILABLE:
         __tablename__ = 'categories'
 
         use_id = True
-        name = Column(String(100), nullable=False)
+        name: Mapped[str] = mapped_column(String(100), nullable=False)
 
         @BaseModelAuto.response_field(
             products=List['ProductResponse']  # 前方参照

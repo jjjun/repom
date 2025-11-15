@@ -1,16 +1,18 @@
 from tests._init import *
-from sqlalchemy import Column, Integer
+from sqlalchemy import Integer
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.exc import StatementError
 from repom.custom_types.JSONEncoded import JSONEncoded
 from tests.db_test_fixtures import db_test
 from repom.base_model import BaseModel
 from datetime import datetime
+from typing import Any
 
 
 class MyModel(BaseModel):
     __tablename__ = 'test_model_jsonencoded'
-    id = Column(Integer, primary_key=True)
-    option_json = Column(JSONEncoded)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    option_json: Mapped[Any] = mapped_column(JSONEncoded)
 
 
 def test_json_encoded_value_is_json_format(db_test):

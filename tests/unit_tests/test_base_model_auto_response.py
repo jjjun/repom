@@ -1,6 +1,8 @@
 """BaseModelAuto の Response スキーマ生成機能をテスト"""
 import pytest
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Integer, String, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column
+from typing import Optional
 from repom.base_model_auto import BaseModelAuto
 from tests.db_test_fixtures import db_test
 
@@ -11,29 +13,29 @@ class ResponseTestModel(BaseModelAuto):
     use_created_at = True
     use_updated_at = True
 
-    name = Column(String(100), nullable=False)
-    email = Column(String(100), nullable=True)
-    category_id = Column(Integer, ForeignKey('categories.id'), nullable=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    email: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    category_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey('categories.id'), nullable=True)
 
 
 class CategoryModel(BaseModelAuto):
     """外部キー参照用のカテゴリモデル"""
     __tablename__ = 'categories'
 
-    name = Column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
 class SensitiveFKModel(BaseModelAuto):
     """センシティブな外部キーを持つモデル"""
     __tablename__ = 'sensitive_fk_model'
 
-    name = Column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
 
     # 通常の外部キー（Create/Update に含まれる）
-    category_id = Column(Integer, ForeignKey('categories.id'), nullable=True)
+    category_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey('categories.id'), nullable=True)
 
     # センシティブな外部キー（Create/Update から除外）
-    owner_id = Column(
+    owner_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey('users.id'),
         info={
@@ -48,17 +50,17 @@ class UserModel(BaseModelAuto):
     """外部キー参照用のユーザーモデル"""
     __tablename__ = 'users'
 
-    username = Column(String(100), nullable=False)
+    username: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
 class ExplicitExcludeModel(BaseModelAuto):
     """明示的に Response から除外するフィールドを持つモデル"""
     __tablename__ = 'explicit_exclude_model'
 
-    name = Column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
 
     # Response から明示的に除外
-    password_hash = Column(
+    password_hash: Mapped[str] = mapped_column(
         String(255),
         info={
             'in_response': False,
@@ -109,7 +111,7 @@ def test_response_field_decorator(db_test):
     class ModelWithResponseField(BaseModelAuto):
         __tablename__ = 'model_with_response_field'
 
-        name = Column(String(100), nullable=False)
+        name: Mapped[str] = mapped_column(String(100), nullable=False)
 
         @BaseModelAuto.response_field(
             full_name=str,
@@ -138,8 +140,8 @@ def test_response_schema_default_behavior(db_test):
         use_updated_at = True
 
         # info なし → デフォルトで Response に含まれる
-        name = Column(String(100), nullable=False)
-        category_id = Column(Integer, ForeignKey('categories.id'), nullable=True)
+        name: Mapped[str] = mapped_column(String(100), nullable=False)
+        category_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey('categories.id'), nullable=True)
 
     ResponseSchema = DefaultBehaviorModel.get_response_schema()
 
