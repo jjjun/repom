@@ -11,8 +11,10 @@ class AutoDateTime(TypeDecorator):
     - 引数に日付が渡されれば、その値が使われる事を保証
 
     使用例:
-        created_at = Column(AutoDateTime, nullable=False)
-        updated_at = Column(AutoDateTime, nullable=False)
+        from sqlalchemy.orm import Mapped, mapped_column
+        
+        created_at: Mapped[datetime] = mapped_column(AutoDateTime, nullable=False)
+        updated_at: Mapped[datetime] = mapped_column(AutoDateTime, nullable=False)
 
     注意:
         updated_at の自動更新は SQLAlchemy Event で実装されています
