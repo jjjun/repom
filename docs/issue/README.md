@@ -37,10 +37,14 @@ completed/     → 実装完了・テスト済み
 
 **ファイル**: `backlog/006_migrate_to_sqlalchemy_2_0_style.md`
 
-**ステータス**: 📝 計画中（2025-11-15）
+**ステータス**: � Phase 1 実施中（2025-11-15）
 
 **概要**:
 repom プロジェクト全体を SQLAlchemy 2.0 の推奨スタイル（`Mapped[]` 型ヒント + `mapped_column()`）に移行する。型安全性の向上、エディタ補完の改善、将来のバージョン互換性を確保する。
+
+**進捗**:
+- ✅ Phase 1.1: BaseModel migration 完了 (Commit: 964504d)
+- ⚠️ Known issue: test_forward_refs_generic_list_response_pattern (AutoDateTime 問題)
 
 **実装計画**:
 - Phase 1: repom コアの移行（BaseModel, サンプルモデル）
@@ -48,6 +52,27 @@ repom プロジェクト全体を SQLAlchemy 2.0 の推奨スタイル（`Mapped
 - Phase 3: ドキュメント整備
 - Phase 4: 外部プロジェクト移行ガイド作成
 - Phase 5: 実プロジェクトの移行
+
+---
+
+### Issue #7: Annotation Inheritance の実装検証
+
+**ファイル**: `backlog/007_annotation_inheritance_validation.md`
+
+**ステータス**: 📝 調査待ち（2025-11-15）
+
+**概要**:
+Issue #006 (Phase 1.1) で BaseModel の `__annotations__` 継承問題を修正したが、この実装が正しいのか、他の影響がないかを調査する必要がある。
+
+**調査項目**:
+1. Python の `__annotations__` 継承動作の確認
+2. SQLAlchemy 2.0 の推奨パターンとの整合性
+3. 他のフレームワークとの互換性（FastAPI, Pydantic）
+4. エッジケースの検証（多重継承, Mixin）
+5. パフォーマンスへの影響
+6. 代替実装の検討
+
+**関連 Issue**: #006 (SQLAlchemy 2.0 migration)
 
 **影響範囲**:
 - repom 内部: BaseModel, サンプルモデル, テストコード
