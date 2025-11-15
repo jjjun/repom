@@ -1,7 +1,7 @@
 # SQLAlchemy 2.0 スタイルへの移行
 
 ## ステータス
-- **段階**: Phase 1 完了 ✅ / Phase 2 進行中 🚧
+- **段階**: Phase 1-3 完了 ✅ / Phase 4-5 残り
 - **優先度**: 中
 - **複雑度**: 中
 - **作成日**: 2025-11-15
@@ -22,19 +22,51 @@
 - ユーザー参照用のサンプルコードが最新スタイル
 - ドキュメントとコード例が統一
 
-### 🚧 Phase 2 進行中 (テストコードの移行)
+**テスト結果**: 141/142 passing (1 known AutoDateTime design issue)
 
-**完了項目** (Part 1: Commit 87b5fb8):
-- ✅ `test_base_model_auto.py` (16/16 tests passing)
-- ✅ `test_response_field.py` (13/13 tests passing)
-- 🚧 `test_response_schema_forward_refs.py` (部分移行)
+### ✅ Phase 2 完了 (テストコードの移行)
 
-**残作業**:
-- test_response_schema_forward_refs.py の残りのモデル定義（多数）
-- その他のテストファイル（test_model.py, test_repository.py など）
-- behavior_tests/（3ファイル）
+**完了項目**:
+- **Part 1** (Commit: 87b5fb8):
+  - ✅ `test_base_model_auto.py` (16/16 tests passing)
+  - ✅ `test_response_field.py` (13/13 tests passing)
+  - ✅ `test_response_schema_forward_refs.py` (main models)
 
-**方針**: Phase 3（ドキュメント整備）を優先し、Phase 2 は段階的に完了
+- **Part 2** (Commit: d56f382):
+  - ✅ `test_system_columns_protection.py` (1 model)
+  - ✅ `test_repository.py` (2 models)
+  - ✅ `test_model_no_id.py` (6 models)
+  - ✅ `test_subclass_parameter_style.py` (15 models)
+  - ✅ `test_unique_key_handling.py` (3 models)
+  - ✅ `test_migration_no_id.py` (3 models)
+  - ✅ `test_date_type_comparison.py` (6 models)
+  - ✅ `test_response_schema_forward_refs.py` (13 test-internal models)
+
+- **Part 3** (Commit: cbef52e):
+  - ✅ `test_response_schema_fastapi.py` (4 models)
+  - ✅ `test_base_model_auto_response.py` (13 models)
+  - ✅ `custom_types/test_listjson.py` (2 models)
+  - ✅ `custom_types/test_jsonencoded.py` (2 models)
+  - ✅ `custom_types/test_createdat.py` (2 models)
+
+**合計**: 72 Column() 定義を 13 テストファイルで移行完了
+
+**テスト結果**: 141/142 passing (1 known AutoDateTime design issue)
+
+### ✅ Phase 3 完了 (ドキュメント更新)
+
+**完了項目** (Commit: 168b70a):
+- ✅ `docs/guides/base_model_auto_guide.md` (13 Column() → mapped_column())
+  - TimeActivityModel, VoiceScriptLineModel, UserModel 等の例
+  - TimeBlockModel (composite primary key 例)
+  - ベストプラクティスセクション
+- ✅ `docs/guides/repository_and_utilities_guide.md` (1 Column() → mapped_column())
+  - Profile model with ForeignKey 例
+
+**影響**:
+- 全てのユーザー向けドキュメントが SQLAlchemy 2.0 スタイル
+- コピー&ペースト可能な最新サンプルコード
+- ドキュメント、コア、テストの完全統一
 
 ### 🚧 発見された問題
 
