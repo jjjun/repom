@@ -43,12 +43,14 @@ This is **repom** - a shared SQLAlchemy foundation package for Python projects.
 ### Creating a Model
 ```python
 from repom.base_model import BaseModel
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
 
 class MyModel(BaseModel):
     __tablename__ = 'my_table'
-    id = Column(Integer, primary_key=True)
-    name = Column(String(100))
+    
+    # use_id=True がデフォルトなので id は自動追加される
+    name: Mapped[str] = mapped_column(String(100))
 ```
 
 ### Using Repository

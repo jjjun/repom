@@ -85,7 +85,9 @@ poetry run python -c "from repom.config import config; print(config.db_url)"
 ### モデルの定義
 
 ```python
-from sqlalchemy import Column, String
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
+from typing import Optional
 from repom.base_model import BaseModel
 
 class Task(BaseModel):
@@ -96,8 +98,8 @@ class Task(BaseModel):
     use_created_at = True
     use_updated_at = True
 
-    title = Column(String(255), nullable=False)
-    description = Column(String, nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String)
 ```
 
 ### リポジトリの実装
