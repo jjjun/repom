@@ -1,17 +1,19 @@
 """自動スキーマ生成機能を持つ BaseModel 拡張
 
-このモジュールは、SQLAlchemy の Column 定義から FastAPI の Pydantic スキーマを
+このモジュールは、SQLAlchemy の mapped_column 定義から FastAPI の Pydantic スキーマを
 自動生成する機能を提供します。
 
 既存の BaseModel を継承し、以下の機能を追加:
-- Column の info パラメータからメタデータを読み取り
+- mapped_column の info パラメータからメタデータを読み取り
 - get_create_schema(): Create スキーマの自動生成
 - get_update_schema(): Update スキーマの自動生成
 - get_response_schema(): Response スキーマの自動生成
 
 使用例:
+    from sqlalchemy.orm import Mapped, mapped_column
+    
     class FinRecurringPaymentModel(BaseModelAuto):
-        name = Column(
+        name: Mapped[str] = mapped_column(
             String(200), 
             nullable=False, 
             unique=True,
@@ -69,7 +71,7 @@ def _extract_undefined_types(error_message: str) -> Set[str]:
 class BaseModelAuto(BaseModel):
     """自動スキーマ生成機能を持つ BaseModel 拡張
 
-    Column の info パラメータに以下のキーを指定することで、
+    mapped_column の info パラメータに以下のキーを指定することで、
     スキーマ生成をコントロールできます:
 
     - in_create (bool): Create スキーマに含めるか (default: auto)
@@ -82,16 +84,18 @@ class BaseModelAuto(BaseModel):
     - 明示的除外: info={'in_create': False} または info={'in_update': False}
 
     使用例:
+        from sqlalchemy.orm import Mapped, mapped_column
+        
         # 通常モデル（id カラムあり、デフォルト）
         class User(BaseModelAuto):
             __tablename__ = 'users'
-            name = Column(String(100), info={'in_create': True, 'in_update': True})
+            name: Mapped[str] = mapped_column(String(100), info={'in_create': True, 'in_update': True})
 
         # 複合主キーモデル（id カラムなし）
         class OrderItem(BaseModelAuto, use_id=False):
             __tablename__ = 'order_items'
-            order_id = Column(Integer, primary_key=True)
-            product_id = Column(Integer, primary_key=True)
+            order_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            product_id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
     注意:
     - BaseModelAuto は抽象クラスなので、カラム継承の問題は発生しません
