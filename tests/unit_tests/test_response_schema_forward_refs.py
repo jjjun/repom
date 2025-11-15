@@ -394,7 +394,7 @@ def test_forward_refs_generic_list_response_pattern(db_test):
     # バリデーションテスト（DB に保存して created_at を設定）
     book1 = BookModel(title='Book 1', author_id=1, price=1000)
     book2 = BookModel(title='Book 2', author_id=2, price=2000)
-    
+
     # DB に保存して created_at を自動設定
     db_test.add_all([book1, book2])
     db_test.commit()

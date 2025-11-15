@@ -6,6 +6,7 @@
 - **複雑度**: 中
 - **作成日**: 2025-11-15
 - **最終更新**: 2025-11-15
+- **コア移行**: ✅ 完了（10 commits, 95+ Column() migrations, 186/186 tests passing）
 
 ## 現在の進捗状況
 
@@ -22,7 +23,7 @@
 - ユーザー参照用のサンプルコードが最新スタイル
 - ドキュメントとコード例が統一
 
-**テスト結果**: 141/142 passing (1 known AutoDateTime design issue)
+**テスト結果**: ✅ **186/186 passing** (1 skipped - FastAPI not installed)
 
 ### ✅ Phase 2 完了 (テストコードの移行)
 
@@ -49,9 +50,16 @@
   - ✅ `custom_types/test_jsonencoded.py` (2 models)
   - ✅ `custom_types/test_createdat.py` (2 models)
 
-**合計**: 72 Column() 定義を 13 テストファイルで移行完了
+- **Part 4 (Bug Fix)** (Commit: 92f50d1):
+  - ✅ `test_response_schema_forward_refs.py` - test_forward_refs_generic_list_response_pattern 修正
+  - 問題: AutoDateTime の created_at が None（DB保存前）
+  - 解決: db_test fixture を追加し、DB commit で created_at を設定
 
-**テスト結果**: 141/142 passing (1 known AutoDateTime design issue)
+**合計**: 95 Column() 定義を 17 テストファイルで移行完了
+
+**最終コミット**: 92f50d1 (test_forward_refs_generic_list_response_pattern 修正)
+
+**テスト結果**: ✅ **186/186 passing** (1 skipped - FastAPI not installed)
 
 ### ✅ Phase 3 完了 (ドキュメント更新)
 
@@ -70,7 +78,7 @@
 
 ### 🚧 発見された問題
 
-#### 問題1: test_forward_refs_generic_list_response_pattern の失敗 ⚠️
+#### 問題1: test_forward_refs_generic_list_response_pattern の失敗 ✅ (解決済み)
 
 **症状**:
 ```
@@ -82,16 +90,32 @@ E     Input should be a valid datetime, got None [type=datetime_type, input_valu
 
 **原因**: 
 - `created_at` が `None` になっている
-- `AutoDateTime` のデフォルト値が正しく機能していない可能性
-- または、スキーマ生成時に `created_at` が `Optional` として扱われていない
+- `AutoDateTime` は **DB保存時に値を設定する設計**（オブジェクト作成時ではない）
+- テストでオブジェクトを作成しただけでは `created_at` が設定されない
+
+**解決策** (Commit: 92f50d1):
+```python
+# ❌ Before: DB に保存せずに to_dict() を呼んでいた
+def test_forward_refs_generic_list_response_pattern():
+    book1 = BookModel(title='Book 1', author_id=1, price=1000)
+    book1.id = 1  # created_at は None のまま
+    response_data = {'items': [book1.to_dict()], 'total': 2}
+
+# ✅ After: db_test fixture で DB に保存してから to_dict()
+def test_forward_refs_generic_list_response_pattern(db_test):
+    book1 = BookModel(title='Book 1', author_id=1, price=1000)
+    book2 = BookModel(title='Book 2', author_id=2, price=2000)
+    db_test.add_all([book1, book2])
+    db_test.commit()  # ← ここで created_at が設定される
+    response_data = {'items': [book1.to_dict(), book2.to_dict()], 'total': 2}
+```
 
 **影響範囲**: 
 - `BaseModelAuto` を使用するモデルで `get_response_schema()` を呼び出す場合
 - 特に前方参照（`List["Model"]`）を含むレスポンススキーマ
+- テストでは必ず DB に保存してから `to_dict()` を呼ぶ必要がある
 
-**優先度**: 高（BaseModelAuto の重要機能に影響）
-
-**ステータス**: Phase 1 完了後に調査・修正予定
+**ステータス**: ✅ **解決済み** - 186/186 tests passing
 
 **関連ファイル**:
 - `repom/custom_types/AutoDateTime.py`
@@ -103,7 +127,7 @@ E     Input should be a valid datetime, got None [type=datetime_type, input_valu
 - ✅ `AutoDateTime` の動作は **正しい仕様**
 - ✅ `created_at` は「**データベース保存時の時刻**」を記録するため
 - ✅ Python オブジェクト作成時に値が設定されないのは意図的
-- ⚠️ テストでは DB に保存してから `to_dict()` を呼ぶ必要がある
+- ✅ テストでは DB に保存してから `to_dict()` を呼ぶ（自動化可能）
 
 **詳細**: `docs/guides/system_columns_and_custom_types.md` を参照
 
@@ -212,7 +236,7 @@ repom を使用しているすべてのプロジェクトで、以下の移行�
 
 **目標**: repom 内部の基盤を SQLAlchemy 2.0 スタイルに移行
 
-**進捗**: 1.1 完了 ✅ / 1.2 未着手 / 1.3 未着手 / 1.4 未着手
+**進捗**: ✅ 完了（1.1-1.4 すべて完了）
 
 #### 1.1. BaseModel の修正 ✅ (完了: Commit 964504d)
 
@@ -263,7 +287,7 @@ class BaseModel(DeclarativeBase):
 
 **テスト**: 既存のすべてのテストが通ることを確認
 
-#### 1.2. サンプルモデルの修正
+#### 1.2. サンプルモデルの修正 ✅ (完了: Commit ae71332)
 
 **ファイル**: `repom/models/sample.py`, `repom/models/user_session.py`
 
@@ -306,13 +330,13 @@ class UserSession(BaseModelAuto, use_id=False):
 
 **重要度**: 高（ユーザーがコピペして使用する可能性）
 
-#### 1.3. BaseModelAuto のドキュメント更新
+#### 1.3. BaseModelAuto のドキュメント更新 ✅ (完了: Commit a65f6fe, c7d787a)
 
-**ファイル**: `repom/base_model_auto.py`
+**ファイル**: `repom/base_model_auto.py`, `repom/custom_types/AutoDateTime.py`
 
 **変更内容**: docstring 内の例を `Mapped[]` スタイルに更新
 
-### Phase 2: テストコードの移行
+### Phase 2: テストコードの移行 ✅ (完了)
 
 **目標**: すべてのテストモデルを SQLAlchemy 2.0 スタイルに移行
 
@@ -331,9 +355,11 @@ class UserSession(BaseModelAuto, use_id=False):
 3. `test_response_schema_forward_refs.py` - 前方参照のテスト
 4. その他のテストファイル
 
-### Phase 3: ドキュメント整備
+### Phase 3: ドキュメント整備 ✅ (完了)
 
 **目標**: すべてのドキュメントを SQLAlchemy 2.0 スタイルに統一
+
+**完了状況**: Commit 168b70a で完了
 
 **対象ファイル**:
 - `docs/guides/base_model_auto_guide.md`
@@ -398,10 +424,16 @@ class UserSession(BaseModelAuto, use_id=False):
 **課題**: `__init_subclass__` で動的にカラムを追加する際、型ヒントをどう付けるか
 
 ```python
-# 現在の実装
+# 旧実装（移行前）
 def __init_subclass__(cls, use_id=_UNSET, ...):
     if cls.use_id:
         cls.id = Column(Integer, primary_key=True)  # 動的に追加
+
+# 新実装（移行後）
+def __init_subclass__(cls, use_id=_UNSET, ...):
+    if cls.use_id:
+        cls.id: Mapped[int] = mapped_column(Integer, primary_key=True)
+        cls.__annotations__['id'] = Mapped[int]
 ```
 
 **問題**: 型ヒントは静的に解決されるため、動的追加との相性が悪い
@@ -434,15 +466,15 @@ def __init_subclass__(cls, use_id=_UNSET, ...):
 - 動的クラス生成では `cls.__dict__` で直接チェックする
 - `use_id=False` のようなオプションを正しく動作させるために必須
 
-### 2. カスタム型との互換性 ⚠️ (未対応)
+### 2. カスタム型との互換性 ✅ (解決済み)
 
 **課題**: ListJSON, JSONEncoded などのカスタム型で型ヒントをどうするか
 
 ```python
-# 現在
+# 旧スタイル
 studio_names = Column(ListJSON)
 
-# 移行後の型ヒント
+# 新スタイル（移行後）
 studio_names: Mapped[Optional[list]] = mapped_column(ListJSON)
 # または
 studio_names: Mapped[Optional[List[str]]] = mapped_column(ListJSON)
@@ -450,9 +482,9 @@ studio_names: Mapped[Optional[List[str]]] = mapped_column(ListJSON)
 
 **推奨**: より具体的な型（`List[str]`, `Dict[str, Any]`）を使用
 
-**ステータス**: Phase 1.3 で対応予定
+**ステータス**: Phase 1.3 で対応完了 (Commit: a65f6fe)
 
-### 3. relationship の型ヒント ⚠️ (未対応)
+### 3. relationship の型ヒント ✅ (Phase 2で対応済み)
 
 **重要**: 循環参照を避けるため、必ず文字列で前方参照
 
@@ -464,6 +496,8 @@ posts: Mapped[List["Post"]] = relationship(back_populates="user")
 from models.post import Post
 posts: Mapped[List[Post]] = relationship(back_populates="user")
 ```
+
+**ステータス**: テストファイルで使用パターンを確認済み
 
 ### 4. 後方互換性
 
@@ -478,10 +512,10 @@ posts: Mapped[List[Post]] = relationship(back_populates="user")
 ### repom プロジェクト
 
 - [x] BaseModel の migration が完了（Phase 1.1）
-- [x] BaseModel tests が通る（test_base_model_auto.py: 7/7 passed）
+- [x] BaseModel tests が通る（test_base_model_auto.py: 16/16 passed）
 - [x] Annotation inheritance バグが修正されている
-- [ ] すべての unit tests が通る（現状: 141/142 passed, 1 unrelated failure）
-  - ⚠️ **Known issue**: test_forward_refs_generic_list_response_pattern (AutoDateTime 関連)
+- [x] すべての unit tests が通る（**186/186 passed**, 1 skipped - FastAPI not installed）
+- [x] test_forward_refs_generic_list_response_pattern 修正済み（AutoDateTime 関連）
 - [ ] すべての behavior tests が通る
 - [ ] `poetry run alembic revision --autogenerate` が正常動作
 - [ ] `poetry run db_create` が正常動作
@@ -493,8 +527,7 @@ posts: Mapped[List[Post]] = relationship(back_populates="user")
 - [ ] 新しいスタイルで書かれたモデルが動作する
 - [ ] Alembic マイグレーションが正常生成される
 - [ ] BaseRepository の操作が正常動作する
-- [ ] get_response_schema() が正常動作する
-  - ⚠️ **Known issue**: AutoDateTime のデフォルト値問題（調査中）
+- [x] get_response_schema() が正常動作する（test_forward_refs_generic_list_response_pattern 修正済み）
 
 ## 完了条件
 
@@ -509,17 +542,17 @@ posts: Mapped[List[Post]] = relationship(back_populates="user")
 - [x] サンプルモデルがユーザー参照可能な状態
   - ⚠️ **Known issue**: test_forward_refs_generic_list_response_pattern (AutoDateTime - 設計仕様)
 
-### Phase 2 完了条件 (進行中)
+### Phase 2 完了条件 ✅ (完了)
 - [x] test_base_model_auto.py が `Mapped[]` スタイル (Commit: 87b5fb8)
 - [x] test_response_field.py が `Mapped[]` スタイル (Commit: 87b5fb8)
-- [ ] test_response_schema_forward_refs.py が完全に `Mapped[]` スタイル
-- [ ] その他の unit tests が `Mapped[]` スタイル
-- [ ] behavior tests が `Mapped[]` スタイル
-- [ ] テストカバレッジが維持されている
+- [x] test_response_schema_forward_refs.py が完全に `Mapped[]` スタイル (Commit: 87b5fb8, 92f50d1)
+- [x] その他の unit tests が `Mapped[]` スタイル (Commit: d56f382, cbef52e)
+- [x] behavior tests が `Mapped[]` スタイル (Commit: d56f382)
+- [x] テストカバレッジが維持されている (186/186 passed)
 
-### Phase 3 完了条件
-- [ ] すべてのドキュメントが `Mapped[]` スタイル
-- [ ] コード例がすべて最新
+### Phase 3 完了条件 ✅ (完了)
+- [x] すべてのドキュメントが `Mapped[]` スタイル (Commit: 168b70a)
+- [x] コード例がすべて最新
 
 ### Phase 4 完了条件
 - [ ] 移行ガイド作成完了
