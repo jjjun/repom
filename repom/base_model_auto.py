@@ -522,7 +522,7 @@ class BaseModelAuto(BaseModel):
         schema = create_model(schema_name, **field_definitions)
 
         # 前方参照を解決（forward_refs が指定されている場合）
-        if forward_refs:
+        if forward_refs is not None:
             try:
                 schema.model_rebuild(_types_namespace=forward_refs)
                 logger.debug(f"Successfully resolved forward references for {schema_name}")
