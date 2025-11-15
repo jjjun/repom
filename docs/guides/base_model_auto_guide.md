@@ -70,7 +70,8 @@ TimeActivityUpdate = TimeActivityModel.get_update_schema()
 
 ```python
 from repom.base_model_auto import BaseModelAuto
-from sqlalchemy import Column, String, Integer, Boolean
+from sqlalchemy import String, Integer, Boolean
+from sqlalchemy.orm import Mapped, mapped_column
 
 class TimeActivityModel(BaseModelAuto):
     __tablename__ = "time_activities"
@@ -79,24 +80,24 @@ class TimeActivityModel(BaseModelAuto):
     use_created_at = True
     use_updated_at = True
 
-    name = Column(
+    name: Mapped[str] = mapped_column(
         String(100), 
         nullable=False, 
         unique=True,
         info={'description': '活動名（重複不可）'}
     )
-    color = Column(
+    color: Mapped[str] = mapped_column(
         String(7), 
         nullable=False,
         info={'description': 'カラーコード（例: #FF5733）'}
     )
-    sort_order = Column(
+    sort_order: Mapped[int] = mapped_column(
         Integer, 
         nullable=False, 
         default=0,
         info={'description': '表示順序'}
     )
-    is_active = Column(
+    is_active: Mapped[bool] = mapped_column(
         Boolean, 
         nullable=False, 
         default=True,
@@ -181,14 +182,17 @@ UserCreateCustom = UserModel.get_create_schema(
 
 ```python
 from repom.base_model import BaseModel
+from sqlalchemy import String, Integer, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column
+from typing import Optional
 
 class VoiceScriptLineModel(BaseModel):
     __tablename__ = "voice_script_lines"
     
     # ... カラム定義
-    scene_id = Column(Integer, ForeignKey('scenes.id'))
-    notes = Column(String(500))
-    character_name = Column(String(100))
+    scene_id: Mapped[int] = mapped_column(Integer, ForeignKey('scenes.id'))
+    notes: Mapped[Optional[str]] = mapped_column(String(500))
+    character_name: Mapped[Optional[str]] = mapped_column(String(100))
     
     @property
     def text(self) -> str | None:
@@ -347,11 +351,14 @@ except SchemaGenerationError as e:
 ### Column.info による制御
 
 ```python
+from sqlalchemy.orm import Mapped, mapped_column
+from typing import Optional
+
 class UserModel(BaseModelAuto):
     __tablename__ = "users"
     
     # Create にのみ含める（パスワード設定）
-    password = Column(
+    password: Mapped[str] = mapped_column(
         String(255),
         info={
             'in_create': True,
@@ -361,7 +368,7 @@ class UserModel(BaseModelAuto):
     )
     
     # Update にのみ含める
-    profile_image_url = Column(
+    profile_image_url: Mapped[Optional[str]] = mapped_column(
         String(500),
         info={
             'in_create': False,  # 初回は空でOK
@@ -393,6 +400,9 @@ class UserModel(BaseModelAuto):
 複合主キーを使用する場合は `use_composite_pk=True` を設定します。
 
 ```python
+from sqlalchemy.orm import Mapped, mapped_column
+from datetime import date, time
+
 class TimeBlockModel(BaseModelAuto):
     __tablename__ = "time_blocks"
     
@@ -400,9 +410,9 @@ class TimeBlockModel(BaseModelAuto):
     use_created_at = True
     use_updated_at = True
     
-    date = Column(Date, primary_key=True, info={'description': '日付'})
-    start_time = Column(Time, primary_key=True, info={'description': '開始時刻'})
-    activity_id = Column(Integer, ForeignKey('time_activities.id'))
+    date: Mapped[date] = mapped_column(Date, primary_key=True, info={'description': '日付'})
+    start_time: Mapped[time] = mapped_column(Time, primary_key=True, info={'description': '開始時刻'})
+    activity_id: Mapped[int] = mapped_column(Integer, ForeignKey('time_activities.id'))
 ```
 
 ### フラグの優先順位
@@ -519,8 +529,10 @@ def get_items():
 ### 1. Column.info を必ず指定
 
 ```python
+from sqlalchemy.orm import Mapped, mapped_column
+
 # ✅ 推奨
-name = Column(
+name: Mapped[str] = mapped_column(
     String(100), 
     nullable=False,
     info={'description': '活動名（重複不可、最大100文字）'}

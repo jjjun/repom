@@ -451,12 +451,14 @@ models/
 #### 方法2: モデルファイル内で明示的にインポート
 
 ```python
+from sqlalchemy.orm import Mapped, mapped_column
+
 # models/profile.py
 from your_project.models.user import User  # 明示的な依存関係
 
 class Profile(BaseModel):
     __tablename__ = 'profiles'
-    user_id = Column(Integer, ForeignKey(User.id))
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey(User.id))
 ```
 
 ### メリット
