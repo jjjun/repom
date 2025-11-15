@@ -33,7 +33,33 @@ completed/     → 実装完了・テスト済み
 
 ## 📝 計画中の Issue
 
-現在、backlog に Issue はありません。
+### Issue #6: SQLAlchemy 2.0 スタイルへの移行
+
+**ファイル**: `backlog/006_migrate_to_sqlalchemy_2_0_style.md`
+
+**ステータス**: 📝 計画中（2025-11-15）
+
+**概要**:
+repom プロジェクト全体を SQLAlchemy 2.0 の推奨スタイル（`Mapped[]` 型ヒント + `mapped_column()`）に移行する。型安全性の向上、エディタ補完の改善、将来のバージョン互換性を確保する。
+
+**実装計画**:
+- Phase 1: repom コアの移行（BaseModel, サンプルモデル）
+- Phase 2: テストコードの移行（100+ 箇所）
+- Phase 3: ドキュメント整備
+- Phase 4: 外部プロジェクト移行ガイド作成
+- Phase 5: 実プロジェクトの移行
+
+**影響範囲**:
+- repom 内部: BaseModel, サンプルモデル, テストコード
+- 外部プロジェクト: repom を使用するすべてのプロジェクト
+
+**技術的決定事項**:
+- `Column()` → `mapped_column()` + `Mapped[]` 型ヒント
+- relationship には文字列で前方参照（循環参照回避）
+- 後方互換性を維持（段階的移行）
+- 移行ガイド提供（外部プロジェクト向け）
+
+---
 
 ---
 
