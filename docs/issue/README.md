@@ -1,292 +1,330 @@
 # Issue Tracker - repom
 
-このディレクトリは、repom プロジェクトの改善提案と課題管理のためのドキュメントを格納します。
+こ�EチE��レクトリは、repom プロジェクト�E改喁E��案と課題管琁E�Eためのドキュメントを格納します、E
 
-## ディレクトリ構造
+## チE��レクトリ構造
 
 ```
 docs/issue/
-├── README.md              # このファイル（Issue 管理インデックス）
-├── completed/             # 完了・解決済み Issue
-│   ├── 001_*.md          # Issue #1（完了）
-│   ├── 002_*.md          # Issue #2（完了）
-│   └── 003_*.md          # Issue #3（完了）
+├── README.md              # こ�Eファイル�E�Essue 管琁E��ンチE��クス�E�E
+├── completed/             # 完亁E�E解決済み Issue
+━E  ├── 001_*.md          # Issue #1�E�完亁E��E
+━E  ├── 002_*.md          # Issue #2�E�完亁E��E
+━E  └── 003_*.md          # Issue #3�E�完亁E��E
 ├── in_progress/           # 作業中の Issue
-└── backlog/               # 計画中・未着手の Issue
+└── backlog/               # 計画中・未着手�E Issue
 ```
 
 ## Issue ライフサイクル
 
 ```
-backlog/       → 計画と優先度付け
-    ↓
-in_progress/   → 実装作業中
-    ↓
-completed/     → 実装完了・テスト済み
+backlog/       ↁE計画と優先度付け
+    ↁE
+in_progress/   ↁE実裁E��業中
+    ↁE
+completed/     ↁE実裁E��亁E�EチE��ト済み
 ```
 
 ## 🚧 作業中の Issue
 
-現在、作業中の Issue はありません。
+現在、作業中の Issue はありません、E
 
 ---
 
 ## 📝 計画中の Issue
 
-### Issue #6: SQLAlchemy 2.0 スタイルへの移行
+### Issue #6: SQLAlchemy 2.0 スタイルへの移衁E
 
 **ファイル**: `backlog/006_migrate_to_sqlalchemy_2_0_style.md`
 
-**ステータス**: � Phase 1 実施中（2025-11-15）
+**スチE�Eタス**: �E� Phase 1 実施中�E�E025-11-15�E�E
 
-**概要**:
-repom プロジェクト全体を SQLAlchemy 2.0 の推奨スタイル（`Mapped[]` 型ヒント + `mapped_column()`）に移行する。型安全性の向上、エディタ補完の改善、将来のバージョン互換性を確保する。
+**概要E*:
+repom プロジェクト�E体を SQLAlchemy 2.0 の推奨スタイル�E�EMapped[]` 型ヒンチE+ `mapped_column()`�E�に移行する。型安�E性の向上、エチE��タ補完�E改喁E��封E��のバ�Eジョン互換性を確保する、E
 
-**進捗**:
-- ✅ Phase 1.1: BaseModel migration 完了 (Commit: 964504d)
-- ⚠️ Known issue: test_forward_refs_generic_list_response_pattern (AutoDateTime 問題)
+**進捁E*:
+- ✁EPhase 1.1: BaseModel migration 完亁E(Commit: 964504d)
+- ⚠�E�EKnown issue: test_forward_refs_generic_list_response_pattern (AutoDateTime 問顁E
 
-**実装計画**:
-- Phase 1: repom コアの移行（BaseModel, サンプルモデル）
-- Phase 2: テストコードの移行（100+ 箇所）
-- Phase 3: ドキュメント整備
-- Phase 4: 外部プロジェクト移行ガイド作成
-- Phase 5: 実プロジェクトの移行
+**実裁E��画**:
+- Phase 1: repom コアの移行！EaseModel, サンプルモチE���E�E
+- Phase 2: チE��トコード�E移行！E00+ 箁E���E�E
+- Phase 3: ドキュメント整傁E
+- Phase 4: 外部プロジェクト移行ガイド作�E
+- Phase 5: 実�Eロジェクト�E移衁E
 
 ---
 
-### Issue #7: Annotation Inheritance の実装検証
+### Issue #7: Annotation Inheritance の実裁E��証
 
 **ファイル**: `backlog/007_annotation_inheritance_validation.md`
 
-**ステータス**: 📝 調査待ち（2025-11-15）
+**スチE�Eタス**: 📝 調査征E���E�E025-11-15�E�E
 
-**概要**:
-Issue #006 (Phase 1.1) で BaseModel の `__annotations__` 継承問題を修正したが、この実装が正しいのか、他の影響がないかを調査する必要がある。
+**概要E*:
+Issue #006 (Phase 1.1) で BaseModel の `__annotations__` 継承問題を修正したが、この実裁E��正しいのか、他�E影響がなぁE��を調査する忁E��がある、E
 
-**調査項目**:
-1. Python の `__annotations__` 継承動作の確認
+**調査頁E��**:
+1. Python の `__annotations__` 継承動作�E確誁E
 2. SQLAlchemy 2.0 の推奨パターンとの整合性
-3. 他のフレームワークとの互換性（FastAPI, Pydantic）
-4. エッジケースの検証（多重継承, Mixin）
+3. 他�Eフレームワークとの互換性�E�EastAPI, Pydantic�E�E
+4. エチE��ケースの検証�E�多重継承, Mixin�E�E
 5. パフォーマンスへの影響
-6. 代替実装の検討
+6. 代替実裁E�E検訁E
 
 **関連 Issue**: #006 (SQLAlchemy 2.0 migration)
 
-**影響範囲**:
-- repom 内部: BaseModel, サンプルモデル, テストコード
-- 外部プロジェクト: repom を使用するすべてのプロジェクト
+**影響篁E��**:
+- repom 冁E��: BaseModel, サンプルモチE��, チE��トコーチE
+- 外部プロジェクチE repom を使用するすべてのプロジェクチE
 
-**技術的決定事項**:
-- `Column()` → `mapped_column()` + `Mapped[]` 型ヒント
-- relationship には文字列で前方参照（循環参照回避）
-- 後方互換性を維持（段階的移行）
-- 移行ガイド提供（外部プロジェクト向け）
-
----
+**技術的決定事頁E*:
+- `Column()` ↁE`mapped_column()` + `Mapped[]` 型ヒンチE
+- relationship には斁E���Eで前方参�E�E�循環参�E回避�E�E
+- 後方互換性を維持E��段階的移行！E
+- 移行ガイド提供（外部プロジェクト向け！E
 
 ---
 
-## 📋 完了済み Issue
+---
 
-### Issue #5: 柔軟な auto_import_models 設定
+## 📋 完亁E��み Issue
+
+### Issue #6: SQLAlchemy 2.0 スタイルへの移衁E
+
+**ファイル**: `completed/006_migrate_to_sqlalchemy_2_0_style.md`
+
+**スチE�Eタス**: ✁E完亁E��E025-11-15�E�E
+
+**概要E*:
+repom プロジェクト�E体を SQLAlchemy 2.0 の推奨スタイル�E�EMapped[]` 型ヒンチE+ `mapped_column()`�E�に移行。型安�E性の向上、エチE��タ補完�E改喁E��封E��のバ�Eジョン互換性を確保、E
+
+**実裁E�E容**:
+- Phase 1: repom コア移衁E✁E
+  - BaseModel migration (Commit: 964504d)
+  - Sample models migration (Commit: ae71332)
+  - AutoDateTime docstring (Commit: a65f6fe)
+  - BaseModelAuto docstring (Commit: c7d787a)
+  
+- Phase 2: チE��トコード移衁E✁E
+  - 17 チE��トファイル、E5+ Column() 定義を移衁E
+  - test_forward_refs_generic_list_response_pattern 修正 (Commit: 92f50d1)
+  - Commits: 87b5fb8, d56f382, cbef52e, 92f50d1
+  
+- Phase 3: ドキュメント整傁E✁E
+  - guides, README, copilot-instructions 更新
+  - Commits: 168b70a, 1379ac0
+
+**チE��ト結果**:
+- 186/186 unit tests passing (1 skipped - FastAPI)
+- 本番環墁E��チE��ト完亁E�E問題なぁE
+
+**技術的成果**:
+- Annotation inheritance バグの発見と修正
+- AutoDateTime 設計仕様�E明確匁E
+- 動的カラム追加と型ヒント�E統合手法確竁E
+
+**関連コミッチE*: 964504d, ae71332, a65f6fe, c7d787a, 87b5fb8, d56f382, cbef52e, 92f50d1, 168b70a, 1379ac0
+
+---
+
+### Issue #5: 柔軟な auto_import_models 設宁E
 
 **ファイル**: `completed/005_flexible_auto_import_models.md`
 
-**ステータス**: ✅ 完了（2025-11-15）
+**スチE�Eタス**: ✁E完亁E��E025-11-15�E�E
 
-**概要**:
-設定ファイルで複数のモデルディレクトリを指定できる機能を実装。`models/__init__.py` への手動記述を不要にし、Alembic マイグレーションと db コマンドでのモデル認識ミスを防ぐ。
+**概要E*:
+設定ファイルで褁E��のモチE��チE��レクトリを指定できる機�Eを実裁E��`models/__init__.py` への手動記述を不要にし、Alembic マイグレーションと db コマンドでのモチE��認識ミスを防ぐ、E
 
-**実装内容**:
-- Phase 1: 基本機能 ✅
-  - `auto_import_models_by_package()` 関数（セキュリティ検証付き）
-  - `auto_import_models_from_list()` 関数（バッチインポート）
-  - `MineDbConfig` プロパティ（model_locations, model_excluded_dirs, allowed_package_prefixes）
-  - `load_models()` 修正（設定ベース対応）
-  - 27個の単体テスト（すべて成功）
-  - ガイドドキュメント作成
+**実裁E�E容**:
+- Phase 1: 基本機�E ✁E
+  - `auto_import_models_by_package()` 関数�E�セキュリチE��検証付き�E�E
+  - `auto_import_models_from_list()` 関数�E�バチE��インポ�Eト！E
+  - `MineDbConfig` プロパティ�E�Eodel_locations, model_excluded_dirs, allowed_package_prefixes�E�E
+  - `load_models()` 修正�E�設定�Eース対応！E
+  - 27個�E単体テスト（すべて成功�E�E
+  - ガイドドキュメント作�E
 
-- Phase 1.5: 設定制御機能 ✅
-  - `model_import_strict` プロパティ追加（デフォルト: False = 警告のみ）
+- Phase 1.5: 設定制御機�E ✁E
+  - `model_import_strict` プロパティ追加�E�デフォルチE False = 警告�Eみ�E�E
   - `load_models()` での `fail_on_error` パラメータ連携
-  - 4個の単体テスト追加（合計31テスト）
+  - 4個�E単体テスト追加�E�合訁E1チE��ト！E
   - ドキュメント更新
 
-**技術的決定事項**:
-- Python コード（CONFIG_HOOK 経由）のみサポート
-- デフォルトで警告のみ（`model_import_strict=False`）
-- セキュリティ検証（`allowed_package_prefixes`、デフォルト: `{'repom.'}`）
-- セキュリティスキップは直接呼び出しのみ許可
-- 後方互換性を維持（`model_locations=None` で従来通り）
+**技術的決定事頁E*:
+- Python コード！EONFIG_HOOK 経由�E��Eみサポ�EチE
+- チE��ォルトで警告�Eみ�E�Emodel_import_strict=False`�E�E
+- セキュリチE��検証�E�Eallowed_package_prefixes`、デフォルチE `{'repom.'}`�E�E
+- セキュリチE��スキチE�Eは直接呼び出し�Eみ許可
+- 後方互換性を維持E��Emodel_locations=None` で従来通り�E�E
 
-**テストカバレッジ**:
-- 合計31テスト（セキュリティ6、パッケージインポート4、Config8、統合4、エラーハンドリング3、実世界3、Strict3）
-- すべてのテストが成功
+**チE��トカバレチE��**:
+- 合訁E1チE��ト（セキュリチE��6、パチE��ージインポ�EチE、Config8、統吁E、エラーハンドリング3、実世界3、Strict3�E�E
+- すべてのチE��トが成功
 
-**関連ドキュメント**:
-- 使用ガイド: `docs/guides/auto_import_models_guide.md`
-- 元のアイディア: `docs/ideas/flexible_auto_import_models.md`（280行に削減）
+**関連ドキュメンチE*:
+- 使用ガイチE `docs/guides/auto_import_models_guide.md`
+- 允E�EアイチE��ア: `docs/ideas/flexible_auto_import_models.md`�E�E80行に削減！E
 
 ---
 
-### Issue #3: response_field 機能を BaseModelAuto に移行
+### Issue #3: response_field 機�EめEBaseModelAuto に移衁E
 
 **ファイル**: `completed/003_response_field_migration_to_base_model_auto.md`
 
-**ステータス**: ✅ 完了（2025-11-15）
+**スチE�Eタス**: ✁E完亁E��E025-11-15�E�E
 
-**概要**:
-Response スキーマ生成機能を `BaseModel` から `BaseModelAuto` に移行し、Create/Update/Response の3つのスキーマ生成を一元化。Phase 6（ドキュメント更新）まで完了。
+**概要E*:
+Response スキーマ生成機�EめE`BaseModel` から `BaseModelAuto` に移行し、Create/Update/Response の3つのスキーマ生成を一允E��。Phase 6�E�ドキュメント更新�E�まで完亁E��E
 
-**実装内容**:
-- Phase 1: 調査と準備 ✅
-- Phase 2: BaseModelAuto への移行 ✅
-- Phase 2.5: システムカラムの自動更新と保護 ✅
-- Phase 3: `info['in_response']` の実装 ✅
-- Phase 4: BaseModel からの削除とカスタム型リネーム（保留）
-- Phase 5: テスト（全テスト合格）✅
-- Phase 6: ドキュメント更新 ✅
-  - `docs/guides/base_model_auto_guide.md` 作成（800行）
-  - `docs/guides/repository_and_utilities_guide.md` 作成（600行）
-  - `README.md` 簡略化（1,388行 → 291行）
+**実裁E�E容**:
+- Phase 1: 調査と準備 ✁E
+- Phase 2: BaseModelAuto への移衁E✁E
+- Phase 2.5: シスチE��カラムの自動更新と保護 ✁E
+- Phase 3: `info['in_response']` の実裁E✁E
+- Phase 4: BaseModel からの削除とカスタム型リネ�Eム�E�保留�E�E
+- Phase 5: チE��ト（�EチE��ト合格�E�✅
+- Phase 6: ドキュメント更新 ✁E
+  - `docs/guides/base_model_auto_guide.md` 作�E�E�E00行！E
+  - `docs/guides/repository_and_utilities_guide.md` 作�E�E�E00行！E
+  - `README.md` 簡略化！E,388衁EↁE291行！E
   - `.github/copilot-instructions.md` 更新
-  - `docs/technical/ai_context_management.md` 作成
-- Phase 7: 外部プロジェクトへの移行通知（未実施）
+  - `docs/technical/ai_context_management.md` 作�E
+- Phase 7: 外部プロジェクトへの移行通知�E�未実施�E�E
 
-**ドキュメント成果物**:
-- 2つの包括的なガイド（base_model_auto_guide.md, repository_and_utilities_guide.md）
-- AI エージェントが効率的に参照できる構造
-- トークン消費量の最適化（29%で全ガイド同時アクセス可能）
+**ドキュメント�E果物**:
+- 2つの匁E��皁E��ガイド！Ease_model_auto_guide.md, repository_and_utilities_guide.md�E�E
+- AI エージェントが効玁E��に参�Eできる構造
+- ト�Eクン消費量�E最適化！E9%で全ガイド同時アクセス可能�E�E
 
-**関連ドキュメント**:
-- 実装ガイド: `docs/guides/base_model_auto_guide.md`
-- リポジトリガイド: `docs/guides/repository_and_utilities_guide.md`
+**関連ドキュメンチE*:
+- 実裁E��イチE `docs/guides/base_model_auto_guide.md`
+- リポジトリガイチE `docs/guides/repository_and_utilities_guide.md`
 - 技術詳細: `docs/technical/get_response_schema_technical.md`
-- AI コンテキスト管理: `docs/technical/ai_context_management.md`
+- AI コンチE��スト管琁E `docs/technical/ai_context_management.md`
 
-### Issue #1: get_response_schema() の前方参照改善
+### Issue #1: get_response_schema() の前方参�E改喁E
 
 **ファイル**: `completed/001_get_response_schema_forward_refs_improvement.md`
 
-**ステータス**: ✅ 完了（2025-11-14）
+**スチE�Eタス**: ✁E完亁E��E025-11-14�E�E
 
-**概要**:
-`BaseModel.get_response_schema()` メソッドの前方参照解決改善。Phase 1（標準型の自動解決）と Phase 2（エラーメッセージ改善 + 環境別エラーハンドリング）を実装。
+**概要E*:
+`BaseModel.get_response_schema()` メソチE��の前方参�E解決改喁E��Phase 1�E�標準型の自動解決�E�と Phase 2�E�エラーメチE��ージ改喁E+ 環墁E��エラーハンドリング�E�を実裁E��E
 
 **結果**:
-- Phase 1: 標準型（List, Dict, Optional 等）の自動解決
-- Phase 2: 未定義型の自動検出とエラーメッセージ改善
-- テスト: 31/31 パス（Phase 1: 3テスト + Phase 2: 4テスト）
-- ドキュメント: 包括的な README セクション + research ディレクトリ
+- Phase 1: 標準型�E�Eist, Dict, Optional 等）�E自動解決
+- Phase 2: 未定義型�E自動検�EとエラーメチE��ージ改喁E
+- チE��チE 31/31 パス�E�Ehase 1: 3チE��チE+ Phase 2: 4チE��ト！E
+- ドキュメンチE 匁E��皁E�� README セクション + research チE��レクトリ
 
-**関連ドキュメント**:
+**関連ドキュメンチE*:
 - 調査: `docs/research/auto_forward_refs_resolution.md`
-- 実装: メイン `README.md` の Phase 1 & 2 セクション参照
+- 実裁E メイン `README.md` の Phase 1 & 2 セクション参�E
 - 技術詳細: `docs/technical/get_response_schema_technical.md`
 
-### Issue #2: SQLAlchemy カラム継承制約による use_id 設計の課題
+### Issue #2: SQLAlchemy カラム継承制紁E��よる use_id 設計�E課顁E
 
 **ファイル**: `completed/002_sqlalchemy_column_inheritance_constraint.md`
 
-**ステータス**: ✅ 完了（2025-11-14）
+**スチE�Eタス**: ✁E完亁E��E025-11-14�E�E
 
-**概要**:
-`BaseModel` と `BaseModelAuto` で `use_id` パラメータのデフォルト値を制御する際、SQLAlchemy のカラム継承制約により複合主キーモデルで `id` カラムが意図せず継承される問題を解決。
+**概要E*:
+`BaseModel` と `BaseModelAuto` で `use_id` パラメータのチE��ォルト値を制御する際、SQLAlchemy のカラム継承制紁E��より褁E��主キーモチE��で `id` カラムが意図せず継承される問題を解決、E
 
 **結果**:
-- 抽象クラス（`__tablename__` なし）にはカラムを追加しない設計
-- 具象クラスのみに `use_id` に基づいて `id` カラムを追加
-- `BaseModel` と `BaseModelAuto` の両方でデフォルト `use_id=True` を維持
-- 複合主キーモデルで `use_id=False` を明示的に指定すれば `id` カラムなし
-- テスト: 全 103 テスト合格
+- 抽象クラス�E�E__tablename__` なし）にはカラムを追加しなぁE��訁E
+- 具象クラスのみに `use_id` に基づぁE�� `id` カラムを追加
+- `BaseModel` と `BaseModelAuto` の両方でチE��ォルチE`use_id=True` を維持E
+- 褁E��主キーモチE��で `use_id=False` を�E示皁E��持E��すれ�E `id` カラムなぁE
+- チE��チE 全 103 チE��ト合格
 
-**関連ドキュメント**:
-- 実装: `repom/base_model.py` と `repom/base_model_auto.py`
-- テスト: `tests/unit_tests/test_model_no_id.py`
-
----
-
-## 新しい Issue の作成
-
-新しい Issue を作成する際は:
-
-1. **Backlog 段階**: `backlog/XXX_issue_name.md` にファイル作成
-2. **作業開始**: 着手時に `in_progress/XXX_issue_name.md` へ移動
-3. **完了**: 完了時に `completed/NNN_issue_name.md` へ移動（連番付与）
-
-完了済み Issue には連番（001, 002, 003...）を付与してください。
+**関連ドキュメンチE*:
+- 実裁E `repom/base_model.py` と `repom/base_model_auto.py`
+- チE��チE `tests/unit_tests/test_model_no_id.py`
 
 ---
 
-## 🔧 Issue テンプレート
+## 新しい Issue の作�E
 
-新しい Issue を追加する際は、以下のフォーマットを使用してください：
+新しい Issue を作�Eする際�E:
+
+1. **Backlog 段隁E*: `backlog/XXX_issue_name.md` にファイル作�E
+2. **作業開姁E*: 着手時に `in_progress/XXX_issue_name.md` へ移勁E
+3. **完亁E*: 完亁E��に `completed/NNN_issue_name.md` へ移動（連番付与！E
+
+完亁E��み Issue には連番�E�E01, 002, 003...�E�を付与してください、E
+
+---
+
+## 🔧 Issue チE��プレーチE
+
+新しい Issue を追加する際�E、以下�Eフォーマットを使用してください�E�E
 
 ```markdown
 # Issue #N: [タイトル]
 
-**ステータス**: 🔴 未着手 / 🟡 提案中 / 🟢 進行中 / ✅ 完了
+**スチE�Eタス**: 🔴 未着扁E/ 🟡 提案中 / 🟢 進行中 / ✁E完亁E
 
-**作成日**: YYYY-MM-DD
+**作�E日**: YYYY-MM-DD
 
-**優先度**: 高 / 中 / 低
+**優先度**: 髁E/ 中 / 佁E
 
-## 問題の説明
+## 問題�E説昁E
 
 [現状の問題点を説明]
 
-## 提案される解決策
+## 提案される解決筁E
 
-[解決策の提案]
+[解決策�E提桁E
 
-## 影響範囲
+## 影響篁E��
 
 - 影響を受けるファイル
-- 影響を受ける機能
+- 影響を受ける機�E
 
-## 実装計画
+## 実裁E��画
 
-1. ステップ1
-2. ステップ2
+1. スチE��チE
+2. スチE��チE
 3. ...
 
-## テスト計画
+## チE��ト計画
 
-[テスト戦略とテストケースの説明]
+[チE��ト戦略とチE��トケースの説明]
 
 ## 関連リソース
 
 - 関連ファイル
-- 参考資料
+- 参老E��E��
 ```
 
 ---
 
-## 🎯 Issue 管理の方針
+## 🎯 Issue 管琁E�E方釁E
 
-### Issue の作成
-- 改善提案、バグ報告、機能追加リクエストなどを Issue として管理
-- 1つの Issue につき 1つのマークダウンファイルを作成
-- ファイル名は `[issue_name].md` の形式（スネークケース推奨）
+### Issue の作�E
+- 改喁E��案、バグ報告、機�E追加リクエストなどめEIssue として管琁E
+- 1つの Issue につぁE1つのマ�Eクダウンファイルを作�E
+- ファイル名�E `[issue_name].md` の形式（スネ�Eクケース推奨�E�E
 
-### ステータス管理
-- 🔴 **未着手**: Issue が提起されたが作業開始していない
-- 🟡 **提案中**: 設計・調査中
-- 🟢 **進行中**: 実装作業中
-- ✅ **完了**: 実装・テスト・ドキュメント化が完了
+### スチE�Eタス管琁E
+- 🔴 **未着扁E*: Issue が提起されたが作業開始してぁE��ぁE
+- 🟡 **提案中**: 設計�E調査中
+- 🟢 **進行中**: 実裁E��業中
+- ✁E**完亁E*: 実裁E�EチE��ト�Eドキュメント化が完亁E
 
 ### 優先度
-- **高**: 重大な問題、ブロッカー
-- **中**: 重要だが緊急ではない
-- **低**: 改善提案、将来的な機能
+- **髁E*: 重大な問題、ブロチE��ー
+- **中**: 重要だが緊急ではなぁE
+- **佁E*: 改喁E��案、封E��皁E��機�E
 
 ---
 
 ## 📝 Issue の更新
 
-Issue の進捗があった場合は、該当ファイルを更新し、このREADME.mdの一覧も更新してください。
+Issue の進捗があった場合�E、該当ファイルを更新し、このREADME.mdの一覧も更新してください、E
 
 ---
 
