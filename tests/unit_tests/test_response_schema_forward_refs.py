@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import List, Optional, Dict, Any
 from repom.base_model_auto import BaseModelAuto
 from pydantic import ValidationError
+from tests.db_test_fixtures import db_test
 import pytest
 
 
@@ -371,7 +372,7 @@ def test_forward_refs_realistic_fastapi_scenario():
     assert 'related_books' in ReviewResponse.model_fields
 
 
-def test_forward_refs_generic_list_response_pattern():
+def test_forward_refs_generic_list_response_pattern(db_test):
     """GenericListResponse パターン（FastAPI で一般的）のテスト"""
     from pydantic import BaseModel as PydanticBaseModel
     from typing import Generic, TypeVar
@@ -390,11 +391,13 @@ def test_forward_refs_generic_list_response_pattern():
     # これは FastAPI の response_model として使用される
     ListResponse = GenericListResponse[BookResponse]
 
-    # バリデーションテスト
+    # バリデーションテスト（DB に保存して created_at を設定）
     book1 = BookModel(title='Book 1', author_id=1, price=1000)
-    book1.id = 1
     book2 = BookModel(title='Book 2', author_id=2, price=2000)
-    book2.id = 2
+    
+    # DB に保存して created_at を自動設定
+    db_test.add_all([book1, book2])
+    db_test.commit()
 
     response_data = {
         'items': [book1.to_dict(), book2.to_dict()],
