@@ -70,7 +70,36 @@ items = repo.get_by(name="example")
 - Always test changes with `poetry run pytest`
 - Keep dependencies minimal
 
-## 📚 重要なドキュメントファイル
+## � Documentation Guidelines
+
+### When Creating Idea Documents (docs/ideas/)
+
+**MUST follow** `docs/ideas/README.md` template:
+- **Length limit**: 250-350 lines maximum
+- **Code examples**: 5-10 lines max per example
+- **Approaches**: ONE recommended approach only
+- **Focus**: Problem definition and solution approach, NOT implementation details
+
+**Before writing**:
+1. Read `docs/ideas/README.md` template
+2. Present outline first, get user approval
+3. Write in sections, not all at once
+4. Report line count at end
+
+**Red Flags 🚩** - STOP and ask user if you're writing:
+- Complete implementations (will become outdated)
+- 3+ approaches in detail (choose ONE)
+- Code examples > 10 lines (simplify)
+- Similar code blocks (consolidate)
+
+### When Creating Issue Documents (docs/issue/)
+
+Follow the workflow in `docs/issue/README.md`:
+- Problem description → Expected behavior → Solution → Test results
+- Mark completed issues automatically when user confirms
+- Use sequential numbering (001, 002, ...)
+
+## �📚 重要なドキュメントファイル
 
 ### Core Documentation (必ず参照)
 

@@ -2,14 +2,132 @@
 
 ## Overview
 
-This directory contains **feature ideas** and **enhancement proposals** for the repom project. Ideas documented here are in the conceptual or planning stage and have not yet been committed to implementation.
+This directory contains **feature ideas** and **enhancement proposals** for the repom project. Ideas documented here are in the conceptual or planning stage.
 
-## Directory Purpose
+## 📏 Document Guidelines
 
-- **Brainstorming**: Capture feature ideas and improvement concepts
-- **Discussion**: Provide a space for evaluating feasibility and priority
-- **Planning**: Organize ideas before they move to concrete implementation
-- **History**: Maintain a record of considered features
+### STRICT LIMITS
+- **Total length**: 250-350 lines maximum
+- **Code examples**: 5-10 lines maximum per example
+- **Approaches**: Present ONE recommended approach only
+
+### What to EXCLUDE
+❌ Complete code implementations (will become outdated)  
+❌ Multiple detailed approach comparisons (choose one)  
+❌ Deep technical implementation details (belongs in code/comments)  
+❌ Redundant code examples (one per concept maximum)  
+❌ "Additional Ideas" sections (create separate docs)
+
+### What to INCLUDE
+✅ Problem definition and scope  
+✅ Impact on existing commands/features  
+✅ Constraints (backward compatibility, etc.)  
+✅ Validation criteria  
+✅ Conceptual explanations with minimal code
+
+## 📋 Required Template
+
+**Copy this template when creating new idea documents**:
+
+```markdown
+# [Feature Name]
+
+## ステータス
+- **段階**: アイディア
+- **優先度**: 高/中/低
+- **複雑度**: 高/中/低
+- **作成日**: YYYY-MM-DD
+- **最終更新**: YYYY-MM-DD
+
+## 概要 (2-3 sentences)
+Brief description of what this idea proposes.
+
+## モチベーション
+
+### 現在の問題 (50-80 lines)
+- What is broken or missing?
+- Which commands/features are affected?
+- Example error cases (brief, no full code)
+
+### 理想の動作 (30-50 lines)
+- What should happen instead?
+- Key benefits (bullet points)
+- ONE simple usage example (5 lines max)
+
+## ユースケース (60-80 lines)
+
+[3-5 use cases, each with]:
+- Brief description (2-3 sentences)
+- Minimal code example (3-5 lines)
+- Why it matters
+
+## 推奨アプローチ (50-70 lines)
+
+**ONE approach only**. Include:
+- Why this approach?
+- Key concepts (explain, don't code)
+- Trade-offs
+- Integration points
+
+❌ DO NOT include:
+- Complete implementations
+- Multiple approach comparisons
+- Deep technical details
+
+## 統合ポイント (30-50 lines)
+
+- Affected files (list only)
+- Existing features impacted
+- Backward compatibility considerations
+
+## 次のステップ (40-60 lines)
+
+### 実装優先順位
+#### Phase 1: 基本機能（高優先度）
+- [ ] Implementation tasks
+
+#### Phase 2: 統合とドキュメント（中優先度）
+- [ ] Integration tasks
+
+#### Phase 3: 高度な機能（低優先度）
+- [ ] Advanced features
+
+### 検証項目
+- [ ] Validation checklist
+
+### 実装決定事項
+1. Decision 1
+2. Decision 2
+
+## 解決すべき質問 (20-40 lines)
+
+- Key decisions needed
+- Open questions
+- Risks to consider
+
+## 関連ドキュメント (10-20 lines)
+
+- Links to related files
+```
+
+**TOTAL TARGET**: 250-350 lines
+
+## 💡 Usage Tips for AI Agents
+
+When creating an idea document:
+
+1. **Start with outline** → Present structure first, get user approval
+2. **Confirm scope** → Ask if full detail needed or concise version
+3. **Write in phases** → Get feedback per section (avoid 800-line dumps)
+4. **Check length** → Report line count at end
+5. **Be concise** → Prefer explanation over code
+
+### Red Flags 🚩
+If you're writing:
+- Complete implementations → **STOP**, ask user
+- 3+ approaches in detail → **Choose ONE**
+- Code examples > 10 lines → **Simplify or remove**
+- Similar code blocks → **Consolidate**
 
 ## Idea Lifecycle
 
@@ -25,71 +143,20 @@ docs/issue/in_progress/ → Active development
 docs/issue/completed/ → Implementation complete
 ```
 
-## Directory Structure
+## 🎯 User Instruction Template
+
+When requesting an idea document from AI, use:
 
 ```
-docs/ideas/
-├── README.md                          # This file
-├── schema_validation_command.md       # CI/CD schema validation idea
-├── schema_file_generation.md          # JSON Schema export idea
-├── api_type_resolution.md             # FastAPI type resolution idea
-└── [other_ideas].md                   # Additional feature ideas
-```
+Please create an idea document following the template in docs/ideas/README.md.
 
-## Idea Template
+Requirements:
+- Follow the template structure exactly
+- Keep total length under 350 lines
+- Use conceptual explanations, not code implementations
+- Present ONE recommended approach only
 
-When creating a new idea document, use this structure:
-
-```markdown
-# [Idea Title]
-
-## Status
-- **Stage**: Idea / Research / Planning
-- **Priority**: High / Medium / Low
-- **Complexity**: High / Medium / Low
-- **Created**: YYYY-MM-DD
-- **Last Updated**: YYYY-MM-DD
-
-## Overview
-Brief description of the idea and its purpose.
-
-## Motivation
-Why is this feature needed? What problem does it solve?
-
-## Use Cases
-1. Use case 1
-2. Use case 2
-3. Use case 3
-
-## Potential Approaches
-### Approach 1: [Name]
-- Description
-- Pros
-- Cons
-
-### Approach 2: [Name]
-- Description
-- Pros
-- Cons
-
-## Technical Considerations
-- Dependency requirements
-- Compatibility concerns
-- Performance implications
-- Security considerations
-
-## Integration Points
-- Which parts of repom would be affected?
-- How would it interact with existing features?
-
-## Next Steps
-- [ ] Research feasibility
-- [ ] Prototype implementation
-- [ ] Community feedback
-- [ ] Move to docs/research/ for detailed investigation
-
-## Related Documents
-- Links to related issues, research, or documentation
+[Attach: docs/ideas/README.md]
 ```
 
 ## Current Ideas
