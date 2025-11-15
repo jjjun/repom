@@ -3,7 +3,7 @@ import inflect
 import unicodedata
 import importlib
 from pathlib import Path
-from typing import Optional, Set
+from typing import Optional, Set, List
 
 """
 inflect
@@ -142,3 +142,101 @@ def auto_import_models(
         except Exception as e:
             # Log import errors but don't fail completely
             print(f"Warning: Failed to import {full_module_name}: {e}")
+
+
+def auto_import_models_by_package(
+    package_name: str,
+    excluded_dirs: Optional[Set[str]] = None,
+    allowed_prefixes: Optional[Set[str]] = None
+) -> None:
+    """
+    パッケージ名からモデルを自動インポート（セキュリティ検証付き）
+
+    Args:
+        package_name: Python パッケージ名（例: 'myapp.models'）
+        excluded_dirs: 除外するディレクトリ名のセット
+        allowed_prefixes: 許可されたパッケージプレフィックス（セキュリティ）
+
+    Example:
+        auto_import_models_by_package('myapp.models')
+        auto_import_models_by_package(
+            'shared.models',
+            allowed_prefixes={'myapp.', 'shared.', 'repom.'}
+        )
+
+    Raises:
+        ValueError: パッケージが許可リストにない、またはパッケージではない場合
+        ImportError: パッケージが見つからない場合
+
+    Security:
+        allowed_prefixes を指定することで、信頼できるパッケージのみをインポート可能。
+        これにより、任意のコード実行を防ぎます。
+    """
+    # セキュリティチェック: 許可リストの検証
+    if allowed_prefixes and not any(package_name.startswith(prefix) for prefix in allowed_prefixes):
+        raise ValueError(
+            f"Security: Package '{package_name}' is not in allowed list. "
+            f"Allowed prefixes: {allowed_prefixes}"
+        )
+
+    try:
+        # パッケージをインポート
+        package = importlib.import_module(package_name)
+
+        # パッケージかどうか確認（モジュールではダメ）
+        if not hasattr(package, '__path__'):
+            raise ValueError(f"{package_name} is not a package (it's a module)")
+
+        # パッケージのディレクトリを取得
+        package_dir = Path(package.__path__[0])
+
+        # 既存の auto_import_models を使用してインポート
+        auto_import_models(
+            models_dir=package_dir,
+            base_package=package_name,
+            excluded_dirs=excluded_dirs
+        )
+    except ImportError as e:
+        raise ImportError(f"Failed to import package {package_name}: {e}")
+
+
+def auto_import_models_from_list(
+    package_names: List[str],
+    excluded_dirs: Optional[Set[str]] = None,
+    allowed_prefixes: Optional[Set[str]] = None,
+    fail_on_error: bool = False
+) -> None:
+    """
+    複数のパッケージからモデルを一括インポート
+
+    Args:
+        package_names: パッケージ名のリスト
+        excluded_dirs: 除外するディレクトリ名のセット
+        allowed_prefixes: 許可されたパッケージプレフィックス（セキュリティ）
+        fail_on_error: エラー時に例外を発生させるか（デフォルト: 警告のみ）
+
+    Example:
+        auto_import_models_from_list([
+            'myapp.models',
+            'shared.models',
+            'plugins.payment.models'
+        ], allowed_prefixes={'myapp.', 'shared.', 'plugins.', 'repom.'})
+
+    Returns:
+        None（エラーは警告として出力、または例外として発生）
+
+    Security:
+        allowed_prefixes を指定することで、信頼できるパッケージのみをインポート。
+    """
+    for package_name in package_names:
+        try:
+            auto_import_models_by_package(
+                package_name=package_name,
+                excluded_dirs=excluded_dirs,
+                allowed_prefixes=allowed_prefixes
+            )
+        except Exception as e:
+            if fail_on_error:
+                raise
+            else:
+                print(f"Warning: Failed to import models from {package_name}: {e}")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Set
 
 from pathlib import Path
 try:
@@ -19,12 +19,25 @@ def load_models() -> None:
     before operating on SQLAlchemy metadata.  By pointing the
     ``MINE_DB_LOAD_MODELS`` environment variable at this function we ensure all
     ``mine_py`` models are imported and registered on ``Base.metadata``.
-    """
 
-    # Importing the ``models`` package has the side-effect of registering every
-    # SQLAlchemy model defined by the application.  The import is intentionally
-    # local so the module is only loaded when the CLI needs it.
-    from repom import models  # noqa: F401  # pylint: disable=unused-import
+    New Feature:
+        If config.model_locations is set, import models from specified packages
+        instead of the default repom.models package.
+    """
+    if config.model_locations:
+        from repom.utility import auto_import_models_from_list
+        auto_import_models_from_list(
+            package_names=config.model_locations,
+            excluded_dirs=config.model_excluded_dirs,
+            allowed_prefixes=config.allowed_package_prefixes,
+            fail_on_error=config.model_import_strict
+        )
+    else:
+        # デフォルト動作（後方互換性）
+        # Importing the ``models`` package has the side-effect of registering every
+        # SQLAlchemy model defined by the application.  The import is intentionally
+        # local so the module is only loaded when the CLI needs it.
+        from repom import models  # noqa: F401  # pylint: disable=unused-import
 
 
 @dataclass
@@ -37,6 +50,12 @@ class MineDbConfig(Config):
 
     # モデルが格納されてるディレクトリ
     set_models_hook: Optional[str] = field(default='repom.config:load_models', init=False, repr=False)
+
+    # モデル自動インポート設定
+    _model_locations: Optional[List[str]] = field(default=None, init=False, repr=False)
+    _model_excluded_dirs: Optional[Set[str]] = field(default=None, init=False, repr=False)
+    _allowed_package_prefixes: Set[str] = field(default_factory=lambda: {'repom.'}, init=False, repr=False)
+    _model_import_strict: bool = field(default=False, init=False, repr=False)
 
     # DBの格納ディレクトリ (デフォルトで data_path に入る)
     _db_path: Optional[str] = field(default=None, init=False, repr=False)
@@ -141,6 +160,42 @@ class MineDbConfig(Config):
     @db_backup_path.setter
     def db_backup_path(self, value: Optional[str]):
         self._db_backup_path = value
+
+    @property
+    def model_locations(self) -> Optional[List[str]]:
+        """モデルをインポートするパッケージ名のリスト"""
+        return self._model_locations
+
+    @model_locations.setter
+    def model_locations(self, value: Optional[List[str]]):
+        self._model_locations = value
+
+    @property
+    def model_excluded_dirs(self) -> Optional[Set[str]]:
+        """モデル検索時に除外するディレクトリ名のセット"""
+        return self._model_excluded_dirs
+
+    @model_excluded_dirs.setter
+    def model_excluded_dirs(self, value: Optional[Set[str]]):
+        self._model_excluded_dirs = value
+
+    @property
+    def allowed_package_prefixes(self) -> Set[str]:
+        """インポートを許可するパッケージのプレフィックスのセット（セキュリティ対策）"""
+        return self._allowed_package_prefixes
+
+    @allowed_package_prefixes.setter
+    def allowed_package_prefixes(self, value: Set[str]):
+        self._allowed_package_prefixes = value
+
+    @property
+    def model_import_strict(self) -> bool:
+        """モデルインポート失敗時に例外を送出するか（デフォルト: False = 警告のみ）"""
+        return self._model_import_strict
+
+    @model_import_strict.setter
+    def model_import_strict(self, value: bool):
+        self._model_import_strict = value
 
 
 config = MineDbConfig()

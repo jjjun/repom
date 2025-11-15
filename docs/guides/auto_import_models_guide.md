@@ -1,0 +1,430 @@
+# auto_import_models ガイド
+
+## 概要
+
+`auto_import_models` は、SQLAlchemy モデルを自動的にインポートし、Alembic マイグレーションやデータベース作成時に `Base.metadata` に登録するためのユーティリティです。
+
+**主な機能**:
+- 指定ディレクトリまたはパッケージから Python ファイルを再帰的に検索
+- SQLAlchemy モデルクラスを動的にインポート
+- 除外ディレクトリの設定によるフィルタリング
+- **セキュリティ検証**: 許可されたパッケージのみインポート可能
+
+---
+
+## 利用可能な関数
+
+### 1. `auto_import_models(directory_path, excluded_dirs=None)`
+
+**目的**: ディレクトリパスからモデルを再帰的にインポート
+
+**パラメータ**:
+- `directory_path` (str): モデルが格納されているディレクトリの絶対パス
+- `excluded_dirs` (Optional[Set[str]]): 除外するディレクトリ名のセット（デフォルト: `DEFAULT_EXCLUDED_DIRS`）
+
+**使用例**:
+```python
+from repom.utility import auto_import_models
+from pathlib import Path
+
+models_dir = Path(__file__).parent / 'models'
+auto_import_models(str(models_dir), excluded_dirs={'tests', 'migrations'})
+```
+
+**動作**:
+- `*.py` ファイルを `rglob()` で再帰検索
+- 除外ディレクトリに該当するファイルはスキップ
+- `importlib.import_module()` でモジュールをインポート
+
+---
+
+### 2. `auto_import_models_by_package(package_name, excluded_dirs=None, allowed_prefixes=None)`
+
+**目的**: パッケージ名からモデルをインポート（セキュリティ検証付き）
+
+**パラメータ**:
+- `package_name` (str): インポートするパッケージ名（例: `myapp.models`）
+- `excluded_dirs` (Optional[Set[str]]): 除外するディレクトリ名のセット
+- `allowed_prefixes` (Optional[Set[str]]): 許可するパッケージプレフィックスのセット
+
+**使用例**:
+```python
+from repom.utility import auto_import_models_by_package
+
+# セキュリティ検証あり
+auto_import_models_by_package(
+    'myapp.models',
+    excluded_dirs={'tests'},
+    allowed_prefixes={'myapp.', 'repom.'}
+)
+```
+
+**セキュリティ動作**:
+- `allowed_prefixes` が設定されている場合、パッケージ名のプレフィックスを検証
+- 許可リストにないパッケージは `ValueError` を送出
+- `allowed_prefixes=None` の場合は検証をスキップ
+
+**エラー例**:
+```python
+# 許可されていないパッケージをインポートしようとした場合
+auto_import_models_by_package(
+    'untrusted_package.models',
+    allowed_prefixes={'myapp.', 'repom.'}
+)
+# ValueError: Security: Package 'untrusted_package.models' is not in allowed list: {'myapp.', 'repom.'}
+```
+
+---
+
+### 3. `auto_import_models_from_list(package_names, excluded_dirs=None, allowed_prefixes=None, fail_on_error=False)`
+
+**目的**: 複数パッケージをバッチインポート
+
+**パラメータ**:
+- `package_names` (List[str]): インポートするパッケージ名のリスト
+- `excluded_dirs` (Optional[Set[str]]): 除外するディレクトリ名
+- `allowed_prefixes` (Optional[Set[str]]): 許可するパッケージプレフィックス
+- `fail_on_error` (bool): エラー時に例外を送出するか（デフォルト: False）
+
+**使用例**:
+```python
+from repom.utility import auto_import_models_from_list
+
+# 複数パッケージをインポート
+auto_import_models_from_list(
+    package_names=['myapp.models', 'myapp.modules.user', 'repom.models'],
+    excluded_dirs={'tests', 'migrations'},
+    allowed_prefixes={'myapp.', 'repom.'}
+)
+```
+
+**エラーハンドリング**:
+- `fail_on_error=False`: エラーをログに記録し、処理を継続
+- `fail_on_error=True`: 最初のエラーで例外を送出
+
+---
+
+## 設定による自動インポート（MineDbConfig）
+
+### 設定プロパティ
+
+`MineDbConfig` クラスに以下の設定を追加することで、`load_models()` 関数が自動的に複数パッケージからモデルをインポートします。
+
+#### `model_locations: Optional[List[str]]`
+
+インポートするパッケージ名のリスト。
+
+**設定例**:
+```python
+from repom.config import config
+
+config.model_locations = [
+    'myapp.models',
+    'myapp.modules.user',
+    'myapp.modules.task'
+]
+```
+
+#### `model_excluded_dirs: Optional[Set[str]]`
+
+除外するディレクトリ名のセット。
+
+**設定例**:
+```python
+config.model_excluded_dirs = {'tests', 'migrations', 'scripts'}
+```
+
+**未設定の場合**: `DEFAULT_EXCLUDED_DIRS` が使用されます。
+```python
+DEFAULT_EXCLUDED_DIRS = {'base', 'mixin', 'validators', 'utils', 'helpers', '__pycache__'}
+```
+
+#### `allowed_package_prefixes: Set[str]`
+
+インポートを許可するパッケージプレフィックスのセット（セキュリティ対策）。
+
+**デフォルト値**: `{'repom.'}`
+
+**設定例**:
+```python
+config.allowed_package_prefixes = {'myapp.', 'repom.', 'shared.'}
+```
+
+**重要**: 親プロジェクトでこの設定を明示的に追加する必要があります。デフォルトでは `repom.` パッケージのみが許可されています。
+
+**セキュリティ検証のスキップ**: `allowed_prefixes=None` を指定することで、セキュリティ検証をスキップできます。ただし、本番環境では推奨されません。
+
+#### `model_import_strict: bool`
+
+モデルインポート失敗時に例外を送出するかどうか。
+
+**デフォルト値**: `False`（警告のみで処理を継続）
+
+**設定例**:
+```python
+# 開発環境では厳格にエラーを検出
+config.model_import_strict = True
+
+# 本番環境では柔軟に対応（デフォルト）
+config.model_import_strict = False
+```
+
+**動作**:
+- `False`: インポート失敗時に警告メッセージを出力して継続（タイポに気づきにくい）
+- `True`: インポート失敗時に `ImportError` を送出して停止（早期発見）
+
+---
+
+### CONFIG_HOOK での設定
+
+親プロジェクトで `CONFIG_HOOK` を使用して設定をカスタマイズできます。
+
+**例: `myapp/config_hook.py`**:
+```python
+def hook_config(config):
+    """repom の設定をカスタマイズ"""
+    # 複数パッケージからモデルをインポート
+    config.model_locations = [
+        'myapp.models',           # アプリケーションのメインモデル
+        'myapp.modules.user',     # ユーザーモジュール
+        'myapp.modules.task',     # タスクモジュール
+        'repom.models'            # repom の共有モデル
+    ]
+    
+    # 除外ディレクトリを追加
+    config.model_excluded_dirs = {'tests', 'migrations', 'scripts', 'tmp'}
+    
+    # 許可するパッケージプレフィックスを設定（セキュリティ重要）
+    config.allowed_package_prefixes = {'myapp.', 'repom.', 'shared.'}
+    
+    # 開発環境では厳格モード（オプション）
+    import os
+    if os.getenv('EXEC_ENV') in ['dev', 'test']:
+        config.model_import_strict = True
+    
+    return config
+```
+
+**環境変数で CONFIG_HOOK を指定**:
+```bash
+# .env ファイル
+CONFIG_HOOK=myapp.config_hook:hook_config
+```
+
+---
+
+## セキュリティに関する重要事項
+
+### なぜセキュリティ検証が必要か
+
+`importlib.import_module()` は任意のパッケージをインポートできるため、以下のリスクがあります:
+
+1. **任意コード実行**: 信頼できないパッケージをインポートすると、そのモジュールレベルのコードが実行される
+2. **依存関係の混入**: 意図しないパッケージの依存関係が環境に影響を与える
+3. **設定ミス**: タイポや設定ミスで予期しないモジュールがインポートされる
+
+### 許可リスト方式
+
+`allowed_package_prefixes` は**許可リスト方式**でセキュリティを強化します:
+
+```python
+# ⚠️ セキュリティ検証をスキップ（直接関数を呼ぶ場合のみ可能）
+auto_import_models_by_package(
+    'any_package.models',
+    allowed_prefixes=None  # 検証をスキップ
+)
+
+# ✅ 安全: 明示的に許可されたパッケージのみ
+config.allowed_package_prefixes = {'myapp.', 'repom.'}
+
+# ❌ エラー: 許可されていないパッケージ
+config.model_locations = ['untrusted_package.models']  # ValueError
+```
+
+**注意**: `load_models()` 経由では常に `config.allowed_package_prefixes` が使用されるため、`None` によるスキップはできません。直接 `auto_import_models_by_package()` を呼ぶ場合のみ `allowed_prefixes=None` でスキップ可能です。
+
+### デフォルト設定の意図
+
+**デフォルト**: `{'repom.'}`
+
+これは、親プロジェクトが明示的に `allowed_package_prefixes` を設定しない限り、`repom` パッケージ以外のインポートが拒否されることを意味します。
+
+**理由**:
+- 設定ミスによる意図しないインポートを防ぐ
+- セキュリティ意識を高める（明示的な設定を要求）
+- デフォルトで安全な動作を保証
+
+---
+
+## load_models() の動作
+
+### 概要
+
+`load_models()` 関数は、データベース作成、マイグレーション、テストなどのタイミングで呼び出され、SQLAlchemy モデルを `Base.metadata` に登録します。
+
+### 動作フロー
+
+```python
+def load_models():
+    """モデルを読み込む（MineDbConfig の設定に基づく）"""
+    from repom.config import config
+    from repom.utility import auto_import_models_from_list
+
+    if config.model_locations:
+        # 新機能: 複数パッケージからインポート
+        auto_import_models_from_list(
+            package_names=config.model_locations,
+            excluded_dirs=config.model_excluded_dirs,
+            allowed_prefixes=config.allowed_package_prefixes
+        )
+    else:
+        # 後方互換性: 従来の動作（repom.models を直接インポート）
+        from repom import models
+```
+
+### 後方互換性
+
+`config.model_locations` が設定されていない場合、従来の動作（`from repom import models`）にフォールバックします。
+
+**既存プロジェクトへの影響**: なし（設定を変更しない限り、従来通りの動作）
+
+---
+
+## 使用パターン
+
+### パターン1: シンプルな単一パッケージ
+
+```python
+# config_hook.py
+def hook_config(config):
+    config.model_locations = ['myapp.models']
+    config.allowed_package_prefixes = {'myapp.', 'repom.'}
+    return config
+```
+
+### パターン2: 複数モジュールに分散したモデル
+
+```python
+# config_hook.py
+def hook_config(config):
+    config.model_locations = [
+        'myapp.core.models',
+        'myapp.auth.models',
+        'myapp.api.models',
+        'repom.models'
+    ]
+    config.model_excluded_dirs = {'tests', 'migrations'}
+    config.allowed_package_prefixes = {'myapp.', 'repom.'}
+    return config
+```
+
+### パターン3: 環境別の設定
+
+```python
+# config_hook.py
+import os
+
+def hook_config(config):
+    if os.getenv('EXEC_ENV') == 'test':
+        # テスト環境: テストモデルも含める
+        config.model_locations = [
+            'myapp.models',
+            'myapp.test_models'
+        ]
+    else:
+        # 本番環境: テストモデルを除外
+        config.model_locations = ['myapp.models']
+    
+    config.allowed_package_prefixes = {'myapp.', 'repom.'}
+    
+    # 開発/テスト環境では厳格モード
+    config.model_import_strict = os.getenv('EXEC_ENV') in ['dev', 'test']
+    
+    return config
+```
+
+---
+
+## トラブルシューティング
+
+### ValueError: Security: Package '...' is not in allowed list
+
+**原因**: インポートしようとしたパッケージが `allowed_package_prefixes` に含まれていない
+
+**解決方法**:
+```python
+# config_hook.py で許可リストを追加
+config.allowed_package_prefixes = {'myapp.', 'repom.', 'newpackage.'}
+```
+
+### ModuleNotFoundError: No module named '...'
+
+**原因**: パッケージ名が間違っているか、パッケージがインストールされていない
+
+**解決方法**:
+1. パッケージ名のスペルを確認
+2. パッケージがインストールされているか確認（`poetry show` or `pip list`）
+3. `PYTHONPATH` が正しく設定されているか確認
+
+### モデルが Alembic で検出されない
+
+**原因**: モデルが `Base.metadata` に登録されていない
+
+**解決方法**:
+1. `config.model_locations` にパッケージが含まれているか確認
+2. モデルファイルが除外ディレクトリに含まれていないか確認
+3. SQLAlchemy の `Base` を継承しているか確認
+4. デバッグ: `load_models()` を直接呼び出してエラーを確認
+
+---
+
+## AI エージェント向けノート
+
+### コード生成時の注意点
+
+1. **セキュリティ第一**: `model_locations` を設定する場合、必ず `allowed_package_prefixes` も設定する
+2. **デフォルト値を変更しない**: `allowed_package_prefixes` のデフォルトは `{'repom.'}` のまま維持
+3. **後方互換性を維持**: `config.model_locations` が `None` の場合、従来の動作を保証
+4. **エラーメッセージの明確化**: セキュリティエラーは `ValueError` で、許可リストを表示
+
+### テストコード生成時のポイント
+
+```python
+# テスト用の設定
+def test_auto_import_models():
+    from repom.utility import auto_import_models_by_package
+    
+    # セキュリティ検証のテスト
+    with pytest.raises(ValueError, match="Security"):
+        auto_import_models_by_package(
+            'untrusted.models',
+            allowed_prefixes={'trusted.'}
+        )
+    
+    # 正常なインポートのテスト
+    auto_import_models_by_package(
+        'trusted.models',
+        allowed_prefixes={'trusted.'}
+    )
+```
+
+### ドキュメント更新のガイドライン
+
+このガイドは `auto_import_models` 関連の機能修正の度に更新します:
+
+- 新しい関数が追加された場合: 「利用可能な関数」セクションに追加
+- セキュリティ機能が変更された場合: 「セキュリティに関する重要事項」セクションを更新
+- 設定オプションが追加された場合: 「設定プロパティ」セクションに追加
+- バグ修正の場合: 「トラブルシューティング」セクションに事例を追加
+
+---
+
+## 関連ドキュメント
+
+- **docs/issue/in_progress/004_flexible_auto_import_models.md**: 機能の技術仕様
+- **docs/guides/repository_and_utilities_guide.md**: `BaseRepository` との統合
+- **AGENTS.md**: プロジェクト構造とコマンドリファレンス
+
+---
+
+**最終更新**: 2025-01-XX (Phase 1 実装完了時)

@@ -27,31 +27,7 @@ completed/     → 実装完了・テスト済み
 
 ## 🚧 作業中の Issue
 
-### Issue #4: 柔軟な auto_import_models 設定
-
-**ファイル**: `in_progress/004_flexible_auto_import_models.md`
-
-**ステータス**: 🚧 作業中（2025-11-15）
-
-**概要**:
-設定ファイルで複数のモデルディレクトリを指定できるようにし、`models/__init__.py` への手動記述を不要にする。これにより、Alembic マイグレーションと db コマンドでのモデル認識ミスを防ぐ。
-
-**実装予定**:
-- Phase 1: 基本機能（高優先度）
-  - [ ] `auto_import_models_by_package` 関数の実装
-  - [ ] `auto_import_models_from_list` 関数の実装
-  - [ ] `MineDbConfig.model_locations` プロパティ追加
-  - [ ] `load_models()` 関数の修正
-  - [ ] 単体テストの作成
-- Phase 2: 統合とドキュメント
-  - [ ] 統合テスト
-  - [ ] ドキュメント更新
-
-**技術的決定事項**:
-- 環境変数は使わず config.py で完結
-- CONFIG_HOOK で親プロジェクトが柔軟に設定可能
-- `load_models()` 修正のみで全体に反映
-- 後方互換性を維持
+現在、作業中の Issue はありません。
 
 ---
 
@@ -62,6 +38,47 @@ completed/     → 実装完了・テスト済み
 ---
 
 ## 📋 完了済み Issue
+
+### Issue #5: 柔軟な auto_import_models 設定
+
+**ファイル**: `completed/005_flexible_auto_import_models.md`
+
+**ステータス**: ✅ 完了（2025-11-15）
+
+**概要**:
+設定ファイルで複数のモデルディレクトリを指定できる機能を実装。`models/__init__.py` への手動記述を不要にし、Alembic マイグレーションと db コマンドでのモデル認識ミスを防ぐ。
+
+**実装内容**:
+- Phase 1: 基本機能 ✅
+  - `auto_import_models_by_package()` 関数（セキュリティ検証付き）
+  - `auto_import_models_from_list()` 関数（バッチインポート）
+  - `MineDbConfig` プロパティ（model_locations, model_excluded_dirs, allowed_package_prefixes）
+  - `load_models()` 修正（設定ベース対応）
+  - 27個の単体テスト（すべて成功）
+  - ガイドドキュメント作成
+
+- Phase 1.5: 設定制御機能 ✅
+  - `model_import_strict` プロパティ追加（デフォルト: False = 警告のみ）
+  - `load_models()` での `fail_on_error` パラメータ連携
+  - 4個の単体テスト追加（合計31テスト）
+  - ドキュメント更新
+
+**技術的決定事項**:
+- Python コード（CONFIG_HOOK 経由）のみサポート
+- デフォルトで警告のみ（`model_import_strict=False`）
+- セキュリティ検証（`allowed_package_prefixes`、デフォルト: `{'repom.'}`）
+- セキュリティスキップは直接呼び出しのみ許可
+- 後方互換性を維持（`model_locations=None` で従来通り）
+
+**テストカバレッジ**:
+- 合計31テスト（セキュリティ6、パッケージインポート4、Config8、統合4、エラーハンドリング3、実世界3、Strict3）
+- すべてのテストが成功
+
+**関連ドキュメント**:
+- 使用ガイド: `docs/guides/auto_import_models_guide.md`
+- 元のアイディア: `docs/ideas/flexible_auto_import_models.md`（280行に削減）
+
+---
 
 ### Issue #3: response_field 機能を BaseModelAuto に移行
 
