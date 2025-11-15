@@ -46,6 +46,15 @@ E     Input should be a valid datetime, got None [type=datetime_type, input_valu
 - `repom/custom_types/AutoDateTime.py`
 - `repom/base_model_auto.py` (get_response_schema)
 - `tests/unit_tests/test_response_schema_forward_refs.py`
+- **ドキュメント**: `docs/guides/system_columns_and_custom_types.md`
+
+**重要な設計仕様**:
+- ✅ `AutoDateTime` の動作は **正しい仕様**
+- ✅ `created_at` は「**データベース保存時の時刻**」を記録するため
+- ✅ Python オブジェクト作成時に値が設定されないのは意図的
+- ⚠️ テストでは DB に保存してから `to_dict()` を呼ぶ必要がある
+
+**詳細**: `docs/guides/system_columns_and_custom_types.md` を参照
 
 #### 問題2: Annotation inheritance バグ ✅ (修正済み)
 
