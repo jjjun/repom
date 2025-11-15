@@ -1,6 +1,8 @@
 import json
-from sqlalchemy import Column, Integer, event
+from sqlalchemy import Integer, event
+from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
+from typing import TYPE_CHECKING
 from repom.db import Base, inspect
 from repom.custom_types.AutoDateTime import AutoDateTime
 
@@ -81,14 +83,26 @@ class BaseModel(Base):
             # 抽象クラスなので、カラムを追加せずに終了
             return
 
+        # __annotations__ を初期化（親クラスから継承した不要なアノテーションを避ける）
+        if '__annotations__' not in cls.__dict__:
+            cls.__annotations__ = {}
+
         # 具象クラスのみ、use_id が True の場合に id カラムを追加
+        # SQLAlchemy 2.0 スタイル: mapped_column() + 型ヒント
         if cls.use_id:
-            cls.id = Column(Integer, primary_key=True)
+            cls.id: Mapped[int] = mapped_column(Integer, primary_key=True)
+            # 動的に追加されたカラムの型ヒントを __annotations__ に登録
+            cls.__annotations__['id'] = Mapped[int]
 
         if cls.use_created_at:
-            cls.created_at = Column(AutoDateTime)
+            cls.created_at: Mapped[datetime] = mapped_column(AutoDateTime)
+            # 動的に追加されたカラムの型ヒントを __annotations__ に登録
+            cls.__annotations__['created_at'] = Mapped[datetime]
+
         if cls.use_updated_at:
-            cls.updated_at = Column(AutoDateTime)
+            cls.updated_at: Mapped[datetime] = mapped_column(AutoDateTime)
+            # 動的に追加されたカラムの型ヒントを __annotations__ に登録
+            cls.__annotations__['updated_at'] = Mapped[datetime]
 
     def to_dict(self):
         return {c.key: getattr(self, c.key) for c in inspect(self).mapper.column_attrs}
