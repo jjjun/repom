@@ -1,9 +1,7 @@
-from sqlalchemy import (
-    Column,
-    String,
-    Date,
-)
-from datetime import datetime
+from sqlalchemy import String, Date
+from sqlalchemy.orm import Mapped, mapped_column
+from datetime import datetime, date
+from typing import Optional
 
 from repom.base_model import BaseModel
 from repom.utility import get_plural_tablename
@@ -19,8 +17,8 @@ class SampleModel(BaseModel):
 
     # default='' と nullable=False は冗長な書き方で、省略しても問題ない。
     # ただ、nullable=False を指定する事でデータベースレベルでの制約を強制できる。
-    value = Column(String(255), nullable=False, default='')
-    done_at = Column(Date)
+    value: Mapped[str] = mapped_column(String(255), nullable=False, default='')
+    done_at: Mapped[Optional[date]] = mapped_column(Date)
 
     def done(self):
         """

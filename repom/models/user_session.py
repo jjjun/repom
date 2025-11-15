@@ -3,7 +3,11 @@ User session model without id column.
 Uses composite primary key (user_id, session_token) instead.
 """
 
-from sqlalchemy import Column, String, DateTime, Integer, ForeignKey
+from sqlalchemy import String, DateTime, Integer
+from sqlalchemy.orm import Mapped, mapped_column
+from datetime import datetime
+from typing import Optional
+
 from repom.base_model_auto import BaseModelAuto
 
 
@@ -16,11 +20,11 @@ class UserSession(BaseModelAuto, use_id=False):
     __tablename__ = 'user_sessions'
 
     # Composite primary key
-    user_id = Column(Integer, primary_key=True, nullable=False)
-    session_token = Column(String(64), primary_key=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, primary_key=True, nullable=False)
+    session_token: Mapped[str] = mapped_column(String(64), primary_key=True, nullable=False)
 
     # Session data
-    ip_address = Column(String(45))  # IPv6 max length
-    user_agent = Column(String(255))
-    expires_at = Column(DateTime, nullable=False)
-    last_activity = Column(DateTime)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45))  # IPv6 max length
+    user_agent: Mapped[Optional[str]] = mapped_column(String(255))
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    last_activity: Mapped[Optional[datetime]] = mapped_column(DateTime)
