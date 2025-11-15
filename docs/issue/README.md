@@ -27,7 +27,31 @@ completed/     → 実装完了・テスト済み
 
 ## 🚧 作業中の Issue
 
-現在、作業中の Issue はありません。
+### Issue #4: 柔軟な auto_import_models 設定
+
+**ファイル**: `in_progress/004_flexible_auto_import_models.md`
+
+**ステータス**: 🚧 作業中（2025-11-15）
+
+**概要**:
+設定ファイルで複数のモデルディレクトリを指定できるようにし、`models/__init__.py` への手動記述を不要にする。これにより、Alembic マイグレーションと db コマンドでのモデル認識ミスを防ぐ。
+
+**実装予定**:
+- Phase 1: 基本機能（高優先度）
+  - [ ] `auto_import_models_by_package` 関数の実装
+  - [ ] `auto_import_models_from_list` 関数の実装
+  - [ ] `MineDbConfig.model_locations` プロパティ追加
+  - [ ] `load_models()` 関数の修正
+  - [ ] 単体テストの作成
+- Phase 2: 統合とドキュメント
+  - [ ] 統合テスト
+  - [ ] ドキュメント更新
+
+**技術的決定事項**:
+- 環境変数は使わず config.py で完結
+- CONFIG_HOOK で親プロジェクトが柔軟に設定可能
+- `load_models()` 修正のみで全体に反映
+- 後方互換性を維持
 
 ---
 
