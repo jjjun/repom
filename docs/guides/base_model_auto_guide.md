@@ -285,20 +285,24 @@ class ReviewModel(BaseModel):
 
 ### 解決法: 文字列型アノテーションと forward_refs
 
+**重要**: 標準型（`List`, `Dict`, `Optional`）は自動解決されるため、カスタム型のみ指定してください。
+
 ```python
-# ✅ 文字列で型を指定（前方参照）
+# ✅ 正しい実装
 class ReviewModel(BaseModel):
     @BaseModel.response_field(
-        related_books="List[BookResponse]",  # 文字列で指定
+        tags=List[str],                        # 標準型：自動解決
+        related_books="List[BookResponse]",    # カスタム型：文字列で指定
         parent_item="ParentItemResponse | None"
     )
     def to_dict(self):
         return {
+            "tags": ["fiction", "mystery"],
             "related_books": [book.to_dict() for book in self.books],
             "parent_item": self.parent.to_dict() if self.parent else None
         }
 
-# スキーマ生成時に前方参照を解決
+# スキーマ生成（カスタム型のみ指定）
 BookResponse = BookModel.get_response_schema()
 ParentItemResponse = ParentItemModel.get_response_schema()
 
@@ -310,70 +314,18 @@ ResponseSchema = ReviewModel.get_response_schema(
 )
 ```
 
-### Phase 1 改善（2025-11-14）
+### エラーハンドリング
 
-**標準型（`List`, `Dict`, `Optional` など）は自動的に解決されるため、`forward_refs` に含める必要はありません。カスタムモデルの前方参照のみ指定してください。**
-
-```python
-# ✅ 正しい使い方
-@BaseModel.response_field(
-    tags=List[str],           # 標準型：forward_refs 不要
-    metadata=Optional[dict],  # 標準型：forward_refs 不要
-    related_books="List[BookResponse]"  # カスタム型：forward_refs 必要
-)
-def to_dict(self):
-    ...
-
-# スキーマ生成（カスタム型だけ指定）
-BookResponse = BookModel.get_response_schema()
-ResponseSchema = MyModel.get_response_schema(
-    forward_refs={'BookResponse': BookResponse}  # カスタム型のみ
-    # 'List' は自動的に解決されるため不要
-)
-```
-
-### エラーハンドリング（Phase 2 改善）
-
-スキーマ生成時に前方参照が解決できない場合、環境に応じて異なる動作をします。
-
-#### 開発環境（`EXEC_ENV=dev`）
-
-**動作**: 例外を発生させて処理を停止
+前方参照が解決できない場合、`SchemaGenerationError` 例外が発生し、具体的な解決策を含むエラーメッセージが表示されます。
 
 ```python
 from repom.base_model import SchemaGenerationError
 
 try:
-    TaskResponse = Task.get_response_schema(
-        forward_refs={'MissingType': MissingType}  # 未定義型
-    )
+    schema = Task.get_response_schema(forward_refs={})
 except SchemaGenerationError as e:
     print(e)
-    # 出力例:
-    # Failed to generate Pydantic schema for 'TaskResponse'.
-    # Error: name 'MissingType' is not defined
-    #
-    # Undefined types detected: MissingType
-    #
-    # Solution:
-    #   Add missing types to forward_refs parameter:
-    #   schema = Task.get_response_schema(
-    #       forward_refs={
-    #           'MissingType': MissingType,
-    #       }
-    #   )
-```
-
-#### 本番環境（`EXEC_ENV=prod` または未設定）
-
-**動作**: ログにエラーを記録し、警告を表示して処理を続行
-
-```python
-# 本番環境では例外を投げずに警告のみ
-TaskResponse = Task.get_response_schema(
-    forward_refs={'MissingType': MissingType}
-)
-# 警告: Failed to rebuild TaskResponse. See logs for details.
+    # エラーメッセージに未定義型と解決方法が含まれる
 ```
 
 ---
@@ -436,43 +388,15 @@ class UserModel(BaseModelAuto):
 
 ## 複合主キー対応
 
-### use_composite_pk フラグの導入
+### use_composite_pk フラグ
 
-**問題**: BaseModelAuto が BaseModel を継承するため、デフォルトで `use_id=False` を設定していても、複合主キーの意図が不明瞭だった
+複合主キーを使用する場合は `use_composite_pk=True` を設定します。
 
-**解決策**: `use_composite_pk=True` フラグを導入し、複合主キーの意図を明確化
-
-```python
-class BaseModel(Base):
-    __abstract__ = True
-    
-    use_id = True  # デフォルトで id を使用
-    use_created_at = False
-    use_updated_at = False
-    use_composite_pk = False  # 複合主キーフラグ（NEW!）
-    
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        
-        # 複合主キーの場合は id カラムを追加しない（最優先）
-        if cls.use_composite_pk:
-            # 既に id カラムが追加されている場合は削除
-            if hasattr(cls, 'id') and isinstance(getattr(cls, 'id', None), Column):
-                delattr(cls, 'id')
-        elif cls.use_id:
-            # 通常の id カラムを追加
-            cls.id = Column(Integer, primary_key=True)
-```
-
-### 使用例
-
-**複合主キーのモデル**:
 ```python
 class TimeBlockModel(BaseModelAuto):
     __tablename__ = "time_blocks"
     
-    # 複合主キーを明示的に宣言
-    use_composite_pk = True  # id カラムを使用しない（最優先）
+    use_composite_pk = True  # id カラムを使用しない
     use_created_at = True
     use_updated_at = True
     
@@ -481,138 +405,42 @@ class TimeBlockModel(BaseModelAuto):
     activity_id = Column(Integer, ForeignKey('time_activities.id'))
 ```
 
-**通常の主キーのモデル**:
-```python
-class TimeActivityModel(BaseModelAuto):
-    __tablename__ = "time_activities"
-    
-    # 通常の id カラムを使用
-    use_id = True
-    use_created_at = True
-    use_updated_at = True
-    
-    name = Column(String(100), nullable=False, info={'description': '活動名'})
-```
-
-**use_id=False のモデル（カスタム主キー）**:
-```python
-class ProductModel(BaseModelAuto):
-    __tablename__ = "products"
-    
-    # id を使わず、独自のカラムを主キーにする
-    use_id = False
-    
-    code = Column(String(50), primary_key=True, info={'description': '商品コード'})
-    name = Column(String(100), nullable=False, info={'description': '商品名'})
-```
-
 ### フラグの優先順位
 
-1. **use_composite_pk=True**: 最優先。id カラムを追加しない（複合主キー用）
-2. **use_id=True**: use_composite_pk が False の場合に有効。id カラムを追加
-3. **use_id=False**: id カラムを追加しない（単一カスタム主キー用）
+1. **use_composite_pk=True**: id カラムを追加しない（複合主キー用）
+2. **use_id=True**: id カラムを追加（デフォルト）
+3. **use_id=False**: id カラムを追加しない（カスタム主キー用）
 
 ---
 
 ## 技術詳細: 内部実装
 
-### アーキテクチャ概要
+### スキーマ生成フロー
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    BaseModel                                 │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  @response_field decorator                                  │
-│    └─> Stores type metadata in method._response_fields      │
-│                                                              │
-│  get_response_schema()                                       │
-│    ├─> Reads SQLAlchemy column definitions                  │
-│    ├─> Reads @response_field metadata                       │
-│    ├─> Registers fields in _EXTRA_FIELDS_REGISTRY           │
-│    ├─> Generates Pydantic schema via create_model()         │
-│    ├─> Calls model_rebuild() if forward_refs provided       │
-│    └─> Caches schema in _response_schemas                   │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+1. **デコレータ実行** (インポート時): `@response_field` が型情報を `to_dict._response_fields` に保存
+2. **スキーマ生成** (実行時): `get_response_schema()` を呼び出し
+3. **フィールド収集**: SQLAlchemy カラム + `@response_field` の追加フィールド
+4. **Pydantic スキーマ作成**: `create_model()` で生成
+5. **前方参照解決**: `forward_refs` が指定されている場合、`model_rebuild()` を実行
+6. **キャッシュ**: 生成されたスキーマをキャッシュ
 
-Global Storage:
-  _EXTRA_FIELDS_REGISTRY: WeakKeyDictionary[type, Dict[str, Any]]
-  BaseModel._response_schemas: Dict[str, Type[Any]]
-```
-
-### データフロー
-
-```
-1. Model Definition
-   ┌──────────────────────────────┐
-   │ class MyModel(BaseModel):    │
-   │   name = Column(String)      │
-   │                              │
-   │   @response_field(           │
-   │     tags=List[str]           │
-   │   )                          │
-   │   def to_dict(self):         │
-   │     ...                      │
-   └──────────────────────────────┘
-                ↓
-2. Decorator Execution (at import time)
-   ┌──────────────────────────────┐
-   │ to_dict._response_fields =   │
-   │   {'tags': List[str]}        │
-   └──────────────────────────────┘
-                ↓
-3. Schema Generation (at runtime)
-   ┌──────────────────────────────┐
-   │ schema = MyModel.            │
-   │   get_response_schema()      │
-   └──────────────────────────────┘
-                ↓
-4. Registration (lazy, on first call)
-   ┌──────────────────────────────┐
-   │ _EXTRA_FIELDS_REGISTRY[cls]  │
-   │   = {'tags': List[str]}      │
-   └──────────────────────────────┘
-                ↓
-5. Pydantic Schema Creation
-   ┌──────────────────────────────┐
-   │ create_model(                │
-   │   'MyModelResponse',         │
-   │   name=(str, ...),           │
-   │   tags=(List[str], ...)      │
-   │ )                            │
-   └──────────────────────────────┘
-                ↓
-6. Caching
-   ┌──────────────────────────────┐
-   │ _response_schemas[           │
-   │   'MyModel::MyModelResponse' │
-   │ ] = schema                   │
-   └──────────────────────────────┘
-```
-
-### キャッシュキーの形式
+### キャッシュ機構
 
 ```python
+# キャッシュキー形式
 cache_key = f"{cls.__name__}::{schema_name}"
 if forward_refs:
     cache_key += f"::{','.join(sorted(forward_refs.keys()))}"
+
+# キャッシュ辞書
+BaseModel._response_schemas: Dict[str, Type[Any]]
 ```
 
-**例**:
-- `"MyModel::MyModelResponse"`
-- `"MyModel::MyModelResponse::ChildResponse,ParentResponse"`
+### グローバルレジストリ
 
-### _EXTRA_FIELDS_REGISTRY
-
-**型**: `WeakKeyDictionary[type, Dict[str, Any]]`
-
-**目的**: モデルクラスを追加フィールドにマッピングするグローバルレジストリ
-
-**WeakKeyDictionary を使う理由**:
-- モデルクラスのガベージコレクションを許可
-- 長時間実行されるアプリケーションでのメモリリークを防ぐ
-- 参照されなくなったモデルクラスを自動的にクリーンアップ
+- **`_EXTRA_FIELDS_REGISTRY`**: `WeakKeyDictionary[type, Dict[str, Any]]`
+- メモリリーク防止のため `WeakKeyDictionary` を使用
+- モデルクラスが参照されなくなると自動的にクリーンアップ
 
 ---
 
@@ -634,24 +462,11 @@ TimeActivityUpdate = TimeActivityModel.get_update_schema()
 
 @app.get("/activities/", response_model=List[TimeActivityResponse])
 def list_activities(db: Session = Depends(get_db)):
-    """活動一覧を取得"""
     activities = db.query(TimeActivityModel).all()
     return [activity.to_dict() for activity in activities]
 
-@app.get("/activities/{activity_id}", response_model=TimeActivityResponse)
-def get_activity(activity_id: int, db: Session = Depends(get_db)):
-    """特定の活動を取得"""
-    activity = db.query(TimeActivityModel).get(activity_id)
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-    return activity.to_dict()
-
 @app.post("/activities/", response_model=TimeActivityResponse, status_code=201)
-def create_activity(
-    activity: TimeActivityCreate, 
-    db: Session = Depends(get_db)
-):
-    """新しい活動を作成"""
+def create_activity(activity: TimeActivityCreate, db: Session = Depends(get_db)):
     db_activity = TimeActivityModel(**activity.dict())
     db.add(db_activity)
     db.commit()
@@ -664,70 +479,22 @@ def update_activity(
     updates: TimeActivityUpdate,
     db: Session = Depends(get_db)
 ):
-    """活動を更新"""
     activity = db.query(TimeActivityModel).get(activity_id)
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
     
-    # exclude_unset=True で送信されたフィールドのみ更新
     activity.update_from_dict(updates.dict(exclude_unset=True))
     db.commit()
     db.refresh(activity)
     return activity.to_dict()
-
-@app.delete("/activities/{activity_id}", status_code=204)
-def delete_activity(activity_id: int, db: Session = Depends(get_db)):
-    """活動を削除"""
-    activity = db.query(TimeActivityModel).get(activity_id)
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-    
-    db.delete(activity)
-    db.commit()
 ```
 
-### GenericListResponse パターン
+### スキーマ生成のタイミング
 
-リストエンドポイントでページネーション情報を含める場合：
-
-```python
-from pydantic import BaseModel as PydanticBaseModel
-from typing import Generic, TypeVar, List
-
-T = TypeVar('T')
-
-class GenericListResponse(PydanticBaseModel, Generic[T]):
-    items: List[T]
-    total: int
-    page: int = 1
-    page_size: int = 10
-
-# FastAPI で使用
-TaskResponse = Task.get_response_schema()
-
-@router.get("/tasks", response_model=GenericListResponse[TaskResponse])
-def get_tasks(page: int = 1, page_size: int = 10, db: Session = Depends(get_db)):
-    offset = (page - 1) * page_size
-    tasks = db.query(Task).offset(offset).limit(page_size).all()
-    total = db.query(Task).count()
-    
-    return {
-        'items': [task.to_dict() for task in tasks],
-        'total': total,
-        'page': page,
-        'page_size': page_size
-    }
-```
-
-### タイミングに関する考慮事項
-
-#### 1. インポート時のスキーマ生成（推奨）
+**推奨**: モジュールインポート時に生成
 
 ```python
-# api/endpoints/items.py
-from src.models.my_model import MyModel
-
-# ✅ モジュールインポート時に一度だけ生成
+# ✅ 推奨: モジュールレベル
 MyModelResponse = MyModel.get_response_schema()
 
 @app.get("/items", response_model=MyModelResponse)
@@ -735,238 +502,108 @@ def get_items():
     ...
 ```
 
-**メリット**:
-- スキーマはモジュールインポート時に一度だけ生成
-- すべての後続リクエストでキャッシュされる
-- ランタイムオーバーヘッドが最小
-
-**デメリット**:
-- アプリケーション起動がわずかに遅くなる
-- インポート時の依存関係を解決する必要がある
-
-#### 2. 遅延スキーマ生成（非推奨）
+**非推奨**: リクエストごとに生成
 
 ```python
+# ❌ 非推奨: リクエストごと
 @app.get("/items")
 def get_items():
-    # ❌ 最初のリクエストでのみ生成（その後キャッシュ）
-    MyModelResponse = MyModel.get_response_schema()
-    return {"response_model": MyModelResponse}
-```
-
-**メリット**:
-- アプリケーション起動が速い
-- 必要になるまで作業を延期
-
-**デメリット**:
-- 最初のリクエストが遅い
-- インポート/依存関係の問題のデバッグが難しい
-- デコレータで `response_model` を使用できない
-
-#### 3. 起動イベントでの生成（代替案）
-
-```python
-# FastAPI 起動イベント
-@app.on_event("startup")
-def generate_schemas():
-    # すべてのスキーマを事前生成
-    MyModel.get_response_schema()
-    OtherModel.get_response_schema()
+    MyModelResponse = MyModel.get_response_schema()  # 遅い
+    ...
 ```
 
 ---
 
 ## ベストプラクティス
 
-### 1. Column.info の活用
+### 1. Column.info を必ず指定
 
 ```python
-# ✅ Good: 詳細な説明とバリデーション情報
+# ✅ 推奨
 name = Column(
     String(100), 
-    nullable=False, 
-    unique=True,
-    info={
-        'description': '活動名（重複不可、最大100文字）',
-        'in_create': True,
-        'in_update': True
-    }
+    nullable=False,
+    info={'description': '活動名（重複不可、最大100文字）'}
 )
-
-# ❌ Bad: info なし
-name = Column(String(100), nullable=False, unique=True)
 ```
 
-### 2. 適切な型アノテーション
+### 2. 具体的な型アノテーション
 
 ```python
-# ✅ Good: 具体的な型指定
+# ✅ 推奨
 @BaseModel.response_field(
-    total_count=int,
     items="List[ItemResponse]",
     metadata="Dict[str, Any]"
 )
 
-# ❌ Bad: すべて Any
+# ❌ 避ける
 @BaseModel.response_field(
-    total_count=Any,
     items=Any,
     metadata=Any
 )
 ```
 
-### 3. 前方参照の管理
+### 3. モジュールレベルでスキーマ生成
 
 ```python
-# ✅ Good: 依存関係を明確に管理
-def create_schemas():
-    # 基本スキーマを先に作成
-    BaseResponse = BaseModel.get_response_schema()
-    
-    # 依存スキーマを後で作成
-    ComplexResponse = ComplexModel.get_response_schema(
-        forward_refs={'BaseResponse': BaseResponse}
-    )
-    
-    return BaseResponse, ComplexResponse
-```
-
-### 4. パフォーマンス考慮
-
-```python
-# ✅ Good: アプリケーション起動時にスキーマを生成
-def initialize_schemas():
-    schemas = {}
-    schemas['user'] = UserModel.get_response_schema()
-    schemas['post'] = PostModel.get_response_schema()
-    return schemas
-
-# アプリケーション起動時
-app_schemas = initialize_schemas()
-```
-
-### 5. 開発環境でのテスト
-
-```python
-# 開発環境で先にテスト
-EXEC_ENV=dev poetry run python -c "from your_app.models import Task; Task.get_response_schema()"
-```
-
-### 6. ログファイルの設定
-
-```python
-# アプリケーション起動時にログ設定
-import logging
-
-logging.basicConfig(
-    level=logging.ERROR,
-    filename='data/repom/logs/app.log',
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# ✅ 推奨: アプリケーション起動時に生成
+UserResponse = UserModel.get_response_schema()
+PostResponse = PostModel.get_response_schema()
 ```
 
 ---
 
 ## トラブルシューティング
 
-### 1. 前方参照エラー
+### 前方参照エラー
 
 **エラー**: `NameError: name 'SomeResponse' is not defined`
 
-**原因**: カスタム型が文字列として参照されているが、`forward_refs` に提供されていない
-
 **解決法**:
 ```python
-# 文字列で型を指定
-@BaseModel.response_field(
-    related="List[SomeResponse]"  # 文字列で指定
-)
+# 文字列で型を指定し、forward_refs で解決
+@BaseModel.response_field(related="List[SomeResponse]")
+def to_dict(self):
+    ...
 
-# スキーマ生成時に解決
 schema = MyModel.get_response_schema(
     forward_refs={'SomeResponse': SomeResponse}
 )
 ```
 
-### 2. 複合主キーでの AttributeError
+### 複合主キーでの AttributeError
 
 **エラー**: `AttributeError: type object 'MyModel' has no attribute 'id'`
 
-**原因**: 複合主キーのモデルで `id` カラムが存在しない
-
-**解決法**:
+**解決法**: 複合主キーを使用
 ```python
 class MyRepository(BaseRepository[MyModel]):
     def set_find_option(self, query, **kwargs):
-        # id.asc() の代わりに複合キーを使用
         order_by = kwargs.get('order_by', [
             self.model.date.asc(), 
             self.model.time.asc()
         ])
-        # ... 実装
 ```
 
-### 3. スキーマキャッシュの問題
+### スキーマキャッシュクリア
 
-**問題**: 開発中にスキーマが更新されない
-
-**解決法**:
 ```python
-# キャッシュをクリア
+# 開発中にスキーマが更新されない場合
 MyModel._response_schemas.clear()
 MyModel._create_schemas.clear()
 MyModel._update_schemas.clear()
-
-# または Python プロセスを再起動
 ```
 
-### 4. 環境に応じたエラーハンドリング
+### 循環インポートの回避
 
-**開発環境**: エラーを即座に検出
-```bash
-$env:EXEC_ENV='dev'
-poetry run python -c "from your_app.models import Task; Task.get_response_schema()"
-```
-
-**本番環境**: ログファイルを確認
-```bash
-# ログファイルの確認
-cat data/repom/logs/app.log | grep "Failed to generate"
-```
-
-### 5. 循環インポートの問題
-
-**問題**: `ImportError: cannot import name 'X' from partially initialized module`
-
-**解決法**:
 ```python
-# ❌ Bad: 循環インポート
-# models/a.py
+# ❌ 避ける: 循環インポート
 from models.b import BModel
 
-class AModel(BaseModel):
+# ✅ 推奨: 文字列参照
+@response_field(b_items="List[BResponse]")
+def to_dict(self):
     ...
-
-# models/b.py
-from models.a import AModel  # ← 循環依存
-
-# ✅ Good: 文字列参照を使用
-# models/a.py
-class AModel(BaseModel):
-    @response_field(
-        b_items="List[BResponse]"  # 文字列参照
-    )
-    def to_dict(self):
-        ...
-
-# api/schemas.py
-from models.a import AModel
-from models.b import BModel
-
-BResponse = BModel.get_response_schema()
-AResponse = AModel.get_response_schema(
-    forward_refs={'BResponse': BResponse}
-)
 ```
 
 ---
