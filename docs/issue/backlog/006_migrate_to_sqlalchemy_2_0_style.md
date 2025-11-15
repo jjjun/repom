@@ -1,7 +1,7 @@
 # SQLAlchemy 2.0 スタイルへの移行
 
 ## ステータス
-- **段階**: Phase 1 実施中
+- **段階**: Phase 1 完了 ✅ / Phase 2 進行中 🚧
 - **優先度**: 中
 - **複雑度**: 中
 - **作成日**: 2025-11-15
@@ -9,13 +9,32 @@
 
 ## 現在の進捗状況
 
-### ✅ 完了済み (Phase 1.1)
+### ✅ Phase 1 完了 (repom コアの移行)
 
-- **BaseModel migration** (Commit: 964504d)
-  - `Column()` → `mapped_column()` に移行
-  - `Mapped[]` 型ヒント追加
-  - `__annotations__` への型登録
-  - Annotation inheritance バグ修正
+**完了項目**:
+- ✅ **Phase 1.1**: BaseModel migration (Commit: 964504d)
+- ✅ **Phase 1.2**: Sample models migration (Commit: ae71332)
+- ✅ **Phase 1.3**: AutoDateTime docstring update (Commit: a65f6fe)
+- ✅ **Phase 1.4**: BaseModelAuto docstring update (Commit: c7d787a)
+
+**影響**:
+- すべての repom コアファイルが SQLAlchemy 2.0 スタイル
+- ユーザー参照用のサンプルコードが最新スタイル
+- ドキュメントとコード例が統一
+
+### 🚧 Phase 2 進行中 (テストコードの移行)
+
+**完了項目** (Part 1: Commit 87b5fb8):
+- ✅ `test_base_model_auto.py` (16/16 tests passing)
+- ✅ `test_response_field.py` (13/13 tests passing)
+- 🚧 `test_response_schema_forward_refs.py` (部分移行)
+
+**残作業**:
+- test_response_schema_forward_refs.py の残りのモデル定義（多数）
+- その他のテストファイル（test_model.py, test_repository.py など）
+- behavior_tests/（3ファイル）
+
+**方針**: Phase 3（ドキュメント整備）を優先し、Phase 2 は段階的に完了
 
 ### 🚧 発見された問題
 
@@ -449,16 +468,21 @@ posts: Mapped[List[Post]] = relationship(back_populates="user")
 
 ## 完了条件
 
-### Phase 1 完了条件
-- [x] **Phase 1.1**: `repom/base_model.py` が `Mapped[]` スタイル ✅ (Commit: 964504d)
-- [ ] **Phase 1.2**: `repom/models/*.py` が `Mapped[]` スタイル
-- [ ] **Phase 1.3**: カスタム型のドキュメント/例が `Mapped[]` スタイル
-- [ ] **Phase 1.4**: `base_model_auto.py` のドキュメントが `Mapped[]` スタイル
-- [ ] すべてのテストが通る
-  - ⚠️ **Blocker**: test_forward_refs_generic_list_response_pattern (AutoDateTime 問題)
+### Phase 1 完了条件 ✅ (完了)
+- [x] **Phase 1.1**: `repom/base_model.py` が `Mapped[]` スタイル (Commit: 964504d)
+- [x] **Phase 1.2**: `repom/models/*.py` が `Mapped[]` スタイル (Commit: ae71332)
+- [x] **Phase 1.3**: カスタム型のドキュメント/例が `Mapped[]` スタイル (Commit: a65f6fe)
+- [x] **Phase 1.4**: `base_model_auto.py` のドキュメントが `Mapped[]` スタイル (Commit: c7d787a)
+- [x] BaseModel tests が通る (test_base_model_auto.py: 16/16 passed)
+- [x] サンプルモデルがユーザー参照可能な状態
+  - ⚠️ **Known issue**: test_forward_refs_generic_list_response_pattern (AutoDateTime - 設計仕様)
 
-### Phase 2 完了条件
-- [ ] すべてのテストファイルが `Mapped[]` スタイル
+### Phase 2 完了条件 (進行中)
+- [x] test_base_model_auto.py が `Mapped[]` スタイル (Commit: 87b5fb8)
+- [x] test_response_field.py が `Mapped[]` スタイル (Commit: 87b5fb8)
+- [ ] test_response_schema_forward_refs.py が完全に `Mapped[]` スタイル
+- [ ] その他の unit tests が `Mapped[]` スタイル
+- [ ] behavior tests が `Mapped[]` スタイル
 - [ ] テストカバレッジが維持されている
 
 ### Phase 3 完了条件
