@@ -10,8 +10,9 @@ import os
 import tempfile
 import shutil
 from pathlib import Path
-from sqlalchemy import Column, String, create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import String, create_engine
+from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
+from typing import Optional
 from alembic.config import Config as AlembicConfig
 from alembic import command
 from alembic.script import ScriptDirectory
@@ -29,8 +30,8 @@ class MigrationTestModelNoId(BaseModel):
 
     use_id = False
 
-    code = Column(String(50), primary_key=True)
-    name = Column(String(100))
+    code: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 class MigrationTestModelWithId(BaseModel):
@@ -40,7 +41,7 @@ class MigrationTestModelWithId(BaseModel):
     """
     __tablename__ = 'test_migration_with_id'
 
-    name = Column(String(100))
+    name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 def test_alembic_migration_without_id():

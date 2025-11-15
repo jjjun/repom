@@ -1,7 +1,10 @@
 """Tests for BaseModel with use_id=False"""
 
 from tests._init import *
-from sqlalchemy import Column, String, Date, Time, inspect
+from sqlalchemy import String, Date, Time, inspect
+from sqlalchemy.orm import Mapped, mapped_column
+from datetime import date as date_type, time as time_type
+from typing import Optional
 from tests.db_test_fixtures import db_test
 from repom.base_model import BaseModel
 
@@ -12,15 +15,15 @@ class ModelWithoutId(BaseModel):
 
     use_id = False  # IDカラムを使用しない
 
-    name = Column(String(100), primary_key=True)  # 代わりにnameをプライマリキーに
-    description = Column(String(255))
+    name: Mapped[str] = mapped_column(String(100), primary_key=True)  # 代わりにnameをプライマリキーに
+    description: Mapped[Optional[str]] = mapped_column(String(255))
 
 
 class ModelWithId(BaseModel):
     """デフォルト（use_id=True）のモデル"""
     __tablename__ = 'model_with_id'
 
-    name = Column(String(100))
+    name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 class ModelWithCompositePK(BaseModel):
@@ -29,9 +32,9 @@ class ModelWithCompositePK(BaseModel):
 
     use_id = False  # 複合主キーを使用
 
-    date = Column(Date, primary_key=True)
-    time = Column(Time, primary_key=True)
-    description = Column(String(255))
+    date: Mapped[date_type] = mapped_column(Date, primary_key=True)
+    time: Mapped[time_type] = mapped_column(Time, primary_key=True)
+    description: Mapped[Optional[str]] = mapped_column(String(255))
 
 
 def test_model_without_id_has_no_id_column():

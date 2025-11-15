@@ -1,9 +1,8 @@
 from tests._init import *
-from typing import List, Type
-from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
+from typing import List, Type, Optional
+from datetime import datetime, timedelta, date as date_type
+from sqlalchemy.orm import Session, Mapped, mapped_column
 from sqlalchemy import (
-    Column,
     Integer,
     String,
     DateTime,
@@ -38,8 +37,8 @@ sqlalchemy の方で型を設定すると、SQLite自体、内部ではTEXTと�
 class TaskModel(Base):
     # この定義によってTaskModel自体はテーブルとしてマッピングされない
     __abstract__ = True  # 抽象基底クラスとして定義
-    id = Column(Integer, primary_key=True)
-    name = Column(String(255), default='')
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), default='')
 
     def done(self):
         """
@@ -56,8 +55,8 @@ class TaskDateModel(TaskModel):
      ISO8601形式では無いという部分で、過去に躓いたことがある。
     """
     __tablename__ = 'task_date'
-    done_at = Column(Date)
-    created_at = Column(DateTime, default=datetime.now())
+    done_at: Mapped[Optional[date_type]] = mapped_column(Date)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now())
 
 
 class TaskStringModel(TaskModel):
@@ -65,8 +64,8 @@ class TaskStringModel(TaskModel):
     done_at と created_at は String なので、日付以外の任意の文字列でも保存できる。
     """
     __tablename__ = 'task_string'
-    done_at = Column(String)
-    created_at = Column(String, default=datetime.now())
+    done_at: Mapped[Optional[str]] = mapped_column(String)
+    created_at: Mapped[Optional[str]] = mapped_column(String, default=datetime.now())
 
 
 if inspector.has_table(TaskDateModel.__tablename__):

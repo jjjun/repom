@@ -1,5 +1,6 @@
 from tests._init import *
-from sqlalchemy import Column, Integer, inspect, select, desc, and_
+from sqlalchemy import Integer, inspect, select, desc, and_
+from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from datetime import datetime
 from tests.db_test_fixtures import db_test
@@ -9,8 +10,8 @@ from repom.base_repository import BaseRepository
 
 class SimpleModel(BaseModel):
     __tablename__ = 'simple_model'
-    id = Column(Integer, primary_key=True)
-    value = Column(Integer)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    value: Mapped[int] = mapped_column(Integer)
 
 
 class SimpleRepository(BaseRepository[SimpleModel]):

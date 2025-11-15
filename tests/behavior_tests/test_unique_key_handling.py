@@ -1,10 +1,10 @@
 from tests._init import *
 from sqlalchemy import (
-    Column,
     Integer,
     String,
     CheckConstraint,
 )
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.exc import IntegrityError
 from tests.utils import (
     generate_sample_roster_data,
@@ -41,10 +41,10 @@ class RosterModel(Base):
     特定のグループや組織のメンバーの名前、役割、担当業務、スケジュールなどが記載されたリストや表のこと
     """
     __tablename__ = 'rosters'
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # key ユニークな英字列を入れる(ex. taro, hanako, ...)
-    key = Column(String(255), unique=True, nullable=False)
-    name = Column(String(255), default='')
+    key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), default='')
 
     __table_args__ = (
         CheckConstraint("key != ''", name='key_not_empty'),

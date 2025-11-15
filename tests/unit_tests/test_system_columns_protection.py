@@ -2,7 +2,8 @@
 import pytest
 from datetime import datetime
 from time import sleep
-from sqlalchemy import Column, String
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
 from repom.base_model import BaseModel
 from tests.db_test_fixtures import db_test
 
@@ -13,7 +14,7 @@ class SystemProtectionModel(BaseModel):
     use_created_at = True
     use_updated_at = True
 
-    name = Column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
 @pytest.fixture

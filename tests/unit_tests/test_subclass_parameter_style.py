@@ -9,7 +9,10 @@ __init_subclass__ パラメータ方式と従来のクラス属性方式の両�
 """
 
 import pytest
-from sqlalchemy import Column, String, Integer, Date, Time
+from sqlalchemy import String, Integer, Date, Time
+from sqlalchemy.orm import Mapped, mapped_column
+from datetime import date as date_type, time as time_type
+from typing import Optional
 from repom.base_model import BaseModel
 from repom.base_model_auto import BaseModelAuto
 
@@ -19,22 +22,22 @@ from repom.base_model_auto import BaseModelAuto
 class ParamStyleWithId(BaseModel, use_id=True, use_created_at=True):
     """パラメータ方式: use_id=True, use_created_at=True"""
     __tablename__ = "param_with_id"
-    name = Column(String(100))
+    name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 class ParamStyleWithoutId(BaseModel, use_id=False):
     """パラメータ方式: use_id=False"""
     __tablename__ = "param_without_id"
-    code = Column(String(50), primary_key=True)
-    name = Column(String(100))
+    code: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 class ParamStyleCompositeKey(BaseModel, use_id=False):
     """パラメータ方式: 複合主キー（use_id=False）"""
     __tablename__ = "param_composite"
-    date = Column(Date, primary_key=True)
-    time = Column(Time, primary_key=True)
-    value = Column(Integer)
+    date: Mapped[date_type] = mapped_column(Date, primary_key=True)
+    time: Mapped[time_type] = mapped_column(Time, primary_key=True)
+    value: Mapped[Optional[int]] = mapped_column(Integer)
 
 
 # ===== 従来のクラス属性方式のテスト =====
@@ -44,24 +47,24 @@ class ClassAttrWithId(BaseModel):
     __tablename__ = "classattr_with_id"
     use_id = True
     use_created_at = True
-    name = Column(String(100))
+    name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 class ClassAttrWithoutId(BaseModel):
     """従来方式: クラス属性で use_id=False"""
     __tablename__ = "classattr_without_id"
     use_id = False
-    code = Column(String(50), primary_key=True)
-    name = Column(String(100))
+    code: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 class ClassAttrCompositeKey(BaseModel):
     """従来方式: 複合主キー（use_id=False）"""
     __tablename__ = "classattr_composite"
     use_id = False
-    date = Column(Date, primary_key=True)
-    time = Column(Time, primary_key=True)
-    value = Column(Integer)
+    date: Mapped[date_type] = mapped_column(Date, primary_key=True)
+    time: Mapped[time_type] = mapped_column(Time, primary_key=True)
+    value: Mapped[Optional[int]] = mapped_column(Integer)
 
 
 # ===== BaseModelAuto を使った拡張基底クラスのテスト =====
@@ -74,14 +77,14 @@ class CustomBaseParam(BaseModel, use_id=False, use_created_at=True):
 class ModelFromCustomBaseParam(CustomBaseParam):
     """CustomBaseParam を継承（use_id=False を継承）"""
     __tablename__ = "model_from_custom_base_param"
-    code = Column(String(50), primary_key=True)
-    name = Column(String(100))
+    code: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 class ModelFromCustomBaseParamOverride(CustomBaseParam, use_id=True):
     """CustomBaseParam を継承し、use_id=True で上書き"""
     __tablename__ = "model_from_custom_override"
-    name = Column(String(100))
+    name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 # ===== BaseModelAuto のテスト =====
@@ -89,27 +92,27 @@ class ModelFromCustomBaseParamOverride(CustomBaseParam, use_id=True):
 class ModelFromAutoDefault(BaseModelAuto):
     """BaseModelAuto のデフォルト（use_id=True）を継承"""
     __tablename__ = "model_from_auto_default"
-    name = Column(String(100))
+    name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 class ModelFromAutoWithoutId(BaseModelAuto, use_id=False):
     """BaseModelAuto を継承し、パラメータで use_id=False"""
     __tablename__ = "model_from_auto_without_id"
-    code = Column(String(50), primary_key=True)
-    name = Column(String(100))
+    code: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 class ModelFromAutoWithId(BaseModelAuto):
     """BaseModelAuto を継承し、クラス属性で use_id=True"""
     __tablename__ = "model_from_auto_with_id"
     use_id = True
-    name = Column(String(100))
+    name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 class ModelFromAutoWithIdParam(BaseModelAuto, use_id=True):
     """BaseModelAuto を継承し、パラメータで use_id=True"""
     __tablename__ = "model_from_auto_with_id_param"
-    name = Column(String(100))
+    name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 # ===== パラメータ方式のテスト =====
@@ -234,7 +237,7 @@ class PriorityTestParamOverClass(BaseModel, use_id=False):
     """パラメータ方式が優先：パラメータ=False、クラス属性=True の場合"""
     __tablename__ = "priority_param_over_class"
     use_id = True  # クラス属性では True だが...
-    code = Column(String(50), primary_key=True)
+    code: Mapped[str] = mapped_column(String(50), primary_key=True)
 
 
 def test_parameter_takes_priority_over_class_attribute():

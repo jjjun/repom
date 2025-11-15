@@ -184,7 +184,7 @@ class ComplexModel(BaseModelAuto):
 
     use_id = True
 
-    name = Column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
 
     @BaseModelAuto.response_field(
         nested_list=List[List[str]],           # ネストしたリスト
@@ -233,7 +233,7 @@ def test_forward_refs_optional_validation():
     class OptionalModel(BaseModelAuto):
         __tablename__ = 'optional_models'
         use_id = True
-        name = Column(String(100))
+        name: Mapped[Optional[str]] = mapped_column(String(100))
 
         @BaseModelAuto.response_field(
             optional_value=Optional[int],
@@ -419,12 +419,12 @@ class ModelWithListJSON(BaseModelAuto):
 
     use_id = True
 
-    name = Column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
 
     # ListJSON カスタム型を使用
     from repom.custom_types.ListJSON import ListJSON
-    tags = Column(ListJSON, nullable=False)
-    categories = Column(ListJSON, nullable=True)
+    tags: Mapped[List] = mapped_column(ListJSON, nullable=False)
+    categories: Mapped[Optional[List]] = mapped_column(ListJSON, nullable=True)
 
     @BaseModelAuto.response_field(
         tag_count=int,
@@ -532,7 +532,7 @@ class AssetItemModel(BaseModelAuto):
     __tablename__ = 'asset_items'
 
     use_id = True
-    name = Column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
 class VoiceScriptLineLogModel(BaseModelAuto):
@@ -540,7 +540,7 @@ class VoiceScriptLineLogModel(BaseModelAuto):
     __tablename__ = 'voice_script_line_logs'
 
     use_id = True
-    message = Column(String(500), nullable=False)
+    message: Mapped[str] = mapped_column(String(500), nullable=False)
 
 
 class VoiceScriptModel(BaseModelAuto):
@@ -548,7 +548,7 @@ class VoiceScriptModel(BaseModelAuto):
     __tablename__ = 'voice_scripts'
 
     use_id = True
-    text = Column(String(500), nullable=True)
+    text: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     @BaseModelAuto.response_field(
         text=str | None,
@@ -836,8 +836,8 @@ def test_phase1_improvement_dict_no_longer_required():
     """Phase 1 改善: forward_refs に Dict を含めなくても動作することを確認"""
     class ConfigModel(BaseModelAuto):
         __tablename__ = 'test_config_phase1'
-        id = Column(Integer, primary_key=True)
-        name = Column(String)
+        id: Mapped[int] = mapped_column(Integer, primary_key=True)
+        name: Mapped[Optional[str]] = mapped_column(String)
 
         @BaseModelAuto.response_field(settings="Dict[str, Any]")
         def to_dict(self):
@@ -865,8 +865,8 @@ def test_phase1_improvement_optional_no_longer_required():
     """Phase 1 改善: forward_refs に Optional を含めなくても動作することを確認"""
     class ItemModel(BaseModelAuto):
         __tablename__ = 'test_item_phase1'
-        id = Column(Integer, primary_key=True)
-        name = Column(String)
+        id: Mapped[int] = mapped_column(Integer, primary_key=True)
+        name: Mapped[Optional[str]] = mapped_column(String)
 
         @BaseModelAuto.response_field(description="Optional[str]")
         def to_dict(self):
@@ -929,7 +929,7 @@ def test_phase2_error_message_in_dev_environment(monkeypatch):
     # Create a model with unresolved forward reference
     class TestModelDevEnv(BaseModelAuto):
         __tablename__ = 'test_error_dev'
-        id = Column(Integer, primary_key=True)
+        id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
         @BaseModelAuto.response_field(
             book="BookResponse"  # Undefined type
@@ -970,7 +970,7 @@ def test_phase2_error_message_in_prod_environment(monkeypatch, caplog):
     # Create a model with unresolved forward reference
     class TestModelProdEnv(BaseModelAuto):
         __tablename__ = 'test_error_prod'
-        id = Column(Integer, primary_key=True)
+        id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
         @BaseModelAuto.response_field(
             asset="AssetResponse"  # Undefined type
@@ -1007,7 +1007,7 @@ def test_phase2_helpful_error_suggestions():
     try:
         class TestModelSuggestions(BaseModelAuto):
             __tablename__ = 'test_suggestions_unique'
-            id = Column(Integer, primary_key=True)
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
             @BaseModelAuto.response_field(
                 item="ItemResponseUnique"
