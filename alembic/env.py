@@ -13,10 +13,21 @@ from repom.config import config as db_config, load_set_model_hook_function
 # access to the values within the .ini file in use.
 config = context.config
 
-# Set runtime paths dynamically
+# Set runtime database URL from MineDbConfig
+# This allows environment-specific databases (dev/test/prod) via EXEC_ENV
 config.set_main_option("sqlalchemy.url", db_config.db_url)
-config.set_main_option("script_location", db_config.alembic_path)
+
+# Set version_locations dynamically from MineDbConfig
+# This allows external projects to control where migration files are stored
+# by inheriting MineDbConfig and setting _alembic_versions_path
 config.set_main_option("version_locations", db_config.alembic_versions_path)
+
+# NOTE: We do NOT override script_location here.
+# script_location should be set in alembic.ini:
+#   - repom standalone: alembic.ini sets "script_location = alembic"
+#   - external project: alembic.ini sets "script_location = submod/repom/alembic"
+# This prevents path conflicts between repom and consuming applications.
+
 # pdb.set_trace()
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

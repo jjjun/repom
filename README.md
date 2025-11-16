@@ -303,6 +303,66 @@ poetry run alembic current
 poetry run alembic history
 ```
 
+### Alembic 設定のカスタマイズ
+
+#### repom 単体で使用する場合
+
+デフォルトでは `alembic/versions/` ディレクトリにマイグレーションファイルが保存されます。
+
+```python
+# repom/config.py（デフォルト設定）
+config = MineDbConfig()
+# alembic_versions_path → 'repom/alembic/versions'
+```
+
+#### 外部プロジェクトで使用する場合
+
+外部プロジェクト（例: `mine-py`）で repom を使用する場合、`MineDbConfig` を継承してマイグレーションファイルの保存場所をカスタマイズできます。
+
+**1. カスタム設定クラスを作成:**
+
+```python
+# mine-py/src/mine_py/config.py
+from repom.config import MineDbConfig
+from pathlib import Path
+
+class MinePyConfig(MineDbConfig):
+    def __init__(self):
+        super().__init__()
+        project_root = Path(__file__).parent.parent.parent
+        # マイグレーションファイルを mine-py のディレクトリに保存
+        self._alembic_versions_path = str(project_root / 'alembic' / 'versions')
+
+# CONFIG_HOOK で repom に注入
+def get_repom_config():
+    return MinePyConfig()
+```
+
+**2. 最小限の alembic.ini を作成:**
+
+```ini
+# mine-py/alembic.ini（3行のみ）
+[alembic]
+script_location = submod/repom/alembic
+```
+
+**3. 環境変数で CONFIG_HOOK を設定:**
+
+```powershell
+# .env ファイル または環境変数
+CONFIG_HOOK=mine_py.config:get_repom_config
+```
+
+**動作の仕組み:**
+
+1. `alembic upgrade head` を実行
+2. `alembic.ini` の `script_location` から `env.py` を読み込み
+3. `env.py` が `CONFIG_HOOK` 経由で `MinePyConfig` を取得
+4. `MinePyConfig.alembic_versions_path` でマイグレーションファイルの場所を決定
+5. 指定されたディレクトリのマイグレーションを実行
+
+これにより、repom と外部プロジェクトのマイグレーション履歴を完全に分離できます。
+
 ### ベストプラクティス
 
 1. **マイグレーション前に必ずバックアップ**

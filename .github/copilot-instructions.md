@@ -30,6 +30,21 @@ This is **repom** - a shared SQLAlchemy foundation package for Python projects.
 - DB creation: `poetry run db_create`
 - Tests: `poetry run pytest tests/unit_tests`
 
+### Alembic Configuration
+- **Migration file location**: Controlled by `MineDbConfig.alembic_versions_path`
+- **Default**: `repom/alembic/versions/`
+- **External projects**: Set `_alembic_versions_path` in inherited `MineDbConfig` class
+- **alembic.ini**: Only needs `script_location` setting (minimal 3 lines)
+- **env.py**: Dynamically sets `version_locations` from `MineDbConfig.alembic_versions_path`
+
+**For external projects (e.g., mine-py)**:
+```python
+class MinePyConfig(MineDbConfig):
+    def __init__(self):
+        super().__init__()
+        self._alembic_versions_path = str(project_root / 'alembic' / 'versions')
+```
+
 ## VS Code Tasks Available
 
 - `⭐Pytest/unit_tests` - Run unit tests

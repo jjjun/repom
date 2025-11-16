@@ -67,6 +67,52 @@ poetry run alembic revision --autogenerate -m "description"  # Generate migratio
 poetry run alembic upgrade head                              # Apply migrations
 ```
 
+## Alembic Configuration
+
+### Migration File Location Control
+
+The location of Alembic migration files is controlled by `MineDbConfig.alembic_versions_path`:
+
+- **Default (repom standalone)**: `repom/alembic/versions/`
+- **External projects**: Customize by setting `_alembic_versions_path` in inherited config class
+
+### For External Projects (e.g., mine-py)
+
+**Step 1: Inherit MineDbConfig**
+
+```python
+# mine-py/src/mine_py/config.py
+from repom.config import MineDbConfig
+from pathlib import Path
+
+class MinePyConfig(MineDbConfig):
+    def __init__(self):
+        super().__init__()
+        project_root = Path(__file__).parent.parent.parent
+        self._alembic_versions_path = str(project_root / 'alembic' / 'versions')
+
+def get_repom_config():
+    return MinePyConfig()
+```
+
+**Step 2: Minimal alembic.ini (3 lines)**
+
+```ini
+# mine-py/alembic.ini
+[alembic]
+script_location = submod/repom/alembic
+```
+
+**Step 3: Set CONFIG_HOOK**
+
+```bash
+# .env file
+CONFIG_HOOK=mine_py.config:get_repom_config
+```
+
+This approach completely separates migration histories between repom and external projects while using the same `env.py` and migration infrastructure.
+```
+
 ## Testing Framework
 
 ### Test Structure
