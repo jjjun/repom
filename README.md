@@ -213,6 +213,8 @@ CONFIG_HOOK=mine_py.config:get_repom_config
 
 ## テスト実行
 
+### 基本的なテスト実行
+
 ```bash
 # すべてのテスト
 poetry run pytest
@@ -231,10 +233,52 @@ poetry run pytest tests/unit_tests/test_config.py
 # - 🧪Pytest/all
 ```
 
+### テスト戦略：Transaction Rollback パターン
+
+repom は **Transaction Rollback** 方式を採用し、高速かつ分離されたテスト環境を提供します。
+
+**特徴**:
+- ✅ **高速**: DB作成は1回のみ（session scope）、各テストはロールバックのみ
+- ✅ **分離**: 各テストは独立したトランザクション内で実行
+- ✅ **クリーン**: 自動ロールバックで確実にリセット
+
+**パフォーマンス**:
+- 従来方式（DB再作成）: ~30秒
+- Transaction Rollback: ~3秒
+- **約9倍の高速化を実現**
+
 ### テストフィクスチャ
 
-- **`db_test`**: テストごとにクリーンなデータベース環境を提供（scope: `function`）
+```python
+# tests/conftest.py
+from repom.testing import create_test_fixtures
+
+db_engine, db_test = create_test_fixtures()
+```
+
+- **`db_engine`**: session スコープ（全テストで1回だけDB作成）
+- **`db_test`**: function スコープ（各テストで独立したトランザクション）
 - **`EXEC_ENV=test`**: 自動的に `data/repom/db.test.sqlite3` を使用
+
+### 外部プロジェクトでの使用
+
+mine-py などの外部プロジェクトでも同じヘルパーを使用できます：
+
+```python
+# external_project/tests/conftest.py
+import pytest
+from repom.testing import create_test_fixtures
+
+db_engine, db_test = create_test_fixtures()
+
+# カスタム設定も可能
+db_engine, db_test = create_test_fixtures(
+    db_url="sqlite:///:memory:",
+    model_loader=my_custom_loader
+)
+```
+
+詳細: `repom/testing.py`
 
 ---
 

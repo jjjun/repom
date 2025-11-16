@@ -15,9 +15,26 @@ This is **repom** - a shared SQLAlchemy foundation package for Python projects.
 - Always work within transaction contexts using `db_session`
 
 ### Testing
-- Run tests with: `poetry run pytest tests/unit_tests`
-- Use fixtures from `tests/db_test_fixtures.py`
-- Test scope: `function` (default), `module`, or `session`
+
+**Strategy**: Transaction Rollback パターン（9倍高速化を実現）
+
+```python
+# tests/conftest.py で使用
+from repom.testing import create_test_fixtures
+db_engine, db_test = create_test_fixtures()
+```
+
+- Run tests: `poetry run pytest tests/unit_tests`
+- Test fixtures: `db_engine` (session scope), `db_test` (function scope)
+- Performance: 195 tests in ~5s (old: ~30s)
+- Clean state: Automatic transaction rollback per test
+
+**For external projects**:
+```python
+# mine-py/tests/conftest.py
+from repom.testing import create_test_fixtures
+db_engine, db_test = create_test_fixtures()
+```
 
 ### Configuration
 - Use environment variable: `EXEC_ENV` (dev/test/prod)

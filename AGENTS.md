@@ -122,17 +122,59 @@ def get_repom_config():
 
 ## Testing Framework
 
+### Test Strategy: Transaction Rollback Pattern
+
+repom uses **Transaction Rollback** approach for fast, isolated testing:
+
+**Architecture**:
+- `db_engine` (session scope): Creates DB once per test session
+- `db_test` (function scope): Provides isolated transaction per test
+- Automatic rollback after each test ensures clean state
+
+**Performance**:
+- Old approach (DB recreation): ~30s for 195 tests
+- Transaction Rollback: ~3s for 195 tests
+- **9x speedup achieved**
+
+**Implementation**:
+```python
+# tests/conftest.py
+from repom.testing import create_test_fixtures
+
+db_engine, db_test = create_test_fixtures()
+```
+
 ### Test Structure
-- **Unit Tests**: `tests/unit_tests/`
-- **Behavior Tests**: `tests/behavior_tests/`
+- **Unit Tests**: `tests/unit_tests/` - Core functionality tests
+- **Behavior Tests**: `tests/behavior_tests/` - Integration scenarios
 
 ### Running Tests
 ```bash
-# All shared tests (from the repository root)
+# All tests (195 tests, ~5s)
+poetry run pytest
+
+# Unit tests only (187 tests, ~3s)
 poetry run pytest tests/unit_tests
 
-# Specific directories
+# Behavior tests only (8 tests, ~2s)
 poetry run pytest tests/behavior_tests
+
+# With verbose output
+poetry run pytest -v
+```
+
+### For External Projects
+
+External projects (e.g., mine-py) can use the same helper:
+
+```python
+# external_project/tests/conftest.py
+from repom.testing import create_test_fixtures
+
+db_engine, db_test = create_test_fixtures(
+    db_url="sqlite:///:memory:",  # Optional
+    model_loader=my_loader          # Optional
+)
 ```
 
 ## Development Guidelines
