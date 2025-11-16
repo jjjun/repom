@@ -1,0 +1,3 @@
+# Keep this directory in git
+# repom is a library and should not contain migration files
+# Migration files should be in consuming applications (mine-py, etc.)

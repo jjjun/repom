@@ -363,6 +363,23 @@ CONFIG_HOOK=mine_py.config:get_repom_config
 
 これにより、repom と外部プロジェクトのマイグレーション履歴を完全に分離できます。
 
+**⚠️ 重要な注意事項:**
+
+- **repom の `alembic/versions/` は空です**
+  - repom はライブラリであり、独自のマイグレーションを持つべきではありません
+  - マイグレーションファイルは消費アプリケーション側（mine-py など）で管理してください
+  
+- **初回セットアップ時のトラブルシューティング**
+  - 古い `alembic_version` テーブルがある場合は削除してください:
+    ```python
+    # drop_alembic_version.py
+    from repom.db import engine
+    with engine.connect() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+        conn.commit()
+    ```
+  - データベースを再作成する場合: `poetry run db_delete; poetry run db_create`
+
 ### ベストプラクティス
 
 1. **マイグレーション前に必ずバックアップ**
