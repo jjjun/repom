@@ -1,805 +1,567 @@
-# Repository & Utilities 完全ガイド
+# BaseRepository ガイド
 
-**このドキュメントについて**: repom パッケージの BaseRepository、FilterParams、auto_import_models などの基盤機能の完全ガイドです。
+**目的**: repom の `BaseRepository` によるデータアクセスパターンを理解する
+
+**対象読者**: repom を使ってリポジトリパターンを実装する開発者・AI エージェント
+
+---
 
 ## 📚 目次
 
-1. [概要](#概要)
-2. [BaseRepository: データアクセス層](#baserepository-データアクセス層)
-3. [FilterParams: FastAPI クエリパラメータ統合](#filterparams-fastapi-クエリパラメータ統合)
-4. [auto_import_models: モデル自動インポート](#autoimportmodels-モデル自動インポート)
-5. [実装パターン集](#実装パターン集)
-6. [トラブルシューティング](#トラブルシューティング)
+1. [基本的な使い方](#基本的な使い方)
+2. [CRUD 操作](#crud-操作)
+3. [検索とフィルタリング](#検索とフィルタリング)
+4. [FilterParams と FastAPI 統合](#filterparams-と-fastapi-統合)
+5. [カスタムリポジトリ](#カスタムリポジトリ)
+6. [実装パターン](#実装パターン)
 
 ---
 
-## 概要
+## 基本的な使い方
 
-このガイドでは、repom パッケージが提供する以下の基盤機能について説明します：
-
-### 主な機能
-
-1. **BaseRepository**: データベース操作を抽象化する汎用リポジトリクラス
-2. **FilterParams**: FastAPI のクエリパラメータを型安全に扱うクラス
-3. **auto_import_models**: モデルファイルを自動的にインポートするユーティリティ
-
----
-
-## BaseRepository: データアクセス層
-
-### 概要
-
-`BaseRepository` は SQLAlchemy モデルに対する CRUD 操作を提供する汎用リポジトリクラスです。
-
-### 基本的な使い方
+### リポジトリの作成
 
 ```python
 from repom.base_repository import BaseRepository
 from your_project.models import Task
 
-# リポジトリを作成
+# 基本的な使い方
 repo = BaseRepository(Task)
 
-# ID で取得
-task = repo.get_by_id(1)
-
-# 条件で取得
-tasks = repo.get_by('status', 'active')
-
-# すべて取得
-all_tasks = repo.get_all()
-
-# 保存
-new_task = Task(title="新しいタスク")
-repo.save(new_task)
-
-# 削除
-repo.remove(task)
+# カスタムセッションを使用
+from repom.db import db_session
+repo = BaseRepository(Task, session=db_session)
 ```
 
-### 提供されるメソッド
+### 主要メソッド一覧
 
-#### 取得系メソッド
+| メソッド | 用途 | 戻り値 |
+|---------|------|--------|
+| `get_by_id(id)` | ID で取得 | `Optional[T]` |
+| `get_by(column, value)` | カラムで検索 | `List[T]` |
+| `get_all()` | 全件取得 | `List[T]` |
+| `find(filters, **options)` | 条件検索 | `List[T]` |
+| `find_one(filters)` | 単一検索 | `Optional[T]` |
+| `count(filters)` | 件数カウント | `int` |
+| `save(instance)` | 保存 | `T` |
+| `saves(instances)` | 一括保存 | `None` |
+| `remove(instance)` | 削除 | `None` |
 
-```python
-# ID で取得
-task = repo.get_by_id(1)
+---
 
-# カラム名と値で取得
-active_tasks = repo.get_by('status', 'active')
+## CRUD 操作
 
-# 単一レコードを取得
-task = repo.get_by('title', 'Important Task', single=True)
-
-# すべて取得
-all_tasks = repo.get_all()
-
-# フィルタ条件で検索
-from sqlalchemy import and_
-filters = [Task.status == 'active', Task.priority > 5]
-tasks = repo.find(filters=filters)
-
-# 単一レコードを検索
-task = repo.find_one(filters=[Task.title == 'Specific Task'])
-
-# カウント
-total = repo.count(filters=[Task.status == 'active'])
-```
-
-#### 保存系メソッド
+### Create（作成）
 
 ```python
-# 単一保存
-task = Task(title="タスク")
-repo.save(task)
+# 1件保存
+task = Task(title="新しいタスク", status="active")
+saved_task = repo.save(task)
 
-# dict から保存
-repo.dict_save({'title': 'タスク', 'status': 'pending'})
+# 辞書から保存
+task = repo.dict_save({"title": "タスク2", "status": "pending"})
 
 # 複数保存
-tasks = [Task(title=f"タスク{i}") for i in range(5)]
+tasks = [Task(title=f"タスク{i}") for i in range(3)]
 repo.saves(tasks)
 
-# dict リストから保存
-data_list = [
-    {'title': 'タスク1', 'status': 'pending'},
-    {'title': 'タスク2', 'status': 'active'}
-]
+# 辞書リストから保存
+data_list = [{"title": f"タスク{i}"} for i in range(3)]
 repo.dict_saves(data_list)
 ```
 
-#### 削除系メソッド
+### Read（取得）
 
 ```python
-# 削除
+# ID で取得
+task = repo.get_by_id(1)
+
+# カラムで検索（複数件）
+active_tasks = repo.get_by('status', 'active')
+
+# 単一取得（single=True）
+task = repo.get_by('title', 'タスク1', single=True)
+
+# 全件取得
+all_tasks = repo.get_all()
+```
+
+### Update（更新）
+
+```python
+# インスタンスを取得して更新
+task = repo.get_by_id(1)
+task.status = 'completed'
+repo.save(task)
+
+# または BaseModel の update_from_dict を使用
+task.update_from_dict({"status": "completed"})
+repo.save(task)
+```
+
+### Delete（削除）
+
+```python
 task = repo.get_by_id(1)
 repo.remove(task)
-```
-
-### クエリオプション
-
-`set_find_option` メソッドでページネーションとソートを制御できます。
-
-```python
-# offset と limit
-tasks = repo.find(
-    filters=[Task.status == 'active'],
-    offset=10,
-    limit=20
-)
-
-# ソート（文字列指定）
-tasks = repo.find(
-    filters=[],
-    order_by='created_at:desc'  # 降順
-)
-
-tasks = repo.find(
-    filters=[],
-    order_by='priority:asc'  # 昇順
-)
-
-# ソート（SQLAlchemy 式）
-from sqlalchemy import desc
-tasks = repo.find(
-    filters=[],
-    order_by=desc(Task.created_at)
-)
-```
-
-### セキュリティ: ソート可能カラムのホワイトリスト
-
-デフォルトで以下のカラムのみソート可能です：
-
-```python
-allowed_order_columns = [
-    'id', 'title', 'created_at', 'updated_at',
-    'started_at', 'finished_at', 'executed_at'
-]
-```
-
-**カスタムリポジトリで拡張**:
-
-```python
-class TaskRepository(BaseRepository[Task]):
-    # ホワイトリストを拡張
-    allowed_order_columns = BaseRepository.allowed_order_columns + [
-        'priority', 'status', 'assigned_to'
-    ]
-```
-
-### カスタムリポジトリの作成
-
-```python
-from typing import Optional, List
-from repom.base_repository import BaseRepository, FilterParams
-from your_project.models import Task
-
-class TaskFilterParams(FilterParams):
-    """タスク検索パラメータ"""
-    keyword: Optional[str] = None
-    status: Optional[str] = None
-    priority_min: Optional[int] = None
-
-class TaskRepository(BaseRepository[Task]):
-    def _build_filters(self, params: Optional[TaskFilterParams]):
-        """検索条件を構築"""
-        filters = []
-        
-        if params:
-            # キーワード検索
-            if params.keyword:
-                filters.append(
-                    Task.title.ilike(f"%{params.keyword}%")
-                )
-            
-            # ステータス
-            if params.status:
-                filters.append(Task.status == params.status)
-            
-            # 優先度
-            if params.priority_min:
-                filters.append(Task.priority >= params.priority_min)
-        
-        return filters
-    
-    def search(self, params: Optional[TaskFilterParams] = None, **kwargs):
-        """カスタム検索メソッド"""
-        filters = self._build_filters(params)
-        return self.find(filters=filters, **kwargs)
-
-# 使用例
-repo = TaskRepository(Task)
-params = TaskFilterParams(keyword="重要", status="active", priority_min=5)
-tasks = repo.search(params, order_by='priority:desc', limit=10)
 ```
 
 ---
 
-## FilterParams: FastAPI クエリパラメータ統合
+## 検索とフィルタリング
 
-### 概要
-
-`FilterParams` は FastAPI のクエリパラメータを型安全に扱うための基底クラスです。`as_query_depends()` メソッドを使用すると、OpenAPI ドキュメントに自動的に反映されます。
-
-### 基本的な使い方
+### find() メソッド
 
 ```python
-from typing import Optional, List
-from repom.base_repository import FilterParams
+from sqlalchemy import and_, or_
 
-class TaskSearchParams(FilterParams):
-    """タスク検索パラメータ"""
-    keyword: Optional[str] = None
+# 基本的な検索
+tasks = repo.find()  # 全件
+
+# フィルタ条件付き
+filters = [Task.status == 'active']
+tasks = repo.find(filters=filters)
+
+# 複数条件（AND）
+filters = [
+    Task.status == 'active',
+    Task.priority == 'high'
+]
+tasks = repo.find(filters=filters)
+
+# OR 条件
+filters = [
+    or_(
+        Task.status == 'active',
+        Task.status == 'pending'
+    )
+]
+tasks = repo.find(filters=filters)
+```
+
+### ページネーション
+
+```python
+# offset と limit
+tasks = repo.find(offset=0, limit=10)
+
+# 2ページ目（1ページ10件）
+tasks = repo.find(offset=10, limit=10)
+```
+
+### ソート
+
+```python
+# デフォルト: id 昇順
+tasks = repo.find()
+
+# 文字列指定（簡易）
+tasks = repo.find(order_by='created_at:desc')
+tasks = repo.find(order_by='title:asc')
+
+# SQLAlchemy 式
+from sqlalchemy import desc
+tasks = repo.find(order_by=desc(Task.created_at))
+
+# 複数ソート（カスタムリポジトリで実装）
+class TaskRepository(BaseRepository[Task]):
+    def find_sorted(self):
+        query = select(Task).order_by(
+            desc(Task.priority),
+            Task.created_at
+        )
+        return self.session.execute(query).scalars().all()
+```
+
+### ソート可能なカラムの制限
+
+セキュリティのため、ソート可能なカラムは `allowed_order_columns` で制限されています。
+
+```python
+# デフォルトで許可されているカラム
+BaseRepository.allowed_order_columns = [
+    'id', 'title', 'created_at', 'updated_at',
+    'started_at', 'finished_at', 'executed_at'
+]
+
+# カスタムリポジトリで拡張
+class TaskRepository(BaseRepository[Task]):
+    allowed_order_columns = BaseRepository.allowed_order_columns + [
+        'priority', 'status'
+    ]
+```
+
+### 件数カウント
+
+```python
+# 全件数
+total = repo.count()
+
+# 条件付きカウント
+filters = [Task.status == 'active']
+active_count = repo.count(filters=filters)
+```
+
+---
+
+## FilterParams と FastAPI 統合
+
+### 基本的な FilterParams
+
+```python
+from repom.base_repository import FilterParams
+from typing import Optional
+
+class TaskFilterParams(FilterParams):
     status: Optional[str] = None
-    tags: Optional[List[str]] = None  # 配列型もサポート
-    priority_min: Optional[int] = None
-    completed: Optional[bool] = None
+    priority: Optional[str] = None
+    title: Optional[str] = None
 ```
 
 ### FastAPI での使用
 
 ```python
 from fastapi import APIRouter, Depends
-from typing import List
 
 router = APIRouter()
 
-@router.get("/tasks", response_model=List[TaskResponse])
-def search_tasks(
-    params: TaskSearchParams = Depends(TaskSearchParams.as_query_depends())
+@router.get("/tasks")
+def list_tasks(
+    filter_params: TaskFilterParams = Depends(TaskFilterParams.as_query_depends())
 ):
-    """
-    タスクを検索
+    # filter_params を使ってリポジトリで検索
+    repo = TaskRepository()
+    tasks = repo.find_by_params(filter_params)
+    return tasks
+```
+
+**クエリ例**:
+```
+GET /tasks?status=active&priority=high
+```
+
+### セキュリティ：除外フィールド
+
+```python
+class SecureFilterParams(FilterParams):
+    # 公開フィールド
+    status: Optional[str] = None
     
-    クエリパラメータ:
-    - keyword: タイトルでキーワード検索
-    - status: ステータスでフィルタ（active/pending/completed）
-    - tags: タグでフィルタ（複数指定可能）
-    - priority_min: 最小優先度
-    - completed: 完了済みフラグ
-    """
-    repo = TaskRepository(Task)
-    tasks = repo.search(params)
-    return [task.to_dict() for task in tasks]
+    # 除外フィールド（クエリパラメータから隠す）
+    _excluded_from_query = {"internal_id", "secret_field"}
+    internal_id: Optional[int] = None  # 除外される
+    secret_field: Optional[str] = None  # 除外される
 ```
 
-### as_query_depends() の仕組み
+**動作**:
+- `_excluded_from_query` に指定されたフィールドは `as_query_depends()` から除外
+- プライベートフィールド（`_`で始まる）も自動的に除外
 
-`as_query_depends()` は FilterParams を FastAPI の `Query` パラメータに変換します：
+### カスタムリポジトリで FilterParams を処理
 
 ```python
-# 内部的な動作（概念的表現）
-def query_depends(
-    keyword: Optional[str] = Query(None, description="Filter by keyword"),
-    status: Optional[str] = Query(None, description="Filter by status"),
-    tags: Optional[List[str]] = Query(None, description="Filter by tags"),
-    priority_min: Optional[int] = Query(None, description="Filter by priority_min"),
-    completed: Optional[bool] = Query(None, description="Filter by completed")
-) -> TaskSearchParams:
-    return TaskSearchParams(
-        keyword=keyword,
-        status=status,
-        tags=tags,
-        priority_min=priority_min,
-        completed=completed
-    )
-```
-
-### OpenAPI ドキュメントへの反映
-
-FastAPI の Swagger UI では、以下のように表示されます：
-
-```
-GET /tasks
-
-Query Parameters:
-  keyword       string   Filter by keyword
-  status        string   Filter by status
-  tags          array    Filter by tags (multiple)
-  priority_min  integer  Filter by priority_min
-  completed     boolean  Filter by completed
-```
-
-### セキュリティ: 除外フィールド
-
-`_excluded_from_query` を使用すると、特定のフィールドをクエリパラメータから除外できます。
-
-```python
-class SecureTaskSearchParams(FilterParams):
-    _excluded_from_query = {'internal_id', 'sensitive_field'}
-    
-    keyword: Optional[str] = None
-    internal_id: Optional[int] = None  # クエリパラメータとして公開されない
-    sensitive_field: Optional[str] = None  # クエリパラメータとして公開されない
-
-# プライベートフィールド（_で始まる）も自動的に除外
-class AutoSecureParams(FilterParams):
-    keyword: Optional[str] = None
-    _internal_id: Optional[int] = None  # 自動的に除外
-```
-
-### カスタム description の指定
-
-```python
-from pydantic import Field
-
-class TaskSearchParams(FilterParams):
-    keyword: Optional[str] = Field(
-        default=None,
-        description="タイトルまたは説明でキーワード検索"
-    )
-    status: Optional[str] = Field(
-        default=None,
-        description="ステータスでフィルタ（active/pending/completed）"
-    )
-```
-
-### 配列型のクエリパラメータ
-
-```python
-class TaskSearchParams(FilterParams):
-    tags: Optional[List[str]] = None  # /tasks?tags=work&tags=urgent
-
-# FastAPI での使用
-# GET /tasks?tags=work&tags=urgent
-# → tags=['work', 'urgent']
-```
-
----
-
-## auto_import_models: モデル自動インポート
-
-### 概要
-
-`auto_import_models` は models ディレクトリ内のすべてのモデルファイルを自動的にインポートするユーティリティ関数です。`__init__.py` で手動でインポートを管理する必要がなくなります。
-
-### 基本的な使い方
-
-```python
-# your_project/models/__init__.py
-from pathlib import Path
-from repom.utility import auto_import_models
-
-# このディレクトリ内のすべてのモデルを自動インポート
-auto_import_models(
-    models_dir=Path(__file__).parent,
-    base_package='your_project.models'  # パッケージ名を指定
-)
-```
-
-これだけで完了です！新しいモデルを作成しても、手動でインポートを追加する必要はありません。
-
-### 動作の仕組み
-
-1. **ディレクトリをスキャン**: models ディレクトリを再帰的にスキャン
-2. **ファイルをフィルタ**: ユーティリティディレクトリとプライベートファイルをスキップ
-3. **アルファベット順にソート**: 一貫したインポート順序を保証
-4. **モジュールをインポート**: 各モデルファイルをロード
-5. **キャッシュを使用**: Python のインポートキャッシュで重複ロードを防止
-
-### ディレクトリ構造
-
-#### プロジェクト構造の例
-
-```
-your_project/
-└── models/
-    ├── __init__.py           # auto_import_models をここで呼び出す
-    ├── user.py               # ✅ インポートされる
-    ├── product.py            # ✅ インポートされる
-    ├── base/                 # ❌ 除外（ユーティリティディレクトリ）
-    │   ├── helper.py
-    │   └── mixins.py
-    ├── validators/           # ❌ 除外（ユーティリティディレクトリ）
-    │   └── email.py
-    └── admin/                # ✅ サブディレクトリのモデルもインポート
-        ├── user.py           # ✅ your_project.models.admin.user としてインポート
-        └── settings.py       # ✅ your_project.models.admin.settings としてインポート
-```
-
-#### デフォルトで除外されるディレクトリ
-
-以下のディレクトリは自動的に除外されます：
-- `base/` - 基底クラスとヘルパー
-- `mixin/` - Mixin クラス
-- `validators/` - バリデーションユーティリティ
-- `utils/` - ユーティリティ関数
-- `helpers/` - ヘルパー関数
-- `__pycache__/` - Python キャッシュ
-
-### カスタム除外
-
-```python
-from pathlib import Path
-from repom.utility import auto_import_models
-
-# 追加のディレクトリを除外
-auto_import_models(
-    models_dir=Path(__file__).parent,
-    base_package='your_project.models',
-    excluded_dirs={'base', 'mixin', 'validators', 'tests', 'fixtures'}
-)
-```
-
-### 最小限の除外
-
-```python
-from pathlib import Path
-from repom.utility import auto_import_models
-
-# __pycache__ のみ除外
-auto_import_models(
-    models_dir=Path(__file__).parent,
-    base_package='your_project.models',
-    excluded_dirs={'__pycache__'}
-)
-```
-
-### モデルの依存関係
-
-モデル A がモデル B に依存している場合、2つの方法があります：
-
-#### 方法1: ファイル命名（推奨）
-
-```
-models/
-├── 01_user.py      # 最初にインポート
-└── 02_profile.py   # 2番目にインポート（user に依存）
-```
-
-#### 方法2: モデルファイル内で明示的にインポート
-
-```python
-from sqlalchemy.orm import Mapped, mapped_column
-
-# models/profile.py
-from your_project.models.user import User  # 明示的な依存関係
-
-class Profile(BaseModel):
-    __tablename__ = 'profiles'
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey(User.id))
-```
-
-### メリット
-
-✅ **手動メンテナンス不要**: モデルを追加しても `__init__.py` を更新する必要なし  
-✅ **一貫したインポート順序**: アルファベット順でソートされ予測可能  
-✅ **サブディレクトリサポート**: ネストされたフォルダでモデルを整理可能  
-✅ **ユーティリティ除外**: ヘルパーコードをモデルから分離  
-✅ **エラーハンドリング**: インポート失敗時の警告表示  
-✅ **パフォーマンス**: Python のインポートキャッシュを使用（重複なし）
-
-### Alembic との統合
-
-Alembic マイグレーションと併用する場合、`alembic/env.py` でモデルロードフックを呼び出します：
-
-```python
-from your_project.config import load_set_model_hook_function
-
-# これが auto_import_models をトリガーする
-load_set_model_hook_function()
-```
-
-### トラブルシューティング
-
-#### モデルが検出されない
-
-1. ファイル名が `_`（アンダースコア）で始まっていないか確認
-2. ファイルが除外ディレクトリにないか確認
-3. ファイルが `.py` 拡張子を持っているか確認
-4. モデルファイルにインポートエラーがないか確認
-
-#### インポートエラー
-
-以下のような警告が表示される場合：
-```
-Warning: Failed to import your_project.models.example: <error>
-```
-
-特定のモデルファイルで構文エラーや依存関係エラーがないか確認してください。
-
-### 実装例
-
-```python
-# your_project/models/__init__.py
-"""
-SQLAlchemy メタデータ登録のためにすべてのモデルを自動インポート
-"""
-from pathlib import Path
-from repom.utility import auto_import_models
-
-# ユーティリティとテストを除くすべてのモデルをインポート
-auto_import_models(
-    models_dir=Path(__file__).parent,
-    base_package='your_project.models',
-    excluded_dirs={'base', 'mixin', 'validators', 'tests', '__pycache__'}
-)
-
-# オプション: 便利なように特定のモデルをエクスポート
-from your_project.models.user import User
-from your_project.models.product import Product
-
-__all__ = ['User', 'Product']
-```
-
----
-
-## 実装パターン集
-
-### パターン1: 基本的な CRUD API
-
-```python
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from typing import List
-
-router = APIRouter()
-
-# スキーマ生成
-TaskResponse = TaskModel.get_response_schema()
-TaskCreate = TaskModel.get_create_schema()
-TaskUpdate = TaskModel.get_update_schema()
-
-# リポジトリ
-class TaskRepository(BaseRepository[TaskModel]):
-    pass
-
-@router.get("/tasks", response_model=List[TaskResponse])
-def list_tasks(db: Session = Depends(get_db)):
-    repo = TaskRepository(TaskModel, db)
-    tasks = repo.get_all()
-    return [task.to_dict() for task in tasks]
-
-@router.get("/tasks/{task_id}", response_model=TaskResponse)
-def get_task(task_id: int, db: Session = Depends(get_db)):
-    repo = TaskRepository(TaskModel, db)
-    task = repo.get_by_id(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return task.to_dict()
-
-@router.post("/tasks", response_model=TaskResponse, status_code=201)
-def create_task(data: TaskCreate, db: Session = Depends(get_db)):
-    repo = TaskRepository(TaskModel, db)
-    task = repo.dict_save(data.dict())
-    return task.to_dict()
-
-@router.patch("/tasks/{task_id}", response_model=TaskResponse)
-def update_task(task_id: int, data: TaskUpdate, db: Session = Depends(get_db)):
-    repo = TaskRepository(TaskModel, db)
-    task = repo.get_by_id(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    task.update_from_dict(data.dict(exclude_unset=True))
-    db.commit()
-    db.refresh(task)
-    return task.to_dict()
-
-@router.delete("/tasks/{task_id}", status_code=204)
-def delete_task(task_id: int, db: Session = Depends(get_db)):
-    repo = TaskRepository(TaskModel, db)
-    task = repo.get_by_id(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    repo.remove(task)
-```
-
-### パターン2: 検索機能付き API
-
-```python
-from fastapi import APIRouter, Depends
-from typing import List, Optional
-
-router = APIRouter()
-
-# FilterParams 定義
-class TaskSearchParams(FilterParams):
-    keyword: Optional[str] = Field(None, description="キーワード検索")
-    status: Optional[str] = Field(None, description="ステータス")
-    tags: Optional[List[str]] = Field(None, description="タグ")
-    priority_min: Optional[int] = Field(None, description="最小優先度")
-    assigned_to: Optional[int] = Field(None, description="担当者ID")
-
-# リポジトリ
-class TaskRepository(BaseRepository[TaskModel]):
-    def _build_filters(self, params: Optional[TaskSearchParams]):
+class TaskRepository(BaseRepository[Task]):
+    def _build_filters(self, params: Optional[TaskFilterParams]) -> list:
+        """FilterParams から SQLAlchemy フィルタを構築"""
+        if not params:
+            return []
+        
         filters = []
         
-        if params:
-            if params.keyword:
-                filters.append(
-                    or_(
-                        TaskModel.title.ilike(f"%{params.keyword}%"),
-                        TaskModel.description.ilike(f"%{params.keyword}%")
-                    )
-                )
-            
-            if params.status:
-                filters.append(TaskModel.status == params.status)
-            
-            if params.tags:
-                # JSON 配列に含まれるタグで検索
-                for tag in params.tags:
-                    filters.append(TaskModel.tags.contains([tag]))
-            
-            if params.priority_min:
-                filters.append(TaskModel.priority >= params.priority_min)
-            
-            if params.assigned_to:
-                filters.append(TaskModel.assigned_to == params.assigned_to)
+        if params.status:
+            filters.append(Task.status == params.status)
+        
+        if params.priority:
+            filters.append(Task.priority == params.priority)
+        
+        if params.title:
+            # 部分一致検索
+            filters.append(Task.title.like(f"%{params.title}%"))
         
         return filters
-
-@router.get("/tasks/search", response_model=List[TaskResponse])
-def search_tasks(
-    params: TaskSearchParams = Depends(TaskSearchParams.as_query_depends()),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
-    db: Session = Depends(get_db)
-):
-    """
-    タスクを検索
     
-    OpenAPI ドキュメントに自動的に反映されます
-    """
-    repo = TaskRepository(TaskModel, db)
-    filters = repo._build_filters(params)
+    def find_by_params(
+        self,
+        params: Optional[TaskFilterParams] = None,
+        **kwargs
+    ) -> List[Task]:
+        """FilterParams を使って検索"""
+        filters = self._build_filters(params)
+        return self.find(filters=filters, **kwargs)
     
-    offset = (page - 1) * page_size
-    tasks = repo.find(
-        filters=filters,
-        offset=offset,
-        limit=page_size,
-        order_by='created_at:desc'
-    )
-    
-    return [task.to_dict() for task in tasks]
+    def count_by_params(self, params: Optional[TaskFilterParams] = None) -> int:
+        """FilterParams を使ってカウント"""
+        filters = self._build_filters(params)
+        return self.count(filters=filters)
 ```
 
-### パターン3: ページネーション対応
+---
+
+## カスタムリポジトリ
+
+### 基本的なカスタムリポジトリ
 
 ```python
-from pydantic import BaseModel as PydanticBaseModel
-from typing import Generic, TypeVar, List
+class TaskRepository(BaseRepository[Task]):
+    def find_active(self) -> List[Task]:
+        """アクティブなタスクを取得"""
+        return self.get_by('status', 'active')
+    
+    def find_by_priority(self, priority: str) -> List[Task]:
+        """優先度で検索"""
+        return self.get_by('priority', priority)
+    
+    def count_active(self) -> int:
+        """アクティブなタスクをカウント"""
+        filters = [Task.status == 'active']
+        return self.count(filters=filters)
+```
 
-T = TypeVar('T')
+### 複雑な検索ロジック
 
-class PaginatedResponse(PydanticBaseModel, Generic[T]):
-    items: List[T]
-    total: int
-    page: int
-    page_size: int
-    total_pages: int
+```python
+from sqlalchemy import and_, or_, select
 
-@router.get("/tasks", response_model=PaginatedResponse[TaskResponse])
-def list_tasks_paginated(
-    params: TaskSearchParams = Depends(TaskSearchParams.as_query_depends()),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
-    db: Session = Depends(get_db)
+class TaskRepository(BaseRepository[Task]):
+    def find_urgent_tasks(self) -> List[Task]:
+        """緊急タスク（高優先度 かつ 期限間近）"""
+        from datetime import datetime, timedelta
+        
+        deadline = datetime.now() + timedelta(days=3)
+        
+        filters = [
+            Task.priority == 'high',
+            Task.due_date <= deadline,
+            Task.status != 'completed'
+        ]
+        
+        return self.find(filters=filters, order_by='due_date:asc')
+    
+    def find_overdue_tasks(self) -> List[Task]:
+        """期限切れタスク"""
+        from datetime import datetime
+        
+        query = select(Task).where(
+            and_(
+                Task.due_date < datetime.now(),
+                Task.status != 'completed'
+            )
+        ).order_by(Task.due_date)
+        
+        return self.session.execute(query).scalars().all()
+```
+
+### 関連モデルの操作
+
+```python
+class TaskRepository(BaseRepository[Task]):
+    def find_with_user(self, user_id: int) -> List[Task]:
+        """特定ユーザーのタスクを取得"""
+        return self.get_by('user_id', user_id)
+    
+    def find_by_tags(self, tags: List[str]) -> List[Task]:
+        """タグで検索（多対多）"""
+        query = select(Task).join(Task.tags).where(
+            Tag.name.in_(tags)
+        ).distinct()
+        
+        return self.session.execute(query).scalars().all()
+```
+
+---
+
+## 実装パターン
+
+### パターン1: シンプルな CRUD
+
+```python
+# リポジトリ定義
+class UserRepository(BaseRepository[User]):
+    pass
+
+# 使用例
+repo = UserRepository()
+
+# 作成
+user = repo.dict_save({"name": "太郎", "email": "taro@example.com"})
+
+# 取得
+user = repo.get_by_id(1)
+users = repo.get_by('email', 'taro@example.com')
+
+# 更新
+user.name = "太郎2"
+repo.save(user)
+
+# 削除
+repo.remove(user)
+```
+
+### パターン2: FilterParams + FastAPI
+
+```python
+# FilterParams 定義
+class UserFilterParams(FilterParams):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    is_active: Optional[bool] = None
+
+# リポジトリ定義
+class UserRepository(BaseRepository[User]):
+    def _build_filters(self, params: Optional[UserFilterParams]) -> list:
+        if not params:
+            return []
+        
+        filters = []
+        if params.name:
+            filters.append(User.name.like(f"%{params.name}%"))
+        if params.email:
+            filters.append(User.email == params.email)
+        if params.is_active is not None:
+            filters.append(User.is_active == params.is_active)
+        
+        return filters
+    
+    def find_by_params(self, params: Optional[UserFilterParams] = None, **kwargs):
+        filters = self._build_filters(params)
+        return self.find(filters=filters, **kwargs)
+
+# FastAPI エンドポイント
+@router.get("/users")
+def list_users(
+    filter_params: UserFilterParams = Depends(UserFilterParams.as_query_depends()),
+    offset: int = 0,
+    limit: int = 10
 ):
-    repo = TaskRepository(TaskModel, db)
-    filters = repo._build_filters(params)
-    
-    # 総数を取得
-    total = repo.count(filters=filters)
-    
-    # ページネーション
-    offset = (page - 1) * page_size
-    tasks = repo.find(
-        filters=filters,
-        offset=offset,
-        limit=page_size,
-        order_by='created_at:desc'
-    )
+    repo = UserRepository()
+    users = repo.find_by_params(filter_params, offset=offset, limit=limit)
+    total = repo.count_by_params(filter_params)
     
     return {
-        'items': [task.to_dict() for task in tasks],
-        'total': total,
-        'page': page,
-        'page_size': page_size,
-        'total_pages': (total + page_size - 1) // page_size
+        "items": [user.to_dict() for user in users],
+        "total": total,
+        "offset": offset,
+        "limit": limit
     }
+```
+
+### パターン3: ビジネスロジック統合
+
+```python
+class OrderRepository(BaseRepository[Order]):
+    def create_order(self, user_id: int, items: List[dict]) -> Order:
+        """注文を作成（ビジネスロジック）"""
+        # 合計金額を計算
+        total = sum(item['price'] * item['quantity'] for item in items)
+        
+        # 注文を作成
+        order = Order(
+            user_id=user_id,
+            status='pending',
+            total_amount=total
+        )
+        
+        return self.save(order)
+    
+    def complete_order(self, order_id: int) -> Order:
+        """注文を完了"""
+        order = self.get_by_id(order_id)
+        if not order:
+            raise ValueError(f"Order {order_id} not found")
+        
+        if order.status != 'pending':
+            raise ValueError(f"Order {order_id} is already {order.status}")
+        
+        order.status = 'completed'
+        order.completed_at = datetime.now()
+        
+        return self.save(order)
+    
+    def cancel_order(self, order_id: int) -> Order:
+        """注文をキャンセル"""
+        order = self.get_by_id(order_id)
+        if not order:
+            raise ValueError(f"Order {order_id} not found")
+        
+        if order.status == 'completed':
+            raise ValueError("Cannot cancel completed order")
+        
+        order.status = 'cancelled'
+        order.cancelled_at = datetime.now()
+        
+        return self.save(order)
 ```
 
 ---
 
 ## トラブルシューティング
 
-### 1. ソート可能カラムエラー
+### よくあるエラー
 
-**エラー**: `ValueError: Column 'custom_field' is not allowed for sorting`
+#### 1. `AttributeError: Column '...' does not exist`
 
-**原因**: ホワイトリストに含まれていないカラムでソートしようとした
-
-**解決法**:
 ```python
-class TaskRepository(BaseRepository[TaskModel]):
-    # ホワイトリストを拡張
-    allowed_order_columns = BaseRepository.allowed_order_columns + [
-        'custom_field'
-    ]
+# ❌ 間違い
+tasks = repo.get_by('wrong_column', 'value')
+
+# ✅ 正しい
+tasks = repo.get_by('status', 'active')
 ```
 
-### 2. FilterParams が OpenAPI に表示されない
+**解決方法**: モデルに存在するカラム名を使用する
 
-**問題**: クエリパラメータが Swagger UI に表示されない
+#### 2. `ValueError: Column '...' is not allowed for sorting`
 
-**原因**: `as_query_depends()` を使用していない
-
-**解決法**:
 ```python
-# ❌ Bad
-@router.get("/tasks")
-def search_tasks(params: TaskSearchParams):  # これでは表示されない
-    ...
+# ❌ 許可されていないカラムでソート
+tasks = repo.find(order_by='custom_field:desc')
 
-# ✅ Good
-@router.get("/tasks")
-def search_tasks(
-    params: TaskSearchParams = Depends(TaskSearchParams.as_query_depends())
-):
-    ...
+# ✅ allowed_order_columns を拡張
+class TaskRepository(BaseRepository[Task]):
+    allowed_order_columns = BaseRepository.allowed_order_columns + ['custom_field']
 ```
 
-### 3. auto_import_models でモデルが見つからない
+#### 3. セッションエラー
 
-**問題**: 一部のモデルがインポートされない
-
-**原因**:
-- ファイル名が `_` で始まっている
-- 除外ディレクトリに配置されている
-- インポートエラーが発生している
-
-**解決法**:
 ```python
-# ファイル名を確認
-models/
-├── user.py        # ✅ OK
-├── _private.py    # ❌ 除外される
-└── test_model.py  # ❌ tests/ ディレクトリなら除外
+# ❌ セッションが閉じている
+repo = TaskRepository()
+# ... 長時間経過 ...
+task = repo.get_by_id(1)  # エラー
 
-# 除外設定を確認
-auto_import_models(
-    models_dir=Path(__file__).parent,
-    base_package='your_project.models',
-    excluded_dirs={'__pycache__'}  # 必要最小限に
-)
-```
-
-### 4. リポジトリのトランザクション管理
-
-**問題**: 複数の操作をアトミックに実行したい
-
-**解決法**:
-```python
+# ✅ 新しいセッションを使用
 from repom.db import db_session
+repo = TaskRepository(session=db_session)
+```
 
-# コンテキストマネージャを使用
-with db_session() as session:
-    repo = TaskRepository(TaskModel, session)
-    
-    # 複数の操作
-    task1 = repo.dict_save({'title': 'タスク1'})
-    task2 = repo.dict_save({'title': 'タスク2'})
-    
-    # すべて成功した場合のみコミット
-    session.commit()
+### デバッグのヒント
+
+```python
+# クエリをログ出力
+import logging
+logging.basicConfig()
+logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+
+# フィルタを確認
+filters = repo._build_filters(params)
+print(f"Filters: {filters}")
+
+# 件数を確認してからデータ取得
+count = repo.count(filters=filters)
+print(f"Found {count} records")
+if count > 0:
+    results = repo.find(filters=filters)
 ```
 
 ---
 
 ## 関連ドキュメント
 
-- **BaseModelAuto & スキーマ生成**: [base_model_auto_guide.md](base_model_auto_guide.md)
-- **AI コンテキスト管理**: [../technical/ai_context_management.md](../technical/ai_context_management.md)
-- **メインドキュメント**: [../../README.md](../../README.md)
+- **[auto_import_models ガイド](auto_import_models_guide.md)**: モデルの自動インポート
+- **[BaseModelAuto ガイド](base_model_auto_guide.md)**: スキーマ自動生成
+- **[BaseRepository ソースコード](../../repom/base_repository.py)**: 実装の詳細
 
 ---
 
-**作成日**: 2025-11-15  
-**最終更新**: 2025-11-15  
-**バージョン**: 統合版 v1.0
+**最終更新**: 2025-11-16  
+**対象バージョン**: repom v2.0+
