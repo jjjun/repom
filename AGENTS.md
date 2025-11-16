@@ -71,47 +71,54 @@ poetry run alembic upgrade head                              # Apply migrations
 
 ### Migration File Location Control
 
-The location of Alembic migration files is controlled by `MineDbConfig.alembic_versions_path`:
+The location of Alembic migration files is controlled **solely** by `alembic.ini`:
 
-- **Default (repom standalone)**: `repom/alembic/versions/`
-- **External projects**: Customize by setting `_alembic_versions_path` in inherited config class
+- **repom standalone**: `version_locations = alembic/versions`
+- **External projects**: `version_locations = %(here)s/alembic/versions`
+
+**Important**: Both file creation (`alembic revision`) and execution (`alembic upgrade`) use the same location specified in `alembic.ini`. This ensures consistency and prevents confusion.
 
 ### For External Projects (e.g., mine-py)
 
-**Step 1: Inherit MineDbConfig**
-
-```python
-# mine-py/src/mine_py/config.py
-from repom.config import MineDbConfig
-from pathlib import Path
-
-class MinePyConfig(MineDbConfig):
-    def __init__(self):
-        super().__init__()
-        project_root = Path(__file__).parent.parent.parent
-        self._alembic_versions_path = str(project_root / 'alembic' / 'versions')
-
-def get_repom_config():
-    return MinePyConfig()
-```
-
-**Step 2: Minimal alembic.ini (3 lines)**
+**Step 1: Create alembic.ini**
 
 ```ini
 # mine-py/alembic.ini
 [alembic]
 script_location = submod/repom/alembic
+
+# CRITICAL: This controls BOTH file creation and execution
+# %(here)s refers to the directory containing alembic.ini
+version_locations = %(here)s/alembic/versions
 ```
 
-**Step 3: Set CONFIG_HOOK**
+**Step 2: Set CONFIG_HOOK (optional)**
+
+Only needed if you want to customize other repom features (like model auto-import).
 
 ```bash
 # .env file
 CONFIG_HOOK=mine_py.config:get_repom_config
 ```
 
-This approach completely separates migration histories between repom and external projects while using the same `env.py` and migration infrastructure.
+```python
+# mine-py/src/mine_py/config.py
+from repom.config import MineDbConfig
+
+class MinePyConfig(MineDbConfig):
+    def __init__(self):
+        super().__init__()
+        # Customize other settings here (model_locations, etc.)
+
+def get_repom_config():
+    return MinePyConfig()
 ```
+
+**Key Changes from Previous Versions:**
+
+- ❌ **Removed**: `MineDbConfig._alembic_versions_path` - no longer exists
+- ❌ **Removed**: `env.py` version_locations override - not needed
+- ✅ **Simplified**: Single source of truth (`alembic.ini` only)
 
 ## Testing Framework
 

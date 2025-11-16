@@ -204,34 +204,38 @@ Response スキーマ生成機�EめE`BaseModel` から `BaseModelAuto` に移�
 - 技術詳細: `docs/technical/get_response_schema_technical.md`
 - AI コンテキスト管理: `docs/technical/ai_context_management.md`
 
-### Issue #8: Alembic マイグレーションパス競合問題
+### Issue #8: Alembic マイグレーションファイルの保存場所制御
 
 **ファイル**: `completed/008_alembic_migration_path_conflict.md`
 
 **ステータス**: ✅ 完了（2025-11-16）
 
 **概要**:
-repom の `alembic/env.py` が動的にパスを上書きすることで、外部プロジェクトのマイグレーション管理と競合する問題を解決。`MineDbConfig.alembic_versions_path` による制御に変更。
+外部プロジェクトで repom を使用する際、マイグレーションファイルの保存場所を制御できない問題を解決。Alembic の制約により `alembic.ini` の `version_locations` を唯一の設定源とする実装に変更。
 
-**実装結果**:
-- `config.py`: `_alembic_path` を削除、`alembic_versions_path` プロパティをシンプル化
-- `alembic/env.py`: `script_location` 上書きを削除、`version_locations` のみ動的設定
-- `alembic.ini`: 最小限の設定（`script_location` のみ）
-- テスト: 6テスト作成、全テストパス（191 passed, 1 skipped）
-- ドキュメント: README.md, AGENTS.md, copilot-instructions.md 更新
+**最終的な解決策**:
+- `alembic.ini` に `version_locations` を明示的に記述
+- ファイル作成と実行の両方で同じ設定を使用
+- `MineDbConfig._alembic_versions_path` を削除（env.py での動的設定は効かないため）
 
-**外部プロジェクト対応**:
-```python
-class MinePyConfig(MineDbConfig):
-    def __init__(self):
-        super().__init__()
-        self._alembic_versions_path = str(project_root / 'alembic' / 'versions')
+**実装変更**:
+- `config.py`: `_alembic_versions_path` フィールドを完全削除
+- `alembic/env.py`: `version_locations` の動的設定を削除
+- `alembic.ini`: `version_locations = alembic/versions` を追加
+- テスト: `test_alembic_config.py` を削除（機能が存在しなくなったため）
+
+**外部プロジェクト設定**:
+```ini
+# mine-py/alembic.ini
+[alembic]
+script_location = submod/repom/alembic
+version_locations = %(here)s/alembic/versions
 ```
 
 **関連ドキュメント**:
-- Ideas: `docs/ideas/completed/alembic_version_location_configuration.md`
-- 実装: `repom/config.py`, `alembic/env.py`, `alembic.ini`
-- テスト: `tests/unit_tests/test_alembic_config.py`
+- 技術調査: `docs/technical/alembic_version_locations_limitation.md`
+- ユーザーガイド: `README.md#alembic-マイグレーション`
+- 開発者ガイド: `AGENTS.md#alembic-configuration`
 
 ### Issue #1: get_response_schema() の前方参照改善
 

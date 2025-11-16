@@ -17,16 +17,17 @@ config = context.config
 # This allows environment-specific databases (dev/test/prod) via EXEC_ENV
 config.set_main_option("sqlalchemy.url", db_config.db_url)
 
-# Set version_locations dynamically from MineDbConfig
-# This allows external projects to control where migration files are stored
-# by inheriting MineDbConfig and setting _alembic_versions_path
-config.set_main_option("version_locations", db_config.alembic_versions_path)
-
-# NOTE: We do NOT override script_location here.
-# script_location should be set in alembic.ini:
-#   - repom standalone: alembic.ini sets "script_location = alembic"
-#   - external project: alembic.ini sets "script_location = submod/repom/alembic"
-# This prevents path conflicts between repom and consuming applications.
+# NOTE: version_locations is controlled by alembic.ini only.
+# Both file creation (alembic revision) and execution (alembic upgrade)
+# use the same location specified in alembic.ini.
+#
+# Configuration:
+#   - repom standalone: version_locations = alembic/versions
+#   - external project: version_locations = %(here)s/alembic/versions
+#
+# script_location should also be set in alembic.ini:
+#   - repom standalone: script_location = alembic
+#   - external project: script_location = submod/repom/alembic
 
 # pdb.set_trace()
 # Interpret the config file for Python logging.
@@ -67,7 +68,6 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        version_locations=db_config.alembic_versions_path,
     )
 
     with context.begin_transaction():
@@ -92,7 +92,6 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             render_as_batch=True,
-            version_locations=db_config.alembic_versions_path,
         )
 
         with context.begin_transaction():

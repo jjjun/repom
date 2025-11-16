@@ -44,11 +44,6 @@ def load_models() -> None:
 class MineDbConfig(Config):
     package_name: str = field(default="repom", init=False)
 
-    # Alembic マイグレーションファイルの保存場所
-    # デフォルト: root_path / 'alembic' / 'versions'
-    # 外部プロジェクトは継承して _alembic_versions_path を設定可能
-    _alembic_versions_path: Optional[str] = field(default=None, init=False, repr=False)
-
     # モデルが格納されてるディレクトリ
     set_models_hook: Optional[str] = field(default='repom.config:load_models', init=False, repr=False)
 
@@ -73,31 +68,8 @@ class MineDbConfig(Config):
 
         if self.auto_create_dirs:
             self._ensure_path_exists([
-                self.alembic_versions_path,
                 self.db_backup_path
             ])
-
-    @property
-    def alembic_versions_path(self) -> Optional[str]:
-        """Alembic マイグレーションファイルの保存場所
-
-        デフォルト: root_path / 'alembic' / 'versions'
-        外部プロジェクトは _alembic_versions_path を設定して上書き可能
-
-        Example:
-            class MinePyConfig(MineDbConfig):
-                def __init__(self):
-                    super().__init__()
-                    self._alembic_versions_path = '/custom/migrations/versions'
-        """
-        if self._alembic_versions_path is not None:
-            return self._alembic_versions_path
-
-        return str(Path(self.root_path) / 'alembic' / 'versions')
-
-    @alembic_versions_path.setter
-    def alembic_versions_path(self, value: Optional[Path]):
-        self._alembic_versions_path = value
 
     @property
     def db_path(self) -> Optional[str]:

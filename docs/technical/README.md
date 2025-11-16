@@ -29,6 +29,22 @@ Technical documentation serves several purposes:
 - Caching behavior and best practices
 - Debugging techniques
 
+### `alembic_version_locations_limitation.md`
+
+**Topic**: Alembic migration file location control and its limitations
+
+**Audience**: Developers integrating repom with external projects, Alembic contributors
+
+**Contents**:
+- Problem overview: Why `alembic.ini` is required
+- Technical root cause analysis
+- Alembic command execution flow (file creation vs execution)
+- Experimental results and source code analysis
+- Future improvement proposals
+- Recommended approaches (short-term and long-term)
+
+**Key Finding**: `version_locations` must be set in `alembic.ini` because `ScriptDirectory` is initialized before `env.py` runs during `alembic revision`.
+
 **When to reference**:
 - Building FastAPI/Flask endpoints with repom models
 - Troubleshooting schema generation errors

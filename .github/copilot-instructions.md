@@ -31,18 +31,17 @@ This is **repom** - a shared SQLAlchemy foundation package for Python projects.
 - Tests: `poetry run pytest tests/unit_tests`
 
 ### Alembic Configuration
-- **Migration file location**: Controlled by `MineDbConfig.alembic_versions_path`
-- **Default**: `repom/alembic/versions/`
-- **External projects**: Set `_alembic_versions_path` in inherited `MineDbConfig` class
-- **alembic.ini**: Only needs `script_location` setting (minimal 3 lines)
-- **env.py**: Dynamically sets `version_locations` from `MineDbConfig.alembic_versions_path`
+- **Migration file location**: Controlled by `alembic.ini` only
+- **repom**: `version_locations = alembic/versions`
+- **External projects**: Must create `alembic.ini` with `version_locations = %(here)s/alembic/versions`
+- **Key point**: `alembic.ini` is the single source of truth for both file creation and execution
 
 **For external projects (e.g., mine-py)**:
-```python
-class MinePyConfig(MineDbConfig):
-    def __init__(self):
-        super().__init__()
-        self._alembic_versions_path = str(project_root / 'alembic' / 'versions')
+```ini
+# mine-py/alembic.ini
+[alembic]
+script_location = submod/repom/alembic
+version_locations = %(here)s/alembic/versions
 ```
 
 ## VS Code Tasks Available
@@ -172,56 +171,16 @@ Follow the workflow in `docs/issue/README.md`:
 
 ---
 
-### Technical Deep Dive (トラブルシューティング時に参照)
+### Technical Deep Dive
 
+- **docs/technical/alembic_version_locations_limitation.md**: Alembic の制約と将来的な改善案
 - **docs/technical/get_response_schema_technical.md**: スキーマ生成の内部実装
-- **docs/technical/ai_context_management.md**: AI コンテキスト管理の解説
 
 ### Issue Tracking
 
 - **docs/issue/README.md**: Issue 管理システムの使い方
 
 ---
-
-## 🤖 AI エージェント作業パターン
-
-### パターン1: BaseModelAuto を使ったモデル作成
-
-```
-1. README.md を読んで基本を理解
-2. docs/guides/base_model_auto_guide.md を読んで詳細を把握
-3. 実装開始
-```
-
-**ユーザーからの指示**:
-```
-「docs/guides/base_model_auto_guide.md を参考にして、
- Task モデルに Create/Update/Response スキーマを追加してください」
-```
-
-### パターン2: FastAPI エンドポイント実装
-
-```
-1. README.md でプロジェクト構造を確認
-2. docs/guides/base_model_auto_guide.md でスキーマ生成方法を確認
-3. docs/guides/repository_and_utilities_guide.md で検索パラメータ実装を確認
-4. 実装開始
-```
-
-**ユーザーからの指示**:
-```
-「docs/guides/base_model_auto_guide.md と
- docs/guides/repository_and_utilities_guide.md を参考にして、
- Task の CRUD エンドポイントと検索機能を実装してください」
-```
-
-### パターン3: トラブルシューティング
-
-```
-1. README.md のトラブルシューティングセクションを確認
-2. 問題が複雑な場合は docs/technical/ を参照
-3. Issue として記録 (docs/issue/)
-```
 
 ## 📚 Documentation Structure & AI Workflow
 

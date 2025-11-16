@@ -1,0 +1,3 @@
+# Keep this directory for migration files
+# This simulates mine-py/alembic/versions/
+# Migration files should be created HERE, not in repom/alembic/versions/
