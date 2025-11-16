@@ -3,7 +3,6 @@ from sqlalchemy import Integer
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.exc import StatementError
 from repom.custom_types.JSONEncoded import JSONEncoded
-from tests.db_test_fixtures import db_test
 from repom.base_model import BaseModel
 from datetime import datetime
 from typing import Any

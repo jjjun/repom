@@ -9,7 +9,6 @@ from sqlalchemy import (
     Date,
     text,
 )
-from tests.db_test_fixtures import db_test
 from repom.db import engine, inspector, db_session, Base
 
 

@@ -2,7 +2,6 @@ from tests._init import *
 from sqlalchemy import Column, Integer, inspect
 from datetime import datetime
 
-from tests.db_test_fixtures import db_test
 from repom.base_model import BaseModel
 
 

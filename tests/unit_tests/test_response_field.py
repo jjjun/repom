@@ -4,7 +4,6 @@ from tests._init import *
 from sqlalchemy import String, Integer, inspect
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import List, Optional
-from tests.db_test_fixtures import db_test
 from repom.base_model_auto import BaseModelAuto
 
 

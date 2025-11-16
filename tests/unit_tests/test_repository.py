@@ -3,7 +3,6 @@ from sqlalchemy import Integer, inspect, select, desc, and_
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from datetime import datetime
-from tests.db_test_fixtures import db_test
 from repom.base_model import BaseModel
 from repom.base_repository import BaseRepository
 

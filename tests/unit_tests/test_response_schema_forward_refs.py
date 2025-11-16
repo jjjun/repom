@@ -10,7 +10,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import List, Optional, Dict, Any
 from repom.base_model_auto import BaseModelAuto
 from pydantic import ValidationError
-from tests.db_test_fixtures import db_test
 import pytest
 
 

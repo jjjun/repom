@@ -4,7 +4,6 @@ from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import Optional
 from repom.base_model_auto import BaseModelAuto
-from tests.db_test_fixtures import db_test
 
 
 class ResponseTestModel(BaseModelAuto):

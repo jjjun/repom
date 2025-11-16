@@ -3,7 +3,6 @@ from sqlalchemy import Integer, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.exc import StatementError
 from repom.custom_types.ListJSON import ListJSON, listjson_filter
-from tests.db_test_fixtures import db_test
 from repom.base_model import BaseModel
 from repom.base_repository import BaseRepository, FilterParams
 from typing import Optional, List

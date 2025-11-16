@@ -5,7 +5,6 @@ from sqlalchemy import String, Integer, Date, Time, inspect
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import Optional
 from datetime import date as date_type, time as time_type
-from tests.db_test_fixtures import db_test
 from repom.base_model_auto import BaseModelAuto
 
 

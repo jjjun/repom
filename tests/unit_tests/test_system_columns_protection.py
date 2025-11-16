@@ -5,7 +5,6 @@ from time import sleep
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.base_model import BaseModel
-from tests.db_test_fixtures import db_test
 
 
 class SystemProtectionModel(BaseModel):

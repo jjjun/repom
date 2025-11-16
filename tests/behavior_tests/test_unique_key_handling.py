@@ -10,7 +10,6 @@ from tests.utils import (
     generate_sample_roster_data,
     save_model_instances
 )
-from tests.db_test_fixtures import db_test
 from repom.db import Base
 from repom.db import db_session
 
