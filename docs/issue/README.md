@@ -25,30 +25,6 @@ completed/     → 実装完了・コミット済み
 
 ## 🚧 作業中の Issue
 
-### Issue #9: テストインフラストラクチャの改善
-
-**ファイル**: `active/009_test_infrastructure_improvement.md`
-
-**ステータス**: 🟢 進行中（2025-11-16）
-
-**概要**:
-repom と外部プロジェクト（mine-py）のテスト基盤を改善。トランザクションロールバック方式の採用により、高速化・完全な分離・クリーンな状態を実現。
-
-**実装計画**:
-- Phase 1: repom テストフィクスチャの改善 ✅
-- Phase 2: repom/testing.py の実装（進行中）
-- Phase 3: テストの実行と検証
-- Phase 4: ドキュメント整備
-
-**技術的決定事項**:
-- トランザクションロールバック方式採用（案A）
-- シンプルなヘルパー関数のみ提供（アプローチ1）
-- テストでは Alembic を使わない方針
-
----
-
-## 📝 実装予定・作業中の Issue
-
 ### Issue #7: Annotation Inheritance の実装検証
 
 **ファイル**: `active/007_annotation_inheritance_validation.md`
@@ -81,6 +57,22 @@ Issue #006 (Phase 1.1) で BaseModel の `__annotations__` 継承問題を修正
 ---
 
 ## 📋 完了済み Issue
+
+### Issue #009: テストインフラストラクチャの改善
+
+**ファイル**: `completed/009_test_infrastructure_improvement.md`
+
+**完了日**: 2025-11-16
+
+**概要**:
+Transaction Rollback パターン実装により9倍の高速化を達成。外部プロジェクト向けヘルパー（`repom/testing.py`）を提供し、全195テスト成功（警告ゼロ）。
+
+**成果**:
+- `repom/testing.py`: `create_test_fixtures()` 実装
+- パフォーマンス: ~30秒 → ~3秒（9倍高速化）
+- ドキュメント整備完了（README, AGENTS, copilot-instructions）
+
+---
 
 ### Issue #1: get_response_schema() の前方参照改善
 
