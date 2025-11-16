@@ -188,14 +188,14 @@ Follow the workflow in `docs/issue/README.md`:
 
 ```
 docs/
-├── issue/              # Problem tracking and resolution
-│   ├── README.md      # Issue index (MUST update when moving files)
-│   ├── completed/     # ✅ Resolved issues (XXX_name.md with sequential numbering)
-│   ├── in_progress/   # 🚧 Active work
-│   └── backlog/       # 📝 Planned issues
-├── research/           # 🔬 Technical investigation and feasibility studies
+├── guides/             # 📘 Usage guides (concise, practical, for teaching other AI agents)
 ├── ideas/              # 💡 Feature proposals and enhancement ideas
-└── technical/          # 📖 API references and implementation guides
+├── research/           # 🔬 Investigation for ideal implementations (future improvements)
+├── technical/          # 🔧 Implementation decisions and constraints (for AI improvement work)
+└── issue/              # 📋 Problem tracking and resolution
+    ├── README.md      # Issue index (MUST update when moving files)
+    ├── active/        # 🚧 Planned and active work (backlog + in_progress merged)
+    └── completed/     # ✅ Resolved issues (XXX_name.md with sequential numbering)
 ```
 
 ### 🤖 AI Agent Collaborative Workflow
@@ -209,9 +209,7 @@ docs/
 
 2. **Create Issue File**
    ```markdown
-   # Choose location based on urgency:
-   # - Immediate work: docs/issue/in_progress/XXX_issue_name.md
-   # - Future work: docs/issue/backlog/XXX_issue_name.md
+   # Location: docs/issue/active/XXX_issue_name.md
    # Use descriptive snake_case naming
    ```
 
@@ -225,10 +223,10 @@ docs/
    - Run tests and validate fix
 
 5. **Mark as Complete** (when user confirms "完了" / "done" / "finished")
-   - **AUTOMATICALLY** move file: `in_progress/XXX_*.md` → `completed/NNN_*.md`
+   - **AUTOMATICALLY** move file: `active/XXX_*.md` → `completed/NNN_*.md`
    - Assign sequential number (001, 002, 003...)
    - **AUTOMATICALLY** update `docs/issue/README.md`:
-     * Remove from "🚧 作業中の Issue"
+     * Remove from "📝 実装予定・作業中の Issue"
      * Add to "📋 完了済み Issue" with summary
    - Commit with message: `docs(issue): Complete issue #NNN - [title]`
 
@@ -250,7 +248,7 @@ docs/
 4. **Lifecycle Progression**
    ```
    ideas/ → research/ (if needs investigation)
-           → issue/backlog/ (if ready to implement)
+           → issue/active/ (if ready to implement)
    ```
 
 #### When Technical Investigation is Needed
@@ -277,7 +275,7 @@ User reports problem
     ↓
 AI confirms understanding
     ↓
-Create: backlog/XXX_name.md OR in_progress/XXX_name.md
+Create: active/XXX_name.md
     ↓
 Update: docs/issue/README.md (add to appropriate section)
     ↓
@@ -286,7 +284,7 @@ Work on solution together (testing, debugging, implementing)
 User says "完了" / "done" / "finished"
     ↓
 AI AUTOMATICALLY:
-  1. Move: in_progress/XXX_name.md → completed/NNN_name.md
+  1. Move: active/XXX_name.md → completed/NNN_name.md
   2. Update: docs/issue/README.md (move entry to completed section)
   3. Commit: "docs(issue): Complete issue #NNN - [title]"
 ```
@@ -303,9 +301,8 @@ Create: docs/ideas/feature_name.md
 Evaluate feasibility
     ↓
 If needs research → docs/research/topic.md
-If ready → docs/issue/backlog/XXX_name.md
+If ready → docs/issue/active/XXX_name.md
 ```
-
 ### 🔄 Automatic Completion Triggers
 
 When user says any of these phrases, **AUTOMATICALLY** complete the issue:
@@ -317,7 +314,7 @@ When user says any of these phrases, **AUTOMATICALLY** complete the issue:
 
 **Automatic Actions:**
 1. Move file to `completed/` with next sequential number
-2. Update `docs/issue/README.md` (remove from in_progress, add to completed)
+2. Update `docs/issue/README.md` (remove from active, add to completed)
 3. Git commit with descriptive message
 4. Confirm completion to user
 

@@ -1,188 +1,137 @@
 # Technical Documentation
 
-## Overview
+## 目的
 
-This directory contains **technical guides** and **deep-dive documentation** for complex features and implementation details in the repom project.
+このディレクトリは、repom の**内部実装の判断基準と制約**を記録します。将来、AI エージェントが機能改善や拡張を行う際の参考資料として使用されます。
 
-## Purpose
+## 対象読者
 
-Technical documentation serves several purposes:
+- **repom を改善・拡張する AI エージェント**（主要な対象）
+- 内部実装の設計判断を理解したい開発者
 
-1. **Knowledge Preservation**: Capture complex implementation details and design decisions
-2. **Onboarding**: Help new developers understand sophisticated parts of the codebase
-3. **Reference**: Provide detailed API and architecture information
-4. **Troubleshooting**: Document known issues, workarounds, and debugging techniques
+## 他のディレクトリとの違い
 
-## Directory Contents
+### `guides/` との違い
 
-### `get_response_schema_technical.md`
+- **guides/**: 使い方マニュアル（簡潔、実用的、他の AI エージェントへの教育用）
+- **technical/**: なぜそうなっているか（詳細、設計判断、将来の改善時の参考）
 
-**Topic**: Pydantic schema generation from SQLAlchemy models
-
-**Audience**: Developers using `BaseModel.get_response_schema()` in API servers
-
-**Contents**:
-- Architecture and component overview
-- Data flow and timing considerations
-- API server integration patterns
-- Type resolution and forward references
-- Caching behavior and best practices
-- Debugging techniques
-
-### `alembic_version_locations_limitation.md`
-
-**Topic**: Alembic migration file location control and its limitations
-
-**Audience**: Developers integrating repom with external projects, Alembic contributors
-
-**Contents**:
-- Problem overview: Why `alembic.ini` is required
-- Technical root cause analysis
-- Alembic command execution flow (file creation vs execution)
-- Experimental results and source code analysis
-- Future improvement proposals
-- Recommended approaches (short-term and long-term)
-
-**Key Finding**: `version_locations` must be set in `alembic.ini` because `ScriptDirectory` is initialized before `env.py` runs during `alembic revision`.
-
-**When to reference**:
-- Building FastAPI/Flask endpoints with repom models
-- Troubleshooting schema generation errors
-- Understanding response field decorators
-- Optimizing schema performance
-
-## Document Types
-
-### 1. Architecture Documents
-Deep-dive into system design, component interactions, and data flow.
-
-**Example**: Component diagrams, sequence diagrams, architecture decisions
-
-### 2. API Reference
-Detailed documentation of public APIs, parameters, return types, and usage examples.
-
-**Example**: Method signatures, parameter descriptions, code examples
-
-### 3. Integration Guides
-Step-by-step instructions for integrating repom with other frameworks and tools.
-
-**Example**: FastAPI integration, Flask integration, testing setup
-
-### 4. Troubleshooting Guides
-Common issues, their causes, and solutions.
-
-**Example**: Import errors, type resolution failures, performance issues
-
-### 5. Implementation Notes
-Technical details about complex implementations, including rationale and alternatives considered.
-
-**Example**: Why WeakKeyDictionary, caching strategies, performance optimizations
-
-## Relationship to Other Documentation
-
+**使い分けの例**:
 ```
-docs/
-├── technical/          # Deep technical guides (THIS DIRECTORY)
-│   ├── README.md
-│   └── get_response_schema_technical.md
-│
-├── issue/              # Problem tracking and solutions
-│   ├── completed/      # Resolved issues with implementation details
-│   ├── in_progress/    # Active problem-solving
-│   └── backlog/        # Known issues to address
-│
-├── research/           # Future feature investigation
-│   └── auto_forward_refs_resolution.md
-│
-├── ideas/              # Feature proposals
-│   └── schema_validation_command.md
-│
-└── auto_import_models_guide.md  # User-facing guides
-    base_model_auto_guide.md
+guides/base_model_auto_guide.md
+→ 「get_response_schema() の使い方」
+
+technical/get_response_schema_technical.md
+→ 「なぜこの実装にしたか、制約は何か、代替案は何だったか」
 ```
 
-### When to Use Each Directory
+### `research/` との違い
 
-| Directory | Purpose | Audience | Lifecycle |
-|-----------|---------|----------|-----------|
-| `technical/` | Implementation details and API reference | Developers using repom | Living documentation (updated as code evolves) |
-| `issue/completed/` | Problem-solution pairs | Developers troubleshooting similar issues | Historical record (mostly static) |
-| `research/` | Future feature investigation | Contributors planning features | Investigation phase (may become issues) |
-| `ideas/` | Feature proposals | Contributors and maintainers | Idea phase (may become research/issues) |
+- **technical/**: 実装済みの判断記録（過去の決定事項）
+- **research/**: まだ実現していない理想系への調査（未来の改善計画）
 
-## Contributing Technical Documentation
-
-### When to Create Technical Documentation
-
-Create technical documentation when:
-- A feature is complex enough to need more than code comments
-- Multiple developers need to understand the same system
-- Integration with external libraries requires special handling
-- Performance characteristics are non-obvious
-- Common usage patterns should be documented
-
-### Documentation Template
-
-```markdown
-# [Feature Name] - Technical Documentation
-
-## Overview
-Brief description of the feature and its purpose.
-
-## Architecture
-Component diagrams and high-level design.
-
-## Implementation Details
-Deep-dive into how it works internally.
-
-## Usage Examples
-Code examples for common scenarios.
-
-## API Reference
-Detailed method/class documentation.
-
-## Performance Considerations
-Memory usage, caching, optimization tips.
-
-## Troubleshooting
-Common issues and solutions.
-
-## See Also
-Links to related documentation, code, tests.
+**時系列**:
+```
+research/ → 実装前の調査（理想はこうしたい）
+   ↓
+実装・完了
+   ↓
+technical/ → 実装後の記録（なぜこうなったか）
 ```
 
-### Keeping Documentation Updated
+### `ideas/` との違い
 
-Technical documentation should evolve with the code:
-- Update when APIs change
-- Add examples for new use cases
-- Document breaking changes
-- Remove outdated information
+- **ideas/**: アイデア段階の提案（問題提起）
+- **technical/**: 実装済み機能の技術詳細（記録）
 
-## Finding Documentation
+## ドキュメントの種類
 
-### By Topic
-- **Schema Generation**: `get_response_schema_technical.md`
-- **Model Architecture**: Coming soon
-- **Repository Patterns**: Coming soon
+### 実装判断記録
 
-### By Use Case
-- **Building API endpoints**: `get_response_schema_technical.md` → API Server Integration
-- **Handling forward references**: `get_response_schema_technical.md` → Type Resolution
-- **Performance optimization**: `get_response_schema_technical.md` → Caching
+実装時になぜその方法を選んだか、どのような制約があったかを記録。
 
-### By Problem
-- **Schema generation fails**: `get_response_schema_technical.md` → Debugging
-- **Type not found errors**: `get_response_schema_technical.md` → Forward References
-- **Slow response times**: `get_response_schema_technical.md` → Performance
+**例**: `get_response_schema_technical.md`
+- Pydantic の前方参照解決の仕組み
+- なぜ forward_refs パラメータが必要か
+- 標準型の自動解決の実装理由
 
-## See Also
+### 制約と制限事項
 
-- Main `README.md` - Project overview and quick start
-- `docs/issue/` - Problem tracking and solutions
-- `docs/research/` - Future feature investigation
-- Code comments in `repom/` - Implementation-level details
+技術的な制約や、理想的ではないが現実的な選択をした理由を記録。
+
+**例**: `alembic_version_locations_limitation.md`
+- Alembic の version_locations の制約
+- なぜ alembic.ini でしか設定できないか
+- 試した代替案とその結果
+
+### AI コンテキスト管理
+
+AI エージェントがドキュメントを効率的に利用するための設計指針。
+
+**例**: `ai_context_management.md`
+- ドキュメント構造の設計方針
+- トークン消費量の最適化戦略
+- 複数エージェント間での情報共有方法
+
+## ドキュメント作成ガイドライン
+
+### 含めるべき内容
+
+✅ 設計判断の理由  
+✅ 技術的な制約  
+✅ 試した代替案とその結果  
+✅ 将来の改善のヒント  
+✅ 関連する Issue や Research ドキュメントへのリンク
+
+### 含めるべきでない内容
+
+❌ 基本的な使い方（guides/ に記載）  
+❌ 未実装の理想系（research/ に記載）  
+❌ アイデア段階の提案（ideas/ に記載）  
+❌ 実装タスクの追跡（issue/ に記載）
+
+## ライフサイクル
+
+```
+ideas/              → アイデア提案
+    ↓
+research/           → 技術調査（実装前）
+    ↓
+issue/active/       → 実装計画
+    ↓
+issue/completed/    → 実装完了
+    ↓
+technical/          → 実装判断の記録（参考資料化）
+```
+
+## 現在のドキュメント
+
+### get_response_schema_technical.md
+Pydantic スキーマ生成の技術詳細と前方参照解決の実装判断。
+
+### alembic_version_locations_limitation.md
+Alembic の version_locations 設定の制約と、なぜ alembic.ini でしか設定できないかの説明。
+
+### ai_context_management.md
+AI エージェントがドキュメントを効率的に利用するための設計指針とトークン最適化戦略。
 
 ---
 
-*Last Updated: 2025-11-14*
+## 使い方（AI エージェント向け）
+
+### 機能改善時
+
+1. 該当機能の technical ドキュメントを読む
+2. 過去の設計判断と制約を理解する
+3. research/ に理想系の調査があるか確認
+4. 改善案を検討
+
+### 新機能実装時
+
+1. 実装完了後、technical/ にドキュメント作成
+2. 設計判断の理由を記録
+3. 将来の改善ポイントがあれば research/ にメモ
+
+---
+
+最終更新: 2025-11-16

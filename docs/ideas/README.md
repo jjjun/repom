@@ -132,13 +132,11 @@ If you're writing:
 ## Idea Lifecycle
 
 ```
-docs/ideas/        → Initial concept and exploration
+docs/ideas/         → Initial concept and exploration
     ↓
-docs/research/     → Technical investigation and feasibility study
+docs/research/      → Technical investigation and feasibility study
     ↓
-docs/issue/backlog/ → Concrete implementation plan
-    ↓
-docs/issue/in_progress/ → Active development
+docs/issue/active/  → Concrete implementation plan
     ↓
 docs/issue/completed/ → Implementation complete
 ```
@@ -212,13 +210,12 @@ When an idea requires technical investigation:
 
 ### To Implementation Phase
 When an idea is ready for implementation:
-1. Create issue file in `docs/issue/backlog/XXX_[idea_name].md`
-2. Move idea file to `docs/ideas/archived/` (optional)
-3. Update status to "Planning" or "Ready for Implementation"
+1. Create issue file in `docs/issue/active/XXX_[idea_name].md`
+2. Update status to "Planning" or "Ready for Implementation"
 
 ## Archived Ideas
 
-Ideas that are no longer relevant or have been superseded can be moved to `docs/ideas/archived/` for historical reference.
+Ideas that are no longer relevant or have been superseded can be archived by updating their status in the document itself.
 
 ## Questions?
 
