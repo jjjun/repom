@@ -66,3 +66,23 @@ def test_use_updated_at_true(db_test):
     """
     inspector = inspect(UpdatedAtModel)
     assert 'updated_at' in [column.name for column in inspector.columns]
+
+
+def test_created_at_nullable_constraint(db_test):
+    """
+    created_at カラムが NOT NULL 制約を持つこと
+    """
+    inspector = inspect(CreatedAtModel)
+    created_at_column = next((col for col in inspector.columns if col.name == 'created_at'), None)
+    assert created_at_column is not None
+    assert created_at_column.nullable is False
+
+
+def test_updated_at_nullable_constraint(db_test):
+    """
+    updated_at カラムが NOT NULL 制約を持つこと
+    """
+    inspector = inspect(UpdatedAtModel)
+    updated_at_column = next((col for col in inspector.columns if col.name == 'updated_at'), None)
+    assert updated_at_column is not None
+    assert updated_at_column.nullable is False

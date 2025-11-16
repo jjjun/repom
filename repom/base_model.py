@@ -95,12 +95,12 @@ class BaseModel(Base):
             cls.__annotations__['id'] = Mapped[int]
 
         if cls.use_created_at:
-            cls.created_at: Mapped[datetime] = mapped_column(AutoDateTime)
+            cls.created_at: Mapped[datetime] = mapped_column(AutoDateTime, nullable=False)
             # 動的に追加されたカラムの型ヒントを __annotations__ に登録
             cls.__annotations__['created_at'] = Mapped[datetime]
 
         if cls.use_updated_at:
-            cls.updated_at: Mapped[datetime] = mapped_column(AutoDateTime)
+            cls.updated_at: Mapped[datetime] = mapped_column(AutoDateTime, nullable=False)
             # 動的に追加されたカラムの型ヒントを __annotations__ に登録
             cls.__annotations__['updated_at'] = Mapped[datetime]
 
