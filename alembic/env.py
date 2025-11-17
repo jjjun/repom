@@ -37,7 +37,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Allow applications to import their own models before migrations run.
-load_set_model_hook_function()
+load_models()
 
 # add your model's MetaData object here
 # for 'autogenerate' support
