@@ -1,9 +1,9 @@
 from repom.db import engine, Base
-from repom.config import load_set_model_hook_function
+from repom.config import load_models
 
 
 def main():
-    load_set_model_hook_function()
+    load_models()
     Base.metadata.drop_all(bind=engine)
 
 

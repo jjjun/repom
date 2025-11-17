@@ -24,7 +24,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 from typing import Callable, Optional
 from repom.db import Base
-from repom.config import config, load_set_model_hook_function
+from repom.config import config, load_models
 
 
 def create_test_fixtures(
@@ -86,7 +86,7 @@ def create_test_fixtures(
     """
     # デフォルト値の設定
     _db_url = db_url or config.db_url
-    _model_loader = model_loader or load_set_model_hook_function
+    _model_loader = model_loader or load_models
 
     @pytest.fixture(scope='session')
     def db_engine():

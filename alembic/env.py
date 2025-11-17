@@ -7,7 +7,7 @@ from sqlalchemy import pool
 from alembic import context
 
 from repom.db import Base
-from repom.config import config as db_config, load_set_model_hook_function
+from repom.config import config as db_config, load_models
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

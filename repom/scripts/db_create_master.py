@@ -1,10 +1,9 @@
-from repom.db import db_session
-from repom.config import load_set_model_hook_function
+from repom.config import load_models
 
 
 def main():
     # 初期データの挿入
-    load_set_model_hook_function()
+    load_models()
     pass
 
 

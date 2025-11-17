@@ -44,9 +44,6 @@ def load_models() -> None:
 class MineDbConfig(Config):
     package_name: str = field(default="repom", init=False)
 
-    # モデルが格納されてるディレクトリ
-    set_models_hook: Optional[str] = field(default='repom.config:load_models', init=False, repr=False)
-
     # モデル自動インポート設定
     _model_locations: Optional[List[str]] = field(default=None, init=False, repr=False)
     _model_excluded_dirs: Optional[Set[str]] = field(default=None, init=False, repr=False)
@@ -177,7 +174,5 @@ config = get_config_from_hook(config)
 
 config.init()
 
-
-def load_set_model_hook_function():
-    """モデル読み込み用のフック関数を実行する"""
-    load_hook_function(config.set_models_hook)()
+# モデル読み込み関数をエクスポート（後方互換性のため）
+load_set_model_hook_function = load_models
