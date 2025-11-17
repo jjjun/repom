@@ -108,7 +108,11 @@ from repom.config import MineDbConfig
 class MinePyConfig(MineDbConfig):
     def __init__(self):
         super().__init__()
-        # Customize other settings here (model_locations, etc.)
+        
+        # Model auto-import settings
+        self.model_locations = ['mine_py.models']
+        self.allowed_package_prefixes = {'mine_py.', 'repom.'}
+        self.model_excluded_dirs = {'base', 'mixin', '__pycache__'}
 
 def get_repom_config():
     return MinePyConfig()
