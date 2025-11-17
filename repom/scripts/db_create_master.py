@@ -1,4 +1,4 @@
-from repom.config import load_models
+from repom.utility import load_models
 
 
 def main():

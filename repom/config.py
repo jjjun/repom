@@ -12,34 +12,6 @@ except ImportError:
 from dataclasses import dataclass, field
 
 
-def load_models() -> None:
-    """Import all application models so ``mine_db`` can discover metadata.
-
-    The :mod:`mine_db` CLI scripts call :func:`mine_db.hooks.load_extra_models`
-    before operating on SQLAlchemy metadata.  By pointing the
-    ``MINE_DB_LOAD_MODELS`` environment variable at this function we ensure all
-    ``mine_py`` models are imported and registered on ``Base.metadata``.
-
-    New Feature:
-        If config.model_locations is set, import models from specified packages
-        instead of the default repom.models package.
-    """
-    if config.model_locations:
-        from repom.utility import auto_import_models_from_list
-        auto_import_models_from_list(
-            package_names=config.model_locations,
-            excluded_dirs=config.model_excluded_dirs,
-            allowed_prefixes=config.allowed_package_prefixes,
-            fail_on_error=config.model_import_strict
-        )
-    else:
-        # デフォルト動作（後方互換性）
-        # Importing the ``models`` package has the side-effect of registering every
-        # SQLAlchemy model defined by the application.  The import is intentionally
-        # local so the module is only loaded when the CLI needs it.
-        from repom import models  # noqa: F401  # pylint: disable=unused-import
-
-
 @dataclass
 class MineDbConfig(Config):
     package_name: str = field(default="repom", init=False)
@@ -173,6 +145,3 @@ config.root_path = str(Path(__file__).parent.parent)
 config = get_config_from_hook(config)
 
 config.init()
-
-# モデル読み込み関数をエクスポート（後方互換性のため）
-load_set_model_hook_function = load_models

@@ -240,3 +240,35 @@ def auto_import_models_from_list(
                 raise
             else:
                 print(f"Warning: Failed to import models from {package_name}: {e}")
+
+
+def load_models() -> None:
+    """Import all application models so SQLAlchemy can discover metadata.
+
+    This function imports models based on config.model_locations setting.
+    If model_locations is not set, it falls back to importing repom.models.
+
+    Usage:
+        from repom.utility import load_models
+        load_models()  # Import all configured models
+
+    Note:
+        This function is typically called by:
+        - Alembic migrations (alembic/env.py)
+        - Database scripts (db_create.py, db_delete.py, etc.)
+        - Test fixtures (tests/conftest.py)
+    """
+    from repom.config import config
+
+    if config.model_locations:
+        auto_import_models_from_list(
+            package_names=config.model_locations,
+            excluded_dirs=config.model_excluded_dirs,
+            allowed_prefixes=config.allowed_package_prefixes,
+            fail_on_error=config.model_import_strict
+        )
+    else:
+        # デフォルト動作（後方互換性）
+        # Importing the models package has the side-effect of registering every
+        # SQLAlchemy model defined by the application.
+        from repom import models  # noqa: F401  # pylint: disable=unused-import

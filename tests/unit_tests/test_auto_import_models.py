@@ -16,9 +16,10 @@ from unittest.mock import patch, MagicMock
 from repom.utility import (
     auto_import_models_by_package,
     auto_import_models_from_list,
+    load_models,
     DEFAULT_EXCLUDED_DIRS
 )
-from repom.config import config, load_models
+from repom.config import config
 
 
 class TestAutoImportModelsByPackage:
