@@ -1,5 +1,6 @@
 import json
-from sqlalchemy import Integer, event
+import uuid
+from sqlalchemy import Integer, String, event
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -21,6 +22,7 @@ class BaseModel(Base):
     def __init_subclass__(
         cls,
         use_id=_UNSET,
+        use_uuid=_UNSET,
         use_created_at=_UNSET,
         use_updated_at=_UNSET,
         **kwargs
@@ -44,8 +46,14 @@ class BaseModel(Base):
 
         デフォルト値:
         - use_id: True（自動採番の id カラムを追加）
+        - use_uuid: False（UUID 主キーを使用しない）
         - use_created_at: False（created_at カラムを追加しない）
         - use_updated_at: False（updated_at カラムを追加しない）
+
+        use_id と use_uuid の関係:
+        - use_uuid=True の場合、use_id は自動的に False になります
+        - 両方を同時に True にすることはできません
+        - use_uuid=True の場合、id カラムは VARCHAR(36) の UUID として作成されます
 
         複合主キーを使用する場合は use_id=False を指定し、
         各カラムに primary_key=True を設定してください。
@@ -60,10 +68,26 @@ class BaseModel(Base):
         super().__init_subclass__(**kwargs)
 
         # パラメータが指定されていない場合は親クラスの値を継承、なければデフォルト値を使用
-        if use_id is _UNSET:
-            cls.use_id = getattr(cls, 'use_id', True)
+        if use_uuid is _UNSET:
+            cls.use_uuid = getattr(cls, 'use_uuid', False)
         else:
-            cls.use_id = use_id
+            cls.use_uuid = use_uuid
+
+        # use_uuid=True の場合、use_id は自動的に False になる
+        if cls.use_uuid:
+            if use_id is not _UNSET and use_id:
+                # 明示的に use_id=True が指定されている場合はエラー
+                raise ValueError(
+                    f"{cls.__name__}: use_id と use_uuid は同時に True にできません。"
+                    "どちらか一方のみを True に設定してください。"
+                )
+            cls.use_id = False
+        else:
+            # use_uuid=False の場合、use_id のデフォルト動作
+            if use_id is _UNSET:
+                cls.use_id = getattr(cls, 'use_id', True)
+            else:
+                cls.use_id = use_id
 
         if use_created_at is _UNSET:
             cls.use_created_at = getattr(cls, 'use_created_at', False)
@@ -87,9 +111,31 @@ class BaseModel(Base):
         if '__annotations__' not in cls.__dict__:
             cls.__annotations__ = {}
 
-        # 具象クラスのみ、use_id が True の場合に id カラムを追加
+        # 具象クラスのみ、use_id または use_uuid が True の場合に id カラムを追加
         # SQLAlchemy 2.0 スタイル: mapped_column() + 型ヒント
-        if cls.use_id:
+        if cls.use_uuid:
+            # UUID 主キー（VARCHAR 36, ハイフン付き）
+            # default は DB レベル、Python レベルでは __init__ で生成
+            cls.id: Mapped[str] = mapped_column(
+                String(36),
+                primary_key=True,
+                default=lambda: str(uuid.uuid4())  # DB レベルのデフォルト
+            )
+            # 動的に追加されたカラムの型ヒントを __annotations__ に登録
+            cls.__annotations__['id'] = Mapped[str]
+
+            # __init__ をオーバーライドして UUID を自動生成
+            original_init = cls.__init__
+
+            def __init__(self, *args, **kwargs):
+                # id が指定されていない場合、UUID を自動生成
+                if 'id' not in kwargs:
+                    kwargs['id'] = str(uuid.uuid4())
+                original_init(self, *args, **kwargs)
+            cls.__init__ = __init__
+
+        elif cls.use_id:
+            # 自動採番 id（INTEGER）
             cls.id: Mapped[int] = mapped_column(Integer, primary_key=True)
             # 動的に追加されたカラムの型ヒントを __annotations__ に登録
             cls.__annotations__['id'] = Mapped[int]
