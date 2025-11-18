@@ -20,6 +20,12 @@
   - `as_query_depends()` メカニズム
   - `auto_import_models` ユーティリティ
 
+- **[セッション管理ガイド](docs/guides/session_management_guide.md)**
+  - トランザクション管理（`get_db_transaction()`, `transaction()`）
+  - FastAPI、Flask、CLI での使用方法
+  - セッションのライフサイクル管理
+  - フレームワーク非依存な設計
+
 ## 目次
 
 - [セットアップ](#セットアップ)

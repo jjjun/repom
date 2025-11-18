@@ -26,7 +26,7 @@ completed/     → 実装完了・コミット済み
 ## 🚧 実装予定・作業中の Issue
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
-|----|---------|--------|-----------|---------|
+|----|---------|--------|-----------|---------||
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください。
@@ -36,7 +36,8 @@ completed/     → 実装完了・コミット済み
 ## 📋 完了済み Issue
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
-|----|---------|--------|------|---------|
+|----|---------|--------|------|---------||
+| #011 | セッション管理ユーティリティの追加 | 2025-11-18 | トランザクション管理機能、FastAPI/CLI対応、13テスト全パス | [completed/011_session_management_utilities.md](completed/011_session_management_utilities.md) |
 | #010 | BaseModel への UUID サポート追加 | 2025-11-18 | UUID 主キーサポート、BaseRepository 互換、17テスト全パス | [completed/010_add_uuid_support_to_base_model.md](completed/010_add_uuid_support_to_base_model.md) |
 | #009 | テストインフラストラクチャの改善 | 2025-11-16 | Transaction Rollback パターン実装、9倍高速化達成 | [completed/009_test_infrastructure_improvement.md](completed/009_test_infrastructure_improvement.md) |
 | #008 | Alembic マイグレーションファイルの保存場所制御 | 2025-11-16 | version_locations の一元管理、外部プロジェクト対応 | [completed/008_alembic_migration_path_conflict.md](completed/008_alembic_migration_path_conflict.md) |

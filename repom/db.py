@@ -32,7 +32,12 @@ sessionmaker
  bind=engine:
   セッションが使用するデータベースエンジンを指定します。
 """
+# スレッドローカルな scoped_session (既存の db_session)
 db_session = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=engine))
+
+# 新規セッションを生成する sessionmaker インスタンス
+# 各呼び出しで新しいセッションを作成するために使用
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_session():
@@ -75,3 +80,14 @@ atexit.register 関数を使用して、プログラム終了時に実行した�
 登録された関数は、プログラムが正常に終了する際に自動的に呼び出されます。
 """
 atexit.register(shutdown_session)
+
+# エクスポート対象
+__all__ = [
+    'engine',
+    'inspector',
+    'db_session',
+    'SessionLocal',
+    'get_session',
+    'Base',
+    'shutdown_session',
+]
