@@ -37,6 +37,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #010 | BaseModel への UUID サポート追加 | 2025-11-18 | UUID 主キーサポート、BaseRepository 互換、17テスト全パス | [completed/010_add_uuid_support_to_base_model.md](completed/010_add_uuid_support_to_base_model.md) |
 | #009 | テストインフラストラクチャの改善 | 2025-11-16 | Transaction Rollback パターン実装、9倍高速化達成 | [completed/009_test_infrastructure_improvement.md](completed/009_test_infrastructure_improvement.md) |
 | #008 | Alembic マイグレーションファイルの保存場所制御 | 2025-11-16 | version_locations の一元管理、外部プロジェクト対応 | [completed/008_alembic_migration_path_conflict.md](completed/008_alembic_migration_path_conflict.md) |
 | #006 | SQLAlchemy 2.0 スタイルへの移行 | 2025-11-15 | Mapped[] + mapped_column() 移行、型安全性向上 | [completed/006_migrate_to_sqlalchemy_2_0_style.md](completed/006_migrate_to_sqlalchemy_2_0_style.md) |

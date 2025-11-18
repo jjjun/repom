@@ -8,7 +8,7 @@ repom では、`BaseModel` を通じて自動的に追加されるシステム�
 
 ## システムカラム
 
-### 1. `id` カラム
+### 1. `id` カラム（整数型）
 
 **型**: `Integer` (primary key, autoincrement)
 
@@ -57,6 +57,132 @@ class UserSession(BaseModel, use_id=False):
 - ⚠️ **テストでのモック**: DB に保存しない場合、`id` は `None` のまま
 - ⚠️ **Pydantic バリデーション**: `get_response_schema()` で生成されるスキーマは `id: int` を期待
   - テストで DB に保存しない場合は、手動で `obj.id = 1` のように設定が必要
+
+---
+
+### 1-2. `id` カラム（UUID型）
+
+**型**: `String(36)` (primary key, UUID v4)
+
+**追加条件**: `use_uuid=True`
+
+**仕様**:
+```python
+class BaseModel(DeclarativeBase):
+    def __init_subclass__(cls, use_uuid=_UNSET, ...):
+        if cls.use_uuid:
+            cls.id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+            # __init__ をオーバーライドして UUID を自動生成
+            original_init = cls.__init__
+            def __init__(self, *args, **kwargs):
+                if 'id' not in kwargs:
+                    kwargs['id'] = str(uuid.uuid4())
+                original_init(self, *args, **kwargs)
+            cls.__init__ = __init__
+```
+
+**動作**:
+- Python オブジェクト作成時に自動的に UUID v4 が生成される
+- 36文字（ハイフン付き）の文字列形式（例: `550e8400-e29b-41d4-a716-446655440000`）
+- RFC 4122 準拠の UUID v4（ランダム）
+- カラム名は `id`（整数型と同じ、BaseRepository 互換）
+
+**排他制御**:
+- `use_uuid=True` と `use_id=True` は**同時に指定できません**
+- `use_uuid=True` を指定すると、`use_id` は自動的に `False` になります
+
+```python
+# ❌ エラー
+class InvalidModel(BaseModel, use_id=True, use_uuid=True):
+    __tablename__ = 'invalid'
+    # ValueError: use_id と use_uuid は同時に True にできません
+
+# ✅ 正しい
+class UuidModel(BaseModel, use_uuid=True):
+    __tablename__ = 'uuid_models'
+    # use_id は自動的に False
+```
+
+**使用例**:
+```python
+class User(BaseModel, use_uuid=True):
+    __tablename__ = 'users'
+    
+    name: Mapped[str] = mapped_column(String(100))
+    email: Mapped[str] = mapped_column(String(255))
+
+# UUID が自動生成される
+user = User(name='Alice', email='alice@example.com')
+print(user.id)  # '550e8400-e29b-41d4-a716-446655440000'
+print(len(user.id))  # 36
+
+# DB に保存
+session.add(user)
+session.commit()
+
+# BaseRepository も動作（カラム名が 'id' のため）
+repo = UserRepository(User, session=session)
+retrieved = repo.get_by_id(user.id)
+assert retrieved.name == 'Alice'
+```
+
+**外部キー参照**:
+```python
+class Post(BaseModel, use_uuid=True):
+    __tablename__ = 'posts'
+    
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey('users.id')
+    )
+    title: Mapped[str] = mapped_column(String(200))
+```
+
+**手動で UUID を指定**:
+```python
+import uuid
+
+# 特定の UUID を指定したい場合
+custom_uuid = str(uuid.uuid4())
+user = User(id=custom_uuid, name='Bob', email='bob@example.com')
+print(user.id)  # 指定した UUID
+```
+
+**BaseRepository との互換性**:
+- カラム名が `id` なので、`get_by_id()` などが変更なしで動作
+- UUID は文字列型なので、引数も文字列で渡す
+
+```python
+repo = UserRepository(User, session=session)
+
+# 作成
+user = User(name='Charlie', email='charlie@example.com')
+session.add(user)
+session.commit()
+
+# ID で取得（UUID を文字列で渡す）
+retrieved = repo.get_by_id(user.id)
+
+# 検索
+results = repo.get_by('name', 'Charlie')
+```
+
+**注意点**:
+- ⚠️ **パフォーマンス**: UUID は整数型より若干遅い（通常は問題なし）
+- ⚠️ **インデックスサイズ**: UUID は 36 文字なので、整数型よりインデックスサイズが大きい
+- ⚠️ **ソート順**: UUID はランダムなので、作成順にソートされない（created_at を使用）
+- ✅ **分散システム**: 異なるサーバーで同時に ID を生成しても衝突しない
+- ✅ **セキュリティ**: ID から作成順や件数が推測できない
+
+**使い分けガイド**:
+
+| 状況 | 推奨 |
+|------|------|
+| 単一サーバー、シンプルなアプリ | Integer (use_id=True) |
+| 分散システム、マイクロサービス | UUID (use_uuid=True) |
+| 公開 API の ID を推測されたくない | UUID (use_uuid=True) |
+| パフォーマンス重視 | Integer (use_id=True) |
+| 外部システムとの連携で UUID が必要 | UUID (use_uuid=True) |
 
 ---
 

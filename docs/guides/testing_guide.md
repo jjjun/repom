@@ -22,6 +22,109 @@ repom は **Transaction Rollback パターン** を採用し、高速かつ分�
 
 ---
 
+## repom プロジェクト内でのテスト作成ガイドライン
+
+### ⚠️ 重要：独自の fixture を定義しない
+
+repom プロジェクト内でテストを書く場合、**テストファイル内で独自の `db_engine` や `db_session` fixture を定義してはいけません**。
+
+**❌ 間違い**:
+```python
+# tests/unit_tests/test_my_feature.py
+
+@pytest.fixture(scope='function')
+def db_engine():  # ← conftest.py と衝突
+    engine = create_engine('sqlite:///:memory:')
+    Base.metadata.create_all(bind=engine)
+    yield engine
+    Base.metadata.drop_all(bind=engine)
+
+@pytest.fixture
+def db_session(db_engine):
+    with Session(db_engine) as session:
+        yield session
+
+def test_my_feature(db_session):  # ← 独自の fixture を使ってしまう
+    model = MyModel(name='Test')
+    db_session.add(model)
+    db_session.commit()
+```
+
+**問題点**:
+1. `conftest.py` の `db_test` fixture と衝突
+2. テーブルが作成されていない状態でクエリが実行される
+3. BaseRepository が別のセッションを使うため、データが見えない
+
+**✅ 正しい**:
+```python
+# tests/unit_tests/test_my_feature.py
+
+def test_my_feature(db_test):  # ← conftest.py の db_test を使う
+    model = MyModel(name='Test')
+    db_test.add(model)
+    db_test.commit()
+    
+    assert model.id is not None
+```
+
+### BaseRepository を使うテスト
+
+BaseRepository を使う場合は、**必ず `session` パラメータに `db_test` を渡してください**。
+
+**✅ 正しい**:
+```python
+def test_repository_integration(db_test):
+    # データ作成
+    model = MyModel(name='Test')
+    db_test.add(model)
+    db_test.commit()
+    
+    # Repository を使う（session を渡す）
+    repo = MyRepository(MyModel, session=db_test)
+    retrieved = repo.get_by_id(model.id)
+    
+    assert retrieved is not None
+    assert retrieved.name == 'Test'
+```
+
+**❌ 間違い**:
+```python
+def test_repository_integration(db_test):
+    model = MyModel(name='Test')
+    db_test.add(model)
+    db_test.commit()
+    
+    # ❌ session を渡していない
+    repo = MyRepository(MyModel)
+    retrieved = repo.get_by_id(model.id)
+    # → None が返る（db_test のデータが見えない）
+```
+
+### get_by() の使い方
+
+`BaseRepository.get_by()` は**位置引数形式**を使います：
+
+```python
+# ✅ 正しい
+results = repo.get_by('name', 'Alice')
+
+# ❌ 間違い
+results = repo.get_by(name='Alice')  # TypeError
+```
+
+### トラブルシューティング："no such table" エラー
+
+**症状**: `sqlite3.OperationalError: no such table: xxx`
+
+**原因**: テストファイルで独自の fixture を定義し、`conftest.py` の `db_test` を使っていない
+
+**解決方法**:
+1. テストファイル内の `@pytest.fixture` 定義を削除
+2. テスト関数のパラメータを `db_test` に変更
+3. Repository 作成時に `session=db_test` を渡す
+
+---
+
 ## 基本的な使い方
 
 ### repom プロジェクト内でのテスト
