@@ -130,6 +130,8 @@ def get_repom_config():
 
 repom uses **Transaction Rollback** approach for fast, isolated testing:
 
+**⚠️ Important**: When creating tests, always refer to `docs/guides/testing_guide.md` for detailed guidelines.
+
 **Architecture**:
 - `db_engine` (session scope): Creates DB once per test session
 - `db_test` (function scope): Provides isolated transaction per test

@@ -213,6 +213,8 @@ CONFIG_HOOK=mine_py.config:get_repom_config
 
 ## テスト実行
 
+**⚠️ 重要**: テスト作成時は必ず **[Testing Guide](docs/guides/testing_guide.md)** を参照してください。
+
 ### 基本的なテスト実行
 
 ```bash

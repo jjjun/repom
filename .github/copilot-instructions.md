@@ -16,7 +16,9 @@ This is **repom** - a shared SQLAlchemy foundation package for Python projects.
 
 ### Testing
 
-**Strategy**: Transaction Rollback パターン（9倍高速化を実現）
+**Strategy**: Transaction Rollback パターン（９倍高速化を実現）
+
+**重要**: テスト作成時は必ず `docs/guides/testing_guide.md` を参照してください。
 
 ```python
 # tests/conftest.py で使用
