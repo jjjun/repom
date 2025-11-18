@@ -27,21 +27,21 @@ from repom.db import Base
 class UuidModel(BaseModel, use_uuid=True, use_created_at=True, use_updated_at=True):
     """UUID を主キーとして使用するモデル"""
     __tablename__ = 'uuid_models'
-    
+
     name: Mapped[str] = mapped_column(String(100))
 
 
 class IntIdModel(BaseModel, use_id=True):
     """従来の INTEGER id を使用するモデル"""
     __tablename__ = 'int_id_models'
-    
+
     name: Mapped[str] = mapped_column(String(100))
 
 
 class NoIdModel(BaseModel, use_id=False, use_uuid=False):
     """id を持たないモデル（複合主キー）"""
     __tablename__ = 'no_id_models'
-    
+
     code: Mapped[str] = mapped_column(String(50), primary_key=True)
     name: Mapped[str] = mapped_column(String(100))
 
@@ -49,7 +49,7 @@ class NoIdModel(BaseModel, use_id=False, use_uuid=False):
 class RelatedModel(BaseModel, use_uuid=True):
     """外部キーで UuidModel を参照するモデル"""
     __tablename__ = 'related_models'
-    
+
     uuid_model_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey('uuid_models.id')
@@ -72,7 +72,7 @@ class UuidModelRepository(BaseRepository[UuidModel]):
 def test_uuid_model_creates_uuid_primary_key(db_test):
     """UUID モデルが UUID 主キーを自動生成すること"""
     model = UuidModel(name='Test')
-    
+
     # id が自動生成されていること
     assert hasattr(model, 'id')
     assert isinstance(model.id, str)
@@ -84,7 +84,7 @@ def test_uuid_model_id_is_varchar_36(db_test):
     # テーブル定義を確認
     table = Base.metadata.tables['uuid_models']
     id_column = table.c.id
-    
+
     assert id_column.primary_key
     assert str(id_column.type) == 'VARCHAR(36)'
 
@@ -94,7 +94,7 @@ def test_uuid_model_saves_to_database(db_test):
     model = UuidModel(name='Test')
     db_test.add(model)
     db_test.commit()
-    
+
     # データベースから取得
     retrieved = db_test.query(UuidModel).filter_by(name='Test').first()
     assert retrieved is not None
@@ -107,7 +107,7 @@ def test_uuid_is_unique_for_each_instance():
     model1 = UuidModel(name='Test1')
     model2 = UuidModel(name='Test2')
     model3 = UuidModel(name='Test3')
-    
+
     # 全て異なる UUID
     assert model1.id != model2.id
     assert model2.id != model3.id
@@ -130,7 +130,7 @@ def test_int_id_model_has_integer_id(db_test):
     model = IntIdModel(name='Test')
     db_test.add(model)
     db_test.commit()
-    
+
     assert hasattr(model, 'id')
     assert isinstance(model.id, int)
     assert model.id >= 1
@@ -139,7 +139,7 @@ def test_int_id_model_has_integer_id(db_test):
 def test_no_id_model_has_no_id_column():
     """use_id=False, use_uuid=False の場合、id が作成されないこと"""
     model = NoIdModel(code='TEST', name='Test')
-    
+
     assert not hasattr(model, 'id')
     assert hasattr(model, 'code')
 
@@ -154,12 +154,12 @@ def test_foreign_key_references_uuid_id(db_test):
     parent = UuidModel(name='Parent')
     db_test.add(parent)
     db_test.commit()
-    
+
     # 子モデル作成
     child = RelatedModel(uuid_model_id=parent.id, name='Child')
     db_test.add(child)
     db_test.commit()
-    
+
     # 外部キーが正しく機能していること
     retrieved_child = db_test.query(RelatedModel).filter_by(name='Child').first()
     assert retrieved_child is not None
@@ -177,11 +177,11 @@ def test_repository_get_by_id_works_with_uuid(db_test):
     db_test.add(model)
     db_test.commit()
     uuid_id = model.id
-    
+
     # Repository で取得（セッションを渡す）
     repo = UuidModelRepository(UuidModel, session=db_test)
     retrieved = repo.get_by_id(uuid_id)
-    
+
     assert retrieved is not None
     assert retrieved.id == uuid_id
     assert retrieved.name == 'Test User'
@@ -192,11 +192,11 @@ def test_repository_create_works_with_uuid(db_test):
     model = UuidModel(name='New User')
     db_test.add(model)
     db_test.commit()
-    
+
     # Repository で取得できること
     repo = UuidModelRepository(UuidModel, session=db_test)
     retrieved = repo.get_by_id(model.id)
-    
+
     assert retrieved is not None
     assert retrieved.id == model.id
     assert isinstance(retrieved.id, str)
@@ -210,11 +210,11 @@ def test_repository_get_by_works_with_uuid(db_test):
     model2 = UuidModel(name='Bob')
     db_test.add_all([model1, model2])
     db_test.commit()
-    
+
     # Repository で検索（セッションを渡す、位置引数形式）
     repo = UuidModelRepository(UuidModel, session=db_test)
     results = repo.get_by('name', 'Alice')
-    
+
     assert len(results) == 1
     assert results[0].name == 'Alice'
     assert isinstance(results[0].id, str)
@@ -229,7 +229,7 @@ def test_to_dict_includes_uuid_id(db_test):
     model = UuidModel(name='Test')
     db_test.add(model)
     db_test.commit()
-    
+
     data = model.to_dict()
     assert 'id' in data
     assert data['id'] == model.id
@@ -242,11 +242,11 @@ def test_update_from_dict_protects_uuid_id(db_test):
     db_test.add(model)
     db_test.commit()
     original_id = model.id
-    
+
     # id を変更しようとする
     model.update_from_dict({'id': str(uuid.uuid4()), 'name': 'Updated'})
     db_test.commit()
-    
+
     # id は変更されていないこと
     assert model.id == original_id
     # name は変更されていること
@@ -262,7 +262,7 @@ def test_uuid_model_with_created_at(db_test):
     model = UuidModel(name='Test')
     db_test.add(model)
     db_test.commit()
-    
+
     assert hasattr(model, 'created_at')
     assert model.created_at is not None
 
@@ -272,7 +272,7 @@ def test_uuid_model_with_updated_at(db_test):
     model = UuidModel(name='Test')
     db_test.add(model)
     db_test.commit()
-    
+
     assert hasattr(model, 'updated_at')
     assert model.updated_at is not None
 
@@ -284,12 +284,12 @@ def test_uuid_model_with_updated_at(db_test):
 def test_uuid_format_is_valid():
     """生成される UUID が RFC 4122 準拠のフォーマットであること"""
     model = UuidModel(name='Test')
-    
+
     # UUID フォーマット: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
     # ハイフンを含めて 36 文字
     assert len(model.id) == 36
     assert model.id.count('-') == 4
-    
+
     # uuid モジュールでパース可能
     parsed_uuid = uuid.UUID(model.id)
     assert str(parsed_uuid) == model.id
@@ -299,6 +299,6 @@ def test_uuid_version_is_4():
     """生成される UUID が version 4 (random) であること"""
     model = UuidModel(name='Test')
     parsed_uuid = uuid.UUID(model.id)
-    
+
     # UUID version 4
     assert parsed_uuid.version == 4
