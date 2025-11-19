@@ -53,34 +53,34 @@ class TestGetLogger:
         # repom/logging.py の _logger_initialized をリセット
         import repom.logging
         repom.logging._logger_initialized = False
-        
+
         # logging の状態をリセット
         logging.shutdown()
-        
+
         # repom のルートロガーをリセット
         repom_root_logger = logging.getLogger('repom')
         for handler in repom_root_logger.handlers[:]:
             repom_root_logger.removeHandler(handler)
-        
+
         # config.log_file_path をモック（monkeypatch を使用）
         log_file = tmp_path / "test.log"
         from repom.config import config
         monkeypatch.setattr(config.__class__, 'log_file_path', property(lambda self: log_file))
-        
+
         logger = get_logger('test')
-        
+
         # repom のルートロガーにハンドラーが追加されているか確認
         assert len(repom_root_logger.handlers) == 2  # FileHandler + ConsoleHandler
-        
+
         # ログファイルが作成されているか確認
         logger.debug("Test message")
         assert log_file.exists()
-        
+
         # ログファイルの内容を確認
         content = log_file.read_text(encoding='utf-8')
         assert "Test message" in content
         assert "repom.test" in content
-    
+
     def test_log_file_path_none(self, monkeypatch):
         """
         config.log_file_path が None の場合、ハンドラーは追加されない
@@ -88,24 +88,24 @@ class TestGetLogger:
         # repom/logging.py の _logger_initialized をリセット
         import repom.logging
         repom.logging._logger_initialized = False
-        
+
         # logging の状態をリセット
         logging.shutdown()
-        
+
         # repom のルートロガーをリセット
         repom_root_logger = logging.getLogger('repom')
         for handler in repom_root_logger.handlers[:]:
             repom_root_logger.removeHandler(handler)
-        
+
         # config.log_file_path を None にモック（monkeypatch を使用）
         from repom.config import config
         monkeypatch.setattr(config.__class__, 'log_file_path', property(lambda self: None))
-        
+
         logger = get_logger('test')
-        
+
         # ハンドラーが追加されていないことを確認
         assert len(repom_root_logger.handlers) == 0
-    
+
     def test_logger_initialization_once(self, tmp_path, monkeypatch):
         """
         get_logger() を複数回呼んでも、ハンドラーは1回だけ追加される
@@ -113,31 +113,31 @@ class TestGetLogger:
         # repom/logging.py の _logger_initialized をリセット
         import repom.logging
         repom.logging._logger_initialized = False
-        
+
         # logging の状態をリセット
         logging.shutdown()
-        
+
         # repom のルートロガーをリセット
         repom_root_logger = logging.getLogger('repom')
         for handler in repom_root_logger.handlers[:]:
             repom_root_logger.removeHandler(handler)
-        
+
         # config.log_file_path をモック（monkeypatch を使用）
         log_file = tmp_path / "test.log"
         from repom.config import config
         monkeypatch.setattr(config.__class__, 'log_file_path', property(lambda self: log_file))
-        
+
         # 1回目の呼び出し
         logger1 = get_logger('test1')
         handler_count_1 = len(repom_root_logger.handlers)
-        
+
         # 2回目の呼び出し
         logger2 = get_logger('test2')
         handler_count_2 = len(repom_root_logger.handlers)
-        
+
         # ハンドラー数が変わらないことを確認
         assert handler_count_1 == handler_count_2 == 2  # FileHandler + ConsoleHandler
-    
+
     def test_log_directory_creation(self, tmp_path, monkeypatch):
         """
         ログディレクトリが存在しない場合、自動作成される
@@ -145,26 +145,26 @@ class TestGetLogger:
         # repom/logging.py の _logger_initialized をリセット
         import repom.logging
         repom.logging._logger_initialized = False
-        
+
         # logging の状態をリセット
         logging.shutdown()
-        
+
         # repom のルートロガーをリセット
         repom_root_logger = logging.getLogger('repom')
         for handler in repom_root_logger.handlers[:]:
             repom_root_logger.removeHandler(handler)
-        
+
         # 存在しないディレクトリを指定
         log_file = tmp_path / "logs" / "subdir" / "test.log"
         assert not log_file.parent.exists()
-        
+
         # config.log_file_path をモック（monkeypatch を使用）
         from repom.config import config
         monkeypatch.setattr(config.__class__, 'log_file_path', property(lambda self: log_file))
-        
+
         logger = get_logger('test')
         logger.debug("Test message")
-        
+
         # ログディレクトリが作成されたことを確認
         assert log_file.parent.exists()
         assert log_file.exists()
