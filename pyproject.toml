@@ -27,6 +27,7 @@ build-backend = "poetry.core.masonry.api"
 db_create = "repom.scripts.db_create:main"
 db_remove = "repom.scripts.db_delete:main"
 db_backup = "repom.scripts.db_backup:main"
+db_sync_master = "repom.scripts.db_sync_master:main"
 
 [tool.pytest.ini_options]
 addopts = [

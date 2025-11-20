@@ -30,6 +30,8 @@ class MineDbConfig(Config):
     _db_url: Optional[str] = field(default=None, init=False, repr=False)
     # バックアップ先 - デフォルトで data_path/backups に入る
     _db_backup_path: Optional[str] = field(default=None, init=False, repr=False)
+    # マスターデータパス - デフォルトで root_path/data_master
+    _master_data_path: Optional[str] = field(default=None, init=False, repr=False)
 
     def init(self):
         """初期化後の処理 - 必要なディレクトリを作成"""
@@ -37,7 +39,8 @@ class MineDbConfig(Config):
 
         if self.auto_create_dirs:
             self._ensure_path_exists([
-                self.db_backup_path
+                self.db_backup_path,
+                self.master_data_path
             ])
 
     @property
@@ -135,6 +138,19 @@ class MineDbConfig(Config):
     @model_import_strict.setter
     def model_import_strict(self, value: bool):
         self._model_import_strict = value
+
+    @property
+    def master_data_path(self) -> Optional[str]:
+        """マスターデータパス - デフォルトで root_path/data_master"""
+        if self._master_data_path is not None:
+            return self._master_data_path
+        if self.root_path:
+            return str(Path(self.root_path) / 'data_master')
+        return None
+
+    @master_data_path.setter
+    def master_data_path(self, value: Optional[str]):
+        self._master_data_path = value
 
 
 config = MineDbConfig()

@@ -27,6 +27,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------|--------|-----------|---------||
+| #013 | マスターデータ同期コマンドの追加 | 中 | 🟡 提案中 | [active/013_master_data_sync_command.md](active/013_master_data_sync_command.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください。
