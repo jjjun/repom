@@ -201,14 +201,14 @@ def load_master_data_files(directory):
 
 ## 実装チェックリスト
 
-- [x] `repom/config.py` に `master_data_dir` 追加
+- [x] `repom/config.py` に `master_data_path` 追加
 - [x] `repom/scripts/db_sync_master.py` 作成
 - [x] `pyproject.toml` にコマンド登録
 - [x] `data_master/001_sample.py` サンプル作成
 - [x] `tests/unit_tests/test_db_sync_master.py` テスト作成
 - [x] 全テスト通過確認（12/12 テスト成功）
-- [ ] `docs/guides/master_data_sync_guide.md` ドキュメント作成（後日）
-- [ ] README.md 更新（コマンド追加）（後日）
+- [x] `docs/guides/master_data_sync_guide.md` ドキュメント作成
+- [x] README.md 更新（コマンド追加）
 
 ---
 

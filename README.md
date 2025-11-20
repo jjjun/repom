@@ -26,6 +26,12 @@
   - セッションのライフサイクル管理
   - フレームワーク非依存な設計
 
+- **[マスターデータ同期ガイド](docs/guides/master_data_sync_guide.md)**
+  - `db_sync_master` コマンドの使い方
+  - マスターデータファイルの作成方法
+  - Upsert 操作とトランザクション管理
+  - ベストプラクティスとトラブルシューティング
+
 - **[ロギングガイド](docs/guides/logging_guide.md)**
   - repom のロギング機能（ハイブリッドアプローチ）
   - CLI ツール実行時の自動設定
@@ -158,14 +164,14 @@ def get_task(task_id: int):
 # データベース作成
 poetry run db_create
 
-# マスターデータベース作成
-poetry run db_create_master
-
 # バックアップ作成
 poetry run db_backup
 
 # データベース削除
 poetry run db_delete
+
+# マスターデータ同期（Upsert）
+poetry run db_sync_master
 ```
 
 **データベースファイルの場所:**
