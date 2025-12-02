@@ -376,7 +376,7 @@ class UserModel(BaseModelAuto):
             'in_response': True
         }
     )
-    
+
     # Response にのみ含める（計算フィールド）
     @BaseModel.response_field(
         full_name=str,
@@ -390,6 +390,38 @@ class UserModel(BaseModelAuto):
         })
         return data
 ```
+
+### SQLAlchemy Enum の Literal 変換
+
+`Enum` 型のカラムは自動的に `typing.Literal` に展開され、Swagger UI でも選択肢付きで表示されます（Create/Update/Response すべてのスキーマで有効）。
+
+```python
+from enum import Enum as PyEnum
+from sqlalchemy import Enum as SQLAEnum
+
+class PublishStatus(str, PyEnum):
+    DRAFT = "draft"
+    PUBLIC = "public"
+
+class ArticleModel(BaseModelAuto):
+    __tablename__ = "articles"
+
+    status: Mapped[PublishStatus] = mapped_column(
+        SQLAEnum(PublishStatus),
+        nullable=False,
+        info={'description': '公開状態'}
+    )
+
+# 生成されるスキーマ例（response）
+ArticleResponse = ArticleModel.get_response_schema()
+assert ArticleResponse.model_fields['status'].annotation == Literal["draft", "public"]
+```
+
+**効果**
+
+- API ドキュメントで許可される値が明示される
+- Swagger UI でドロップダウンが表示され、入力ミスを防止
+- Enum 定義を単一箇所に集約しつつ、Pydantic のバリデーションを活用
 
 ---
 
