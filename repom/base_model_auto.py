@@ -26,11 +26,13 @@
         )
 """
 
-from typing import Type, Any, Optional, Dict, List, Callable, Set
+from enum import Enum as PyEnum
+from typing import Type, Any, Optional, Dict, List, Callable, Set, Literal
 from weakref import WeakKeyDictionary
 from pydantic import BaseModel as PydanticBaseModel, create_model, Field
 from repom.base_model import BaseModel
 from repom.db import inspect
+from sqlalchemy import Enum as SQLAlchemyEnum
 import re
 import logging
 
@@ -377,6 +379,12 @@ class BaseModelAuto(BaseModel):
     @classmethod
     def _get_python_type(cls, col) -> Type:
         """SQLAlchemy Column から Python 型を取得"""
+        if isinstance(col.type, SQLAlchemyEnum):
+            enum_class = getattr(col.type, 'enum_class', None)
+            if enum_class and issubclass(enum_class, PyEnum):
+                enum_values = tuple(member.value for member in enum_class)
+                if enum_values:
+                    return Literal.__getitem__(enum_values)
         try:
             python_type = col.type.python_type
         except (NotImplementedError, AttributeError):
