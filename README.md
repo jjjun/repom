@@ -20,6 +20,12 @@
   - `as_query_depends()` メカニズム
   - `auto_import_models` ユーティリティ
 
+- **[論理削除（Soft Delete）ガイド](docs/guides/soft_delete_guide.md)** ⭐ NEW
+  - SoftDeletableMixin による論理削除機能
+  - 削除済みレコードの自動フィルタリング
+  - 復元・物理削除の管理
+  - バッチ処理での活用
+
 - **[セッション管理ガイド](docs/guides/session_management_guide.md)**
   - トランザクション管理（`get_db_transaction()`, `transaction()`）
   - FastAPI、Flask、CLI での使用方法
@@ -153,6 +159,38 @@ def get_task(task_id: int):
 ```
 
 **詳細**: [BaseModelAuto & スキーマ自動生成ガイド](docs/guides/base_model_auto_guide.md)
+
+### 論理削除（Soft Delete）
+
+```python
+from repom.base_model_auto import BaseModelAuto, SoftDeletableMixin
+from repom.base_repository import BaseRepository
+
+# モデルに Mixin を追加
+class Article(BaseModelAuto, SoftDeletableMixin):
+    __tablename__ = "articles"
+    title: Mapped[str] = mapped_column(String(200))
+
+# Repository で論理削除
+repo = BaseRepository(Article)
+
+# 論理削除（deleted_at に日時を記録）
+repo.soft_delete(article_id)
+
+# 復元（deleted_at を NULL に戻す）
+repo.restore(article_id)
+
+# 物理削除（完全削除）
+repo.permanent_delete(article_id)
+
+# 削除済みを除外して検索（デフォルト）
+active_articles = repo.find()
+
+# 削除済みも含めて検索
+all_articles = repo.find(include_deleted=True)
+```
+
+**詳細**: [論理削除（Soft Delete）ガイド](docs/guides/soft_delete_guide.md)
 
 ---
 

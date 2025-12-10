@@ -37,6 +37,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------||
+| #014 | repom への論理削除（Soft Delete）機能追加 | 2025-12-10 | SoftDeletableMixin、BaseRepository拡張、22テスト全パス | [completed/014_soft_delete_feature.md](completed/014_soft_delete_feature.md) |
 | #013 | マスターデータ同期コマンドの追加 | 2025-11-19 | db_sync_master コマンド、Upsert 操作、12テスト全パス | [completed/013_master_data_sync_command.md](completed/013_master_data_sync_command.md) |
 | #012 | ロギング機能の追加 | 2025-01-XX | ハイブリッドアプローチロギング、CLI/アプリ対応、6テスト全パス | [completed/012_add_logging_support.md](completed/012_add_logging_support.md) |
 | #011 | セッション管理ユーティリティの追加 | 2025-11-18 | トランザクション管理機能、FastAPI/CLI対応、13テスト全パス | [completed/011_session_management_utilities.md](completed/011_session_management_utilities.md) |
@@ -134,4 +135,8 @@ Issue の進捗があった場合は、該当ファイルを更新し、この R
 
 ---
 
-最終更新: 2025-11-16
+**次のステップ**: Phase 2（mine-py での適用）は別途実施
+
+---
+
+最終更新: 2025-12-10
