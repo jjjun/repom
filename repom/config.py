@@ -152,6 +152,48 @@ class MineDbConfig(Config):
     def master_data_path(self, value: Optional[str]):
         self._master_data_path = value
 
+    @property
+    def engine_kwargs(self) -> dict:
+        """create_engine に渡す追加パラメータ
+        
+        SQLite/PostgreSQL/MySQL などすべてのデータベースで有効なパラメータを設定。
+        外部プロジェクトでオーバーライド可能。
+        
+        接続プール設定:
+        - pool_size: 接続プールに保持する接続数（デフォルト: 10）
+        - max_overflow: pool_size を超えて作成可能な追加接続数（デフォルト: 20）
+        - pool_timeout: 接続待機タイムアウト秒数（デフォルト: 30）
+        - pool_recycle: 接続の再利用時間秒数（デフォルト: 3600）
+        - pool_pre_ping: 接続前のpingチェック（デフォルト: True）
+        
+        Returns:
+            dict: create_engine に渡すキーワード引数
+            
+        使用例（外部プロジェクトでオーバーライド）:
+            class MinePyConfig(MineDbConfig):
+                @property
+                def engine_kwargs(self) -> dict:
+                    base = super().engine_kwargs
+                    base.update({
+                        'pool_size': 20,      # 接続数を増やす
+                        'max_overflow': 40,
+                    })
+                    return base
+        """
+        kwargs = {
+            'pool_size': 10,          # 接続プール数
+            'max_overflow': 20,       # 最大オーバーフロー接続数
+            'pool_timeout': 30,       # 接続待機タイムアウト（秒）
+            'pool_recycle': 3600,     # 接続の再利用時間（秒）
+            'pool_pre_ping': True,    # 接続前のpingチェック
+        }
+        
+        # SQLite 固有の設定
+        if self.db_url and self.db_url.startswith('sqlite'):
+            kwargs['connect_args'] = {'check_same_thread': False}
+        
+        return kwargs
+
 
 config = MineDbConfig()
 

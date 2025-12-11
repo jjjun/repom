@@ -11,7 +11,7 @@ from sqlalchemy.orm import declarative_base
 
 from repom.config import config
 
-engine = create_engine(config.db_url)
+engine = create_engine(config.db_url, **config.engine_kwargs)
 
 inspector = inspect(engine)
 

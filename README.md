@@ -237,6 +237,40 @@ poetry run alembic history
 
 ## 環境変数
 
+### データベース接続設定
+
+デフォルトで以下の接続プール設定が適用されます：
+
+```python
+# repom/config.py
+@property
+def engine_kwargs(self) -> dict:
+    return {
+        'pool_size': 10,           # 常時維持する接続数
+        'max_overflow': 20,        # pool_sizeを超えて作成可能な追加接続数
+        'pool_timeout': 30,        # 接続待ちタイムアウト（秒）
+        'pool_recycle': 3600,      # 接続の再利用時間（秒）
+        'pool_pre_ping': True,     # 使用前に接続をテスト
+        'connect_args': {'check_same_thread': False}  # SQLite用
+    }
+```
+
+**カスタマイズ方法:**
+
+```python
+# mine_py/config.py
+from repom.config import MineDbConfig
+
+class MinePyConfig(MineDbConfig):
+    @property
+    def engine_kwargs(self) -> dict:
+        base_kwargs = super().engine_kwargs
+        # 大量の並列処理が必要な場合
+        base_kwargs['pool_size'] = 20
+        base_kwargs['max_overflow'] = 40
+        return base_kwargs
+```
+
 ### `EXEC_ENV`
 
 実行環境を指定します。

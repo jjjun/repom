@@ -409,6 +409,49 @@ class BaseRepository(Generic[T]):
         filters = self._build_filters(params) if params else []
         return self.count(filters=filters)
 
+    def find_by_ids(
+        self, 
+        ids: List[int], 
+        include_deleted: bool = False,
+        **kwargs
+    ) -> List[T]:
+        """指定された ID のリストでレコードを一括取得
+        
+        N+1 問題を解決するための一括取得メソッド。
+        複数のレコードを1回のクエリで取得します。
+        
+        Args:
+            ids: 取得するレコードのIDリスト
+            include_deleted: 削除済みも含めるか（デフォルト: False）
+            **kwargs: order_by などのオプション
+            
+        Returns:
+            List[T]: 見つかったレコードのリスト（順序は保証されない）
+            
+        使用例:
+            # N+1問題を解決
+            asset_ids = [link.asset_item_id for link in item.asset_links]
+            assets = asset_repo.find_by_ids(asset_ids)
+            
+            # IDでマッピング作成
+            asset_map = {a.id: a for a in assets}
+            for link in item.asset_links:
+                asset = asset_map.get(link.asset_item_id)
+        """
+        if not ids:
+            return []
+        
+        # ID フィルタ
+        filters = [self.model.id.in_(ids)]
+        
+        # 論理削除フィルタ
+        if self._has_soft_delete() and not include_deleted:
+            filters.append(self.model.deleted_at.is_(None))
+        
+        query = select(self.model).where(and_(*filters))
+        query = self.set_find_option(query, **kwargs)
+        return self.session.execute(query).scalars().all()
+
     # ========================================
     # 論理削除関連メソッド
     # ========================================

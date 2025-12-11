@@ -110,6 +110,57 @@ repo.remove(task)
 
 ## 検索とフィルタリング
 
+### find_by_ids() メソッド - 効率的な一括取得
+
+**N+1 問題の解決に最適**
+
+```python
+# N+1 問題を避ける（❌ 悪い例）
+for task_id in task_ids:
+    task = repo.get_by_id(task_id)  # N回のクエリ！
+    # ... 処理
+
+# 一括取得で解決（✅ 良い例）
+tasks = repo.find_by_ids(task_ids)  # 1回のクエリ
+task_dict = {task.id: task for task in tasks}
+for task_id in task_ids:
+    task = task_dict.get(task_id)
+    # ... 処理
+```
+
+**基本的な使い方**
+
+```python
+# 複数IDで一括取得
+ids = [1, 2, 3]
+tasks = repo.find_by_ids(ids)  # List[Task]
+
+# 空リスト
+tasks = repo.find_by_ids([])  # []
+
+# 存在しないIDは無視される
+tasks = repo.find_by_ids([1, 999, 3])  # ID 999は取得されない
+
+# 重複IDは自動で除外
+tasks = repo.find_by_ids([1, 1, 2])  # IDが1のレコードは1つだけ
+```
+
+**ソフトデリート対応**
+
+```python
+# 論理削除されたレコードも含める
+tasks = repo.find_by_ids([1, 2, 3], include_deleted=True)
+
+# デフォルトは論理削除を除外
+tasks = repo.find_by_ids([1, 2, 3])  # include_deleted=False
+```
+
+**注意事項**
+
+- 返却順序は保証されません（必要な場合はアプリケーション側でソート）
+- 大量のIDを指定する場合、データベースの制限に注意
+- connection poolの設定は `repom.config.MineDbConfig.engine_kwargs` で調整可能
+
 ### find() メソッド
 
 ```python
