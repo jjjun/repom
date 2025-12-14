@@ -1,7 +1,7 @@
 import os
 import pytest
 import logging
-from repom.testing import create_test_fixtures
+from repom.testing import create_test_fixtures, create_async_test_fixtures
 
 
 os.environ['EXEC_ENV'] = 'test'
@@ -25,4 +25,8 @@ def pytest_configure(config):
 
 
 # repom/testing.py のヘルパー関数を使用してフィクスチャを作成
+# 同期版（既存）
 db_engine, db_test = create_test_fixtures()
+
+# async 版（新規）
+async_db_engine, async_db_test = create_async_test_fixtures()

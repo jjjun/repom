@@ -342,12 +342,66 @@ repom は **Transaction Rollback** 方式を採用し、高速かつ分離され
 
 ### テストフィクスチャ
 
+#### 同期テスト（標準）
+
 ```python
 # tests/conftest.py
 from repom.testing import create_test_fixtures
 
 db_engine, db_test = create_test_fixtures()
+
+# テストでの使用
+def test_create_user(db_test):
+    user = User(name="test")
+    db_test.add(user)
+    db_test.flush()
 ```
+
+#### 非同期テスト（FastAPI Users など）
+
+FastAPI Users のような async ライブラリのテストには `async_db_test` を使用：
+
+```python
+# tests/conftest.py
+from repom.testing import create_async_test_fixtures
+
+async_db_engine, async_db_test = create_async_test_fixtures()
+
+# テストでの使用
+@pytest.mark.asyncio
+async def test_create_user_async(async_db_test):
+    from sqlalchemy import select
+    
+    user = User(name="test")
+    async_db_test.add(user)
+    await async_db_test.flush()
+    
+    stmt = select(User).where(User.name == "test")
+    result = await async_db_test.execute(stmt)
+    found = result.scalar_one_or_none()
+    
+    assert found is not None
+```
+
+**async サポートの依存関係**:
+
+```bash
+# SQLite async サポート
+poetry add repom[async]
+
+# PostgreSQL async サポート
+poetry add repom[postgres-async]
+
+# 両方サポート
+poetry add repom[async-all]
+
+# pytest-asyncio も必要
+poetry add --group dev pytest-asyncio
+```
+
+**注意事項**:
+- async では lazy loading が使えません（eager loading を使用）
+- Transaction Rollback パターンは async でも同様に動作します
 
 - **`db_engine`**: session スコープ（全テストで1回だけDB作成）
 - **`db_test`**: function スコープ（各テストで独立したトランザクション）

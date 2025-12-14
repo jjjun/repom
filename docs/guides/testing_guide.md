@@ -638,13 +638,174 @@ def pytest_configure(config):
 
 ---
 
+## 🔄 非同期テスト（Async Support）
+
+FastAPI Users など async ライブラリのテストには `create_async_test_fixtures()` を使用します。
+
+### 基本的な使い方
+
+```python
+# tests/conftest.py
+from repom.testing import create_test_fixtures, create_async_test_fixtures
+
+# 同期版（既存）
+db_engine, db_test = create_test_fixtures()
+
+# async 版（新規）
+async_db_engine, async_db_test = create_async_test_fixtures()
+```
+
+### async テストの作成
+
+```python
+import pytest
+from sqlalchemy import select
+
+@pytest.mark.asyncio
+async def test_create_user(async_db_test):
+    """async Session を使用したテスト"""
+    from your_project.models import User
+    
+    # ユーザー作成
+    user = User(email="test@example.com", hashed_password="hashed")
+    async_db_test.add(user)
+    await async_db_test.flush()
+    
+    # 取得
+    stmt = select(User).where(User.email == "test@example.com")
+    result = await async_db_test.execute(stmt)
+    found_user = result.scalar_one_or_none()
+    
+    assert found_user is not None
+    assert found_user.email == "test@example.com"
+```
+
+### 依存関係のインストール
+
+```bash
+# SQLite async サポート
+poetry add repom[async]
+
+# PostgreSQL async サポート
+poetry add repom[postgres-async]
+
+# 両方サポート
+poetry add repom[async-all]
+
+# pytest-asyncio も必要
+poetry add --group dev pytest-asyncio
+```
+
+### FastAPI Users との統合例
+
+```python
+@pytest.mark.asyncio
+async def test_fastapi_users_registration(async_db_test):
+    """FastAPI Users を使用した認証テスト"""
+    from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+    from your_project.models import User
+    
+    # FastAPI Users の UserDatabase を作成
+    user_db = SQLAlchemyUserDatabase(async_db_test, User)
+    
+    # ユーザー登録
+    user_dict = {
+        "email": "newuser@example.com",
+        "hashed_password": "hashed_password",
+        "is_active": True,
+        "is_superuser": False,
+        "is_verified": False,
+    }
+    user = await user_db.create(user_dict)
+    
+    # 確認
+    assert user.email == "newuser@example.com"
+    
+    # メールで検索
+    found = await user_db.get_by_email("newuser@example.com")
+    assert found is not None
+```
+
+### Transaction Rollback の動作
+
+async テストでも同じ Transaction Rollback パターンが動作します：
+
+```python
+@pytest.mark.asyncio
+async def test_first_test(async_db_test):
+    """最初のテストでデータを追加"""
+    user = User(email="test1@example.com")
+    async_db_test.add(user)
+    await async_db_test.flush()
+    # テスト終了時に自動ロールバック
+
+@pytest.mark.asyncio
+async def test_second_test(async_db_test):
+    """2番目のテストでは前のデータが残っていない"""
+    from sqlalchemy import select
+    
+    stmt = select(User).where(User.email == "test1@example.com")
+    result = await async_db_test.execute(stmt)
+    found = result.scalar_one_or_none()
+    
+    assert found is None  # ロールバックされている
+```
+
+### 重要な注意事項
+
+#### 1. Lazy Loading は使えない
+
+```python
+# ❌ 動作しない
+user = await async_db_test.get(User, 1)
+posts = user.posts  # AttributeError
+
+# ✅ Eager Loading を使用
+from sqlalchemy.orm import selectinload
+
+stmt = select(User).options(selectinload(User.posts)).where(User.id == 1)
+result = await async_db_test.execute(stmt)
+user = result.scalar_one()
+posts = user.posts  # OK
+```
+
+#### 2. await を忘れずに
+
+```python
+# ❌ await を忘れる
+result = async_db_test.execute(stmt)  # TypeError
+
+# ✅ await を付ける
+result = await async_db_test.execute(stmt)
+```
+
+#### 3. URI 変換が自動で行われる
+
+```python
+# 同期 URI
+sqlite:///data/db.test.sqlite3
+
+# async URI（自動変換される）
+sqlite+aiosqlite:///data/db.test.sqlite3
+```
+
+### パフォーマンス
+
+async テストでも高速性は維持されます：
+
+- **DB作成**: session scope で1回のみ
+- **各テスト**: Transaction Rollback のみ
+- **速度**: 同期テストと同等の高速性
+
+---
+
 ## 関連ドキュメント
 
-- **repom/testing.py**: `create_test_fixtures()` の実装
+- **repom/testing.py**: `create_test_fixtures()` / `create_async_test_fixtures()` の実装
 - **docs/guides/auto_import_models_guide.md**: モデル自動インポートの詳細
 - **README.md**: テスト戦略セクション
 - **AGENTS.md**: Testing Framework セクション
 
 ---
 
-**最終更新**: 2025-11-16
+**最終更新**: 2025-12-14

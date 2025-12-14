@@ -14,10 +14,21 @@ python-dotenv = "^1.0.1"
 inflect = "^7.5.0"
 pydantic = "^2.11.3"
 
+# Async support (optional)
+aiosqlite = { version = "^0.20.0", optional = true }
+asyncpg = { version = "^0.30.0", optional = true }
+
+[tool.poetry.extras]
+async = ["aiosqlite"]
+postgres-async = ["asyncpg"]
+async-all = ["aiosqlite", "asyncpg"]
+
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.4"
 pytest-sqlalchemy = "^0.2.1"
 pytest-benchmark = "^5.1.0"
+pytest-asyncio = "^0.24.0"
+aiosqlite = "^0.20.0"
 
 [build-system]
 requires = ["poetry-core"]
