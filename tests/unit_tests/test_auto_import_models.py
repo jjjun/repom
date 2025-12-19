@@ -147,11 +147,11 @@ class TestAutoImportModelsFromList:
 class TestMineDbConfigProperties:
     """Test MineDbConfig properties for model import configuration"""
 
-    def test_model_locations_default_is_none(self):
-        """model_locations のデフォルトは None"""
+    def test_model_locations_default_is_empty_list(self):
+        """model_locations のデフォルトは空リスト"""
         from repom.config import MineDbConfig
         test_config = MineDbConfig()
-        assert test_config.model_locations is None
+        assert test_config.model_locations == []
 
     def test_model_locations_setter_and_getter(self):
         """model_locations の setter/getter が正常に動作"""
@@ -161,11 +161,11 @@ class TestMineDbConfigProperties:
         test_config.model_locations = ['myapp.models', 'shared.models']
         assert test_config.model_locations == ['myapp.models', 'shared.models']
 
-    def test_model_excluded_dirs_default_is_none(self):
-        """model_excluded_dirs のデフォルトは None"""
+    def test_model_excluded_dirs_default_is_empty_set(self):
+        """model_excluded_dirs のデフォルトは空セット"""
         from repom.config import MineDbConfig
         test_config = MineDbConfig()
-        assert test_config.model_excluded_dirs is None
+        assert test_config.model_excluded_dirs == set()
 
     def test_model_excluded_dirs_setter_and_getter(self):
         """model_excluded_dirs の setter/getter が正常に動作"""

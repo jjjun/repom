@@ -17,8 +17,8 @@ class MineDbConfig(Config):
     package_name: str = field(default="repom", init=False)
 
     # モデル自動インポート設定
-    _model_locations: Optional[List[str]] = field(default=None, init=False, repr=False)
-    _model_excluded_dirs: Optional[Set[str]] = field(default=None, init=False, repr=False)
+    _model_locations: List[str] = field(default_factory=list, init=False, repr=False)
+    _model_excluded_dirs: Set[str] = field(default_factory=set, init=False, repr=False)
     _allowed_package_prefixes: Set[str] = field(default_factory=lambda: {'repom.'}, init=False, repr=False)
     _model_import_strict: bool = field(default=False, init=False, repr=False)
 
@@ -104,21 +104,21 @@ class MineDbConfig(Config):
         self._db_backup_path = value
 
     @property
-    def model_locations(self) -> Optional[List[str]]:
+    def model_locations(self) -> List[str]:
         """モデルをインポートするパッケージ名のリスト"""
         return self._model_locations
 
     @model_locations.setter
-    def model_locations(self, value: Optional[List[str]]):
+    def model_locations(self, value: List[str]):
         self._model_locations = value
 
     @property
-    def model_excluded_dirs(self) -> Optional[Set[str]]:
+    def model_excluded_dirs(self) -> Set[str]:
         """モデル検索時に除外するディレクトリ名のセット"""
         return self._model_excluded_dirs
 
     @model_excluded_dirs.setter
-    def model_excluded_dirs(self, value: Optional[Set[str]]):
+    def model_excluded_dirs(self, value: Set[str]):
         self._model_excluded_dirs = value
 
     @property
