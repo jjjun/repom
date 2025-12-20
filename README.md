@@ -32,6 +32,12 @@
   - セッションのライフサイクル管理
   - フレームワーク非依存な設計
 
+- **[非同期セッション（AsyncSession）サポート](docs/guides/async_session_guide.md)** ⭐ NEW
+  - FastAPI Users 統合のための AsyncSession サポート
+  - 非同期データベース操作（`get_async_session()`, `get_async_db_session()`）
+  - トランザクション自動管理とロールバック
+  - テストフィクスチャによる高速テスト
+
 - **[マスターデータ同期ガイド](docs/guides/master_data_sync_guide.md)**
   - `db_sync_master` コマンドの使い方
   - マスターデータファイルの作成方法

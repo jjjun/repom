@@ -130,10 +130,10 @@ class TestGetDbTransaction:
 
                 # 意図的に例外を発生させる
                 raise ValueError("Test exception")
-            except Exception:
+            except Exception as e:
                 # ジェネレータのクリーンアップを実行
                 try:
-                    gen.throw(ValueError, "Test exception", None)
+                    gen.throw(e)
                 except (ValueError, StopIteration):
                     pass
                 raise

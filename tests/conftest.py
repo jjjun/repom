@@ -23,6 +23,11 @@ def pytest_configure(config):
         # 通常のテスト実行時は WARNING レベル以上のみ
         logging.getLogger('repom').setLevel(logging.WARNING)
 
+    # 外部ライブラリの詳細ログを抑制（常に WARNING 以上）
+    logging.getLogger('aiosqlite').setLevel(logging.WARNING)
+    logging.getLogger('asyncio').setLevel(logging.WARNING)
+    logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
+
 
 # repom/testing.py のヘルパー関数を使用してフィクスチャを作成
 # 同期版（既存）
