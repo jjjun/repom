@@ -1,10 +1,14 @@
 from repom.db import engine, Base
 from repom.utility import load_models
+from repom.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def main():
-    load_models()
+    load_models(context="db_create")
     Base.metadata.create_all(bind=engine)
+    logger.info(f"Database created: {engine.url}")
 
 
 if __name__ == "__main__":

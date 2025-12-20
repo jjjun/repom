@@ -242,15 +242,18 @@ def auto_import_models_from_list(
                 print(f"Warning: Failed to import models from {package_name}: {e}")
 
 
-def load_models() -> None:
+def load_models(context: Optional[str] = None) -> None:
     """Import all application models so SQLAlchemy can discover metadata.
 
     This function imports models based on config.model_locations setting.
     If model_locations is not set, it falls back to importing repom.models.
 
+    Args:
+        context: Execution context for logging (e.g., "db_create", "db_delete", "alembic_migration")
+
     Usage:
         from repom.utility import load_models
-        load_models()  # Import all configured models
+        load_models(context="db_create")  # Import with context info
 
     Note:
         This function is typically called by:
@@ -259,6 +262,12 @@ def load_models() -> None:
         - Test fixtures (tests/conftest.py)
     """
     from repom.config import config
+    from repom.logging import get_logger
+
+    logger = get_logger(__name__)
+    context_prefix = f"[{context}] " if context else ""
+
+    logger.info(f"{context_prefix}Starting model loading...")
 
     if config.model_locations:
         auto_import_models_from_list(
@@ -272,3 +281,12 @@ def load_models() -> None:
         # Importing the models package has the side-effect of registering every
         # SQLAlchemy model defined by the application.
         from repom import models  # noqa: F401  # pylint: disable=unused-import
+
+    # Log loaded models
+    from repom.base_model import Base
+    try:
+        # Get table names from metadata (most reliable method)
+        table_names = sorted(Base.metadata.tables.keys())
+        logger.info(f"{context_prefix}Loaded {len(table_names)} models: {', '.join(table_names)}")
+    except Exception as e:
+        logger.warning(f"{context_prefix}Could not retrieve model list: {e}")
