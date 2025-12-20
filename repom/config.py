@@ -167,10 +167,3 @@ config.root_path = str(Path(__file__).parent.parent)
 config = get_config_from_hook(config)
 
 config.init()
-
-
-# ========================================
-# Backward Compatibility
-# ========================================
-# Alias for backward compatibility with external projects
-MineDbConfig = RepomConfig
