@@ -1,4 +1,4 @@
-"""Runtime configuration helpers for :mod:`mine_db`."""
+"""Runtime configuration helpers for :mod:`repom`."""
 
 from __future__ import annotations
 from pathlib import Path
@@ -13,14 +13,14 @@ from dataclasses import dataclass, field
 
 
 @dataclass
-class MineDbConfig(Config):
+class RepomConfig(Config):
     package_name: str = field(default="repom", init=False)
 
     # モデル自動インポート設定
-    _model_locations: List[str] = field(default_factory=list, init=False, repr=False)
-    _model_excluded_dirs: Set[str] = field(default_factory=set, init=False, repr=False)
-    _allowed_package_prefixes: Set[str] = field(default_factory=lambda: {'repom.'}, init=False, repr=False)
-    _model_import_strict: bool = field(default=False, init=False, repr=False)
+    model_locations: List[str] = field(default_factory=list, init=False, repr=False)
+    model_excluded_dirs: Set[str] = field(default_factory=set, init=False, repr=False)
+    allowed_package_prefixes: Set[str] = field(default_factory=lambda: {'repom.'}, init=False, repr=False)
+    model_import_strict: bool = field(default=False, init=False, repr=False)
 
     # DBの格納ディレクトリ (デフォルトで data_path に入る)
     _db_path: Optional[str] = field(default=None, init=False, repr=False)
@@ -104,42 +104,6 @@ class MineDbConfig(Config):
         self._db_backup_path = value
 
     @property
-    def model_locations(self) -> List[str]:
-        """モデルをインポートするパッケージ名のリスト"""
-        return self._model_locations
-
-    @model_locations.setter
-    def model_locations(self, value: List[str]):
-        self._model_locations = value
-
-    @property
-    def model_excluded_dirs(self) -> Set[str]:
-        """モデル検索時に除外するディレクトリ名のセット"""
-        return self._model_excluded_dirs
-
-    @model_excluded_dirs.setter
-    def model_excluded_dirs(self, value: Set[str]):
-        self._model_excluded_dirs = value
-
-    @property
-    def allowed_package_prefixes(self) -> Set[str]:
-        """インポートを許可するパッケージのプレフィックスのセット（セキュリティ対策）"""
-        return self._allowed_package_prefixes
-
-    @allowed_package_prefixes.setter
-    def allowed_package_prefixes(self, value: Set[str]):
-        self._allowed_package_prefixes = value
-
-    @property
-    def model_import_strict(self) -> bool:
-        """モデルインポート失敗時に例外を送出するか（デフォルト: False = 警告のみ）"""
-        return self._model_import_strict
-
-    @model_import_strict.setter
-    def model_import_strict(self, value: bool):
-        self._model_import_strict = value
-
-    @property
     def master_data_path(self) -> Optional[str]:
         """マスターデータパス - デフォルトで root_path/data_master"""
         if self._master_data_path is not None:
@@ -170,7 +134,7 @@ class MineDbConfig(Config):
             dict: create_engine に渡すキーワード引数
 
         使用例（外部プロジェクトでオーバーライド）:
-            class MinePyConfig(MineDbConfig):
+            class MinePyConfig(RepomConfig):
                 @property
                 def engine_kwargs(self) -> dict:
                     base = super().engine_kwargs
@@ -195,7 +159,7 @@ class MineDbConfig(Config):
         return kwargs
 
 
-config = MineDbConfig()
+config = RepomConfig()
 
 config.root_path = str(Path(__file__).parent.parent)
 
@@ -203,3 +167,10 @@ config.root_path = str(Path(__file__).parent.parent)
 config = get_config_from_hook(config)
 
 config.init()
+
+
+# ========================================
+# Backward Compatibility
+# ========================================
+# Alias for backward compatibility with external projects
+MineDbConfig = RepomConfig

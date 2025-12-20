@@ -1,7 +1,7 @@
 """Tests for :mod:`repom.config`."""
 
 from __future__ import annotations
-from repom.config import MineDbConfig
+from repom.config import RepomConfig
 import pytest
 
 from pathlib import Path
@@ -15,10 +15,10 @@ if str(SRC_PATH) not in sys.path:
 
 @pytest.fixture()
 def config_factory(tmp_path):
-    """Create a ``MineDbConfig`` bound to a temporary root path."""
+    """Create a ``RepomConfig`` bound to a temporary root path."""
 
-    def _factory(*, exec_env: str = "dev") -> MineDbConfig:
-        return MineDbConfig(root_path=str(tmp_path), exec_env=exec_env)
+    def _factory(*, exec_env: str = "dev") -> RepomConfig:
+        return RepomConfig(root_path=str(tmp_path), exec_env=exec_env)
 
     return _factory
 

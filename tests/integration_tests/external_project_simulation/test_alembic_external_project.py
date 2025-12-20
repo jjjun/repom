@@ -13,14 +13,14 @@ import pytest
 import tempfile
 import shutil
 from pathlib import Path
-from repom.config import MineDbConfig
+from repom.config import RepomConfig
 
 
 def test_alembic_versions_path_isolation():
     """Verify that custom alembic_versions_path completely isolates migration history"""
 
     # Simulate external project config
-    class ExternalProjectConfig(MineDbConfig):
+    class ExternalProjectConfig(RepomConfig):
         def __init__(self, custom_path: str):
             super().__init__()
             self._alembic_versions_path = custom_path
@@ -35,7 +35,7 @@ def test_alembic_versions_path_isolation():
         assert config.alembic_versions_path == external_versions_path
 
         # Verify it's different from repom's default
-        repom_config = MineDbConfig()
+        repom_config = RepomConfig()
         repom_config.root_path = str(Path(__file__).parent.parent.parent.parent)
         repom_config.init()
 

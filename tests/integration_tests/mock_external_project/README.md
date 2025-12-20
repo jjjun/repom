@@ -59,7 +59,7 @@ The migration file should be created in:
 ## Expected Behavior
 
 When using CONFIG_HOOK:
-1. `MineDbConfig._alembic_versions_path` is set to custom path
+1. `RepomConfig._alembic_versions_path` is set to custom path
 2. `env.py` passes this to `context.configure(version_locations=...)`
 3. Alembic creates migration files in the custom path
 

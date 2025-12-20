@@ -159,7 +159,7 @@ tasks = repo.find_by_ids([1, 2, 3])  # include_deleted=False
 
 - 返却順序は保証されません（必要な場合はアプリケーション側でソート）
 - 大量のIDを指定する場合、データベースの制限に注意
-- connection poolの設定は `repom.config.MineDbConfig.engine_kwargs` で調整可能
+- connection poolの設定は `repom.config.RepomConfig.engine_kwargs` で調整可能
 
 ### find() メソッド
 

@@ -13,7 +13,7 @@ def hook_config(config: dataclass) -> dataclass:
 
     config.root_path = str(root_path)
 
-    if type(config).__name__ == 'MineDbConfig':
+    if type(config).__name__ == 'RepomConfig':
         # Note: _alembic_versions_path no longer exists
         # Migration file location is controlled by alembic.ini only
         # Other custom settings can be configured here if needed

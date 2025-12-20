@@ -4,7 +4,7 @@ Tests for auto_import_models functions and configuration integration.
 This test suite verifies:
 1. auto_import_models_by_package() - Package-based model import with security
 2. auto_import_models_from_list() - Batch import from multiple packages
-3. MineDbConfig properties - model_locations, allowed_package_prefixes, model_excluded_dirs
+3. RepomConfig properties - model_locations, allowed_package_prefixes, model_excluded_dirs
 4. load_models() - Integration with config settings
 5. Security validation - allowed_prefixes enforcement
 6. Backward compatibility - Existing behavior without model_locations
@@ -144,33 +144,33 @@ class TestAutoImportModelsFromList:
             )
 
 
-class TestMineDbConfigProperties:
-    """Test MineDbConfig properties for model import configuration"""
+class TestRepomConfigProperties:
+    """Test RepomConfig properties for model import configuration"""
 
     def test_model_locations_default_is_empty_list(self):
         """model_locations のデフォルトは空リスト"""
-        from repom.config import MineDbConfig
-        test_config = MineDbConfig()
+        from repom.config import RepomConfig
+        test_config = RepomConfig()
         assert test_config.model_locations == []
 
     def test_model_locations_setter_and_getter(self):
         """model_locations の setter/getter が正常に動作"""
-        from repom.config import MineDbConfig
-        test_config = MineDbConfig()
+        from repom.config import RepomConfig
+        test_config = RepomConfig()
 
         test_config.model_locations = ['myapp.models', 'shared.models']
         assert test_config.model_locations == ['myapp.models', 'shared.models']
 
     def test_model_excluded_dirs_default_is_empty_set(self):
         """model_excluded_dirs のデフォルトは空セット"""
-        from repom.config import MineDbConfig
-        test_config = MineDbConfig()
+        from repom.config import RepomConfig
+        test_config = RepomConfig()
         assert test_config.model_excluded_dirs == set()
 
     def test_model_excluded_dirs_setter_and_getter(self):
         """model_excluded_dirs の setter/getter が正常に動作"""
-        from repom.config import MineDbConfig
-        test_config = MineDbConfig()
+        from repom.config import RepomConfig
+        test_config = RepomConfig()
 
         excluded = {'tests', 'migrations', 'scripts'}
         test_config.model_excluded_dirs = excluded
@@ -178,14 +178,14 @@ class TestMineDbConfigProperties:
 
     def test_allowed_package_prefixes_default(self):
         """allowed_package_prefixes のデフォルトは {'repom.'}"""
-        from repom.config import MineDbConfig
-        test_config = MineDbConfig()
+        from repom.config import RepomConfig
+        test_config = RepomConfig()
         assert test_config.allowed_package_prefixes == {'repom.'}
 
     def test_allowed_package_prefixes_setter_and_getter(self):
         """allowed_package_prefixes の setter/getter が正常に動作"""
-        from repom.config import MineDbConfig
-        test_config = MineDbConfig()
+        from repom.config import RepomConfig
+        test_config = RepomConfig()
 
         prefixes = {'myapp.', 'shared.', 'repom.'}
         test_config.allowed_package_prefixes = prefixes
@@ -193,14 +193,14 @@ class TestMineDbConfigProperties:
 
     def test_model_import_strict_default_is_false(self):
         """model_import_strict のデフォルトは False"""
-        from repom.config import MineDbConfig
-        test_config = MineDbConfig()
+        from repom.config import RepomConfig
+        test_config = RepomConfig()
         assert test_config.model_import_strict is False
 
     def test_model_import_strict_setter_and_getter(self):
         """model_import_strict の setter/getter が正常に動作"""
-        from repom.config import MineDbConfig
-        test_config = MineDbConfig()
+        from repom.config import RepomConfig
+        test_config = RepomConfig()
 
         test_config.model_import_strict = True
         assert test_config.model_import_strict is True
@@ -296,8 +296,8 @@ class TestSecurityScenarios:
 
     def test_default_config_only_allows_repom(self):
         """デフォルト設定では repom. パッケージのみ許可"""
-        from repom.config import MineDbConfig
-        test_config = MineDbConfig()
+        from repom.config import RepomConfig
+        test_config = RepomConfig()
 
         # デフォルトは {'repom.'}
         assert test_config.allowed_package_prefixes == {'repom.'}
@@ -369,8 +369,8 @@ class TestRealWorldScenarios:
 
     def test_config_hook_pattern(self):
         """CONFIG_HOOK パターン: 親プロジェクトでの設定"""
-        from repom.config import MineDbConfig
-        test_config = MineDbConfig()
+        from repom.config import RepomConfig
+        test_config = RepomConfig()
 
         # 親プロジェクトでの設定をシミュレート
         test_config.model_locations = [
@@ -390,10 +390,10 @@ class TestRealWorldScenarios:
 
     def test_environment_specific_configuration(self):
         """環境別設定: EXEC_ENV による切り替え"""
-        from repom.config import MineDbConfig
+        from repom.config import RepomConfig
         import os
 
-        test_config = MineDbConfig()
+        test_config = RepomConfig()
 
         # テスト環境のシミュレーション
         if os.getenv('EXEC_ENV') == 'test':

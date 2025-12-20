@@ -124,9 +124,9 @@ logger.info("アプリケーション起動")
 
 ```python
 # mine-py/src/mine_py/config.py
-from repom.config import MineDbConfig
+from repom.config import RepomConfig
 
-class MinePyConfig(MineDbConfig):
+class MinePyConfig(RepomConfig):
     def __init__(self):
         super().__init__()
         
@@ -340,7 +340,7 @@ print(config.log_file_path)  # None なら設定されていない
 
 ```python
 # mine-py/src/mine_py/config.py
-class MinePyConfig(MineDbConfig):
+class MinePyConfig(RepomConfig):
     @property
     def log_file_path(self):
         return 'logs/mine_py.log'  # カスタムパスを指定

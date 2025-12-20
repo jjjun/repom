@@ -259,9 +259,9 @@ def engine_kwargs(self) -> dict:
 
 ```python
 # mine_py/config.py
-from repom.config import MineDbConfig
+from repom.config import RepomConfig  # Note: MineDbConfig is still available as an alias
 
-class MinePyConfig(MineDbConfig):
+class MinePyConfig(RepomConfig):
     @property
     def engine_kwargs(self) -> dict:
         base_kwargs = super().engine_kwargs
@@ -526,9 +526,9 @@ CONFIG_HOOK=mine_py.config:get_repom_config
 
 ```python
 # mine-py/src/mine_py/config.py
-from repom.config import MineDbConfig
+from repom.config import RepomConfig  # Note: MineDbConfig is still available as an alias
 
-class MinePyConfig(MineDbConfig):
+class MinePyConfig(RepomConfig):
     def __init__(self):
         super().__init__()
         

@@ -6,7 +6,7 @@ Based on Alembic source code investigation:
 2. alembic.command.revision() accepts version_path parameter
 3. Config.set_main_option() can set version_locations dynamically
 
-Goal: Make file creation and execution use the same location source (MineDbConfig)
+Goal: Make file creation and execution use the same location source (RepomConfig)
 """
 import os
 from pathlib import Path
@@ -82,7 +82,7 @@ def test_approach_3_alembic_ini_comment():
     print()
     print("Cons:")
     print("  ❌ External projects need custom alembic.ini (not minimal)")
-    print("  ❌ Duplicates path configuration (alembic.ini + MineDbConfig)")
+    print("  ❌ Duplicates path configuration (alembic.ini + RepomConfig)")
     print("  ❌ Confusing: file creation uses .ini, execution uses env.py")
     print()
 
