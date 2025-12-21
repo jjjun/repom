@@ -93,9 +93,9 @@ def test_model_without_id_in_database(db_test):
 def test_model_without_id_table_structure(db_test):
     """データベーステーブルにidカラムが存在しないことを確認"""
     from sqlalchemy import inspect as sqla_inspect
-    from repom.db import engine
 
-    inspector = sqla_inspect(engine)
+    # db_test fixture の engine を使用する
+    inspector = sqla_inspect(db_test.bind)
     columns = inspector.get_columns('model_without_id')
     column_names = [col['name'] for col in columns]
 
@@ -109,9 +109,9 @@ def test_model_without_id_table_structure(db_test):
 def test_model_with_id_table_structure(db_test):
     """デフォルトモデルのテーブルにはidカラムが存在することを確認"""
     from sqlalchemy import inspect as sqla_inspect
-    from repom.db import engine
 
-    inspector = sqla_inspect(engine)
+    # db_test fixture の engine を使用する
+    inspector = sqla_inspect(db_test.bind)
     columns = inspector.get_columns('model_with_id')
     column_names = [col['name'] for col in columns]
 
@@ -179,10 +179,9 @@ def test_model_with_composite_pk_primary_keys():
 def test_model_with_composite_pk_database_structure(db_test):
     """use_id=False で複合主キーのモデルがデータベースで正しく作成されることを確認"""
     from sqlalchemy import inspect as sqla_inspect
-    from repom.db import engine
 
-    # データベースのテーブル構造を確認
-    inspector = sqla_inspect(engine)
+    # db_test fixture の engine を使用する
+    inspector = sqla_inspect(db_test.bind)
     columns = inspector.get_columns('model_with_composite_pk')
     column_names = [col['name'] for col in columns]
 

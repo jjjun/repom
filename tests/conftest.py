@@ -1,10 +1,11 @@
+# fmt: off
 import os
 import pytest
 import logging
-from repom.testing import create_test_fixtures, create_async_test_fixtures
-
 
 os.environ['EXEC_ENV'] = 'test'
+
+from repom.testing import create_test_fixtures, create_async_test_fixtures
 
 
 def pytest_configure(config):
