@@ -110,10 +110,10 @@ def test_use_in_memory_db_for_tests_defaults_to_true(config_factory):
 def test_use_in_memory_db_for_tests_is_settable(config_factory):
     """``use_in_memory_db_for_tests`` can be explicitly set."""
     config = config_factory(exec_env="test")
-    
+
     config.use_in_memory_db_for_tests = False
     assert config.use_in_memory_db_for_tests is False
-    
+
     config.use_in_memory_db_for_tests = True
     assert config.use_in_memory_db_for_tests is True
 
@@ -121,7 +121,7 @@ def test_use_in_memory_db_for_tests_is_settable(config_factory):
 def test_db_url_returns_in_memory_for_test_env(config_factory):
     """``db_url`` returns 'sqlite:///:memory:' when exec_env='test' and use_in_memory_db_for_tests=True."""
     config = config_factory(exec_env="test")
-    
+
     # デフォルト（use_in_memory_db_for_tests=True）
     assert config.db_url == "sqlite:///:memory:"
 
@@ -129,7 +129,7 @@ def test_db_url_returns_in_memory_for_test_env(config_factory):
 def test_db_url_returns_file_based_when_in_memory_disabled(config_factory):
     """``db_url`` returns file-based URL when use_in_memory_db_for_tests=False."""
     config = config_factory(exec_env="test")
-    
+
     config.use_in_memory_db_for_tests = False
     expected = f"sqlite:///{config.db_path}/{config.db_file}"
     assert config.db_url == expected
@@ -140,7 +140,7 @@ def test_db_url_returns_file_based_for_non_test_env(config_factory):
     # dev 環境
     config_dev = config_factory(exec_env="dev")
     assert config_dev.db_url == f"sqlite:///{config_dev.db_path}/{config_dev.db_file}"
-    
+
     # prod 環境
     config_prod = config_factory(exec_env="prod")
     assert config_prod.db_url == f"sqlite:///{config_prod.db_path}/{config_prod.db_file}"
@@ -149,7 +149,7 @@ def test_db_url_returns_file_based_for_non_test_env(config_factory):
 def test_db_url_override_takes_precedence(config_factory):
     """Explicitly set ``db_url`` takes precedence over in-memory logic."""
     config = config_factory(exec_env="test")
-    
+
     custom_url = "sqlite:////tmp/custom.sqlite3"
     config.db_url = custom_url
     assert config.db_url == custom_url
