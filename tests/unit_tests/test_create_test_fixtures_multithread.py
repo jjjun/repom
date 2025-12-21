@@ -11,6 +11,7 @@ engine_kwargs を正しく適用しているかを検証する。
         StaticPool が適用され、マルチスレッドでも正常に動作する。
 """
 
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -22,6 +23,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 from repom.base_model import BaseModel
 from repom.testing import create_test_fixtures
 
+# CRITICAL: モジュールレベルで create_test_fixtures を呼び出す前に
+# EXEC_ENV を設定しないと、conftest.py が実行される前に
+# db.dev.sqlite3 (ファイルベース) が使用されてしまう
+os.environ['EXEC_ENV'] = 'test'
+
 
 class FixtureTestModel(BaseModel):
     """create_test_fixtures を使ったテスト用モデル"""
@@ -32,6 +38,7 @@ class FixtureTestModel(BaseModel):
 
 
 # create_test_fixtures を使って fixture を作成
+# この時点で EXEC_ENV='test' なので :memory: DB が使用される
 db_engine, db_test = create_test_fixtures()
 
 
