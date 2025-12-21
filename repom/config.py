@@ -171,10 +171,21 @@ class RepomConfig(Config):
 
         接続プール設定:
         - pool_size: 接続プールに保持する接続数（デフォルト: 10）
+          * SQLite ファイルDB: 有効（SQLAlchemy 2.0+ は QueuePool 使用）
+          * SQLite :memory: DB: 除外（StaticPool は pool_size 未サポート）
+          * PostgreSQL/MySQL: 有効
         - max_overflow: pool_size を超えて作成可能な追加接続数（デフォルト: 20）
+          * SQLite ファイルDB: 有効（QueuePool）
+          * SQLite :memory: DB: 除外（StaticPool は max_overflow 未サポート）
+          * PostgreSQL/MySQL: 有効
         - pool_timeout: 接続待機タイムアウト秒数（デフォルト: 30）
+          * SQLite ファイルDB: 有効（QueuePool）
+          * SQLite :memory: DB: 除外（StaticPool は pool_timeout 未サポート）
+          * PostgreSQL/MySQL: 有効
         - pool_recycle: 接続の再利用時間秒数（デフォルト: 3600）
+          * すべてのDBで有効
         - pool_pre_ping: 接続前のpingチェック（デフォルト: True）
+          * すべてのDBで有効
 
         Returns:
             dict: create_engine に渡すキーワード引数
@@ -189,14 +200,30 @@ class RepomConfig(Config):
                         'max_overflow': 40,
                     })
                     return base
+
+        参考:
+        - SQLite と QueuePool: https://docs.sqlalchemy.org/en/20/dialects/sqlite.html#threading-pooling-behavior
+        - Connection Pooling: https://docs.sqlalchemy.org/en/20/core/pooling.html
         """
-        kwargs = {
-            'pool_size': 10,          # 接続プール数
-            'max_overflow': 20,       # 最大オーバーフロー接続数
-            'pool_timeout': 30,       # 接続待機タイムアウト（秒）
-            'pool_recycle': 3600,     # 接続の再利用時間（秒）
-            'pool_pre_ping': True,    # 接続前のpingチェック
-        }
+        # SQLite :memory: DB の場合は、StaticPool/SingletonThreadPool が使用されるため
+        # pool_size, max_overflow, pool_timeout はサポートされない
+        is_memory_db = self.db_url and ':memory:' in self.db_url
+        
+        if is_memory_db:
+            # :memory: DB 用の最小限の設定
+            kwargs = {
+                'pool_recycle': 3600,     # 接続の再利用時間（秒）
+                'pool_pre_ping': True,    # 接続前のpingチェック
+            }
+        else:
+            # ファイルベースDB または PostgreSQL/MySQL 用の完全な設定
+            kwargs = {
+                'pool_size': 10,          # 接続プール数
+                'max_overflow': 20,       # 最大オーバーフロー接続数
+                'pool_timeout': 30,       # 接続待機タイムアウト（秒）
+                'pool_recycle': 3600,     # 接続の再利用時間（秒）
+                'pool_pre_ping': True,    # 接続前のpingチェック
+            }
 
         # SQLite 固有の設定
         if self.db_url and self.db_url.startswith('sqlite'):
