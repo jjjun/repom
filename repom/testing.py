@@ -101,8 +101,8 @@ def create_test_fixtures(
         # モデルをロード
         _model_loader()
 
-        # エンジン作成
-        engine = create_engine(_db_url)
+        # エンジン作成（engine_kwargs を渡して StaticPool などを適用）
+        engine = create_engine(_db_url, **config.engine_kwargs)
 
         # テーブル作成（1回のみ）
         Base.metadata.create_all(bind=engine)
@@ -303,8 +303,8 @@ def create_async_test_fixtures(
         # モデルをロード
         _model_loader()
 
-        # async engine 作成
-        engine = create_async_engine(_async_db_url, echo=False)
+        # async engine 作成（engine_kwargs を渡して StaticPool などを適用）
+        engine = create_async_engine(_async_db_url, echo=False, **config.engine_kwargs)
 
         # テーブル作成（async での create_all）
         async with engine.begin() as conn:
