@@ -208,7 +208,7 @@ class RepomConfig(Config):
         # SQLite :memory: DB の場合は、StaticPool/SingletonThreadPool が使用されるため
         # pool_size, max_overflow, pool_timeout はサポートされない
         is_memory_db = self.db_url and ':memory:' in self.db_url
-        
+
         if is_memory_db:
             # :memory: DB 用の最小限の設定
             kwargs = {
