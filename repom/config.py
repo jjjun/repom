@@ -186,6 +186,15 @@ class RepomConfig(Config):
           * すべてのDBで有効
         - pool_pre_ping: 接続前のpingチェック（デフォルト: True）
           * すべてのDBで有効
+        - poolclass: 接続プールクラス
+          * SQLite :memory: DB: StaticPool（単一接続をすべてのスレッドで共有）
+          * その他: デフォルト（NullPool または QueuePool）
+
+        StaticPool の必要性:
+        - :memory: DB は1つの connection でのみデータを保持
+        - NullPool（デフォルト）では各スレッドで新しい connection が作成される
+        - 別の connection からは :memory: DB のデータが見えない
+        - StaticPool により単一 connection を全スレッドで共有することで解決
 
         Returns:
             dict: create_engine に渡すキーワード引数
@@ -204,16 +213,18 @@ class RepomConfig(Config):
         参考:
         - SQLite と QueuePool: https://docs.sqlalchemy.org/en/20/dialects/sqlite.html#threading-pooling-behavior
         - Connection Pooling: https://docs.sqlalchemy.org/en/20/core/pooling.html
+        - StaticPool: https://docs.sqlalchemy.org/en/20/core/pooling.html#sqlalchemy.pool.StaticPool
         """
-        # SQLite :memory: DB の場合は、StaticPool/SingletonThreadPool が使用されるため
-        # pool_size, max_overflow, pool_timeout はサポートされない
+        # SQLite :memory: DB の場合は、StaticPool を使用して単一接続を全スレッドで共有
         is_memory_db = self.db_url and ':memory:' in self.db_url
 
         if is_memory_db:
-            # :memory: DB 用の最小限の設定
+            # :memory: DB 用の設定（StaticPool を使用）
+            from sqlalchemy.pool import StaticPool
+
             kwargs = {
-                'pool_recycle': 3600,     # 接続の再利用時間（秒）
-                'pool_pre_ping': True,    # 接続前のpingチェック
+                'poolclass': StaticPool,  # 単一接続を全スレッドで共有
+                'connect_args': {'check_same_thread': False},  # スレッド安全性チェックを無効化
             }
         else:
             # ファイルベースDB または PostgreSQL/MySQL 用の完全な設定
@@ -225,9 +236,9 @@ class RepomConfig(Config):
                 'pool_pre_ping': True,    # 接続前のpingチェック
             }
 
-        # SQLite 固有の設定
-        if self.db_url and self.db_url.startswith('sqlite'):
-            kwargs['connect_args'] = {'check_same_thread': False}
+            # SQLite ファイルベースの場合は check_same_thread を無効化
+            if self.db_url and self.db_url.startswith('sqlite'):
+                kwargs['connect_args'] = {'check_same_thread': False}
 
         return kwargs
 
