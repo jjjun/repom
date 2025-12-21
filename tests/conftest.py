@@ -30,6 +30,44 @@ def pytest_configure(config):
     logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
 
 
+@pytest.fixture(scope='session', autouse=True)
+def setup_repom_db_tables():
+    """
+    repom.db.engine と repom.async_session.async_engine にテーブルを作成
+    
+    test_session.py などが get_db_session() を使用する際、
+    これらのengineを使用するため、テーブルが必要。
+    
+    Note: EXEC_ENV='test' が設定されているため、両engineは :memory: + StaticPool
+    create_test_fixtures() が作成する db_engine と同じ :memory: DB を参照する。
+    
+    autouse=True により、全テスト実行前に自動的に実行される。
+    """
+    from repom.base_model import Base
+    from repom.db import engine
+    from repom.async_session import async_engine
+    import asyncio
+    
+    # モデルをロード（テーブル定義を Base.metadata に登録）
+    from repom.utility import load_models
+    load_models()
+    
+    # 同期 engine にテーブル作成
+    Base.metadata.create_all(bind=engine)
+    
+    # 非同期 engine にテーブル作成
+    async def create_async_tables():
+        async with async_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    
+    asyncio.run(create_async_tables())
+    
+    yield
+    
+    # クリーンアップ（オプション）
+    Base.metadata.drop_all(bind=engine)
+
+
 # repom/testing.py のヘルパー関数を使用してフィクスチャを作成
 # 同期版（既存）
 db_engine, db_test = create_test_fixtures()
