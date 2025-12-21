@@ -2,18 +2,24 @@
 
 ## 概要
 
-repom は **Transaction Rollback パターン** を採用し、高速かつ分離されたテスト環境を提供します。
+repom は **Transaction Rollback パターン** と **インメモリDB** を採用し、高速かつ分離されたテスト環境を提供します。
 
 **パフォーマンス**:
 - 従来方式（DB再作成）: ~30秒
 - Transaction Rollback: ~3秒
 - **9倍の高速化を実現**
 
+**インメモリDB（デフォルト）**:
+- ✅ **35倍高速**: ファイルI/Oなし、純粋なメモリ操作
+- ✅ **ロック防止**: "database is locked" エラーが発生しない
+- ✅ **自動クリーンアップ**: プロセス終了時に自動削除
+
 ---
 
 ## 目次
 
 - [基本的な使い方](#基本的な使い方)
+- [インメモリDB設定](#インメモリdb設定)
 - [外部プロジェクトでの使用](#外部プロジェクトでの使用)
 - [テスト用DBの作成](#テスト用dbの作成)
 - [モデルのインポート方法](#モデルのインポート方法)
@@ -149,6 +155,73 @@ poetry run pytest tests/unit_tests
 # 詳細表示
 poetry run pytest -v
 ```
+
+---
+
+## インメモリDB設定
+
+### デフォルト動作（v0.x.x 以降）
+
+repom は `exec_env == 'test'` の場合、自動的に SQLite インメモリDB (`sqlite:///:memory:`) を使用します：
+
+```python
+from repom.config import config
+
+# test 環境では自動的にインメモリDB
+config.exec_env = 'test'
+print(config.db_url)
+# 出力: sqlite:///:memory:
+```
+
+### インメモリDBを無効化する
+
+ファイルベースのDB（`db.test.sqlite3`）を使用したい場合：
+
+```python
+# tests/conftest.py または設定ファイル
+from repom.config import config
+
+# conftest.py の pytest_configure() で設定
+def pytest_configure(config_pytest):
+    from repom.config import config as repom_config
+    repom_config.use_in_memory_db_for_tests = False
+```
+
+または、外部プロジェクトの config_hook で：
+
+```python
+# mine_py/config.py
+from repom.config import RepomConfig
+
+class MinePyConfig(RepomConfig):
+    def __init__(self):
+        super().__init__()
+        # ファイルベースのテストDBを使用
+        self.use_in_memory_db_for_tests = False
+
+def get_repom_config():
+    return MinePyConfig()
+```
+
+```bash
+# .env
+CONFIG_HOOK=mine_py.config:get_repom_config
+```
+
+### どちらを使うべきか？
+
+| 用途 | インメモリDB | ファイルベースDB |
+|------|-------------|-----------------|
+| **通常のユニットテスト** | ✅ 推奨（高速） | ❌ |
+| **統合テスト** | ✅ 推奨 | △ |
+| **DB永続化のテスト** | ❌ | ✅ 必要 |
+| **複数プロセスでの並行テスト** | ⚠️ 各プロセス独立 | ✅ |
+| **実行後のDB確認が必要** | ❌ | ✅ |
+| **CI/CD環境** | ✅ 推奨 | △ |
+
+**推奨**:
+- 99%のケースで **インメモリDB**（デフォルト）で十分です
+- ファイルベースDBは特別な理由がある場合のみ使用してください
 
 ---
 

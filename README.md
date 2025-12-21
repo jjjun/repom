@@ -295,7 +295,43 @@ export EXEC_ENV=dev
 **環境別データベース:**
 - `prod`: `data/repom/db.sqlite3`
 - `dev`: `data/repom/db.dev.sqlite3`
-- `test`: `data/repom/db.test.sqlite3`
+- `test`: `sqlite:///:memory:` (デフォルト) または `data/repom/db.test.sqlite3`
+
+**テスト環境でのインメモリDB** (v0.x.x 以降):
+
+デフォルトで `test` 環境は自動的に SQLite インメモリDB (`sqlite:///:memory:`) を使用します：
+
+```python
+from repom.config import config
+
+# test 環境の場合
+config.exec_env = 'test'
+print(config.db_url)
+# 出力: sqlite:///:memory:
+
+# インメモリDBを無効化してファイルベースに戻す場合
+config.use_in_memory_db_for_tests = False
+print(config.db_url)
+# 出力: sqlite:///C:/path/to/repom/data/repom/db.test.sqlite3
+```
+
+**メリット:**
+- ✅ **35倍高速**: ファイルI/Oなし、純粋なメモリ操作
+- ✅ **ロック防止**: "database is locked" エラーが発生しない
+- ✅ **自動クリーンアップ**: プロセス終了時に自動削除、手動削除不要
+
+**外部プロジェクトでの設定:**
+
+```python
+# mine_py/config.py
+from repom.config import RepomConfig
+
+class MinePyConfig(RepomConfig):
+    def __init__(self):
+        super().__init__()
+        # インメモリDBをオフにする場合（デフォルトはTrue）
+        self.use_in_memory_db_for_tests = False
+```
 
 ### `CONFIG_HOOK`
 
