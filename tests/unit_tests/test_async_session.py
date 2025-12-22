@@ -8,6 +8,14 @@ Tests async SQLAlchemy session functionality including:
 - URL conversion
 """
 
+from repom.models.sample import SampleModel
+from repom.async_session import (
+    async_engine,
+    AsyncSessionLocal,
+    get_async_session,
+    get_async_db_session,
+    convert_to_async_uri
+)
 import os
 import pytest
 from sqlalchemy import select
@@ -17,15 +25,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # async_session.py creates async_engine at module level using config.db_url
 # Without this, it will use dev DB which may not have tables
 os.environ['EXEC_ENV'] = 'test'
-
-from repom.async_session import (
-    async_engine,
-    AsyncSessionLocal,
-    get_async_session,
-    get_async_db_session,
-    convert_to_async_uri
-)
-from repom.models.sample import SampleModel
 
 
 class TestConvertToAsyncUri:
@@ -115,7 +114,7 @@ class TestGetAsyncDbSession:
     @pytest.mark.asyncio
     async def test_auto_commits_on_success(self, async_db_test):
         """Session should auto-commit on successful completion
-        
+
         Note: Using async_db_test fixture which has tables created.
         In real applications, tables would exist from migrations.
         """
@@ -135,14 +134,14 @@ class TestGetAsyncDbSession:
     @pytest.mark.asyncio
     async def test_rolls_back_on_error(self, async_db_test):
         """Session should rollback on error
-        
+
         Note: Using async_db_test fixture for transaction control.
         """
         # Create initial data
         sample = SampleModel(value="test_rollback_initial")
         async_db_test.add(sample)
         await async_db_test.flush()
-        
+
         # Attempt to modify but cause an error
         sample.value = "test_rollback_modified"
         # Rollback manually to simulate error handling

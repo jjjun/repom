@@ -4,6 +4,13 @@ session.py のユニットテスト
 セッション管理ユーティリティの動作を検証します。
 """
 
+from repom.session import (
+    get_db_session,
+    get_db_transaction,
+    get_session,
+    transaction,
+)
+from repom.base_model import BaseModel
 import os
 import pytest
 from sqlalchemy import Column, Integer, String
@@ -12,14 +19,6 @@ from sqlalchemy.orm import Session
 # CRITICAL: Set EXEC_ENV before importing repom modules
 # session.py may create engine at module level
 os.environ['EXEC_ENV'] = 'test'
-
-from repom.base_model import BaseModel
-from repom.session import (
-    get_db_session,
-    get_db_transaction,
-    get_session,
-    transaction,
-)
 
 
 # テスト用モデル
@@ -63,14 +62,14 @@ class TestGetDbSession:
 
     def test_get_db_session_no_auto_commit(self, db_test):
         """トランザクションが自動コミットされないことを確認
-        
+
         Note: get_db_session() は repom.db.engine を使用するため、
         テストでは db_test フィクスチャを使って検証する。
         実際のアプリケーションでは、マイグレーションでテーブルが作成される。
         """
         # db_test フィクスチャのセッションを使用
         # （get_db_session() の代わりに）
-        
+
         # データを追加
         item = SessionTestModel(name="test_no_commit")
         db_test.add(item)
