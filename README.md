@@ -16,6 +16,7 @@
 
 - **[BaseRepository & Utilities ガイド](docs/guides/repository_and_utilities_guide.md)**
   - BaseRepository によるデータアクセス
+  - **Eager loading サポート（joinedload, selectinload）- N+1 問題の解決** ⭐ NEW
   - FilterParams（FastAPI クエリパラメータ統合）
   - `as_query_depends()` メカニズム
   - `auto_import_models` ユーティリティ
