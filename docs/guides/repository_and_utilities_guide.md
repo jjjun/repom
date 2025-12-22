@@ -161,6 +161,138 @@ tasks = repo.find_by_ids([1, 2, 3])  # include_deleted=False
 - 大量のIDを指定する場合、データベースの制限に注意
 - connection poolの設定は `repom.config.RepomConfig.engine_kwargs` で調整可能
 
+### Eager Loading（N+1 問題の解決）
+
+**関連モデルの効率的な取得**
+
+SQLAlchemy の `options` パラメータを使用して、N+1 問題を解決できます。
+
+#### joinedload - 1対1 / 多対1 に最適
+
+```python
+from sqlalchemy.orm import joinedload
+
+# 基本的な使い方
+tasks = repo.find(
+    filters=[Task.status == 'active'],
+    options=[joinedload(Task.user)]  # user を JOIN で取得
+)
+
+# N+1 なしでアクセス可能
+for task in tasks:
+    print(task.user.name)  # 追加のクエリなし
+```
+
+**SQL例**:
+```sql
+SELECT tasks.*, users.*
+FROM tasks
+LEFT OUTER JOIN users ON users.id = tasks.user_id
+WHERE tasks.status = 'active';
+```
+
+#### selectinload - 1対多 / 多対多 に最適
+
+```python
+from sqlalchemy.orm import selectinload
+
+# コレクション（1対多）を効率的に取得
+users = user_repo.find(
+    options=[selectinload(User.tasks)]  # 関連するタスクを取得
+)
+
+# N+1 なしでアクセス可能
+for user in users:
+    for task in user.tasks:  # 追加のクエリなし
+        print(task.title)
+```
+
+**SQL例**:
+```sql
+-- 1. ユーザーを取得
+SELECT * FROM users;
+
+-- 2. 関連するタスクを一括取得（IN句）
+SELECT * FROM tasks WHERE user_id IN (1, 2, 3, ...);
+```
+
+#### 複数の関連モデルを同時に取得
+
+```python
+tasks = repo.find(
+    options=[
+        joinedload(Task.user),        # 1対1
+        selectinload(Task.tags),      # 1対多
+        selectinload(Task.comments)   # 1対多
+    ]
+)
+```
+
+#### ネストした関連モデル
+
+```python
+# task → user → department
+tasks = repo.find(
+    options=[
+        joinedload(Task.user).joinedload(User.department)
+    ]
+)
+
+for task in tasks:
+    print(task.user.department.name)  # N+1 なし
+```
+
+#### カスタムリポジトリで利用
+
+```python
+class TaskRepository(BaseRepository[Task]):
+    def find_with_user(self, **kwargs):
+        """ユーザー情報を含めて取得"""
+        return self.find(
+            options=[joinedload(Task.user)],
+            **kwargs
+        )
+    
+    def find_full(self, **kwargs):
+        """すべての関連情報を含めて取得"""
+        return self.find(
+            options=[
+                joinedload(Task.user),
+                selectinload(Task.tags),
+                selectinload(Task.comments)
+            ],
+            **kwargs
+        )
+```
+
+#### ベストプラクティス
+
+| パターン | 使用する options | 理由 |
+|---------|-----------------|------|
+| 1対1 / 多対1 | `joinedload` | 1回のクエリで完結 |
+| 1対多 / 多対多 | `selectinload` | カルテシアン積を避ける |
+| 深いネスト | `joinedload().joinedload()` | チェーンで接続 |
+| 条件付き取得 | `contains_eager` | フィルタ付き JOIN |
+
+#### パフォーマンス比較
+
+```python
+# ❌ N+1 問題（101回のクエリ）
+tasks = repo.find()  # 1回
+for task in tasks:   # 100件
+    user = task.user # 100回のクエリ
+
+# ✅ joinedload（1回のクエリ）
+tasks = repo.find(options=[joinedload(Task.user)])
+for task in tasks:
+    user = task.user # クエリなし
+
+# ✅ selectinload（2回のクエリ）
+tasks = repo.find(options=[selectinload(Task.tags)])
+for task in tasks:
+    tags = task.tags # クエリなし
+```
+
 ### find() メソッド
 
 ```python
@@ -188,6 +320,7 @@ filters = [
     )
 ]
 tasks = repo.find(filters=filters)
+```
 ```
 
 ### ページネーション

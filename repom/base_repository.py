@@ -256,7 +256,7 @@ class BaseRepository(Generic[T]):
         """
         クエリにオプションを設定するメソッド。
 
-        このメソッドは、クエリに対して offset、limit、および order_by オプションを設定します。
+        このメソッドは、クエリに対して offset、limit、order_by、および options を設定します。
         デフォルトでは、order_by はモデルの id フィールドの降順に設定されます。
 
         desc(降順): 値が大きいものから小さいもの順に並べる
@@ -267,16 +267,43 @@ class BaseRepository(Generic[T]):
             **kwargs: 任意のキーワード引数。以下の引数をサポートします。
                 - offset (int): 取得するデータの開始位置。デフォルトは 0。
                 - limit (int): 取得するデータの件数。デフォルトは 10。
-                - order_by (Callable): 結果を並べ替えるための呼び出し可能オブジェクト。デフォルトはモデルの id フィールドの降順。
+                - order_by (Callable | str): 結果を並べ替えるための呼び出し可能オブジェクト。デフォルトはモデルの id フィールドの降順。
+                - options (list | Load): SQLAlchemy の load options (joinedload, selectinload など)。
 
         Returns:
             クエリオブジェクトにオプションを設定したものを返します。
+
+        使用例:
+            # Eager loading を使用して N+1 問題を解決
+            from sqlalchemy.orm import joinedload, selectinload
+
+            results = repo.find(
+                filters=[Model.status == 'active'],
+                options=[joinedload(Model.user)]  # 関連モデルを eager load
+            )
+
+            # 複数の options を指定
+            results = repo.find(
+                options=[
+                    joinedload(Model.user),
+                    selectinload(Model.tags)
+                ]
+            )
         """
         offset = kwargs.get('offset', None)
         limit = kwargs.get('limit', None)
+        options = kwargs.get('options', None)
         # 特に指定しない場合、デフォルトで昇順になるんだけど、此処では明示的に指定してる
         # order_by が指定されていない場合はデフォルト
         order_by = self.model.id.asc()
+
+        # options の処理
+        if options is not None:
+            if isinstance(options, list):
+                for opt in options:
+                    query = query.options(opt)
+            else:
+                query = query.options(options)
 
         # order_by の型に応じて処理を分岐
         if 'order_by' in kwargs:
