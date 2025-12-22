@@ -1,0 +1,310 @@
+"""
+AsyncBaseRepository の options パラメータ（eager loading）のテスト
+
+test_repository_options.py の全テストケースを非同期版に変換したもの。
+N+1 問題を解決するための joinedload, selectinload などの
+SQLAlchemy の load options をテストします。
+"""
+from tests._init import *
+from sqlalchemy import Integer, String, ForeignKey, select
+from sqlalchemy.orm import Mapped, mapped_column, relationship, joinedload, selectinload
+import pytest
+import pytest_asyncio
+from repom.base_model import BaseModel
+from repom.async_base_repository import AsyncBaseRepository
+
+
+# テスト用モデル定義
+class AsyncEagerAuthorModel(BaseModel):
+    __tablename__ = 'async_eager_test_authors'
+
+    name: Mapped[str] = mapped_column(String(100))
+    books: Mapped[list["AsyncEagerBookModel"]] = relationship(back_populates="author")
+
+
+class AsyncEagerBookModel(BaseModel):
+    __tablename__ = 'async_eager_test_books'
+
+    title: Mapped[str] = mapped_column(String(200))
+    author_id: Mapped[int] = mapped_column(ForeignKey('async_eager_test_authors.id'))
+
+    author: Mapped[AsyncEagerAuthorModel] = relationship(back_populates="books")
+    reviews: Mapped[list["AsyncEagerReviewModel"]] = relationship(back_populates="book")
+
+
+class AsyncEagerReviewModel(BaseModel):
+    __tablename__ = 'async_eager_test_reviews'
+
+    comment: Mapped[str] = mapped_column(String(500))
+    book_id: Mapped[int] = mapped_column(ForeignKey('async_eager_test_books.id'))
+
+    book: Mapped[AsyncEagerBookModel] = relationship(back_populates="reviews")
+
+
+# Repository 定義
+class AsyncAuthorRepository(AsyncBaseRepository[AsyncEagerAuthorModel]):
+    def __init__(self, session):
+        super().__init__(AsyncEagerAuthorModel, session)
+
+
+class AsyncBookRepository(AsyncBaseRepository[AsyncEagerBookModel]):
+    def __init__(self, session):
+        super().__init__(AsyncEagerBookModel, session)
+
+
+class AsyncReviewRepository(AsyncBaseRepository[AsyncEagerReviewModel]):
+    def __init__(self, session):
+        super().__init__(AsyncEagerReviewModel, session)
+
+
+@pytest_asyncio.fixture(scope="function")
+async def setup_async_test_data(async_db_test):
+    """テストデータのセットアップ（非同期版）"""
+    # Author を作成
+    author1 = AsyncEagerAuthorModel(name="Author One")
+    author2 = AsyncEagerAuthorModel(name="Author Two")
+    async_db_test.add_all([author1, author2])
+    await async_db_test.flush()
+
+    # Book を作成
+    book1 = AsyncEagerBookModel(title="Book 1", author_id=author1.id)
+    book2 = AsyncEagerBookModel(title="Book 2", author_id=author1.id)
+    book3 = AsyncEagerBookModel(title="Book 3", author_id=author2.id)
+    async_db_test.add_all([book1, book2, book3])
+    await async_db_test.flush()
+
+    # Review を作成
+    review1 = AsyncEagerReviewModel(comment="Great!", book_id=book1.id)
+    review2 = AsyncEagerReviewModel(comment="Good!", book_id=book1.id)
+    review3 = AsyncEagerReviewModel(comment="Nice!", book_id=book2.id)
+    async_db_test.add_all([review1, review2, review3])
+    await async_db_test.commit()
+
+    return {
+        'authors': [author1, author2],
+        'books': [book1, book2, book3],
+        'reviews': [review1, review2, review3]
+    }
+
+
+@pytest.mark.asyncio
+async def test_find_without_options_works_as_before(async_db_test, setup_async_test_data):
+    """
+    options を指定しない場合、既存の動作が変わらないことを確認（後方互換性）
+    """
+    repo = AsyncBookRepository(session=async_db_test)
+
+    # options なし（既存の動作）
+    books = await repo.find()
+
+    assert isinstance(books, list)
+    assert len(books) == 3
+    assert all(isinstance(book, AsyncEagerBookModel) for book in books)
+
+
+@pytest.mark.asyncio
+async def test_find_with_joinedload_single_relationship(async_db_test, setup_async_test_data):
+    """
+    joinedload を使って関連モデルを eager load できることを確認
+    """
+    data = setup_async_test_data
+    repo = AsyncBookRepository(session=async_db_test)
+
+    # joinedload で author を取得
+    books = await repo.find(
+        options=[joinedload(AsyncEagerBookModel.author)]
+    )
+
+    assert len(books) == 3
+
+    # N+1 なしで author にアクセスできる
+    for book in books:
+        assert book.author is not None
+        assert isinstance(book.author.name, str)
+        # author が正しく load されている
+        assert book.author.id in [data['authors'][0].id, data['authors'][1].id]
+
+
+@pytest.mark.asyncio
+async def test_find_with_selectinload_collection(async_db_test, setup_async_test_data):
+    """
+    selectinload を使ってコレクション（1対多）を eager load できることを確認
+    """
+    repo = AsyncBookRepository(session=async_db_test)
+
+    # selectinload で reviews を取得
+    books = await repo.find(
+        options=[selectinload(AsyncEagerBookModel.reviews)]
+    )
+
+    assert len(books) == 3
+
+    # N+1 なしで reviews にアクセスできる
+    book1 = next(b for b in books if b.title == "Book 1")
+    assert len(book1.reviews) == 2
+
+    book2 = next(b for b in books if b.title == "Book 2")
+    assert len(book2.reviews) == 1
+
+    book3 = next(b for b in books if b.title == "Book 3")
+    assert len(book3.reviews) == 0
+
+
+@pytest.mark.asyncio
+async def test_find_with_multiple_options(async_db_test, setup_async_test_data):
+    """
+    複数の options を同時に指定できることを確認
+    """
+    repo = AsyncBookRepository(session=async_db_test)
+
+    # 複数の relationships を eager load
+    books = await repo.find(
+        options=[
+            joinedload(AsyncEagerBookModel.author),
+            selectinload(AsyncEagerBookModel.reviews)
+        ]
+    )
+
+    assert len(books) == 3
+
+    # 両方の関連モデルにアクセスできる
+    for book in books:
+        assert book.author is not None
+        assert isinstance(book.author.name, str)
+        assert isinstance(book.reviews, list)
+
+
+@pytest.mark.asyncio
+async def test_find_with_options_and_filters(async_db_test, setup_async_test_data):
+    """
+    options とフィルタを組み合わせて使用できることを確認
+    """
+    data = setup_async_test_data
+    repo = AsyncBookRepository(session=async_db_test)
+
+    author1_id = data['authors'][0].id
+
+    # フィルタと options を組み合わせ
+    books = await repo.find(
+        filters=[AsyncEagerBookModel.author_id == author1_id],
+        options=[joinedload(AsyncEagerBookModel.author)]
+    )
+
+    assert len(books) == 2
+    for book in books:
+        assert book.author_id == author1_id
+        assert book.author.name == "Author One"
+
+
+@pytest.mark.asyncio
+async def test_find_with_options_and_pagination(async_db_test, setup_async_test_data):
+    """
+    options とページネーション（offset, limit）を組み合わせて使用できることを確認
+    """
+    repo = AsyncBookRepository(session=async_db_test)
+
+    # options + offset + limit
+    books = await repo.find(
+        options=[joinedload(AsyncEagerBookModel.author)],
+        offset=0,
+        limit=2,
+        order_by='id:asc'
+    )
+
+    assert len(books) == 2
+    for book in books:
+        assert book.author is not None
+
+
+@pytest.mark.asyncio
+async def test_find_with_options_and_order_by(async_db_test, setup_async_test_data):
+    """
+    options とソート（order_by）を組み合わせて使用できることを確認
+    """
+    repo = AsyncBookRepository(session=async_db_test)
+
+    # options + order_by
+    books = await repo.find(
+        options=[joinedload(AsyncEagerBookModel.author)],
+        order_by='title:desc'
+    )
+
+    assert len(books) == 3
+    assert books[0].title == "Book 3"
+    assert books[1].title == "Book 2"
+    assert books[2].title == "Book 1"
+
+
+@pytest.mark.asyncio
+async def test_find_with_single_option_not_list(async_db_test, setup_async_test_data):
+    """
+    options を list ではなく単一の option として渡せることを確認
+    """
+    repo = AsyncBookRepository(session=async_db_test)
+
+    # 単一の option（list にしない）
+    books = await repo.find(
+        options=joinedload(AsyncEagerBookModel.author)
+    )
+
+    assert len(books) == 3
+    for book in books:
+        assert book.author is not None
+
+
+@pytest.mark.asyncio
+async def test_find_with_nested_joinedload(async_db_test, setup_async_test_data):
+    """
+    ネストした joinedload を使用できることを確認
+    """
+    repo = AsyncReviewRepository(session=async_db_test)
+
+    # review → book → author とネストして eager load
+    reviews = await repo.find(
+        options=[
+            joinedload(AsyncEagerReviewModel.book).joinedload(AsyncEagerBookModel.author)
+        ]
+    )
+
+    assert len(reviews) == 3
+    for review in reviews:
+        assert review.book is not None
+        assert review.book.author is not None
+
+
+@pytest.mark.asyncio
+async def test_get_by_with_options(async_db_test, setup_async_test_data):
+    """
+    get_by メソッドの制限事項を確認
+
+    Note: get_by は内部で find を呼ぶが、**kwargs を渡していないため、
+    現状では options を使用できない。
+    options を使用する場合は find() メソッドを直接使用する必要がある。
+    """
+    repo = AsyncBookRepository(session=async_db_test)
+
+    # get_by は options をサポートしていない（設計上の制限）
+    # 代わりに find() を使用する
+    books = await repo.find(
+        filters=[AsyncEagerBookModel.title == "Book 1"],
+        options=[joinedload(AsyncEagerBookModel.author)]
+    )
+
+    assert isinstance(books, list)
+    assert len(books) == 1
+    assert books[0].title == "Book 1"
+    assert books[0].author is not None
+
+
+@pytest.mark.asyncio
+async def test_options_none_behavior(async_db_test, setup_async_test_data):
+    """
+    options=None を明示的に渡した場合、通常の動作をすることを確認
+    """
+    repo = AsyncBookRepository(session=async_db_test)
+
+    # options=None を明示的に指定
+    books = await repo.find(options=None)
+
+    assert isinstance(books, list)
+    assert len(books) == 3

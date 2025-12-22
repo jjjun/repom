@@ -21,6 +21,13 @@
   - `as_query_depends()` メカニズム
   - `auto_import_models` ユーティリティ
 
+- **[AsyncBaseRepository ガイド](docs/guides/async_repository_guide.md)** ⭐ NEW
+  - 完全非同期版リポジトリ（FastAPI 向け）
+  - AsyncSession による非同期データベース操作
+  - **Eager loading サポート（N+1 問題の解決）**
+  - `asyncio.gather` による並行処理パターン
+  - 論理削除（SoftDelete）の非同期操作
+
 - **[論理削除（Soft Delete）ガイド](docs/guides/soft_delete_guide.md)** ⭐ NEW
   - SoftDeletableMixin による論理削除機能
   - 削除済みレコードの自動フィルタリング
