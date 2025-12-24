@@ -76,11 +76,28 @@ repo.dict_saves(data_list)
 # ID で取得
 task = repo.get_by_id(1)
 
+# 関連モデルも一緒に取得（N+1 問題を回避）
+from sqlalchemy.orm import selectinload, joinedload
+task = repo.get_by_id(1, options=[
+    joinedload(Task.user),        # ユーザー情報を JOIN
+    selectinload(Task.comments)   # コメントを一括取得
+])
+
 # カラムで検索（複数件）
 active_tasks = repo.get_by('status', 'active')
 
+# カラムで検索 + 関連モデル取得
+active_tasks = repo.get_by('status', 'active', options=[
+    joinedload(Task.user)
+])
+
 # 単一取得（single=True）
 task = repo.get_by('title', 'タスク1', single=True)
+
+# 単一取得 + 関連モデル
+task = repo.get_by('title', 'タスク1', single=True, options=[
+    joinedload(Task.user)
+])
 
 # 全件取得
 all_tasks = repo.get_all()
@@ -166,6 +183,46 @@ tasks = repo.find_by_ids([1, 2, 3])  # include_deleted=False
 **関連モデルの効率的な取得**
 
 SQLAlchemy の `options` パラメータを使用して、N+1 問題を解決できます。
+
+**対応メソッド**:
+- ✅ `find()` - 複数レコード取得
+- ✅ `find_one()` - 単一レコード取得
+- ✅ `get_by_id()` - ID で単一レコード取得
+- ✅ `get_by()` - カラム条件で取得（単一/複数両対応）
+
+#### 基本的な使い方
+
+```python
+from sqlalchemy.orm import joinedload, selectinload
+
+# find() で使用
+tasks = repo.find(
+    filters=[Task.status == 'active'],
+    options=[joinedload(Task.user)]
+)
+
+# get_by_id() で使用
+task = repo.get_by_id(1, options=[
+    joinedload(Task.user),
+    selectinload(Task.comments)
+])
+
+# get_by() で使用（単一取得）
+task = repo.get_by('title', 'タスク1', single=True, options=[
+    joinedload(Task.user)
+])
+
+# get_by() で使用（複数取得）
+tasks = repo.get_by('status', 'active', options=[
+    selectinload(Task.comments)
+])
+
+# find_one() で使用
+task = repo.find_one(
+    filters=[Task.id == 1],
+    options=[joinedload(Task.user)]
+)
+```
 
 #### joinedload - 1対1 / 多対1 に最適
 
@@ -291,6 +348,19 @@ for task in tasks:
 tasks = repo.find(options=[selectinload(Task.tags)])
 for task in tasks:
     tags = task.tags # クエリなし
+
+# ❌ get_by_id() で N+1 問題
+task = repo.get_by_id(1)
+user = task.user      # 追加クエリ発生
+comments = task.comments  # 追加クエリ発生
+
+# ✅ get_by_id() + options で解決
+task = repo.get_by_id(1, options=[
+    joinedload(Task.user),
+    selectinload(Task.comments)
+])
+user = task.user      # クエリなし
+comments = task.comments  # クエリなし
 ```
 
 ### find() メソッド

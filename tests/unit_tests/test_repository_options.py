@@ -293,3 +293,100 @@ def test_options_none_behavior(db_test, setup_test_data):
 
     assert isinstance(books, list)
     assert len(books) == 3
+
+
+def test_get_by_id_with_options(db_test, setup_test_data):
+    """
+    get_by_id() で options を使って eager loading できることを確認
+    """
+    data = setup_test_data
+    repo = BookRepository(session=db_test)
+
+    book_id = data['books'][0].id
+
+    # options なし（既存の動作）
+    book = repo.get_by_id(book_id)
+    assert book is not None
+    assert book.title == "Book 1"
+
+    # options あり（eager loading）
+    book = repo.get_by_id(
+        book_id,
+        options=[
+            joinedload(EagerBookModel.author),
+            selectinload(EagerBookModel.reviews)
+        ]
+    )
+
+    assert book is not None
+    assert book.title == "Book 1"
+    # N+1 なしで関連モデルにアクセスできる
+    assert book.author is not None
+    assert book.author.name == "Author One"
+    assert len(book.reviews) == 2
+
+
+def test_get_by_with_options_single(db_test, setup_test_data):
+    """
+    get_by() で single=True と options を使って eager loading できることを確認
+    """
+    repo = BookRepository(session=db_test)
+
+    # get_by with options
+    book = repo.get_by(
+        'title',
+        'Book 1',
+        single=True,
+        options=[joinedload(EagerBookModel.author)]
+    )
+
+    assert book is not None
+    assert book.title == "Book 1"
+    # N+1 なしで author にアクセスできる
+    assert book.author is not None
+    assert book.author.name == "Author One"
+
+
+def test_get_by_with_options_multiple(db_test, setup_test_data):
+    """
+    get_by() で複数レコードを取得する際に options を使えることを確認
+    """
+    data = setup_test_data
+    author_id = data['authors'][0].id
+    repo = BookRepository(session=db_test)
+
+    # get_by (single=False) with options
+    books = repo.get_by(
+        'author_id',
+        author_id,
+        options=[selectinload(EagerBookModel.reviews)]
+    )
+
+    assert isinstance(books, list)
+    assert len(books) == 2
+    # N+1 なしで reviews にアクセスできる
+    for book in books:
+        assert isinstance(book.reviews, list)
+
+
+def test_find_one_with_options(db_test, setup_test_data):
+    """
+    find_one() で options を使って eager loading できることを確認
+    """
+    repo = BookRepository(session=db_test)
+
+    # find_one with options
+    book = repo.find_one(
+        filters=[EagerBookModel.title == "Book 1"],
+        options=[
+            joinedload(EagerBookModel.author),
+            selectinload(EagerBookModel.reviews)
+        ]
+    )
+
+    assert book is not None
+    assert book.title == "Book 1"
+    # N+1 なしで関連モデルにアクセスできる
+    assert book.author is not None
+    assert book.author.name == "Author One"
+    assert len(book.reviews) == 2

@@ -143,12 +143,29 @@ class BaseRepository(Generic[T]):
         value: Any,
         *extra_filters: ColumnElement,
         single: bool = False,
+        options: Optional[List] = None
     ) -> Union[List[T], Optional[T]]:
         """Retrieve records by the specified column name and value.
 
         Additional SQLAlchemy filter expressions can be supplied via ``extra_filters``
         to further narrow down the query. By default all matching records are
         returned; when ``single`` is ``True`` only the first match is returned.
+
+        Args:
+            column_name: 検索するカラム名
+            value: 検索する値
+            extra_filters: 追加のフィルタ条件
+            single: True の場合は最初の1件のみ返す
+            options: SQLAlchemy クエリオプション（eager loading等）
+
+        Example:
+            >>> from sqlalchemy.orm import selectinload
+            >>> # 単一レコード取得（relationship も eager load）
+            >>> item = repo.get_by(
+            ...     'email', 'user@example.com',
+            ...     single=True,
+            ...     options=[selectinload(User.profile)]
+            ... )
         """
         if not hasattr(self.model, column_name):
             raise AttributeError(f"Column '{column_name}' does not exist on {self.model.__name__}")
@@ -156,25 +173,37 @@ class BaseRepository(Generic[T]):
         column = getattr(self.model, column_name)
         filters = [column == value, *extra_filters]
         if single:
-            return self.find_one(filters=filters)
-        return self.find(filters=filters)
+            return self.find_one(filters=filters, options=options)
+        return self.find(filters=filters, options=options)
 
-    def get_by_id(self, id: int, include_deleted: bool = False) -> Optional[T]:
+    def get_by_id(self, id: int, include_deleted: bool = False, options: Optional[List] = None) -> Optional[T]:
         """
         指定されたIDのインスタンスを取得
 
         Args:
             id (int): インスタンスのID
             include_deleted (bool): 削除済みレコードも含めるか（デフォルト: False）
+            options (Optional[List]): SQLAlchemy クエリオプション（eager loading等）
 
         Returns:
             Optional[T]: インスタンスが見つかった場合はインスタンス、見つからない場合はNone
+
+        Example:
+            >>> # シンプルな取得（従来通り）
+            >>> item = repo.get_by_id(123)
+            >>> 
+            >>> # relationship も一緒に取得（N+1問題を回避）
+            >>> from sqlalchemy.orm import selectinload
+            >>> item = repo.get_by_id(123, options=[
+            ...     selectinload(Model.tags),
+            ...     selectinload(Model.reviews)
+            ... ])
         """
         extra_filters = []
         if self._has_soft_delete() and not include_deleted:
             extra_filters.append(self.model.deleted_at.is_(None))
 
-        return self.get_by('id', id, *extra_filters, single=True)
+        return self.get_by('id', id, *extra_filters, single=True, options=options)
 
     def get_all(self) -> List[T]:
         """
@@ -403,17 +432,30 @@ class BaseRepository(Generic[T]):
         query = self.set_find_option(query, **kwargs)
         return self.session.execute(query).scalars().all()
 
-    def find_one(self, filters: list) -> Optional[T]:
+    def find_one(self, filters: list, options: Optional[List] = None) -> Optional[T]:
         """
         Retrieve a single record based on the provided filters (SQLAlchemy expressions list).
 
         Args:
             filters (list): フィルタ条件のリスト。
+            options (Optional[List]): SQLAlchemy クエリオプション（eager loading等）
 
         Returns:
             Optional[T]: インスタンスが見つかった場合はインスタンス、見つからない場合はNone
+
+        Example:
+            >>> from sqlalchemy.orm import selectinload
+            >>> item = repo.find_one(
+            ...     filters=[Model.status == 'active'],
+            ...     options=[selectinload(Model.tags)]
+            ... )
         """
         query = select(self.model).filter(*filters).limit(1)
+
+        # eager loading 対応
+        if options:
+            query = query.options(*options)
+
         result = self.session.execute(query).scalars().first()
         return result
 

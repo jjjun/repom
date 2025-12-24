@@ -326,6 +326,41 @@ high_priority_count = await repo.count(
 
 AsyncBaseRepository は `options` パラメータをサポートし、SQLAlchemy の `joinedload` や `selectinload` を使って N+1 問題を解決できます。
 
+**対応メソッド**:
+- ✅ `await find()` - 複数レコード取得
+- ✅ `await find_one()` - 単一レコード取得
+- ✅ `await get_by_id()` - ID で単一レコード取得
+- ✅ `await get_by()` - カラム条件で取得（単一/複数両対応）
+
+### 基本的な使い方
+
+```python
+from sqlalchemy.orm import joinedload, selectinload
+
+# find() で使用
+tasks = await repo.find(
+    filters=[Task.status == 'active'],
+    options=[joinedload(Task.user)]
+)
+
+# get_by_id() で使用（NEW!）
+task = await repo.get_by_id(1, options=[
+    joinedload(Task.user),
+    selectinload(Task.comments)
+])
+
+# get_by() で使用（NEW!）
+task = await repo.get_by('title', 'タスク1', single=True, options=[
+    joinedload(Task.user)
+])
+
+# find_one() で使用（NEW!）
+task = await repo.find_one(
+    filters=[Task.id == 1],
+    options=[joinedload(Task.user)]
+)
+```
+
 ### joinedload（多対一関係）
 
 ```python
