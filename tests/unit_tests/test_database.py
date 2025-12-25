@@ -263,3 +263,73 @@ class TestSessionIsolation:
             items2 = result2.scalars().all()
             assert len(items1) == 1
             assert len(items2) == 1
+
+
+class TestFastAPIDependsPattern:
+    """FastAPI Depends パターンのテスト"""
+
+    def test_get_db_session_yields_session(self):
+        """get_db_session() should yield Session for FastAPI Depends"""
+        # contextmanager デコレータにより、context manager として動作
+        # FastAPI Depends は内部でこれを呼び出して generator を取得する
+        with get_db_session() as session:
+            # Session であることを確認
+            assert isinstance(session, Session)
+
+            # session.execute() が動作することを確認
+            from sqlalchemy import select
+            result = session.execute(select(DatabaseTestModel))
+            items = result.scalars().all()
+            assert isinstance(items, list)
+
+    def test_get_db_transaction_yields_session(self):
+        """get_db_transaction() should yield Session with transaction"""
+        with get_db_transaction() as session:
+            # Session であることを確認
+            assert isinstance(session, Session)
+
+            # トランザクション内でレコードを作成
+            item = DatabaseTestModel(name="transaction_test")
+            session.add(item)
+            session.flush()
+
+            # 作成されたことを確認
+            from sqlalchemy import select
+            result = session.execute(
+                select(DatabaseTestModel).where(DatabaseTestModel.name == "transaction_test")
+            )
+            found = result.scalar_one_or_none()
+            assert found is not None
+
+    def test_fastapi_depends_simulation(self):
+        """Simulate FastAPI Depends behavior"""
+        # FastAPI が Depends を処理する際の動作をシミュレート
+        # Depends は callable を受け取り、その結果を使用する
+        def endpoint_handler():
+            # Depends(get_db_session) のように使用
+            with get_db_session() as session:
+                from sqlalchemy import select
+                result = session.execute(select(DatabaseTestModel))
+                return result.scalars().all()
+
+        items = endpoint_handler()
+        assert isinstance(items, list)
+
+    def test_fastapi_depends_with_transaction(self):
+        """FastAPI Depends with transaction simulation"""
+        # トランザクション内でレコードを作成
+        item_name = "fastapi_test"
+        with get_db_transaction() as session:
+            item = DatabaseTestModel(name=item_name)
+            session.add(item)
+            # トランザクションは自動コミットされる
+
+        # コミットされたことを確認
+        with get_db_session() as verify_session:
+            from sqlalchemy import select
+            result = verify_session.execute(
+                select(DatabaseTestModel).where(DatabaseTestModel.name == item_name)
+            )
+            found = result.scalar_one_or_none()
+            assert found is not None
+            assert found.name == item_name

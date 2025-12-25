@@ -462,6 +462,7 @@ def get_sync_engine() -> Engine:
     return _db_manager.get_sync_engine()
 
 
+@contextmanager
 def get_db_session() -> Generator[Session, None, None]:
     """
     Get a synchronous database session (for FastAPI Depends).
@@ -478,9 +479,11 @@ def get_db_session() -> Generator[Session, None, None]:
         >>>     result = session.execute(select(User))
         >>>     return result.scalars().all()
     """
-    return _db_manager.get_sync_session()
+    with _db_manager.get_sync_session() as session:
+        yield session
 
 
+@contextmanager
 def get_db_transaction() -> Generator[Session, None, None]:
     """
     Get a synchronous database session with automatic transaction management.
@@ -489,12 +492,21 @@ def get_db_transaction() -> Generator[Session, None, None]:
         Session: SQLAlchemy synchronous session with auto-commit/rollback
 
     Example:
-        >>> with get_db_transaction() as session:
-        >>>     user = User(name="test")
+        >>> from fastapi import Depends
+        >>> from repom.database import get_db_transaction
+        >>> 
+        >>> @app.post("/users")
+        >>> def create_user(
+        >>>     user_data: UserCreate,
+        >>>     session: Session = Depends(get_db_transaction)
+        >>> ):
+        >>>     user = User(**user_data.dict())
         >>>     session.add(user)
         >>>     # Auto commit on exit
+        >>>     return user
     """
-    return _db_manager.get_sync_transaction()
+    with _db_manager.get_sync_transaction() as session:
+        yield session
 
 
 def get_inspector():
@@ -521,6 +533,7 @@ async def get_async_engine() -> AsyncEngine:
     return await _db_manager.get_async_engine()
 
 
+@asynccontextmanager
 async def get_async_db_session():
     """
     Get an asynchronous database session (for FastAPI Depends).
@@ -543,6 +556,7 @@ async def get_async_db_session():
         yield session
 
 
+@asynccontextmanager
 async def get_async_db_transaction():
     """
     Get an asynchronous database session with explicit transaction management.

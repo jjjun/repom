@@ -79,9 +79,8 @@ class TestGetAsyncDbSession:
     @pytest.mark.asyncio
     async def test_yields_async_session(self):
         """AsyncSession が正しく yield されることを確認"""
-        async for session in get_async_db_session():
+        async with get_async_db_session() as session:
             assert isinstance(session, AsyncSession)
-            break  # 一度だけテスト
 
     @pytest.mark.asyncio
     async def test_session_can_query(self, async_db_test):
@@ -94,10 +93,9 @@ class TestGetAsyncDbSession:
     async def test_closes_session_automatically(self):
         """Session が context manager 終了後に自動クローズされることを確認"""
         session_ref = None
-        async for session in get_async_db_session():
+        async with get_async_db_session() as session:
             session_ref = session
             assert session_ref is not None
-            break
 
         # context manager 終了後はクローズされている
         assert session_ref is not None
@@ -147,7 +145,7 @@ class TestGetAsyncDbTransaction:
     async def test_transaction_with_exception(self, async_db_test):
         """例外が発生した場合のロールバック動作を確認"""
         with pytest.raises(ValueError):
-            async for session in get_async_db_transaction():
+            async with get_async_db_transaction() as session:
                 sample = SampleModel(value="test_exception_rollback")
                 session.add(sample)
                 await session.flush()
@@ -297,11 +295,8 @@ class TestFastAPIDependsPattern:
     @pytest.mark.asyncio
     async def test_get_async_db_session_yields_session(self):
         """get_async_db_session() should yield AsyncSession for FastAPI Depends"""
-        # FastAPI が内部的に行うのと同じ処理をシミュレート
-        async_gen = get_async_db_session()
-        session = await async_gen.__anext__()
-
-        try:
+        # asynccontextmanager デコレータにより、context manager として動作
+        async with get_async_db_session() as session:
             # AsyncSession であることを確認
             assert isinstance(session, AsyncSession)
 
@@ -309,20 +304,11 @@ class TestFastAPIDependsPattern:
             result = await session.execute(select(SampleModel))
             samples = result.scalars().all()
             assert isinstance(samples, list)
-        finally:
-            # クリーンアップ（FastAPI が自動的に行う）
-            try:
-                await async_gen.__anext__()
-            except StopAsyncIteration:
-                pass
 
     @pytest.mark.asyncio
     async def test_get_async_db_transaction_yields_session(self):
         """get_async_db_transaction() should yield AsyncSession with transaction"""
-        async_gen = get_async_db_transaction()
-        session = await async_gen.__anext__()
-
-        try:
+        async with get_async_db_transaction() as session:
             # AsyncSession であることを確認
             assert isinstance(session, AsyncSession)
 
@@ -337,29 +323,19 @@ class TestFastAPIDependsPattern:
             )
             found = result.scalar_one_or_none()
             assert found is not None
-        finally:
-            try:
-                await async_gen.__anext__()
-            except StopAsyncIteration:
-                pass
 
     @pytest.mark.asyncio
     async def test_fastapi_depends_simulation(self):
         """Simulate FastAPI Depends behavior"""
-        # FastAPI のような依存関数として使用
-        async def get_session_dependency():
-            async for session in get_async_db_session():
-                yield session
+        # FastAPI が Depends を処理する際の動作をシミュレート
+        async def endpoint_handler():
+            # Depends(get_async_db_session) のように使用
+            async with get_async_db_session() as session:
+                result = await session.execute(select(SampleModel))
+                return result.scalars().all()
 
-        # エンドポイントのような使用例
-        async for session in get_session_dependency():
-            # session が AsyncSession であることを確認
-            assert isinstance(session, AsyncSession)
-
-            # 実際の操作が可能なことを確認
-            result = await session.execute(select(SampleModel))
-            samples = result.scalars().all()
-            assert isinstance(samples, list)
+        samples = await endpoint_handler()
+        assert isinstance(samples, list)
             break  # 一度だけテスト
 
     @pytest.mark.asyncio
