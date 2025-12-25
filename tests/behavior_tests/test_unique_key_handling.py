@@ -10,7 +10,7 @@ from tests.utils import (
     generate_sample_roster_data,
     save_model_instances
 )
-from repom.database import Base, get_db_session
+from repom.database import Base, _db_manager
 
 
 """
@@ -75,7 +75,7 @@ def test_skip_on_exception(db_test):
 
     # save_model_instancesにより、既にデータは保存されている
     # この先の処理では事前にキーをチェックして、既に存在している為、保存はスキップされる
-    with get_db_session() as session:
+    with _db_manager.get_sync_session() as session:
         try:
             for item in sample_data:
                 try:

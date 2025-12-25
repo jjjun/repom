@@ -75,12 +75,12 @@ class TestGetAsyncEngine:
 
 class TestGetAsyncDbSession:
     """DEPRECATED: These tests relied on 'async with' statement which no longer works.
-    
+
     After removing @asynccontextmanager decorator to fix FastAPI Depends compatibility,
     get_async_db_session() returns an async generator, not a context manager.
     For context manager usage, use DatabaseManager methods directly.
     """
-    
+
     def test_deprecated_context_manager_usage(self):
         """Skip old tests that used 'async with' statement"""
         pytest.skip(
@@ -91,12 +91,12 @@ class TestGetAsyncDbSession:
 
 class TestGetAsyncDbTransaction:
     """DEPRECATED: These tests relied on 'async with' statement which no longer works.
-    
+
     After removing @asynccontextmanager decorator to fix FastAPI Depends compatibility,
     get_async_db_transaction() returns an async generator, not a context manager.
     For context manager usage, use DatabaseManager methods directly.
     """
-    
+
     def test_deprecated_context_manager_usage(self):
         """Skip old tests that used 'async with' statement"""
         pytest.skip(

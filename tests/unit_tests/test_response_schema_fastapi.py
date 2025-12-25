@@ -47,6 +47,7 @@ if FASTAPI_AVAILABLE:
     class ProductModel(BaseModelAuto):
         """商品モデル"""
         __tablename__ = 'products'
+        __table_args__ = {'extend_existing': True}
 
         use_id = True
         use_created_at = True
@@ -272,6 +273,7 @@ if FASTAPI_AVAILABLE:
     class CategoryModel(BaseModelAuto):
         """カテゴリモデル"""
         __tablename__ = 'categories'
+        __table_args__ = {'extend_existing': True}
 
         use_id = True
         name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -344,7 +346,7 @@ if FASTAPI_AVAILABLE:
         from repom.base_repository import BaseRepository
 
         # リポジトリを作成
-        repo = BaseRepository[ProductModel]()
+        repo = BaseRepository(ProductModel)
 
         # データを作成
         product = ProductModel(name='Test Product', price=1500, stock=20)
