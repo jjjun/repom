@@ -27,7 +27,7 @@ Example (CLI script):
 """
 
 from typing import Optional, AsyncGenerator, Generator
-from contextlib import contextmanager, asynccontextmanager
+from contextlib import contextmanager, asynccontextmanager  # Only for DatabaseManager internal use
 import asyncio
 
 from sqlalchemy import create_engine, Engine, inspect
@@ -462,7 +462,6 @@ def get_sync_engine() -> Engine:
     return _db_manager.get_sync_engine()
 
 
-@contextmanager
 def get_db_session() -> Generator[Session, None, None]:
     """
     Get a synchronous database session (for FastAPI Depends).
@@ -483,7 +482,6 @@ def get_db_session() -> Generator[Session, None, None]:
         yield session
 
 
-@contextmanager
 def get_db_transaction() -> Generator[Session, None, None]:
     """
     Get a synchronous database session with automatic transaction management.
@@ -533,7 +531,6 @@ async def get_async_engine() -> AsyncEngine:
     return await _db_manager.get_async_engine()
 
 
-@asynccontextmanager
 async def get_async_db_session():
     """
     Get an asynchronous database session (for FastAPI Depends).
@@ -556,7 +553,6 @@ async def get_async_db_session():
         yield session
 
 
-@asynccontextmanager
 async def get_async_db_transaction():
     """
     Get an asynchronous database session with explicit transaction management.

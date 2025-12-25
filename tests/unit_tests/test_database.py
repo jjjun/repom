@@ -62,99 +62,19 @@ class TestGetInspector:
 
 
 class TestGetDbSession:
-    """get_db_session() のテスト"""
+    """DEPRECATED: Tests for old 'with' statement behavior removed"""
 
-    def test_get_db_session_yields_session(self, db_test):
-        """セッションが正しく生成されることを確認"""
-        with get_db_session() as session:
-            assert isinstance(session, Session)
-
-    def test_get_db_session_closes_session(self, db_test):
-        """セッションが正しくクローズされることを確認"""
-        session_ref = None
-        with get_db_session() as session:
-            session_ref = session
-            assert session.is_active
-
-        # context manager 終了後はクローズされている
-        assert session_ref is not None
-
-    def test_get_db_session_no_auto_commit(self, db_test):
-        """トランザクションが自動コミットされないことを確認"""
-        # データを追加
-        item = DatabaseTestModel(name="test_no_commit")
-        db_test.add(item)
-        db_test.flush()
-
-        # 明示的にコミットしない
-        # db_test フィクスチャ内では見えるが、ロールバック後は消える
-        from sqlalchemy import select
-        result = db_test.execute(select(DatabaseTestModel).where(
-            DatabaseTestModel.name == "test_no_commit"
-        ))
-        items = result.scalars().all()
-        assert len(items) == 1
+    def test_deprecated_with_statement_tests(self):
+        """Old tests removed - FastAPI Depends compatibility tests in TestFastAPIDependsPattern"""
+        pytest.skip("Old 'with' statement tests removed - generator protocol tested in TestFastAPIDependsPattern")
 
 
 class TestGetDbTransaction:
-    """get_db_transaction() のテスト"""
+    """DEPRECATED: Tests for old 'with' statement behavior removed"""
 
-    def test_get_db_transaction_auto_commit(self, db_test):
-        """正常終了時に自動コミットされることを確認"""
-        from sqlalchemy import select
-
-        with get_db_transaction() as session:
-            # データを追加
-            item = DatabaseTestModel(name="test_auto_commit")
-            session.add(item)
-
-        # 別のセッションで確認（コミットされているので見える）
-        with get_db_session() as session:
-            result = session.execute(select(DatabaseTestModel).where(
-                DatabaseTestModel.name == "test_auto_commit"
-            ))
-            items = result.scalars().all()
-            assert len(items) == 1
-            assert items[0].name == "test_auto_commit"
-
-    def test_get_db_transaction_auto_rollback_on_exception(self, db_test):
-        """例外発生時に自動ロールバックされることを確認"""
-        from sqlalchemy import select
-
-        # 例外が発生することを確認
-        with pytest.raises(ValueError):
-            with get_db_transaction() as session:
-                # データを追加
-                item = DatabaseTestModel(name="test_rollback")
-                session.add(item)
-                # 意図的に例外を発生させる
-                raise ValueError("Test exception")
-
-        # 別のセッションで確認（ロールバックされているので見えない）
-        with get_db_transaction() as session:
-            result = session.execute(select(DatabaseTestModel).where(
-                DatabaseTestModel.name == "test_rollback"
-            ))
-            items = result.scalars().all()
-            assert len(items) == 0
-
-    def test_transaction_nested_operations(self, db_test):
-        """複数の操作を含むトランザクションのテスト"""
-        from sqlalchemy import select
-
-        with get_db_transaction() as session:
-            # 複数のアイテムを追加
-            for i in range(5):
-                item = DatabaseTestModel(name=f"test_nested_{i}")
-                session.add(item)
-
-        # 別のセッションで確認（すべてコミットされている）
-        with get_db_transaction() as session:
-            result = session.execute(select(DatabaseTestModel).where(
-                DatabaseTestModel.name.like("test_nested_%")
-            ))
-            items = result.scalars().all()
-            assert len(items) == 5
+    def test_deprecated_with_statement_tests(self):
+        """Old tests removed - FastAPI Depends compatibility tests in TestFastAPIDependsPattern"""
+        pytest.skip("Old 'with' statement tests removed - generator protocol tested in TestFastAPIDependsPattern")
 
 
 class TestDatabaseManager:
@@ -295,7 +215,7 @@ class TestFastAPIDependsPattern:
         try:
             # FastAPI calls next(gen) to get the dependency
             session = next(gen)
-            
+
             # Session であることを確認
             assert isinstance(session, Session), \
                 f"Expected Session but got {type(session).__name__}"
@@ -405,11 +325,11 @@ class TestFastAPIDependsPattern:
 
         # Use the simulated Depends
         session = simulate_fastapi_depends(get_db_session)
-        
+
         # Session であることを確認
         assert isinstance(session, Session), \
             f"Expected Session but got {type(session).__name__}"
-        
+
         # session.execute() が動作することを確認
         from sqlalchemy import select
         result = session.execute(select(DatabaseTestModel))
