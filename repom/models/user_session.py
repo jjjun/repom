@@ -17,7 +17,7 @@ class UserSession(BaseModelAuto, use_id=False, use_created_at=True, use_updated_
     """
     User session tracking model with composite primary key.
     This model demonstrates use_id=False to avoid auto-generated id column.
-    
+
     推奨構造:
     - use_id=False で複合主キーを使用
     - パラメータ方式で明示的に指定
@@ -28,14 +28,14 @@ class UserSession(BaseModelAuto, use_id=False, use_created_at=True, use_updated_
 
     # Composite primary key
     user_id: Mapped[int] = mapped_column(
-        Integer, 
-        primary_key=True, 
+        Integer,
+        primary_key=True,
         nullable=False,
         info={'description': 'ユーザーID'}
     )
     session_token: Mapped[str] = mapped_column(
-        String(64), 
-        primary_key=True, 
+        String(64),
+        primary_key=True,
         nullable=False,
         info={'description': 'セッショントークン'}
     )
@@ -50,7 +50,7 @@ class UserSession(BaseModelAuto, use_id=False, use_created_at=True, use_updated_
         info={'description': 'ユーザーエージェント'}
     )
     expires_at: Mapped[datetime] = mapped_column(
-        DateTime, 
+        DateTime,
         nullable=False,
         info={'description': '有効期限'}
     )

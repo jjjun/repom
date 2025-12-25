@@ -9,7 +9,7 @@ from repom.utility import get_plural_tablename
 
 class SampleModel(BaseModelAuto, use_id=True, use_created_at=True, use_updated_at=True):
     """サンプルモデル
-    
+
     推奨構造:
     - BaseModelAuto を継承（Pydantic スキーマ自動生成機能）
     - パラメータ方式で use_* フラグを指定
@@ -18,8 +18,8 @@ class SampleModel(BaseModelAuto, use_id=True, use_created_at=True, use_updated_a
     __tablename__ = get_plural_tablename(__file__)
 
     value: Mapped[str] = mapped_column(
-        String(255), 
-        nullable=False, 
+        String(255),
+        nullable=False,
         default='',
         info={'description': 'サンプル値（最大5０文字）'}
     )
