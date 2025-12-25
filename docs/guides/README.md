@@ -42,8 +42,9 @@ repom の使い方を機能別に整理したガイド集です。
 - [base_model_auto_guide.md](core/base_model_auto_guide.md)
 - [system_columns_and_custom_types.md](core/system_columns_and_custom_types.md)
 
-### Database (1)
-- [migration_to_database_py.md](database/migration_to_database_py.md)
+### Database (0)
+- このディレクトリには現在ガイドはありません
+- データベース関連は [repository/](repository/) を参照
 
 ### Repository (3)
 - [async_repository_guide.md](repository/async_repository_guide.md)
@@ -60,4 +61,4 @@ repom の使い方を機能別に整理したガイド集です。
 
 ---
 
-**合計**: 11 ガイド (削減前: 13 ガイド)
+**合計**: 10 ガイド (削減前: 13 ガイド)

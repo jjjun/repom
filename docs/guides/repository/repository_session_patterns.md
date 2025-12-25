@@ -497,5 +497,4 @@ asyncio_mode = "auto"
 ## 関連ドキュメント
 
 - [repository_and_utilities_guide.md](repository_and_utilities_guide.md) - BaseRepository の基本的な使い方
-- [../database/migration_to_database_py.md](../database/migration_to_database_py.md) - database.py への移行ガイド
 - [async_repository_guide.md](async_repository_guide.md) - 非同期版 Repository の使い方
