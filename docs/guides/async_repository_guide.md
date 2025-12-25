@@ -56,7 +56,7 @@
 
 ```python
 from repom.async_base_repository import AsyncBaseRepository
-from repom.async_session import get_async_db_session
+from repom.database import get_async_db_session
 from your_project.models import Task
 
 # 非同期コンテキストマネージャーで使用
@@ -93,7 +93,7 @@ async with get_async_db_session() as session:
 ```python
 from fastapi import FastAPI, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from repom.async_session import get_async_db_session
+from repom.database import get_async_db_session
 from repom.async_base_repository import AsyncBaseRepository
 from your_project.models import Task
 
@@ -796,7 +796,7 @@ with db_session() as session:
 **非同期版 (AsyncBaseRepository)**:
 ```python
 from repom.async_base_repository import AsyncBaseRepository
-from repom.async_session import get_async_db_session
+from repom.database import get_async_db_session
 
 async with get_async_db_session() as session:
     repo = AsyncBaseRepository(Task, session)

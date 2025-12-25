@@ -16,7 +16,7 @@ repom は FastAPI Users などの非同期フレームワークとの統合を�
 repom は**同期セッションと非同期セッションの両方**をサポートします：
 
 - **同期セッション** (`repom.session`): 既存のコード、CLI ツール、シンプルなアプリケーション向け
-- **非同期セッション** (`repom.async_session`): FastAPI、FastAPI Users、高スループットアプリケーション向け
+- **非同期セッション** (`repom.database`): FastAPI、FastAPI Users、高スループットアプリケーション向け
 
 両方の API が共存し、プロジェクトの要件に応じて使い分けができます。
 
@@ -55,7 +55,7 @@ poetry add repom[async-all]
 手動でセッションを開閉する場合は `get_async_session()` を使用します。
 
 ```python
-from repom.async_session import get_async_session
+from repom.database import get_async_session
 from sqlalchemy import select
 from your_project.models import User
 
@@ -81,7 +81,7 @@ async def get_user_by_id(user_id: int):
 トランザクション自動管理が必要な場合は `get_async_db_session()` を使用します。
 
 ```python
-from repom.async_session import get_async_db_session
+from repom.database import get_async_db_session
 from sqlalchemy import select
 from your_project.models import User
 
@@ -113,7 +113,7 @@ FastAPI Users は `AsyncGenerator[AsyncSession, None]` 型の依存関数を要�
 from fastapi import Depends, FastAPI
 from fastapi_users import FastAPIUsers
 from fastapi_users.db import SQLAlchemyUserDatabase
-from repom.async_session import get_async_db_session
+from repom.database import get_async_db_session
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -147,7 +147,7 @@ app.include_router(
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from repom.async_session import get_async_db_session
+from repom.database import get_async_db_session
 from your_project.models import Article
 from your_project.schemas import ArticleResponse, ArticleCreate
 
@@ -248,7 +248,7 @@ async def test_transaction_isolation(async_db_test):
 非同期セッションは同期 DB URL を非同期ドライバー用に自動変換します。
 
 ```python
-from repom.async_session import convert_to_async_uri
+from repom.database import convert_to_async_uri
 
 # SQLite
 sync_url = "sqlite:///data/db.sqlite3"

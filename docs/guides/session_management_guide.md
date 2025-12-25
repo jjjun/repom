@@ -1,7 +1,7 @@
 # セッション管理ガイド
 
 repom は、SQLAlchemy セッションの管理を簡素化するためのヘルパー関数を提供しています。
-このガイドでは、`repom.session` モジュールの使い方を説明します。
+このガイドでは、`repom.database` モジュールの使い方を説明します。
 
 ## 📚 目次
 
@@ -19,7 +19,7 @@ repom は、SQLAlchemy セッションの管理を簡素化するためのヘル
 
 ## 概要
 
-`repom.session` モジュールは、フレームワーク非依存な設計で、様々な環境で使用できる汎用的なセッション管理機能を提供します。
+`repom.database` モジュールは、フレームワーク非依存な設計で、様々な環境で使用できる汎用的なセッション管理機能を提供します。
 
 **主な特徴**:
 - ✅ フレームワーク非依存（FastAPI、Flask、Django、CLI など）
@@ -128,7 +128,7 @@ def get_session() -> Session:
 ```python
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from repom.session import get_db_session
+from repom.database import get_db_session
 
 router = APIRouter()
 
@@ -155,7 +155,7 @@ async def read_item(
 ```python
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from repom.session import get_db_transaction
+from repom.database import get_db_transaction
 
 router = APIRouter()
 
@@ -207,7 +207,7 @@ async def delete_item(
 ```python
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from repom.session import get_db_transaction
+from repom.database import get_db_transaction
 
 router = APIRouter()
 
@@ -235,7 +235,7 @@ async def create_bulk_blocks(
 #### パターン 1: 単純なデータ操作
 
 ```python
-from repom.session import transaction
+from repom.database import transaction
 from repom.models import Item
 
 def create_initial_data():
@@ -258,7 +258,7 @@ if __name__ == "__main__":
 #### パターン 2: バッチ処理
 
 ```python
-from repom.session import transaction
+from repom.database import transaction
 from repom.models import Block
 
 def process_blocks(block_ids: List[int]):
@@ -283,7 +283,7 @@ if __name__ == "__main__":
 #### パターン 3: エラーハンドリング
 
 ```python
-from repom.session import transaction
+from repom.database import transaction
 from repom.models import Item
 
 def safe_create_item(name: str, description: str):
@@ -309,7 +309,7 @@ if __name__ == "__main__":
 
 ```python
 from flask import Flask, request, jsonify
-from repom.session import get_db_transaction, get_db_session
+from repom.database import get_db_transaction, get_db_session
 
 app = Flask(__name__)
 
@@ -353,7 +353,7 @@ def create_item():
 特殊なケースで低レベルな制御が必要な場合は、`get_session()` を使用します。
 
 ```python
-from repom.session import get_session
+from repom.database import get_session
 
 def advanced_transaction():
     """複雑なトランザクション制御"""
@@ -392,7 +392,7 @@ def advanced_transaction():
 
 ### 1. フレームワーク非依存
 
-`repom.session` のすべての関数は、特定のフレームワークに依存しない設計です。
+`repom.database` のすべての関数は、特定のフレームワークに依存しない設計です。
 
 - ❌ FastAPI 専用ではない
 - ❌ Flask 専用ではない
@@ -422,7 +422,7 @@ session = next(gen)
 これにより、各リクエスト・トランザクションで独立したセッションが作成されます。
 
 ```python
-# repom/session.py
+# repom/database.py
 from repom.db import SessionLocal
 
 def get_db_session() -> Generator[Session, None, None]:
@@ -524,7 +524,7 @@ async def create_item(session: Session = Depends(get_db_transaction)):
 **解決策**:
 ```python
 # デバッグ用のログを追加
-from repom.session import transaction
+from repom.database import transaction
 
 try:
     with transaction() as session:
@@ -548,21 +548,21 @@ except Exception as e:
 ```python
 # ❌ 間違った使い方
 from repom.db import db_session  # scoped_session（スレッドローカル）
-from repom.session import get_db_transaction  # SessionLocal（独立）
+from repom.database import get_db_transaction  # SessionLocal（独立）
 
 # これらを混ぜると予期しない動作になる
 
 # ✅ 正しい使い方
-from repom.session import get_db_transaction, transaction
+from repom.database import get_db_transaction, transaction
 
-# repom.session のみを使用する
+# repom.database のみを使用する
 ```
 
 ---
 
 ## まとめ
 
-`repom.session` モジュールは、シンプルで汎用的なセッション管理機能を提供します。
+`repom.database` モジュールは、シンプルで汎用的なセッション管理機能を提供します。
 
 **使い分けガイド**:
 

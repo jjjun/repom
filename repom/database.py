@@ -539,7 +539,8 @@ async def get_async_db_session():
         >>>     result = await session.execute(select(User))
         >>>     return result.scalars().all()
     """
-    return _db_manager.get_async_session()
+    async with _db_manager.get_async_session() as session:
+        yield session
 
 
 async def get_async_db_transaction():
@@ -549,7 +550,8 @@ async def get_async_db_transaction():
     Yields:
         AsyncSession: SQLAlchemy asynchronous session with auto-commit/rollback
     """
-    return _db_manager.get_async_transaction()
+    async with _db_manager.get_async_transaction() as session:
+        yield session
 
 
 # ========================================
