@@ -227,7 +227,7 @@ class BaseRepository(Generic[T]):
             理由: SQLAlchemy の同期セッションでは expire_on_commit=True (デフォルト) により、
                   commit() 後に属性アクセス時、自動的にデータベースから再読み込みが発生します。
                   そのため、AutoDateTime などのデフォルト値も正しく取得できます。
-            
+
             非同期版（AsyncBaseRepository.save）では refresh() が必須です。
         """
         try:

@@ -165,7 +165,7 @@ class AsyncBaseRepository(Generic[T]):
             非同期セッションでは commit() 後に refresh() が必須です。
             理由: SQLAlchemy の非同期環境では、expire された属性への自動ロードが動作せず、
                   AutoDateTime などのデフォルト値が Python オブジェクトに反映されません。
-            
+
             同期版（BaseRepository.save）では refresh() は不要です。
             理由: expire_on_commit=True (デフォルト) により、commit() 後に属性アクセス時
                   自動的にデータベースから再読み込みが発生するため。

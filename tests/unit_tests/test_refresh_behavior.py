@@ -27,39 +27,39 @@ class TestRefreshBehaviorSync:
     def test_save_without_refresh_created_at_is_none(self, db_test):
         """Test if created_at is None after save() without refresh()"""
         repo = BaseRepository(TestModel, session=db_test)
-        
+
         # Create instance without setting created_at/updated_at
         instance = TestModel(name="Test Item")
-        
+
         # Before save, created_at should be None
         assert instance.created_at is None
         assert instance.updated_at is None
-        
+
         # Save without refresh
         saved = repo.save(instance)
-        
+
         # CRITICAL TEST: Are created_at/updated_at still None?
         print(f"\nAfter save (no refresh):")
         print(f"  created_at: {saved.created_at}")
         print(f"  updated_at: {saved.updated_at}")
-        
+
         # If the issue document is correct, these should be None
         # But let's verify what actually happens
         is_created_at_none = saved.created_at is None
         is_updated_at_none = saved.updated_at is None
-        
+
         print(f"\nVerification:")
         print(f"  created_at is None: {is_created_at_none}")
         print(f"  updated_at is None: {is_updated_at_none}")
-        
+
         # Let's also check if database has the values
         db_test.commit()  # Ensure database is updated
         fetched = db_test.query(TestModel).filter_by(id=saved.id).first()
-        
+
         print(f"\nFetched from database:")
         print(f"  created_at: {fetched.created_at}")
         print(f"  updated_at: {fetched.updated_at}")
-        
+
         # Record results for analysis
         return {
             'saved_created_at_is_none': is_created_at_none,
@@ -71,17 +71,17 @@ class TestRefreshBehaviorSync:
     def test_save_with_manual_refresh(self, db_test):
         """Test if manual refresh() fixes the issue"""
         repo = BaseRepository(TestModel, session=db_test)
-        
+
         instance = TestModel(name="Test Item 2")
         saved = repo.save(instance)
-        
+
         # Manually refresh
         db_test.refresh(saved)
-        
+
         print(f"\nAfter save + manual refresh:")
         print(f"  created_at: {saved.created_at}")
         print(f"  updated_at: {saved.updated_at}")
-        
+
         # After refresh, these should NOT be None
         assert saved.created_at is not None
         assert isinstance(saved.created_at, datetime)
@@ -96,28 +96,28 @@ class TestRefreshBehaviorAsync:
     async def test_save_without_refresh_created_at_is_none(self, async_db_test):
         """Test if created_at is None after save() without refresh() (async)"""
         repo = AsyncBaseRepository(TestModel, session=async_db_test)
-        
+
         # Create instance without setting created_at/updated_at
         instance = TestModel(name="Test Item Async")
-        
+
         # Before save
         assert instance.created_at is None
         assert instance.updated_at is None
-        
+
         # Save without refresh
         saved = await repo.save(instance)
-        
+
         print(f"\n[ASYNC] After save (no refresh):")
         print(f"  created_at: {saved.created_at}")
         print(f"  updated_at: {saved.updated_at}")
-        
+
         is_created_at_none = saved.created_at is None
         is_updated_at_none = saved.updated_at is None
-        
+
         print(f"\n[ASYNC] Verification:")
         print(f"  created_at is None: {is_created_at_none}")
         print(f"  updated_at is None: {is_updated_at_none}")
-        
+
         return {
             'saved_created_at_is_none': is_created_at_none,
             'saved_updated_at_is_none': is_updated_at_none,
@@ -126,17 +126,17 @@ class TestRefreshBehaviorAsync:
     async def test_save_with_manual_refresh(self, async_db_test):
         """Test if manual refresh() fixes the issue (async)"""
         repo = AsyncBaseRepository(TestModel, session=async_db_test)
-        
+
         instance = TestModel(name="Test Item Async 2")
         saved = await repo.save(instance)
-        
+
         # Manually refresh
         await async_db_test.refresh(saved)
-        
+
         print(f"\n[ASYNC] After save + manual refresh:")
         print(f"  created_at: {saved.created_at}")
         print(f"  updated_at: {saved.updated_at}")
-        
+
         # After refresh, these should NOT be None
         assert saved.created_at is not None
         assert isinstance(saved.created_at, datetime)
