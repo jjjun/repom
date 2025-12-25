@@ -279,8 +279,8 @@ schema2 = MyModel.get_response_schema()  # キャッシュ取得（高速）
 
 ```python
 # ❌ これはエラーになる
-class ReviewModel(BaseModel):
-    @BaseModel.response_field(
+class ReviewModel(BaseModelAuto):
+    @BaseModelAuto.response_field(
         related_books=List[BookResponse]  # BookResponse がまだ定義されていない
     )
     def to_dict(self):
@@ -293,8 +293,8 @@ class ReviewModel(BaseModel):
 
 ```python
 # ✅ 正しい実装
-class ReviewModel(BaseModel):
-    @BaseModel.response_field(
+class ReviewModel(BaseModelAuto):
+    @BaseModelAuto.response_field(
         tags=List[str],                        # 標準型：自動解決
         related_books="List[BookResponse]",    # カスタム型：文字列で指定
         parent_item="ParentItemResponse | None"
@@ -323,7 +323,7 @@ ResponseSchema = ReviewModel.get_response_schema(
 前方参照が解決できない場合、`SchemaGenerationError` 例外が発生し、具体的な解決策を含むエラーメッセージが表示されます。
 
 ```python
-from repom.base_model import SchemaGenerationError
+from repom.base_model_auto import SchemaGenerationError
 
 try:
     schema = Task.get_response_schema(forward_refs={})
@@ -475,7 +475,9 @@ if forward_refs:
     cache_key += f"::{','.join(sorted(forward_refs.keys()))}"
 
 # キャッシュ辞書
-BaseModel._response_schemas: Dict[str, Type[Any]]
+BaseModelAuto._response_schemas: Dict[str, Type[Any]]
+BaseModelAuto._create_schemas: Dict[str, Type[Any]]
+BaseModelAuto._update_schemas: Dict[str, Type[Any]]
 ```
 
 ### グローバルレジストリ
@@ -654,12 +656,12 @@ def to_dict(self):
 
 ## 関連ドキュメント
 
-- **BaseRepository & FilterParams**: [repository_and_utilities_guide.md](repository_and_utilities_guide.md)
-- **AI コンテキスト管理**: [../technical/ai_context_management.md](../technical/ai_context_management.md)
-- **Issue #3 (完了)**: [../issue/completed/003_*.md](../issue/completed/)
+- **BaseRepository & FilterParams**: [../repository/repository_and_utilities_guide.md](../repository/repository_and_utilities_guide.md)
+- **AI コンテキスト管理**: [../../technical/ai_context_management.md](../../technical/ai_context_management.md)
+- **Soft Delete Guide**: [../features/soft_delete_guide.md](../features/soft_delete_guide.md)
 
 ---
 
 **作成日**: 2025-11-15  
-**最終更新**: 2025-11-15  
-**バージョン**: 統合版 v1.0
+**最終更新**: 2025-12-25  
+**バージョン**: 統合版 v1.1 (実装整合性チェック完了)
