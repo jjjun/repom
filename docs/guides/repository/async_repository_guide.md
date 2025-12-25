@@ -824,5 +824,5 @@ async with get_async_db_session() as session:
 詳細は以下のドキュメントも参照してください：
 
 - [BaseRepository ガイド](repository_and_utilities_guide.md) - 同期版の詳細
-- [Session Management ガイド](session_management_guide.md) - セッション管理
-- [Testing ガイド](testing_guide.md) - AsyncBaseRepository のテスト方法
+- [Session Management ガイド](repository_session_patterns.md) - セッション管理
+- [Testing ガイド](../testing/testing_guide.md) - AsyncBaseRepository のテスト方法

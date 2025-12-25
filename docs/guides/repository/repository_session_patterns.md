@@ -355,6 +355,125 @@ def create_task(
 
 ---
 
+## FastAPI 統合パターン
+
+### FastAPI Depends の使い方
+
+FastAPI の依存性注入システムと統合する場合、`get_async_db_session()` を使用します：
+
+```python
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from repom.database import get_async_db_session
+from your_project.models import Article
+from your_project.schemas import ArticleResponse, ArticleCreate
+
+router = APIRouter()
+
+@router.get("/articles/{article_id}", response_model=ArticleResponse)
+async def get_article(
+    article_id: int,
+    session: AsyncSession = Depends(get_async_db_session)
+):
+    """記事を取得"""
+    result = await session.execute(
+        select(Article).where(Article.id == article_id)
+    )
+    article = result.scalar_one_or_none()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return article.to_dict()
+
+@router.post("/articles", response_model=ArticleResponse)
+async def create_article(
+    data: ArticleCreate,
+    session: AsyncSession = Depends(get_async_db_session)
+):
+    """記事を作成"""
+    article = Article(**data.dict())
+    session.add(article)
+    await session.flush()  # ID を取得
+    return article.to_dict()
+    # 自動で commit される
+```
+
+### FastAPI Users パターン
+
+FastAPI Users は `AsyncGenerator[AsyncSession, None]` 型の依存関数を要求します：
+
+```python
+from fastapi import Depends, FastAPI
+from fastapi_users import FastAPIUsers
+from fastapi_users.db import SQLAlchemyUserDatabase
+from repom.database import get_async_db_session
+from typing import AsyncGenerator
+from sqlalchemy.ext.asyncio import AsyncSession
+
+app = FastAPI()
+
+# FastAPI Users のための依存関数
+async def get_user_db(
+    session: AsyncSession = Depends(get_async_db_session)
+) -> AsyncGenerator[SQLAlchemyUserDatabase, None]:
+    yield SQLAlchemyUserDatabase(session, User)
+
+# FastAPI Users の初期化
+fastapi_users = FastAPIUsers[User, int](
+    get_user_manager,
+    [auth_backend],
+)
+
+# ルーター登録
+app.include_router(
+    fastapi_users.get_auth_router(auth_backend),
+    prefix="/auth/jwt",
+    tags=["auth"],
+)
+```
+
+---
+
+## トラブルシューティング
+
+### TypeError: object AsyncSession can't be used in 'await' expression
+
+**原因**: `get_async_session()` の戻り値を誤って await しています。
+
+**間違った例**:
+```python
+session = await get_async_session()  # ❌ この時点で既に AsyncSession
+```
+
+**正しい例**:
+```python
+session = await get_async_session()  # ✅ get_async_session() 自体が async 関数
+await session.execute(...)           # ✅ execute を await
+```
+
+### ImportError: cannot import name 'AsyncSession'
+
+**原因**: 非同期ドライバーがインストールされていません。
+
+**解決方法**:
+```bash
+poetry add aiosqlite  # SQLite の場合
+poetry add asyncpg    # PostgreSQL の場合
+```
+
+### RuntimeError: Event loop is closed
+
+**原因**: pytest-asyncio の設定が不足しています。
+
+**解決方法**:
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+```
+
+---
+
 ## まとめ
 
 **覚えておくべき 3 つのポイント**:
@@ -378,6 +497,5 @@ def create_task(
 ## 関連ドキュメント
 
 - [repository_and_utilities_guide.md](repository_and_utilities_guide.md) - BaseRepository の基本的な使い方
-- [session_management_guide.md](session_management_guide.md) - セッション管理の詳細
-- [migration_to_database_py.md](migration_to_database_py.md) - database.py への移行ガイド
+- [../database/migration_to_database_py.md](../database/migration_to_database_py.md) - database.py への移行ガイド
 - [async_repository_guide.md](async_repository_guide.md) - 非同期版 Repository の使い方

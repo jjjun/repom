@@ -8,51 +8,46 @@
 
 このドキュメントは基本的な情報のみを記載しています。詳細な使用方法は以下のガイドを参照してください：
 
-- **[BaseModelAuto & スキーマ自動生成ガイド](docs/guides/base_model_auto_guide.md)**
+- **[BaseModelAuto & スキーマ自動生成ガイド](docs/guides/core/base_model_auto_guide.md)**
   - Pydantic スキーマ自動生成（`get_create_schema()`, `get_update_schema()`, `get_response_schema()`）
   - `@response_field` デコレータの使い方
   - FastAPI 統合の実装例
   - 前方参照の解決方法
 
-- **[BaseRepository & Utilities ガイド](docs/guides/repository_and_utilities_guide.md)**
+- **[BaseRepository & Utilities ガイド](docs/guides/repository/repository_and_utilities_guide.md)**
   - BaseRepository によるデータアクセス
   - **Eager loading サポート（joinedload, selectinload）- N+1 問題の解決** ⭐ NEW
   - FilterParams（FastAPI クエリパラメータ統合）
   - `as_query_depends()` メカニズム
   - `auto_import_models` ユーティリティ
 
-- **[AsyncBaseRepository ガイド](docs/guides/async_repository_guide.md)** ⭐ NEW
+- **[AsyncBaseRepository ガイド](docs/guides/repository/async_repository_guide.md)** ⭐ NEW
   - 完全非同期版リポジトリ（FastAPI 向け）
   - AsyncSession による非同期データベース操作
   - **Eager loading サポート（N+1 問題の解決）**
   - `asyncio.gather` による並行処理パターン
   - 論理削除（SoftDelete）の非同期操作
 
-- **[論理削除（Soft Delete）ガイド](docs/guides/soft_delete_guide.md)** ⭐ NEW
+- **[論理削除（Soft Delete）ガイド](docs/guides/features/soft_delete_guide.md)** ⭐ NEW
   - SoftDeletableMixin による論理削除機能
   - 削除済みレコードの自動フィルタリング
   - 復元・物理削除の管理
   - バッチ処理での活用
 
-- **[セッション管理ガイド](docs/guides/session_management_guide.md)**
+- **[セッション管理パターンガイド](docs/guides/repository/repository_session_patterns.md)**
   - トランザクション管理（`get_db_transaction()`, `transaction()`）
-  - FastAPI、Flask、CLI での使用方法
+  - FastAPI Depends パターン
+  - FastAPI Users 統合
   - セッションのライフサイクル管理
-  - フレームワーク非依存な設計
+  - トラブルシューティング
 
-- **[非同期セッション（AsyncSession）サポート](docs/guides/async_session_guide.md)** ⭐ NEW
-  - FastAPI Users 統合のための AsyncSession サポート
-  - 非同期データベース操作（`get_async_session()`, `get_async_db_session()`）
-  - トランザクション自動管理とロールバック
-  - テストフィクスチャによる高速テスト
-
-- **[マスターデータ同期ガイド](docs/guides/master_data_sync_guide.md)**
+- **[マスターデータ同期ガイド](docs/guides/features/master_data_sync_guide.md)**
   - `db_sync_master` コマンドの使い方
   - マスターデータファイルの作成方法
   - Upsert 操作とトランザクション管理
   - ベストプラクティスとトラブルシューティング
 
-- **[ロギングガイド](docs/guides/logging_guide.md)**
+- **[ロギングガイド](docs/guides/features/logging_guide.md)**
   - repom のロギング機能（ハイブリッドアプローチ）
   - CLI ツール実行時の自動設定
   - アプリケーション使用時の制御方法
@@ -172,7 +167,7 @@ def get_task(task_id: int):
     return task.to_dict()
 ```
 
-**詳細**: [BaseModelAuto & スキーマ自動生成ガイド](docs/guides/base_model_auto_guide.md)
+**詳細**: [BaseModelAuto & スキーマ自動生成ガイド](docs/guides/core/base_model_auto_guide.md)
 
 ### 論理削除（Soft Delete）
 
@@ -204,7 +199,7 @@ active_articles = repo.find()
 all_articles = repo.find(include_deleted=True)
 ```
 
-**詳細**: [論理削除（Soft Delete）ガイド](docs/guides/soft_delete_guide.md)
+**詳細**: [論理削除（Soft Delete）ガイド](docs/guides/features/soft_delete_guide.md)
 
 ---
 
@@ -354,7 +349,7 @@ CONFIG_HOOK=mine_py.config:get_repom_config
 
 ## テスト実行
 
-**⚠️ 重要**: テスト作成時は必ず **[Testing Guide](docs/guides/testing_guide.md)** を参照してください。
+**⚠️ 重要**: テスト作成時は必ず **[Testing Guide](docs/guides/testing/testing_guide.md)** を参照してください。
 
 ### 基本的なテスト実行
 
@@ -716,11 +711,15 @@ poetry run python -c "from repom.config import config; print(config)"
 ## 関連ドキュメント
 
 - **[AGENTS.md](AGENTS.md)**: AI アシスタント向けプロジェクト情報
-- **[docs/guides/base_model_auto_guide.md](docs/guides/base_model_auto_guide.md)**: BaseModelAuto & スキーマ自動生成ガイド
-- **[docs/guides/repository_and_utilities_guide.md](docs/guides/repository_and_utilities_guide.md)**: BaseRepository & Utilities ガイド
+- **[docs/guides/](docs/guides/)**: 全ガイド一覧（機能別に整理）
+  - [core/](docs/guides/core/) - BaseModel、スキーマ生成、カスタム型
+  - [database/](docs/guides/database/) - データベース接続と移行
+  - [repository/](docs/guides/repository/) - リポジトリパターンとセッション管理
+  - [features/](docs/guides/features/) - 論理削除、マスターデータ、ロギング
+  - [testing/](docs/guides/testing/) - テスト戦略とフィクスチャ
 - **[.github/copilot-instructions.md](.github/copilot-instructions.md)**: GitHub Copilot 専用の指示
 
 ---
 
-**最終更新**: 2025-11-15  
-**バージョン**: 簡略版 v2.0
+**最終更新**: 2025-12-25  
+**バージョン**: 簡略版 v2.1 (ガイド再構成版)

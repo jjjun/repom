@@ -811,8 +811,8 @@ if count > 0:
 
 ## 関連ドキュメント
 
-- **[auto_import_models ガイド](auto_import_models_guide.md)**: モデルの自動インポート
-- **[BaseModelAuto ガイド](base_model_auto_guide.md)**: スキーマ自動生成
+- **[auto_import_models ガイド](../core/auto_import_models_guide.md)**: モデルの自動インポート
+- **[BaseModelAuto ガイド](../core/base_model_auto_guide.md)**: スキーマ自動生成
 - **[BaseRepository ソースコード](../../repom/base_repository.py)**: 実装の詳細
 
 ---
