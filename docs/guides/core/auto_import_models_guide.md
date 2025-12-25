@@ -14,12 +14,13 @@
 
 ## 利用可能な関数
 
-### 1. `auto_import_models(directory_path, excluded_dirs=None)`
+### 1. `auto_import_models(models_dir, base_package, excluded_dirs=None)`
 
 **目的**: ディレクトリパスからモデルを再帰的にインポート
 
 **パラメータ**:
-- `directory_path` (str): モデルが格納されているディレクトリの絶対パス
+- `models_dir` (str | Path): モデルが格納されているディレクトリのパス
+- `base_package` (str): ベースパッケージ名（例: `'myapp.models'`）
 - `excluded_dirs` (Optional[Set[str]]): 除外するディレクトリ名のセット（デフォルト: `DEFAULT_EXCLUDED_DIRS`）
 
 **使用例**:
@@ -27,14 +28,21 @@
 from repom.utility import auto_import_models
 from pathlib import Path
 
-models_dir = Path(__file__).parent / 'models'
-auto_import_models(str(models_dir), excluded_dirs={'tests', 'migrations'})
+# models/__init__.py で使用
+auto_import_models(
+    models_dir=Path(__file__).parent,
+    base_package='myapp.models',
+    excluded_dirs={'tests', 'migrations'}
+)
 ```
 
 **動作**:
 - `*.py` ファイルを `rglob()` で再帰検索
 - 除外ディレクトリに該当するファイルはスキップ
+- アンダースコアで始まるファイル（`__init__.py`、`_private.py` など）をスキップ
+- ファイルをアルファベット順にソートして一貫したインポート順序を保証
 - `importlib.import_module()` でモジュールをインポート
+- インポートエラーは警告として出力し、処理を継続
 
 ---
 
@@ -71,7 +79,7 @@ auto_import_models_by_package(
     'untrusted_package.models',
     allowed_prefixes={'myapp.', 'repom.'}
 )
-# ValueError: Security: Package 'untrusted_package.models' is not in allowed list: {'myapp.', 'repom.'}
+# ValueError: Security: Package 'untrusted_package.models' is not in allowed list. Allowed prefixes: {'myapp.', 'repom.'}
 ```
 
 ---
@@ -104,11 +112,11 @@ auto_import_models_from_list(
 
 ---
 
-## 設定による自動インポート（MineDbConfig）
+## 設定による自動インポート（RepomConfig）
 
 ### 設定プロパティ
 
-`MineDbConfig` クラスに以下の設定を追加することで、`load_models()` 関数が自動的に複数パッケージからモデルをインポートします。
+`RepomConfig` クラスに以下の設定を追加することで、`load_models()` 関数が自動的に複数パッケージからモデルをインポートします。
 
 #### `model_locations: Optional[List[str]]`
 
@@ -181,34 +189,39 @@ config.model_import_strict = False
 
 **例: `myapp/config_hook.py`**:
 ```python
-def hook_config(config):
-    """repom の設定をカスタマイズ"""
-    # 複数パッケージからモデルをインポート
-    config.model_locations = [
-        'myapp.models',           # アプリケーションのメインモデル
-        'myapp.modules.user',     # ユーザーモジュール
-        'myapp.modules.task',     # タスクモジュール
-        'repom.models'            # repom の共有モデル
-    ]
-    
-    # 除外ディレクトリを追加
-    config.model_excluded_dirs = {'tests', 'migrations', 'scripts', 'tmp'}
-    
-    # 許可するパッケージプレフィックスを設定（セキュリティ重要）
-    config.allowed_package_prefixes = {'myapp.', 'repom.', 'shared.'}
-    
-    # 開発環境では厳格モード（オプション）
-    import os
-    if os.getenv('EXEC_ENV') in ['dev', 'test']:
-        config.model_import_strict = True
-    
-    return config
+from repom.config import RepomConfig
+
+class MyAppConfig(RepomConfig):
+    def __init__(self):
+        super().__init__()
+        
+        # 複数パッケージからモデルをインポート
+        self.model_locations = [
+            'myapp.models',           # アプリケーションのメインモデル
+            'myapp.modules.user',     # ユーザーモジュール
+            'myapp.modules.task',     # タスクモジュール
+            'repom.models'            # repom の共有モデル
+        ]
+        
+        # 除外ディレクトリを追加
+        self.model_excluded_dirs = {'tests', 'migrations', 'scripts', 'tmp'}
+        
+        # 許可するパッケージプレフィックスを設定（セキュリティ重要）
+        self.allowed_package_prefixes = {'myapp.', 'repom.', 'shared.'}
+        
+        # 開発環境では厳格モード（オプション）
+        import os
+        if os.getenv('EXEC_ENV') in ['dev', 'test']:
+            self.model_import_strict = True
+
+def get_repom_config():
+    return MyAppConfig()
 ```
 
 **環境変数で CONFIG_HOOK を指定**:
 ```bash
 # .env ファイル
-CONFIG_HOOK=myapp.config_hook:hook_config
+CONFIG_HOOK=myapp.config_hook:get_repom_config
 ```
 
 ---
@@ -265,8 +278,8 @@ config.model_locations = ['untrusted_package.models']  # ValueError
 ### 動作フロー
 
 ```python
-def load_models():
-    """モデルを読み込む（MineDbConfig の設定に基づく）"""
+def load_models(context: Optional[str] = None) -> None:
+    """モデルを読み込む（RepomConfig の設定に基づく）"""
     from repom.config import config
     from repom.utility import auto_import_models_from_list
 
@@ -275,7 +288,8 @@ def load_models():
         auto_import_models_from_list(
             package_names=config.model_locations,
             excluded_dirs=config.model_excluded_dirs,
-            allowed_prefixes=config.allowed_package_prefixes
+            allowed_prefixes=config.allowed_package_prefixes,
+            fail_on_error=config.model_import_strict
         )
     else:
         # 後方互換性: 従来の動作（repom.models を直接インポート）
@@ -296,26 +310,38 @@ def load_models():
 
 ```python
 # config_hook.py
-def hook_config(config):
-    config.model_locations = ['myapp.models']
-    config.allowed_package_prefixes = {'myapp.', 'repom.'}
-    return config
+from repom.config import RepomConfig
+
+class MyAppConfig(RepomConfig):
+    def __init__(self):
+        super().__init__()
+        self.model_locations = ['myapp.models']
+        self.allowed_package_prefixes = {'myapp.', 'repom.'}
+
+def get_repom_config():
+    return MyAppConfig()
 ```
 
 ### パターン2: 複数モジュールに分散したモデル
 
 ```python
 # config_hook.py
-def hook_config(config):
-    config.model_locations = [
-        'myapp.core.models',
-        'myapp.auth.models',
-        'myapp.api.models',
-        'repom.models'
-    ]
-    config.model_excluded_dirs = {'tests', 'migrations'}
-    config.allowed_package_prefixes = {'myapp.', 'repom.'}
-    return config
+from repom.config import RepomConfig
+
+class MyAppConfig(RepomConfig):
+    def __init__(self):
+        super().__init__()
+        self.model_locations = [
+            'myapp.core.models',
+            'myapp.auth.models',
+            'myapp.api.models',
+            'repom.models'
+        ]
+        self.model_excluded_dirs = {'tests', 'migrations'}
+        self.allowed_package_prefixes = {'myapp.', 'repom.'}
+
+def get_repom_config():
+    return MyAppConfig()
 ```
 
 ### パターン3: 環境別の設定
@@ -323,24 +349,29 @@ def hook_config(config):
 ```python
 # config_hook.py
 import os
+from repom.config import RepomConfig
 
-def hook_config(config):
-    if os.getenv('EXEC_ENV') == 'test':
-        # テスト環境: テストモデルも含める
-        config.model_locations = [
-            'myapp.models',
-            'myapp.test_models'
-        ]
-    else:
-        # 本番環境: テストモデルを除外
-        config.model_locations = ['myapp.models']
-    
-    config.allowed_package_prefixes = {'myapp.', 'repom.'}
-    
-    # 開発/テスト環境では厳格モード
-    config.model_import_strict = os.getenv('EXEC_ENV') in ['dev', 'test']
-    
-    return config
+class MyAppConfig(RepomConfig):
+    def __init__(self):
+        super().__init__()
+        
+        if os.getenv('EXEC_ENV') == 'test':
+            # テスト環境: テストモデルも含める
+            self.model_locations = [
+                'myapp.models',
+                'myapp.test_models'
+            ]
+        else:
+            # 本番環境: テストモデルを除外
+            self.model_locations = ['myapp.models']
+        
+        self.allowed_package_prefixes = {'myapp.', 'repom.'}
+        
+        # 開発/テスト環境では厳格モード
+        self.model_import_strict = os.getenv('EXEC_ENV') in ['dev', 'test']
+
+def get_repom_config():
+    return MyAppConfig()
 ```
 
 ---
@@ -421,10 +452,9 @@ def test_auto_import_models():
 
 ## 関連ドキュメント
 
-- **docs/issue/in_progress/004_flexible_auto_import_models.md**: 機能の技術仕様
-- **docs/guides/repository_and_utilities_guide.md**: `BaseRepository` との統合
-- **AGENTS.md**: プロジェクト構造とコマンドリファレンス
+- **[repository_and_utilities_guide.md](../repository/repository_and_utilities_guide.md)**: `BaseRepository` との統合
+- **[AGENTS.md](../../../AGENTS.md)**: プロジェクト構造とコマンドリファレンス
 
 ---
 
-**最終更新**: 2025-01-XX (Phase 1 実装完了時)
+**最終更新**: 2025-12-25 (実装との整合性チェック完了)
