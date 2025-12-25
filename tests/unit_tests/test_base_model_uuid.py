@@ -17,7 +17,7 @@ from sqlalchemy import String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.base_model import BaseModel
 from repom.base_repository import BaseRepository
-from repom.db import Base
+from repom.database import Base
 
 
 # ========================================

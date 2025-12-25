@@ -23,7 +23,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 from typing import Callable, Optional
-from repom.db import Base
+from repom.database import Base
 from repom.config import config
 from repom.utility import load_models
 

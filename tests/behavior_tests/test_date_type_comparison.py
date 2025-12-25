@@ -9,7 +9,7 @@ from sqlalchemy import (
     Date,
     text,
 )
-from repom.db import engine, inspector, db_session, Base
+from repom.database import get_sync_engine, get_inspector, get_db_session, Base
 
 
 """
@@ -66,6 +66,9 @@ class TaskStringModel(TaskModel):
     done_at: Mapped[Optional[str]] = mapped_column(String)
     created_at: Mapped[Optional[str]] = mapped_column(String, default=datetime.now())
 
+
+engine = get_sync_engine()
+inspector = get_inspector()
 
 if inspector.has_table(TaskDateModel.__tablename__):
     TaskDateModel.__table__.drop(bind=engine)

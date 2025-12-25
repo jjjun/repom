@@ -10,8 +10,7 @@ from tests.utils import (
     generate_sample_roster_data,
     save_model_instances
 )
-from repom.db import Base
-from repom.db import db_session
+from repom.database import Base, get_db_session
 
 
 """
@@ -72,25 +71,26 @@ def test_skip_on_exception(db_test):
     """
     sample_data = generate_sample_roster_data(SAVE_COUNT)
 
-    save_model_instances(RosterModel, sample_data, db_session)
+    save_model_instances(RosterModel, sample_data, db_test)
 
     # save_model_instancesにより、既にデータは保存されている
     # この先の処理では事前にキーをチェックして、既に存在している為、保存はスキップされる
-    try:
-        for item in sample_data:
-            try:
-                instance = RosterModel(**item)
-                db_session.add(instance)
-                db_session.commit()
-            except IntegrityError as e:
-                # トランザクションをロールバックし、データベースの一貫性を保たないといけないみたい
-                # この処理をしないと `sqlalchemy.exc.PendingRollbackError` が起こる。
-                db_session.rollback()
-                pass
+    with get_db_session() as session:
+        try:
+            for item in sample_data:
+                try:
+                    instance = RosterModel(**item)
+                    session.add(instance)
+                    session.commit()
+                except IntegrityError as e:
+                    # トランザクションをロールバックし、データベースの一貫性を保たないといけないみたい
+                    # この処理をしないと `sqlalchemy.exc.PendingRollbackError` が起こる。
+                    session.rollback()
+                    pass
 
-    except Exception as e:
-        db_session.rollback()
-        raise e
+        except Exception as e:
+            session.rollback()
+            raise e
 
 
 def test_check_duplicate_key_and_skip(db_test):
@@ -99,22 +99,22 @@ def test_check_duplicate_key_and_skip(db_test):
     """
     sample_data = generate_sample_roster_data(SAVE_COUNT)
 
-    save_model_instances(RosterModel, sample_data, db_session)
+    save_model_instances(RosterModel, sample_data, db_test)
 
     # save_model_instancesにより、既にデータは保存されている
     # この先の処理では事前にキーをチェックして、既に存在している為、保存はスキップされる
     try:
         for item in sample_data:
             # 事前にキーをチェックして、既に存在している場合はスキップする
-            existing_item = db_session.query(RosterModel).filter_by(key=item['key']).first()
+            existing_item = db_test.query(RosterModel).filter_by(key=item['key']).first()
             if existing_item:
                 continue
 
             instance = RosterModel(**item)
-            db_session.add(instance)
+            db_test.add(instance)
 
-        db_session.commit()
+        db_test.commit()
 
     except Exception as e:
-        db_session.rollback()
+        db_test.rollback()
         raise e

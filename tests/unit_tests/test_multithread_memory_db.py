@@ -21,7 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from repom.base_model import BaseModel
 from repom.config import RepomConfig
-from repom.db import create_engine
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 

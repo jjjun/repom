@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
-from repom.db import db_session
 import inspect
 import logging
 
@@ -118,13 +117,13 @@ class BaseRepository(Generic[T]):
         'started_at', 'finished_at', 'executed_at'
     ]
 
-    def __init__(self, model: Type[T], session: Session = db_session):
+    def __init__(self, model: Type[T], session: Optional[Session] = None):
         """
         BaseRepositoryの初期化
 
         Args:
             model (Type[T]): モデルクラス
-            session (Session, optional): データベースセッション. Defaults to db_session.
+            session (Session, optional): データベースセッション. Defaults to None (get_db_session() を使用).
         """
         self.model = model
         self.session = session

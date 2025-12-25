@@ -18,7 +18,7 @@ from alembic import command
 from alembic.script import ScriptDirectory
 
 from repom.base_model import BaseModel
-from repom.db import Base
+from repom.database import Base
 
 
 class MigrationTestModelNoId(BaseModel):
@@ -121,7 +121,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-from repom.db import Base
+from repom.database import Base
 target_metadata = Base.metadata
 
 def run_migrations_online():

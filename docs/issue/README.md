@@ -27,6 +27,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------|--------|-----------|---------||
+| #015 | Database Manager Unification - セッション・エンジン管理の統合 | 高 | 🔴 未着手 | [active/015_database_manager_unification.md](active/015_database_manager_unification.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください。

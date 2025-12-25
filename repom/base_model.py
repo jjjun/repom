@@ -1,10 +1,10 @@
 import json
 import uuid
-from sqlalchemy import Integer, String, event
+from sqlalchemy import Integer, String, event, inspect
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 from typing import TYPE_CHECKING
-from repom.db import Base, inspect
+from repom.database import Base
 from repom.custom_types.AutoDateTime import AutoDateTime
 
 # センチネル値（パラメータが指定されていないことを示す）

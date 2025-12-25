@@ -2,7 +2,7 @@ from typing import Optional, Union, List, Callable
 from sqlalchemy import select, desc, and_
 from repom.models.sample import SampleModel
 from repom.base_repository import BaseRepository, FilterParams
-from repom.db import db_session
+from repom.database import get_db_session
 
 
 class SampleFilterParams(FilterParams):
@@ -10,7 +10,9 @@ class SampleFilterParams(FilterParams):
 
 
 class SampleRepository(BaseRepository[SampleModel]):
-    def __init__(self, session=db_session):
+    def __init__(self, session=None):
+        if session is None:
+            session = get_db_session()
         super().__init__(SampleModel, session)
 
     def find(

@@ -19,7 +19,7 @@ from typing import Generator, Tuple, Type, List, Dict, Any
 
 from repom.utility import load_models
 from repom.config import config
-from repom.session import transaction
+from repom.database import get_db_transaction
 from repom.base_repository import BaseRepository
 
 

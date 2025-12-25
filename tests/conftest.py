@@ -44,8 +44,7 @@ def setup_repom_db_tables():
     autouse=True により、全テスト実行前に自動的に実行される。
     """
     from repom.base_model import Base
-    from repom.db import engine
-    from repom.async_session import async_engine
+    from repom.database import get_sync_engine, get_async_engine
     import asyncio
 
     # モデルをロード（テーブル定義を Base.metadata に登録）
@@ -53,10 +52,12 @@ def setup_repom_db_tables():
     load_models()
 
     # 同期 engine にテーブル作成
+    engine = get_sync_engine()
     Base.metadata.create_all(bind=engine)
 
     # 非同期 engine にテーブル作成
     async def create_async_tables():
+        async_engine = await get_async_engine()
         async with async_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 

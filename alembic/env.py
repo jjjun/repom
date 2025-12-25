@@ -6,7 +6,7 @@ from sqlalchemy import pool
 
 from alembic import context
 
-from repom.db import Base
+from repom.database import Base
 from repom.config import config as db_config
 from repom.utility import load_models
 

@@ -32,8 +32,7 @@ from weakref import WeakKeyDictionary
 from datetime import datetime, timezone
 from pydantic import BaseModel as PydanticBaseModel, create_model, Field
 from repom.base_model import BaseModel
-from repom.db import inspect
-from sqlalchemy import Enum as SQLAlchemyEnum, DateTime
+from sqlalchemy import Enum as SQLAlchemyEnum, DateTime, inspect
 from sqlalchemy.orm import Mapped, mapped_column
 import re
 import logging
