@@ -336,15 +336,11 @@ class TestFastAPIDependsPattern:
 
         samples = await endpoint_handler()
         assert isinstance(samples, list)
-        break  # 一度だけテスト
 
     @pytest.mark.asyncio
     async def test_session_has_required_methods(self):
         """Yielded session should have all required SQLAlchemy methods"""
-        async_gen = get_async_db_session()
-        session = await async_gen.__anext__()
-
-        try:
+        async with get_async_db_session() as session:
             # 必要なメソッドが存在することを確認
             assert hasattr(session, 'execute')
             assert hasattr(session, 'add')
@@ -356,11 +352,6 @@ class TestFastAPIDependsPattern:
 
             # execute メソッドが呼び出し可能
             assert callable(session.execute)
-        finally:
-            try:
-                await async_gen.__anext__()
-            except StopAsyncIteration:
-                pass
 
 
 if __name__ == "__main__":
