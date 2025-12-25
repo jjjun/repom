@@ -336,7 +336,7 @@ class TestFastAPIDependsPattern:
 
         samples = await endpoint_handler()
         assert isinstance(samples, list)
-            break  # 一度だけテスト
+        break  # 一度だけテスト
 
     @pytest.mark.asyncio
     async def test_session_has_required_methods(self):
