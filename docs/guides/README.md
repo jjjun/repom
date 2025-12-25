@@ -9,14 +9,12 @@ repom の使い方を機能別に整理したガイド集です。
 - Pydantic スキーマ自動生成
 - カスタム型の実装
 - モデル自動インポート
-
-### 💾 [database/](database/) - データベース
-- database.py の使い方
-- 移行ガイド
+- データベース基礎設定
 
 ### 📦 [repository/](repository/) - リポジトリパターン
 - BaseRepository の使い方
 - セッション管理パターン
+- データベース接続とトランザクション
 - AsyncBaseRepository
 
 ### ⚡ [features/](features/) - 機能別ガイド
@@ -41,10 +39,6 @@ repom の使い方を機能別に整理したガイド集です。
 - [auto_import_models_guide.md](core/auto_import_models_guide.md)
 - [base_model_auto_guide.md](core/base_model_auto_guide.md)
 - [system_columns_and_custom_types.md](core/system_columns_and_custom_types.md)
-
-### Database (0)
-- このディレクトリには現在ガイドはありません
-- データベース関連は [repository/](repository/) を参照
 
 ### Repository (3)
 - [async_repository_guide.md](repository/async_repository_guide.md)

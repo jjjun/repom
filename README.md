@@ -713,8 +713,7 @@ poetry run python -c "from repom.config import config; print(config)"
 - **[AGENTS.md](AGENTS.md)**: AI アシスタント向けプロジェクト情報
 - **[docs/guides/](docs/guides/)**: 全ガイド一覧（機能別に整理）
   - [core/](docs/guides/core/) - BaseModel、スキーマ生成、カスタム型
-  - [database/](docs/guides/database/) - データベース接続と移行
-  - [repository/](docs/guides/repository/) - リポジトリパターンとセッション管理
+  - [repository/](docs/guides/repository/) - リポジトリパターン、セッション管理、データベース接続
   - [features/](docs/guides/features/) - 論理削除、マスターデータ、ロギング
   - [testing/](docs/guides/testing/) - テスト戦略とフィクスチャ
 - **[.github/copilot-instructions.md](.github/copilot-instructions.md)**: GitHub Copilot 専用の指示
