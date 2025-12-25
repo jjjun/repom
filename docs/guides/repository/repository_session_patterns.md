@@ -92,14 +92,14 @@ scripts = repo.get_all()
 - ⚠️ やや冗長（with 文が必要）
 
 ```python
-from repom.database import get_db_transaction
+from repom.database import _db_manager
 from your_project.models import VoiceScript
 
 class VoiceScriptRepository(BaseRepository[VoiceScript]):
     pass
 
 # 使い方
-with get_db_transaction() as session:
+with _db_manager.get_sync_transaction() as session:
     repo = VoiceScriptRepository(session)
     script = repo.get_by_id(1)
     script.title = "更新"
@@ -121,6 +121,9 @@ with get_db_transaction() as session:
 - ✅ エンドポイント単位でセッション管理
 - ✅ テストしやすい
 - ⚠️ FastAPI 専用
+
+**重要**: `get_db_session()` / `get_db_transaction()` は FastAPI Depends 専用です。
+with 文で使用することは**できません**。with 文を使う場合は `_db_manager.get_sync_session()` を使用してください。
 
 ```python
 from fastapi import APIRouter, Depends
@@ -190,7 +193,9 @@ class OrderItemRepository(BaseRepository[OrderItem]):
 
 # 使い方：複数テーブルの操作を 1 トランザクションで
 def create_order_with_items(order_data: dict, items_data: list[dict]):
-    with get_db_transaction() as session:
+    from repom.database import _db_manager
+    
+    with _db_manager.get_sync_transaction() as session:
         order_repo = OrderRepository(session)
         item_repo = OrderItemRepository(session)
         
@@ -298,11 +303,13 @@ order.user_id = user.id        # ❌ order は別セッションのオブジェ�
 repo.save(order)               # エラー: DetachedInstanceError
 ```
 
-**解決策**: 複数操作は `get_db_transaction()` でラップする（パターン 2）
+**解決策**: 複数操作は `_db_manager.get_sync_transaction()` でラップする（パターン 2）
 
 ```python
 # ✅ 正しい
-with get_db_transaction() as session:
+from repom.database import _db_manager
+
+with _db_manager.get_sync_transaction() as session:
     repo = VoiceScriptRepository(session)
     user = repo.get_by_id(1)
     order = repo.get_by_id(2)
@@ -312,18 +319,40 @@ with get_db_transaction() as session:
 
 ---
 
-### ❌ 間違い 4: FastAPI で get_db_transaction() を使う
+### ❌ 間違い 4: get_db_session() を with 文で使おうとする
 
 ```python
-# これは avoid！
-@router.post("/tasks")
-def create_task(task_data: TaskCreate):
-    with get_db_transaction() as session:  # ⚠️ FastAPI では Depends を推奨
-        repo = TaskRepository(session)
-        return repo.dict_save(task_data.model_dump())
+# ❌ これは動作しません！
+with get_db_session() as session:  # TypeError: 'generator' object does not support the context manager protocol
+    repo = TaskRepository(session)
+    return repo.dict_save(data)
 ```
 
-**理由**: FastAPI では依存性注入（Depends）を使うのが慣習です。テストもしやすくなります。
+**理由**: `get_db_session()` / `get_db_transaction()` は FastAPI Depends 専用の generator 関数です。with 文では使用できません。
+
+**正しい方法**:
+```python
+# ✅ with 文を使いたい場合
+from repom.database import _db_manager
+
+with _db_manager.get_sync_session() as session:
+    repo = TaskRepository(session)
+    return repo.dict_save(data)
+
+# ✅ FastAPI では Depends を使う
+from fastapi import Depends
+from repom.database import get_db_session
+
+@router.post("/tasks")
+def create_task(
+    task_data: TaskCreate,
+    session: Session = Depends(get_db_session)
+):
+    repo = TaskRepository(session)
+    task = repo.dict_save(task_data.model_dump())
+    session.commit()
+    return task
+```
 
 **推奨**:
 ```python
@@ -432,127 +461,122 @@ app.include_router(
 )
 ```
 
-### @contextmanager による実装の仕組み
+### 実装の仕組みと使い分け
 
-repom の `get_db_session()` / `get_db_transaction()` は `@contextmanager` デコレータを使用して実装されており、**FastAPI Depends と with 文の両方で使用可能**です。
+repom には **2種類のセッション取得方法** があります：
 
-**実装例（sync 版）**:
+#### 1. FastAPI Depends 専用関数（generator）
+
 ```python
-from contextlib import contextmanager
-from sqlalchemy.orm import Session
-
-@contextmanager
 def get_db_session():
-    """同期セッションを取得（Depends と with 両対応）"""
-    with _db_manager.get_sync_session() as session:
+    """FastAPI Depends 専用 - with 文では使えません"""
+    session = _db_manager.get_sync_session()
+    try:
         yield session
-        # with ブロック終了時に自動クローズ
+    finally:
+        session.close()
 
-@contextmanager
 def get_db_transaction():
-    """同期トランザクションを取得（Depends と with 両対応）"""
-    with _db_manager.get_sync_transaction() as session:
+    """FastAPI Depends 専用 - with 文では使えません"""
+    session = _db_manager.get_sync_session()
+    try:
         yield session
-        # with ブロック終了時に自動コミット（エラー時はロールバック）
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 ```
 
-**実装例（async 版）**:
+**使い方**: FastAPI の `Depends()` でのみ使用
 ```python
-from contextlib import asynccontextmanager
-from sqlalchemy.ext.asyncio import AsyncSession
-
-@asynccontextmanager
-async def get_async_db_session():
-    """非同期セッションを取得（Depends と async with 両対応）"""
-    async with _db_manager.get_async_session() as session:
-        yield session
-
-@asynccontextmanager
-async def get_async_db_transaction():
-    """非同期トランザクションを取得（Depends と async with 両対応）"""
-    async with _db_manager.get_async_transaction() as session:
-        yield session
-```
-
-**両方の使い方が可能**:
-
-```python
-# ✅ パターン A: FastAPI Depends（推奨）
 from fastapi import Depends
 from repom.database import get_db_session
 
 @app.post("/items")
 def create_item(
     data: ItemCreate,
-    session: Session = Depends(get_db_session)  # generator として動作
+    session: Session = Depends(get_db_session)  # ✅ OK
 ):
     item = Item(**data.dict())
     session.add(item)
     session.commit()
     return item
+```
 
-# ✅ パターン B: with 文（CLI やスクリプトで使用）
-from repom.database import get_db_transaction
+#### 2. DatabaseManager のメソッド（context manager）
 
-def batch_import(items: list[dict]):
-    with get_db_transaction() as session:  # context manager として動作
-        for data in items:
-            item = Item(**data)
-            session.add(item)
-        # with ブロック終了時に自動コミット
+```python
+from repom.database import _db_manager
+
+# with 文で使用する場合はこちら
+with _db_manager.get_sync_session() as session:  # ✅ OK
+    session.query(Model).all()
+
+with _db_manager.get_sync_transaction() as session:  # ✅ OK
+    session.add(item)
+    # 自動コミット
 ```
 
 **重要ポイント**:
-- `@contextmanager` により、**同じ関数が generator と context manager の両方として動作**
-- FastAPI Depends: generator として `yield` で値を返す
-- with 文: context manager として `__enter__` / `__exit__` を呼び出す
-- どちらも **自動的にリソース管理**（セッションのクローズ、トランザクションのコミット/ロールバック）
+- ❌ `get_db_session()` を with 文で使用することは**できません**
+- ✅ with 文を使いたい場合は `_db_manager.get_sync_session()` を使用
+- ✅ FastAPI では `Depends(get_db_session)` を使用
+- ✅ CLI スクリプトでは `_db_manager.get_sync_transaction()` を使用
 
 ---
 
 ## トラブルシューティング
 
-### AttributeError: '_GeneratorContextManager' object has no attribute 'execute'
+### TypeError: 'generator' object does not support the context manager protocol
 
-**原因**: 古いバージョンの repom を使用しているか、`get_db_session()` の戻り値を直接使おうとしています。
+**原因**: `get_db_session()` / `get_db_transaction()` を with 文で使おうとしています。
 
 **問題のコード例**:
 ```python
-# ❌ 古い実装（repom v0.1.0 以前）
-@app.post("/items")
-def create_item(
-    data: ItemCreate,
-    session = Depends(get_db_session)  # context manager オブジェクトが返される
-):
-    # AttributeError: '_GeneratorContextManager' object has no attribute 'execute'
-    session.execute(...)  # ❌ エラー
+# ❌ これは動作しません
+from repom.database import get_db_session
+
+with get_db_session() as session:
+    # TypeError: 'generator' object does not support the context manager protocol
+    session.execute(...)
 ```
 
 **解決方法**:
 
-1. **repom を最新バージョンに更新**（推奨）:
-```bash
-poetry update repom
-```
-
-2. **型アノテーションを追加**:
+**方法 1: FastAPI では Depends を使う**（推奨）:
 ```python
-# ✅ 正しい（repom v0.2.0 以降）
+# ✅ FastAPI の場合
+from fastapi import Depends
 from sqlalchemy.orm import Session
+from repom.database import get_db_session
 
 @app.post("/items")
 def create_item(
     data: ItemCreate,
-    session: Session = Depends(get_db_session)  # Session 型を明示
+    session: Session = Depends(get_db_session)  # ✅ OK
 ):
-    session.execute(...)  # ✅ OK
+    session.execute(...)
+    session.commit()
+```
+
+**方法 2: with 文を使う場合は DatabaseManager を使う**:
+```python
+# ✅ CLI やスクリプトの場合
+from repom.database import _db_manager
+
+with _db_manager.get_sync_session() as session:  # ✅ OK
+    session.execute(...)
+
+with _db_manager.get_sync_transaction() as session:  # ✅ OK（自動コミット）
+    session.execute(...)
 ```
 
 **技術的な背景**:
-- repom v0.2.0 で `@contextmanager` デコレータを追加
-- これにより `get_db_session()` が generator 関数として動作
-- FastAPI Depends が自動的に `next()` を呼び出して Session を取得
-- 型アノテーションがあることで、FastAPI が正しく処理
+- `get_db_session()` は純粋な generator 関数（FastAPI Depends 専用）
+- generator は context manager プロトコルをサポートしていない
+- with 文を使う場合は `_db_manager` のメソッドを使用する必要がある
 
 ### TypeError: object AsyncSession can't be used in 'await' expression
 
