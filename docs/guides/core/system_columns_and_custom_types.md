@@ -2,7 +2,13 @@
 
 ## 概要
 
-repom では、`BaseModel` を通じて自動的に追加されるシステムカラムと、それらに使用されるカスタム型を提供しています。このガイドでは、各カラムの仕様、動作、注意点を詳しく説明します。
+repom の `BaseModel` は、オプトインでシステムカラムを自動追加できます。このガイドでは、各カラムの仕様と使い方を説明します。
+
+**デフォルト設定**:
+- `use_id=True` - 整数型の主キー `id` を追加（デフォルト）
+- `use_uuid=False` - UUID型の主キー（use_id と排他）
+- `use_created_at=False` - 作成日時カラム（デフォルトで無効）
+- `use_updated_at=False` - 更新日時カラム（デフォルトで無効）
 
 ---
 
@@ -10,120 +16,63 @@ repom では、`BaseModel` を通じて自動的に追加されるシステム�
 
 ### 1. `id` カラム（整数型）
 
-**型**: `Integer` (primary key, autoincrement)
-
-**追加条件**: `use_id=True` (デフォルト)
-
-**仕様**:
-```python
-class BaseModel(DeclarativeBase):
-    def __init_subclass__(cls, use_id=_UNSET, ...):
-        if cls.use_id:
-            cls.id: Mapped[int] = mapped_column(Integer, primary_key=True)
-```
+**型**: `Integer` (primary key, autoincrement)  
+**デフォルト**: 有効（`use_id=True`）
 
 **動作**:
-- データベース保存時に自動的に採番される（autoincrement）
-- Python オブジェクト作成時点では `None`
-- `session.add()` + `session.commit()` 後に値が設定される
+- データベース保存時に自動採番
+- オブジェクト作成時は `None`、`session.commit()` 後に値が設定される
 
 **使用例**:
 ```python
 class User(BaseModel):
     __tablename__ = 'users'
-    # use_id=True がデフォルト
+    # use_id=True がデフォルトなので指定不要
     
     name: Mapped[str] = mapped_column(String(100))
 
 user = User(name='Alice')
-print(user.id)  # None（まだDB保存していない）
+print(user.id)  # None
 
 session.add(user)
 session.commit()
-print(user.id)  # 1（DB保存後に採番される）
+print(user.id)  # 1
 ```
 
-**無効化する場合**:
+**無効化**（複合主キーの場合）:
 ```python
 class UserSession(BaseModel, use_id=False):
     __tablename__ = 'user_sessions'
     
-    # Composite primary key を使用
     user_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     session_token: Mapped[str] = mapped_column(String(64), primary_key=True)
 ```
 
-**注意点**:
-- ⚠️ **テストでのモック**: DB に保存しない場合、`id` は `None` のまま
-- ⚠️ **Pydantic バリデーション**: `get_response_schema()` で生成されるスキーマは `id: int` を期待
-  - テストで DB に保存しない場合は、手動で `obj.id = 1` のように設定が必要
-
 ---
 
-### 1-2. `id` カラム（UUID型）
+### 2. `id` カラム（UUID型）
 
-**型**: `String(36)` (primary key, UUID v4)
+**型**: `String(36)` (primary key, UUID v4)  
+**デフォルト**: 無効（`use_uuid=False`）
 
-**追加条件**: `use_uuid=True`
-
-**仕様**:
-```python
-class BaseModel(DeclarativeBase):
-    def __init_subclass__(cls, use_uuid=_UNSET, ...):
-        if cls.use_uuid:
-            cls.id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-            # __init__ をオーバーライドして UUID を自動生成
-            original_init = cls.__init__
-            def __init__(self, *args, **kwargs):
-                if 'id' not in kwargs:
-                    kwargs['id'] = str(uuid.uuid4())
-                original_init(self, *args, **kwargs)
-            cls.__init__ = __init__
-```
+**排他制御**: `use_uuid=True` と `use_id=True` は同時指定不可
 
 **動作**:
-- Python オブジェクト作成時に自動的に UUID v4 が生成される
-- 36文字（ハイフン付き）の文字列形式（例: `550e8400-e29b-41d4-a716-446655440000`）
-- RFC 4122 準拠の UUID v4（ランダム）
-- カラム名は `id`（整数型と同じ、BaseRepository 互換）
-
-**排他制御**:
-- `use_uuid=True` と `use_id=True` は**同時に指定できません**
-- `use_uuid=True` を指定すると、`use_id` は自動的に `False` になります
-
-```python
-# ❌ エラー
-class InvalidModel(BaseModel, use_id=True, use_uuid=True):
-    __tablename__ = 'invalid'
-    # ValueError: use_id と use_uuid は同時に True にできません
-
-# ✅ 正しい
-class UuidModel(BaseModel, use_uuid=True):
-    __tablename__ = 'uuid_models'
-    # use_id は自動的に False
-```
+- オブジェクト作成時に UUID v4 を自動生成
+- 36文字のハイフン付き文字列（例: `550e8400-e29b-41d4-a716-446655440000`）
+- カラム名は `id`（BaseRepository 互換）
 
 **使用例**:
 ```python
 class User(BaseModel, use_uuid=True):
     __tablename__ = 'users'
+    # use_id は自動的に False になる
     
     name: Mapped[str] = mapped_column(String(100))
-    email: Mapped[str] = mapped_column(String(255))
 
-# UUID が自動生成される
-user = User(name='Alice', email='alice@example.com')
+user = User(name='Alice')
 print(user.id)  # '550e8400-e29b-41d4-a716-446655440000'
 print(len(user.id))  # 36
-
-# DB に保存
-session.add(user)
-session.commit()
-
-# BaseRepository も動作（カラム名が 'id' のため）
-repo = UserRepository(User, session=session)
-retrieved = repo.get_by_id(user.id)
-assert retrieved.name == 'Alice'
 ```
 
 **外部キー参照**:
@@ -131,472 +80,301 @@ assert retrieved.name == 'Alice'
 class Post(BaseModel, use_uuid=True):
     __tablename__ = 'posts'
     
-    user_id: Mapped[str] = mapped_column(
-        String(36),
-        ForeignKey('users.id')
-    )
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey('users.id'))
     title: Mapped[str] = mapped_column(String(200))
 ```
 
-**手動で UUID を指定**:
-```python
-import uuid
-
-# 特定の UUID を指定したい場合
-custom_uuid = str(uuid.uuid4())
-user = User(id=custom_uuid, name='Bob', email='bob@example.com')
-print(user.id)  # 指定した UUID
-```
-
-**BaseRepository との互換性**:
-- カラム名が `id` なので、`get_by_id()` などが変更なしで動作
-- UUID は文字列型なので、引数も文字列で渡す
-
-```python
-repo = UserRepository(User, session=session)
-
-# 作成
-user = User(name='Charlie', email='charlie@example.com')
-session.add(user)
-session.commit()
-
-# ID で取得（UUID を文字列で渡す）
-retrieved = repo.get_by_id(user.id)
-
-# 検索
-results = repo.get_by('name', 'Charlie')
-```
-
-**注意点**:
-- ⚠️ **パフォーマンス**: UUID は整数型より若干遅い（通常は問題なし）
-- ⚠️ **インデックスサイズ**: UUID は 36 文字なので、整数型よりインデックスサイズが大きい
-- ⚠️ **ソート順**: UUID はランダムなので、作成順にソートされない（created_at を使用）
-- ✅ **分散システム**: 異なるサーバーで同時に ID を生成しても衝突しない
-- ✅ **セキュリティ**: ID から作成順や件数が推測できない
-
-**使い分けガイド**:
-
-| 状況 | 推奨 |
-|------|------|
-| 単一サーバー、シンプルなアプリ | Integer (use_id=True) |
-| 分散システム、マイクロサービス | UUID (use_uuid=True) |
-| 公開 API の ID を推測されたくない | UUID (use_uuid=True) |
-| パフォーマンス重視 | Integer (use_id=True) |
-| 外部システムとの連携で UUID が必要 | UUID (use_uuid=True) |
+**使い分け**:
+- 分散システム、マイクロサービス → UUID
+- 単一サーバー、シンプルなアプリ → Integer
+- 公開APIでIDを推測されたくない → UUID
 
 ---
 
-### 2. `created_at` カラム
+### 3. `created_at` カラム
 
-**型**: `AutoDateTime` (カスタム型)
-
-**追加条件**: `use_created_at=True` (デフォルト)
-
-**仕様**:
-```python
-class BaseModel(DeclarativeBase):
-    def __init_subclass__(cls, use_created_at=_UNSET, ...):
-        if cls.use_created_at:
-            cls.created_at: Mapped[datetime] = mapped_column(AutoDateTime)
-```
+**型**: `AutoDateTime` (カスタム型)  
+**デフォルト**: 無効（`use_created_at=False`）
 
 **動作**:
-- **データベース保存時**に自動的に `datetime.now()` が設定される
-- Python オブジェクト作成時点では `None`（これは仕様）
-- `session.add()` + `session.commit()` 後に値が設定される
+- データベース保存時に `datetime.now()` を自動設定
+- オブジェクト作成時は `None`、`session.commit()` 後に値が設定される
+- 手動で過去の日時を指定することも可能
 
-**AutoDateTime の実装**:
+**有効化と使用例**:
 ```python
-class AutoDateTime(TypeDecorator):
-    impl = DateTime
-    
-    def process_bind_param(self, value, dialect):
-        """データベース保存時に実行される"""
-        if value is None:
-            value = datetime.now()  # ← ここで自動設定
-        return value
-    
-    def process_result_value(self, value, dialect):
-        """データベース読み取り時に実行される"""
-        return value
-```
-
-**使用例**:
-```python
-from datetime import datetime
-
-class Article(BaseModel):
+class Article(BaseModel, use_created_at=True):
     __tablename__ = 'articles'
-    # use_created_at=True がデフォルト
     
     title: Mapped[str] = mapped_column(String(200))
 
-# ケース1: 自動設定（推奨）
-article = Article(title='Hello World')
-print(article.created_at)  # None（まだDB保存していない）
+# 自動設定
+article = Article(title='Hello')
+print(article.created_at)  # None
 
 session.add(article)
 session.commit()
-print(article.created_at)  # 2025-11-15 10:30:45.123456（DB保存時に自動設定）
+print(article.created_at)  # 2025-12-25 10:30:45.123456
 
-# ケース2: 手動設定（過去の日時を記録する場合など）
-past_date = datetime(2024, 1, 1, 0, 0, 0)
-article2 = Article(title='Old Article', created_at=past_date)
-session.add(article2)
+# 手動設定（データ移行時など）
+from datetime import datetime
+old_article = Article(title='Old', created_at=datetime(2024, 1, 1))
+session.add(old_article)
 session.commit()
-print(article2.created_at)  # 2024-01-01 00:00:00（手動設定した値が使われる）
+print(old_article.created_at)  # 2024-01-01 00:00:00
 ```
-
-**重要な仕様**:
-- ✅ **意図的な設計**: `created_at` は「**データベース保存時の時刻**」を記録するため
-- ✅ **Python オブジェクトの作成時刻ではない**: オブジェクトを作成してから保存までの時間が空いても問題ない
-- ✅ **データの整合性**: DB に保存された時刻を正確に記録できる
-
-**無効化する場合**:
-```python
-class TempModel(BaseModel, use_created_at=False):
-    __tablename__ = 'temp_models'
-    # created_at カラムは追加されない
-```
-
-**注意点**:
-- ⚠️ **テストでのモック**: DB に保存しない場合、`created_at` は `None` のまま
-  ```python
-  # ❌ テストで失敗する例
-  book = BookModel(title='Test')
-  book.id = 1  # 手動設定
-  response_data = book.to_dict()
-  # response_data['created_at'] は None
-  # Pydantic バリデーションでエラー
-  
-  # ✅ 正しいテスト方法
-  book = BookModel(title='Test')
-  session.add(book)
-  session.commit()  # ← DB に保存
-  response_data = book.to_dict()
-  # response_data['created_at'] は datetime オブジェクト
-  ```
-
-- ⚠️ **Pydantic スキーマとの整合性**: `get_response_schema()` で生成されるスキーマは `created_at: datetime` を期待
-  - テストで DB に保存しない場合は、スキーマを `created_at: Optional[datetime]` にするか、手動で値を設定
 
 ---
 
-### 3. `updated_at` カラム
+### 4. `updated_at` カラム
 
-**型**: `AutoDateTime` (カスタム型)
-
-**追加条件**: `use_updated_at=True` (デフォルト)
-
-**仕様**:
-```python
-class BaseModel(DeclarativeBase):
-    def __init_subclass__(cls, use_updated_at=_UNSET, ...):
-        if cls.use_updated_at:
-            cls.updated_at: Mapped[datetime] = mapped_column(AutoDateTime)
-```
+**型**: `AutoDateTime` (カスタム型)  
+**デフォルト**: 無効（`use_updated_at=False`）
 
 **動作**:
-- **データベース保存時**に自動的に `datetime.now()` が設定される（`created_at` と同じ）
-- **更新時**に自動的に `datetime.now()` が設定される（SQLAlchemy Event で実装）
-- Python オブジェクト作成時点では `None`
+- データベース保存時に `datetime.now()` を自動設定
+- 更新時に SQLAlchemy Event で自動更新
+- 初回保存時は `created_at` と同じ値、更新時のみ変わる
 
-**自動更新の実装** (BaseModel):
+**有効化と使用例**:
 ```python
-@event.listens_for(BaseModel, 'before_update', propagate=True)
-def receive_before_update(mapper, connection, target):
-    """モデル更新時に updated_at を自動更新"""
-    if hasattr(target, 'updated_at'):
-        target.updated_at = datetime.now()
-```
-
-**使用例**:
-```python
-from datetime import datetime
-import time
-
-class Product(BaseModel):
+class Product(BaseModel, use_created_at=True, use_updated_at=True):
     __tablename__ = 'products'
-    # use_created_at=True, use_updated_at=True がデフォルト
     
     name: Mapped[str] = mapped_column(String(100))
     price: Mapped[int] = mapped_column(Integer)
 
-# 新規作成
 product = Product(name='Laptop', price=1000)
 session.add(product)
 session.commit()
 
-print(product.created_at)  # 2025-11-15 10:30:00.000000
-print(product.updated_at)  # 2025-11-15 10:30:00.000000（初回は created_at と同じ）
+print(product.created_at)  # 2025-12-25 10:30:00
+print(product.updated_at)  # 2025-12-25 10:30:00（初回は同じ）
 
-# 少し待ってから更新
-time.sleep(2)
-
+# 更新
 product.price = 900
 session.commit()
 
-print(product.created_at)  # 2025-11-15 10:30:00.000000（変わらない）
-print(product.updated_at)  # 2025-11-15 10:30:02.000000（更新された）
+print(product.created_at)  # 2025-12-25 10:30:00（変わらない）
+print(product.updated_at)  # 2025-12-25 10:30:05（自動更新）
 ```
 
-**重要な仕様**:
-- ✅ **自動更新**: `session.commit()` 時に SQLAlchemy Event が発火し、自動的に更新される
-- ✅ **created_at との関係**: 初回保存時は `created_at` と同じ値、更新時のみ変わる
-- ✅ **手動設定も可能**: 必要に応じて手動で `updated_at` を設定できる
-
-**無効化する場合**:
+**注意**: bulk update（`query.update()`）では自動更新されません。手動で設定してください：
 ```python
-class StaticModel(BaseModel, use_updated_at=False):
-    __tablename__ = 'static_models'
-    # updated_at カラムは追加されない
-```
+from datetime import datetime
 
-**注意点**:
-- ⚠️ **created_at と同じ制約**: DB に保存しない場合、`updated_at` は `None` のまま
-- ⚠️ **bulk update では発火しない**: `session.query(Model).update({...})` では Event が発火しないため、手動で設定が必要
-  ```python
-  # ❌ bulk update では updated_at が更新されない
-  session.query(Product).filter_by(category='old').update({'price': 500})
-  
-  # ✅ 手動で updated_at を設定
-  session.query(Product).filter_by(category='old').update({
-      'price': 500,
-      'updated_at': datetime.now()
-  })
-  ```
+session.query(Product).filter_by(category='old').update({
+    'price': 500,
+    'updated_at': datetime.now()  # 手動設定
+})
+```
 
 ---
 
-## カスタム型
+## カスタム型: AutoDateTime
 
-### AutoDateTime
+**実装**: `repom/custom_types/AutoDateTime.py`
 
-**実装ファイル**: `repom/custom_types/AutoDateTime.py`
+**目的**: データベース保存時に自動的に現在時刻を設定
 
-**目的**: データベース保存時に自動的に現在時刻を設定する
-
-**完全な実装**:
+**実装**:
 ```python
 from sqlalchemy.types import TypeDecorator, DateTime
 from datetime import datetime
 
 class AutoDateTime(TypeDecorator):
-    """
-    Custom SQLAlchemy type to automatically set datetime values on insert.
-    
-    自動的に日時を設定するカスタム型:
-    - 引数に何も渡されなければ、`datetime.now()` の値が入る事を保証
-    - 引数に日付が渡されれば、その値が使われる事を保証
-    
-    使用例:
-        created_at = mapped_column(AutoDateTime, nullable=False)
-        updated_at = mapped_column(AutoDateTime, nullable=False)
-    
-    注意:
-        updated_at の自動更新は SQLAlchemy Event で実装されています
-        （BaseModel の @event.listens_for を参照）
-    """
-    
     impl = DateTime
-    cache_ok = True  # SQLAlchemy 2.0+ でキャッシュを有効化
+    cache_ok = True
     
     def process_bind_param(self, value, dialect):
-        """データベースへ保存する前に実行される"""
+        """DB保存時に実行"""
         if value is None:
             value = datetime.now()
         return value
     
     def process_result_value(self, value, dialect):
-        """データベースから読み取った後に実行される"""
+        """DB読み取り時に実行"""
         return value
 ```
 
-**実行タイミング**:
+**重要**: オブジェクト作成時には実行されません。`session.commit()` で DB 保存時にのみ実行されます。
 
-| タイミング | `process_bind_param` | `process_result_value` |
-|-----------|---------------------|----------------------|
-| Python → DB | ✅ 実行される | ❌ 実行されない |
-| DB → Python | ❌ 実行されない | ✅ 実行される |
-| オブジェクト作成 | ❌ 実行されない | ❌ 実行されない |
+---
 
-**重要**: Python オブジェクトを作成しただけでは `process_bind_param` は実行されない
+## システムカラムの組み合わせパターン
 
-**使用例**:
+### パターン1: ID のみ（デフォルト）
 ```python
-from repom.custom_types.AutoDateTime import AutoDateTime
-from datetime import datetime
-
-class Event(BaseModel):
-    __tablename__ = 'events'
-    use_created_at = False  # システムカラムは使わない
+class User(BaseModel):
+    __tablename__ = 'users'
+    # use_id=True のみ（デフォルト）
     
     name: Mapped[str] = mapped_column(String(100))
-    occurred_at: Mapped[datetime] = mapped_column(AutoDateTime)  # カスタムで使用
+```
 
-# 自動設定
-event1 = Event(name='System Start')
-print(event1.occurred_at)  # None（まだDB保存していない）
+### パターン2: ID + タイムスタンプ
+```python
+class Article(BaseModel, use_created_at=True, use_updated_at=True):
+    __tablename__ = 'articles'
+    # use_id=True はデフォルトで有効
+    
+    title: Mapped[str] = mapped_column(String(200))
+```
 
-session.add(event1)
-session.commit()
-print(event1.occurred_at)  # 2025-11-15 10:30:00.000000（DB保存時に自動設定）
+### パターン3: UUID + タイムスタンプ
+```python
+class User(BaseModel, use_uuid=True, use_created_at=True, use_updated_at=True):
+    __tablename__ = 'users'
+    # use_id は自動的に False
+    
+    name: Mapped[str] = mapped_column(String(100))
+```
 
-# 手動設定（過去のイベントを記録）
-past_time = datetime(2024, 12, 31, 23, 59, 59)
-event2 = Event(name='Old Event', occurred_at=past_time)
-session.add(event2)
-session.commit()
-print(event2.occurred_at)  # 2024-12-31 23:59:59（手動設定した値が使われる）
+### パターン4: 複合主キー + タイムスタンプ
+```python
+class UserSession(BaseModel, use_id=False, use_created_at=True):
+    __tablename__ = 'user_sessions'
+    
+    user_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_token: Mapped[str] = mapped_column(String(64), primary_key=True)
+```
+
+### パターン5: システムカラムなし
+```python
+class CustomModel(BaseModel, use_id=False):
+    __tablename__ = 'custom_models'
+    
+    custom_id: Mapped[str] = mapped_column(String(36), primary_key=True)
 ```
 
 ---
 
 ## テストでの注意点
 
-### 問題: Pydantic バリデーションエラー
+### 問題: created_at が None でバリデーションエラー
 
 **症状**:
 ```python
-def test_book_response():
-    book = BookModel(title='Test', author_id=1, price=1000)
-    book.id = 1  # 手動設定
-    
-    BookResponse = BookModel.get_response_schema()
-    response_data = book.to_dict()
-    
-    # ❌ ValidationError: created_at should be a valid datetime, got None
-    validated = BookResponse(**response_data)
+book = BookModel(title='Test', price=1000)
+book.id = 1  # 手動設定
+
+BookResponse = BookModel.get_response_schema()
+# ValidationError: created_at should be a valid datetime, got None
+validated = BookResponse(**book.to_dict())
 ```
 
-**原因**:
-- `book` を DB に保存していないため、`created_at` は `None`
-- `get_response_schema()` で生成される Pydantic スキーマは `created_at: datetime` を期待
+**原因**: DB に保存していないため、`created_at` は `None` のまま
 
-**解決策**:
-
-#### 解決策1: DB に保存してからテストする（推奨）
+**解決策1**: DB に保存する（推奨）
 ```python
-def test_book_response(session):  # session fixture を使用
-    book = BookModel(title='Test', author_id=1, price=1000)
-    
+def test_book_response(session):
+    book = BookModel(title='Test', price=1000)
     session.add(book)
-    session.commit()  # ← DB に保存
+    session.commit()  # これで created_at に値が入る
     
-    BookResponse = BookModel.get_response_schema()
-    response_data = book.to_dict()
-    
-    # ✅ created_at に datetime が設定されている
-    validated = BookResponse(**response_data)
+    validated = BookResponse(**book.to_dict())
     assert validated.created_at is not None
 ```
 
-#### 解決策2: 手動で値を設定する
+**解決策2**: 手動で値を設定
 ```python
-def test_book_response():
-    from datetime import datetime
-    
-    book = BookModel(title='Test', author_id=1, price=1000)
-    book.id = 1
-    book.created_at = datetime.now()  # ← 手動設定
-    
-    BookResponse = BookModel.get_response_schema()
-    response_data = book.to_dict()
-    
-    # ✅ 手動設定した値が使われる
-    validated = BookResponse(**response_data)
-    assert validated.created_at is not None
-```
+from datetime import datetime
 
-#### 解決策3: スキーマを Optional にする（非推奨）
-```python
-class BookModel(BaseModelAuto):
-    __tablename__ = 'books'
-    
-    @BaseModelAuto.response_field(
-        created_at=Optional[datetime]  # ← Optional にする
-    )
-    def to_dict(self):
-        return super().to_dict()
-```
+book = BookModel(title='Test', price=1000)
+book.id = 1
+book.created_at = datetime.now()  # 手動設定
 
-**推奨**: 解決策1（DB に保存してテスト）を使用することで、実際の動作に近いテストができます。
-
----
-
-## システムカラムの組み合わせ
-
-### パターン1: すべて有効（デフォルト）
-```python
-class User(BaseModel):
-    __tablename__ = 'users'
-    # use_id=True, use_created_at=True, use_updated_at=True（デフォルト）
-    
-    name: Mapped[str] = mapped_column(String(100))
-
-# 結果: id, created_at, updated_at が自動追加
-```
-
-### パターン2: id のみ無効
-```python
-class UserSession(BaseModel, use_id=False):
-    __tablename__ = 'user_sessions'
-    # use_created_at=True, use_updated_at=True（デフォルト）
-    
-    user_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    session_token: Mapped[str] = mapped_column(String(64), primary_key=True)
-
-# 結果: created_at, updated_at のみ追加
-```
-
-### パターン3: タイムスタンプのみ無効
-```python
-class StaticData(BaseModel, use_created_at=False, use_updated_at=False):
-    __tablename__ = 'static_data'
-    # use_id=True（デフォルト）
-    
-    key: Mapped[str] = mapped_column(String(50), unique=True)
-    value: Mapped[str] = mapped_column(String(255))
-
-# 結果: id のみ追加
-```
-
-### パターン4: すべて無効
-```python
-class CustomModel(BaseModel, use_id=False, use_created_at=False, use_updated_at=False):
-    __tablename__ = 'custom_models'
-    
-    custom_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    data: Mapped[str] = mapped_column(String(255))
-
-# 結果: システムカラムなし（すべて手動定義）
+validated = BookResponse(**book.to_dict())
 ```
 
 ---
 
 ## ベストプラクティス
 
-### 1. デフォルト設定を活用する
+### 1. デフォルト設定で十分か判断する
 
-**推奨**: ほとんどのモデルではデフォルト設定（id, created_at, updated_at すべて有効）を使用
+**ID のみで十分な場合**（多くのケース）:
 ```python
 class Product(BaseModel):
     __tablename__ = 'products'
-    # デフォルトのまま（何も指定しない）
-    
-    name: Mapped[str] = mapped_column(String(100))
-    price: Mapped[int] = mapped_column(Integer)
+    # デフォルト設定をそのまま使う
 ```
 
-### 2. 複合主キーの場合のみ use_id=False
+**タイムスタンプが必要な場合**:
+```python
+class Article(BaseModel, use_created_at=True, use_updated_at=True):
+    __tablename__ = 'articles'
+```
 
-**use_id=False を使うべきケース**:
-- 複合主キー（Composite Primary Key）を使用する場合
-- 外部システムの ID を主キーとして使用する場合
+### 2. 複合主キーの場合は use_id=False
 
 ```python
-class OrderItem(BaseModel, use_id=False):
+class OrderItem(BaseModel, use_id=False, use_created_at=True):
     __tablename__ = 'order_items'
+    
+    order_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+```
+
+### 3. テストでは DB に保存する
+
+Pydantic バリデーションを行う場合は、必ず DB に保存してからテストしてください。
+
+### 4. システムカラムは読み取り専用
+
+```python
+# ❌ 避ける
+user.id = 999
+user.created_at = datetime.now()
+
+# ✅ データ移行時のみ例外的に許可
+```
+
+---
+
+## FAQ
+
+### Q1: created_at が None のままなのはバグですか？
+
+**A**: いいえ、仕様です。`created_at` はデータベース保存時の時刻を記録します。オブジェクト作成時は `None` で、`session.commit()` 後に値が設定されます。
+
+### Q2: デフォルトで created_at を有効にできますか？
+
+**A**: できません。repom のデフォルト設定は `use_created_at=False` です。必要に応じて明示的に `use_created_at=True` を指定してください。
+
+### Q3: updated_at が更新されない
+
+**A**: 以下を確認してください：
+1. `session.commit()` を呼んでいるか
+2. bulk update（`query.update()`）を使っていないか（自動更新されません）
+3. `use_updated_at=True` を指定しているか
+
+### Q4: use_id と use_uuid を両方 True にしたい
+
+**A**: できません。排他制御されています。どちらか一方のみ使用してください。
+
+### Q5: 他のカスタム型はありますか？
+
+**A**: はい。以下が用意されています：
+- `ISO8601DateTime`: ISO8601 形式の文字列として保存
+- `JSONEncoded`: JSON として保存
+- `ListJSON`: リストを JSON として保存
+- `StrEncodedArray`: カンマ区切り文字列として保存
+
+詳細は各カスタム型のソースコードを参照してください。
+
+---
+
+## 関連ドキュメント
+
+- [BaseModel](../../repom/base_model.py)
+- [BaseModelAuto ガイド](../base_model_auto_guide.md)
+- [Repository ガイド](../repository/repository_and_utilities_guide.md)
+
+---
+
+**最終更新**: 2025-12-25  
+**関連コミット**: FastAPI Depends compatibility fix
     
     order_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     product_id: Mapped[int] = mapped_column(Integer, primary_key=True)
