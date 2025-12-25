@@ -159,11 +159,22 @@ class AsyncBaseRepository(Generic[T]):
         Args:
             instance (T): 保存するインスタンス
         Returns:
-            T: 保存したインスタンス
+            T: 保存したインスタンス（データベースの最新値で更新済み）
+
+        Note:
+            非同期セッションでは commit() 後に refresh() が必須です。
+            理由: SQLAlchemy の非同期環境では、expire された属性への自動ロードが動作せず、
+                  AutoDateTime などのデフォルト値が Python オブジェクトに反映されません。
+            
+            同期版（BaseRepository.save）では refresh() は不要です。
+            理由: expire_on_commit=True (デフォルト) により、commit() 後に属性アクセス時
+                  自動的にデータベースから再読み込みが発生するため。
         """
         try:
             self.session.add(instance)
             await self.session.commit()
+            # 非同期環境では refresh() が必須（AutoDateTime等のDB自動設定値を反映）
+            await self.session.refresh(instance)
         except SQLAlchemyError:
             await self.session.rollback()
             raise
@@ -185,10 +196,18 @@ class AsyncBaseRepository(Generic[T]):
 
         Args:
             instances (List[T]): 保存するインスタンスのリスト
+
+        Note:
+            非同期セッションでは commit() 後に各インスタンスの refresh() が必須です。
+            大量データの一括保存でパフォーマンスが問題になる場合は、
+            保存後に get_by_id() で再取得する方法も検討してください。
         """
         try:
             self.session.add_all(instances)
             await self.session.commit()
+            # 非同期環境では各インスタンスの refresh() が必須
+            for instance in instances:
+                await self.session.refresh(instance)
         except SQLAlchemyError:
             await self.session.rollback()
             raise

@@ -221,10 +221,19 @@ class BaseRepository(Generic[T]):
             instance (T): 保存するインスタンス
         Returns:
             T: 保存したインスタンス
+
+        Note:
+            同期版では refresh() は不要です。
+            理由: SQLAlchemy の同期セッションでは expire_on_commit=True (デフォルト) により、
+                  commit() 後に属性アクセス時、自動的にデータベースから再読み込みが発生します。
+                  そのため、AutoDateTime などのデフォルト値も正しく取得できます。
+            
+            非同期版（AsyncBaseRepository.save）では refresh() が必須です。
         """
         try:
             self.session.add(instance)
             self.session.commit()
+            # 同期版では refresh() 不要（expire_on_commit により自動ロードされる）
         except SQLAlchemyError:
             self.session.rollback()
             raise
@@ -248,10 +257,15 @@ class BaseRepository(Generic[T]):
 
         Args:
             instances (List[T]): 保存するインスタンスのリスト
+
+        Note:
+            同期版では refresh() は不要です（属性アクセス時に自動ロード）。
+            非同期版（AsyncBaseRepository.saves）では各インスタンスの refresh() が必須です。
         """
         try:
             self.session.add_all(instances)
             self.session.commit()
+            # 同期版では refresh() 不要（expire_on_commit により自動ロードされる）
         except SQLAlchemyError:
             self.session.rollback()
             raise
