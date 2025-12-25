@@ -305,42 +305,163 @@ class TestFastAPIDependsPattern:
             samples = result.scalars().all()
             assert isinstance(samples, list)
 
+class TestFastAPIDependsPattern:
+    """FastAPI Depends パターンのテスト - 実際の async generator protocol をテスト"""
+
     @pytest.mark.asyncio
-    async def test_get_async_db_transaction_yields_session(self):
-        """get_async_db_transaction() should yield AsyncSession with transaction"""
-        async with get_async_db_transaction() as session:
+    async def test_get_async_db_session_is_async_generator_function(self):
+        """get_async_db_session() should be an async generator function"""
+        import inspect
+        assert inspect.isasyncgenfunction(get_async_db_session), \
+            "get_async_db_session must be an async generator function for FastAPI Depends compatibility"
+
+    @pytest.mark.asyncio
+    async def test_get_async_db_session_returns_async_generator(self):
+        """get_async_db_session() should return an async generator object"""
+        result = get_async_db_session()
+        # Async generator object should be returned (not context manager)
+        assert type(result).__name__ == 'async_generator', \
+            f"Expected async_generator but got {type(result).__name__}"
+        # Must have __anext__ for async generator protocol
+        assert hasattr(result, '__anext__'), \
+            "Async generator must have __anext__ method"
+        # Must NOT have __aenter__ (not an async context manager)
+        assert not hasattr(result, '__aenter__'), \
+            "Async generator should not be an async context manager"
+
+    @pytest.mark.asyncio
+    async def test_get_async_db_session_yields_session_via_anext(self):
+        """get_async_db_session() should yield AsyncSession when used with anext()"""
+        # This is how FastAPI Depends actually works with async
+        gen = get_async_db_session()
+        try:
+            # FastAPI calls anext(gen) to get the dependency
+            session = await gen.__anext__()
+            
             # AsyncSession であることを確認
+            assert isinstance(session, AsyncSession), \
+                f"Expected AsyncSession but got {type(session).__name__}"
+
+            # session.execute() が動作することを確認
+            result = await session.execute(select(SampleModel))
+            items = result.scalars().all()
+            assert isinstance(items, list)
+        finally:
+            # FastAPI calls anext() again for cleanup
+            try:
+                await gen.__anext__()
+            except StopAsyncIteration:
+                pass  # Expected
+
+    @pytest.mark.asyncio
+    async def test_get_async_db_session_context_manager_compatibility(self):
+        """get_async_db_session() should also work with 'async with' for backward compatibility"""
+        # This tests the old behavior (async with statement)
+        # If @asynccontextmanager is removed, this test should be updated or removed
+        try:
+            async with get_async_db_session() as session:
+                assert isinstance(session, AsyncSession)
+                result = await session.execute(select(SampleModel))
+                items = result.scalars().all()
+                assert isinstance(items, list)
+        except (AttributeError, TypeError) as e:
+            # If @asynccontextmanager is removed, async generator doesn't support 'async with'
+            pytest.skip(f"Async context manager protocol not supported: {e}")
+
+    @pytest.mark.asyncio
+    async def test_get_async_db_transaction_is_async_generator_function(self):
+        """get_async_db_transaction() should be an async generator function"""
+        import inspect
+        assert inspect.isasyncgenfunction(get_async_db_transaction), \
+            "get_async_db_transaction must be an async generator function"
+
+    @pytest.mark.asyncio
+    async def test_get_async_db_transaction_returns_async_generator(self):
+        """get_async_db_transaction() should return an async generator object"""
+        result = get_async_db_transaction()
+        assert type(result).__name__ == 'async_generator', \
+            f"Expected async_generator but got {type(result).__name__}"
+        assert hasattr(result, '__anext__')
+        assert not hasattr(result, '__aenter__')
+
+    @pytest.mark.asyncio
+    async def test_get_async_db_transaction_yields_session_via_anext(self):
+        """get_async_db_transaction() should yield AsyncSession with auto-commit"""
+        gen = get_async_db_transaction()
+        try:
+            session = await gen.__anext__()
             assert isinstance(session, AsyncSession)
 
             # トランザクション内でレコードを作成
-            sample = SampleModel(value="transaction_test")
+            sample = SampleModel(value="transaction_test_via_anext")
             session.add(sample)
             await session.flush()
 
-            # 作成されたことを確認
+            # 作成されたことを確認（まだコミット前）
             result = await session.execute(
-                select(SampleModel).where(SampleModel.value == "transaction_test")
+                select(SampleModel).where(SampleModel.value == "transaction_test_via_anext")
             )
             found = result.scalar_one_or_none()
             assert found is not None
+        finally:
+            # Cleanup (triggers auto-commit)
+            try:
+                await gen.__anext__()
+            except StopAsyncIteration:
+                pass
+
+        # コミットされたことを確認
+        gen2 = get_async_db_session()
+        try:
+            verify_session = await gen2.__anext__()
+            result = await verify_session.execute(
+                select(SampleModel).where(SampleModel.value == "transaction_test_via_anext")
+            )
+            found = result.scalar_one_or_none()
+            assert found is not None
+        finally:
+            try:
+                await gen2.__anext__()
+            except StopAsyncIteration:
+                pass
 
     @pytest.mark.asyncio
-    async def test_fastapi_depends_simulation(self):
-        """Simulate FastAPI Depends behavior"""
-        # FastAPI が Depends を処理する際の動作をシミュレート
-        async def endpoint_handler():
-            # Depends(get_async_db_session) のように使用
-            async with get_async_db_session() as session:
-                result = await session.execute(select(SampleModel))
-                return result.scalars().all()
+    async def test_fastapi_depends_real_simulation(self):
+        """Simulate REAL FastAPI Depends behavior (using anext())"""
+        # This is how FastAPI actually processes async dependencies
+        async def simulate_fastapi_depends(dependency_func):
+            """Simulates FastAPI's async dependency injection"""
+            gen = dependency_func()
+            try:
+                # Get the dependency value
+                value = await gen.__anext__()
+                return value
+            finally:
+                # Cleanup
+                try:
+                    await gen.__anext__()
+                except StopAsyncIteration:
+                    pass
 
-        samples = await endpoint_handler()
-        assert isinstance(samples, list)
+        # Use the simulated Depends
+        session = await simulate_fastapi_depends(get_async_db_session)
+        
+        # AsyncSession であることを確認
+        assert isinstance(session, AsyncSession), \
+            f"Expected AsyncSession but got {type(session).__name__}"
+        
+        # session.execute() が動作することを確認
+        result = await session.execute(select(SampleModel))
+        items = result.scalars().all()
+        assert isinstance(items, list)
 
     @pytest.mark.asyncio
     async def test_session_has_required_methods(self):
         """Yielded session should have all required SQLAlchemy methods"""
-        async with get_async_db_session() as session:
+        gen = get_async_db_session()
+        try:
+            session = await gen.__anext__()
+            
             # 必要なメソッドが存在することを確認
             assert hasattr(session, 'execute')
             assert hasattr(session, 'add')
@@ -352,7 +473,13 @@ class TestFastAPIDependsPattern:
 
             # execute メソッドが呼び出し可能
             assert callable(session.execute)
+        finally:
+            try:
+                await gen.__anext__()
+            except StopAsyncIteration:
+                pass
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+

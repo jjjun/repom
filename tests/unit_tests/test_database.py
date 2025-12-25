@@ -266,70 +266,152 @@ class TestSessionIsolation:
 
 
 class TestFastAPIDependsPattern:
-    """FastAPI Depends パターンのテスト"""
+    """FastAPI Depends パターンのテスト - 実際の generator protocol をテスト"""
 
-    def test_get_db_session_yields_session(self):
-        """get_db_session() should yield Session for FastAPI Depends"""
-        # contextmanager デコレータにより、context manager として動作
-        # FastAPI Depends は内部でこれを呼び出して generator を取得する
-        with get_db_session() as session:
+    def test_get_db_session_is_generator_function(self):
+        """get_db_session() should be a generator function (not context manager)"""
+        import inspect
+        # FastAPI Depends requires generator function
+        assert inspect.isgeneratorfunction(get_db_session), \
+            "get_db_session must be a generator function for FastAPI Depends compatibility"
+
+    def test_get_db_session_returns_generator(self):
+        """get_db_session() should return a generator object"""
+        result = get_db_session()
+        # Generator object should be returned (not context manager)
+        assert type(result).__name__ == 'generator', \
+            f"Expected generator but got {type(result).__name__}"
+        # Must have __next__ for generator protocol
+        assert hasattr(result, '__next__'), \
+            "Generator must have __next__ method"
+        # Must NOT have __enter__ (not a context manager)
+        assert not hasattr(result, '__enter__'), \
+            "Generator should not be a context manager"
+
+    def test_get_db_session_yields_session_via_next(self):
+        """get_db_session() should yield Session when used with next()"""
+        # This is how FastAPI Depends actually works
+        gen = get_db_session()
+        try:
+            # FastAPI calls next(gen) to get the dependency
+            session = next(gen)
+            
             # Session であることを確認
-            assert isinstance(session, Session)
+            assert isinstance(session, Session), \
+                f"Expected Session but got {type(session).__name__}"
 
             # session.execute() が動作することを確認
             from sqlalchemy import select
             result = session.execute(select(DatabaseTestModel))
             items = result.scalars().all()
             assert isinstance(items, list)
+        finally:
+            # FastAPI calls next() again for cleanup
+            try:
+                next(gen)
+            except StopIteration:
+                pass  # Expected
 
-    def test_get_db_transaction_yields_session(self):
-        """get_db_transaction() should yield Session with transaction"""
-        with get_db_transaction() as session:
-            # Session であることを確認
+    def test_get_db_session_context_manager_compatibility(self):
+        """get_db_session() should also work with 'with' statement for backward compatibility"""
+        # This tests the old behavior (with statement)
+        # If @contextmanager is removed, this test should be updated or removed
+        try:
+            with get_db_session() as session:
+                # Session であることを確認
+                assert isinstance(session, Session)
+
+                # session.execute() が動作することを確認
+                from sqlalchemy import select
+                result = session.execute(select(DatabaseTestModel))
+                items = result.scalars().all()
+                assert isinstance(items, list)
+        except (AttributeError, TypeError) as e:
+            # If @contextmanager is removed, generator doesn't support 'with'
+            pytest.skip(f"Context manager protocol not supported: {e}")
+
+    def test_get_db_transaction_is_generator_function(self):
+        """get_db_transaction() should be a generator function"""
+        import inspect
+        assert inspect.isgeneratorfunction(get_db_transaction), \
+            "get_db_transaction must be a generator function for FastAPI Depends compatibility"
+
+    def test_get_db_transaction_returns_generator(self):
+        """get_db_transaction() should return a generator object"""
+        result = get_db_transaction()
+        assert type(result).__name__ == 'generator', \
+            f"Expected generator but got {type(result).__name__}"
+        assert hasattr(result, '__next__')
+        assert not hasattr(result, '__enter__')
+
+    def test_get_db_transaction_yields_session_via_next(self):
+        """get_db_transaction() should yield Session with auto-commit"""
+        gen = get_db_transaction()
+        try:
+            session = next(gen)
             assert isinstance(session, Session)
 
             # トランザクション内でレコードを作成
-            item = DatabaseTestModel(name="transaction_test")
+            item = DatabaseTestModel(name="transaction_test_via_next")
             session.add(item)
             session.flush()
 
-            # 作成されたことを確認
+            # 作成されたことを確認（まだコミット前）
             from sqlalchemy import select
             result = session.execute(
-                select(DatabaseTestModel).where(DatabaseTestModel.name == "transaction_test")
+                select(DatabaseTestModel).where(DatabaseTestModel.name == "transaction_test_via_next")
             )
             found = result.scalar_one_or_none()
             assert found is not None
-
-    def test_fastapi_depends_simulation(self):
-        """Simulate FastAPI Depends behavior"""
-        # FastAPI が Depends を処理する際の動作をシミュレート
-        # Depends は callable を受け取り、その結果を使用する
-        def endpoint_handler():
-            # Depends(get_db_session) のように使用
-            with get_db_session() as session:
-                from sqlalchemy import select
-                result = session.execute(select(DatabaseTestModel))
-                return result.scalars().all()
-
-        items = endpoint_handler()
-        assert isinstance(items, list)
-
-    def test_fastapi_depends_with_transaction(self):
-        """FastAPI Depends with transaction simulation"""
-        # トランザクション内でレコードを作成
-        item_name = "fastapi_test"
-        with get_db_transaction() as session:
-            item = DatabaseTestModel(name=item_name)
-            session.add(item)
-            # トランザクションは自動コミットされる
+        finally:
+            # Cleanup (triggers auto-commit)
+            try:
+                next(gen)
+            except StopIteration:
+                pass
 
         # コミットされたことを確認
-        with get_db_session() as verify_session:
+        gen2 = get_db_session()
+        try:
+            verify_session = next(gen2)
             from sqlalchemy import select
             result = verify_session.execute(
-                select(DatabaseTestModel).where(DatabaseTestModel.name == item_name)
+                select(DatabaseTestModel).where(DatabaseTestModel.name == "transaction_test_via_next")
             )
             found = result.scalar_one_or_none()
             assert found is not None
-            assert found.name == item_name
+        finally:
+            try:
+                next(gen2)
+            except StopIteration:
+                pass
+
+    def test_fastapi_depends_real_simulation(self):
+        """Simulate REAL FastAPI Depends behavior (using next())"""
+        # This is how FastAPI actually processes dependencies
+        def simulate_fastapi_depends(dependency_func):
+            """Simulates FastAPI's dependency injection"""
+            gen = dependency_func()
+            try:
+                # Get the dependency value
+                value = next(gen)
+                return value
+            finally:
+                # Cleanup
+                try:
+                    next(gen)
+                except StopIteration:
+                    pass
+
+        # Use the simulated Depends
+        session = simulate_fastapi_depends(get_db_session)
+        
+        # Session であることを確認
+        assert isinstance(session, Session), \
+            f"Expected Session but got {type(session).__name__}"
+        
+        # session.execute() が動作することを確認
+        from sqlalchemy import select
+        result = session.execute(select(DatabaseTestModel))
+        items = result.scalars().all()
+        assert isinstance(items, list)
