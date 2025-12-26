@@ -71,7 +71,7 @@ class TestConvertToAsyncUri:
         async_url = "sqlite+aiosqlite:///./database.db"
         result = convert_to_async_uri(async_url)
         assert result == async_url
-        
+
         # PostgreSQL async
         async_url_pg = "postgresql+asyncpg://user:pass@localhost/db"
         result_pg = convert_to_async_uri(async_url_pg)
