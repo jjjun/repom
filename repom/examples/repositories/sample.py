@@ -1,7 +1,7 @@
 from typing import Optional, Union, List, Callable
 from sqlalchemy import select, desc, and_
-from repom.models.sample import SampleModel
-from repom.base_repository import BaseRepository, FilterParams
+from repom.examples.models.sample import SampleModel
+from repom import BaseRepository, FilterParams
 from repom.database import get_db_session
 
 

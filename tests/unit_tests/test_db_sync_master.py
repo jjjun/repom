@@ -12,8 +12,8 @@ import os
 import pytest
 from pathlib import Path
 from repom.scripts.db_sync_master import load_master_data_files, sync_master_data
-from repom.models.sample import SampleModel
-from repom.base_repository import BaseRepository
+from repom.examples.models.sample import SampleModel
+from repom.repositories import BaseRepository
 
 
 class TestLoadMasterDataFiles:
@@ -25,7 +25,7 @@ class TestLoadMasterDataFiles:
         master_file = tmp_path / "001_test.py"
         master_file.write_text(
             """
-from repom.models.sample import SampleModel
+from repom.examples.models.sample import SampleModel
 
 MODEL_CLASS = SampleModel
 MASTER_DATA = [
@@ -51,7 +51,7 @@ MASTER_DATA = [
         file2 = tmp_path / "002_second.py"
         file2.write_text(
             """
-from repom.models.sample import SampleModel
+from repom.examples.models.sample import SampleModel
 
 MODEL_CLASS = SampleModel
 MASTER_DATA = [{"id": 2, "value": "second"}]
@@ -61,7 +61,7 @@ MASTER_DATA = [{"id": 2, "value": "second"}]
         file1 = tmp_path / "001_first.py"
         file1.write_text(
             """
-from repom.models.sample import SampleModel
+from repom.examples.models.sample import SampleModel
 
 MODEL_CLASS = SampleModel
 MASTER_DATA = [{"id": 1, "value": "first"}]
@@ -96,7 +96,7 @@ MASTER_DATA = [{"id": 1}]
         master_file = tmp_path / "001_test.py"
         master_file.write_text(
             """
-from repom.models.sample import SampleModel
+from repom.examples.models.sample import SampleModel
 
 MODEL_CLASS = SampleModel
 """
@@ -110,7 +110,7 @@ MODEL_CLASS = SampleModel
         master_file = tmp_path / "001_test.py"
         master_file.write_text(
             """
-from repom.models.sample import SampleModel
+from repom.examples.models.sample import SampleModel
 
 MODEL_CLASS = SampleModel
 MASTER_DATA = {"id": 1}  # dict型（エラー）
@@ -126,7 +126,7 @@ MASTER_DATA = {"id": 1}  # dict型（エラー）
         file1 = tmp_path / "001_test.py"
         file1.write_text(
             """
-from repom.models.sample import SampleModel
+from repom.examples.models.sample import SampleModel
 
 MODEL_CLASS = SampleModel
 MASTER_DATA = [{"id": 1}]
@@ -137,7 +137,7 @@ MASTER_DATA = [{"id": 1}]
         file2 = tmp_path / "_private.py"
         file2.write_text(
             """
-from repom.models.sample import SampleModel
+from repom.examples.models.sample import SampleModel
 
 MODEL_CLASS = SampleModel
 MASTER_DATA = [{"id": 999}]

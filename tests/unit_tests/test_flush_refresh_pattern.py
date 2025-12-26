@@ -27,42 +27,42 @@ class TestFlushRefreshPatternSync:
     def test_flush_without_refresh_created_at_is_none(self, db_test):
         """Test if created_at is None after flush() without refresh() - SYNC"""
         instance = FlushTestModel(name="Test Item")
-        
+
         # Before flush
         assert instance.created_at is None
         assert instance.updated_at is None
-        
+
         # Pattern from issue: add + flush (without refresh)
         db_test.add(instance)
         db_test.flush()
-        
+
         print(f"\n[SYNC] After flush (no refresh):")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
-        
+
         is_created_at_none = instance.created_at is None
         is_updated_at_none = instance.updated_at is None
-        
+
         print(f"\n[SYNC] Verification:")
         print(f"  created_at is None: {is_created_at_none}")
         print(f"  updated_at is None: {is_updated_at_none}")
-        
+
         # If issue is correct, these should be None
         # But let's see actual behavior
 
     def test_flush_with_refresh_has_values(self, db_test):
         """Test if created_at is set after flush() + refresh() - SYNC"""
         instance = FlushTestModel(name="Test Item 2")
-        
+
         # Pattern with refresh
         db_test.add(instance)
         db_test.flush()
         db_test.refresh(instance)
-        
+
         print(f"\n[SYNC] After flush + refresh:")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
-        
+
         # After refresh, these should NOT be None
         assert instance.created_at is not None
         assert isinstance(instance.created_at, datetime)
@@ -72,17 +72,17 @@ class TestFlushRefreshPatternSync:
     def test_commit_without_refresh_auto_loads(self, db_test):
         """Test if commit() triggers auto-load on attribute access - SYNC"""
         instance = FlushTestModel(name="Test Item 3")
-        
+
         db_test.add(instance)
         db_test.flush()
         db_test.commit()
-        
+
         # After commit, try to access created_at
         # Sync session should auto-load it due to expire_on_commit
         print(f"\n[SYNC] After flush + commit (accessing attribute):")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
-        
+
         # Should auto-load due to expire_on_commit
         assert instance.created_at is not None
         assert instance.updated_at is not None
@@ -95,42 +95,42 @@ class TestFlushRefreshPatternAsync:
     async def test_flush_without_refresh_created_at_is_none(self, async_db_test):
         """Test if created_at is None after flush() without refresh() - ASYNC"""
         instance = FlushTestModel(name="Test Item Async")
-        
+
         # Before flush
         assert instance.created_at is None
         assert instance.updated_at is None
-        
+
         # Pattern from issue: add + flush (without refresh)
         async_db_test.add(instance)
         await async_db_test.flush()
-        
+
         print(f"\n[ASYNC] After flush (no refresh):")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
-        
+
         is_created_at_none = instance.created_at is None
         is_updated_at_none = instance.updated_at is None
-        
+
         print(f"\n[ASYNC] Verification:")
         print(f"  created_at is None: {is_created_at_none}")
         print(f"  updated_at is None: {is_updated_at_none}")
-        
+
         # According to issue, these should be None
         # Let's verify
 
     async def test_flush_with_refresh_has_values(self, async_db_test):
         """Test if created_at is set after flush() + refresh() - ASYNC"""
         instance = FlushTestModel(name="Test Item Async 2")
-        
+
         # Pattern with refresh
         async_db_test.add(instance)
         await async_db_test.flush()
         await async_db_test.refresh(instance)
-        
+
         print(f"\n[ASYNC] After flush + refresh:")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
-        
+
         # After refresh, these should NOT be None
         assert instance.created_at is not None
         assert isinstance(instance.created_at, datetime)
@@ -140,17 +140,17 @@ class TestFlushRefreshPatternAsync:
     async def test_commit_without_refresh_still_none(self, async_db_test):
         """Test if commit() does NOT auto-load in async - ASYNC"""
         instance = FlushTestModel(name="Test Item Async 3")
-        
+
         async_db_test.add(instance)
         await async_db_test.flush()
         await async_db_test.commit()
-        
+
         # After commit, try to access created_at
         # Async session does NOT auto-load
         print(f"\n[ASYNC] After flush + commit (accessing attribute):")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
-        
+
         # Should still be None in async
 
 
@@ -161,14 +161,14 @@ class TestRepositorySaveVsFlush:
     async def test_save_method_automatically_refreshes(self, async_db_test):
         """Test that save() method handles refresh automatically"""
         repo = AsyncBaseRepository(FlushTestModel, session=async_db_test)
-        
+
         instance = FlushTestModel(name="Via save() method")
         saved = await repo.save(instance)
-        
+
         print(f"\n[COMPARE] Using repo.save():")
         print(f"  created_at: {saved.created_at}")
         print(f"  updated_at: {saved.updated_at}")
-        
+
         # save() includes refresh, so these should be set
         assert saved.created_at is not None
         assert saved.updated_at is not None
@@ -176,14 +176,14 @@ class TestRepositorySaveVsFlush:
     async def test_manual_flush_needs_refresh(self, async_db_test):
         """Test that manual flush() needs explicit refresh()"""
         instance = FlushTestModel(name="Via manual flush")
-        
+
         async_db_test.add(instance)
         await async_db_test.flush()
         # Deliberately NOT calling refresh()
-        
+
         print(f"\n[COMPARE] Using manual flush (no refresh):")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
-        
+
         # Without refresh, these might be None
         # This is the problem described in the issue

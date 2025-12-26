@@ -21,15 +21,34 @@
 
 ### リポジトリの作成
 
+#### 推奨パターン: カスタム __init__ を定義
+
+```python
+from repom.base_repository import BaseRepository
+from your_project.models import Task
+from sqlalchemy.orm import Session
+
+# カスタムリポジトリを定義（推奨）
+class TaskRepository(BaseRepository[Task]):
+    def __init__(self, session: Session = None):
+        super().__init__(Task, session)
+
+# インスタンス化（モデル名の指定が不要）
+repo = TaskRepository(session=db_session)
+```
+
+**メリット**:
+- インスタンス化時にモデル名を省略できる
+- カスタムメソッドを追加しやすい
+- コードが読みやすい
+
+#### 代替パターン: BaseRepository を直接使用
+
 ```python
 from repom.base_repository import BaseRepository
 from your_project.models import Task
 
-# 基本的な使い方
-repo = BaseRepository(Task)
-
-# カスタムセッションを使用
-from repom.db import db_session
+# カスタムリポジトリが不要な場合
 repo = BaseRepository(Task, session=db_session)
 ```
 

@@ -278,9 +278,13 @@ def load_models(context: Optional[str] = None) -> None:
         )
     else:
         # デフォルト動作（後方互換性）
-        # Importing the models package has the side-effect of registering every
+        # Importing the examples package has the side-effect of registering every
         # SQLAlchemy model defined by the application.
-        from repom import models  # noqa: F401  # pylint: disable=unused-import
+        try:
+            from repom.examples import models  # noqa: F401  # pylint: disable=unused-import
+        except ImportError:
+            # repom.examples.models が存在しない場合は警告のみ
+            logger.warning(f"{context_prefix}No model locations configured and repom.examples.models not found.")
 
     # Log loaded models
     from repom.base_model import Base

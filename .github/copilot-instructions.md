@@ -89,11 +89,13 @@ class MyModel(BaseModel):
 ### Using Repository
 ```python
 from repom.base_repository import BaseRepository
+from sqlalchemy.orm import Session
 
 class MyRepository(BaseRepository[MyModel]):
-    pass
+    def __init__(self, session: Session = None):
+        super().__init__(MyModel, session)
 
-repo = MyRepository()
+repo = MyRepository(session=db_session)
 item = repo.get_by_id(1)
 items = repo.get_by(name="example")
 ```

@@ -124,6 +124,29 @@ def get_repom_config():
 - ❌ **Removed**: `env.py` version_locations override - not needed
 - ✅ **Simplified**: Single source of truth (`alembic.ini` only)
 
+**Step 3: Define Repository (recommended)**
+
+```python
+# mine-py/src/mine_py/repositories/user.py
+from repom.base_repository import BaseRepository
+from mine_py.models import User
+from sqlalchemy.orm import Session
+
+class UserRepository(BaseRepository[User]):
+    def __init__(self, session: Session = None):
+        super().__init__(User, session)
+
+# Usage
+from repom.db import db_session
+repo = UserRepository(session=db_session)
+user = repo.get_by_id(1)
+```
+
+**メリット**:
+- インスタンス化時にモデル名を省略できる
+- カスタムメソッドを追加しやすい
+- コードが読みやすい
+
 ## Testing Framework
 
 ### Test Strategy: Transaction Rollback Pattern

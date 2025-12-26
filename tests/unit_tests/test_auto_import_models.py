@@ -35,10 +35,10 @@ class TestAutoImportModelsByPackage:
 
     def test_security_validation_allows_prefix_match(self):
         """許可されたプレフィックスにマッチするパッケージはOK"""
-        # repom.models は実際に存在するパッケージ
+        # repom.examples.models は実際に存在するパッケージ
         try:
             auto_import_models_by_package(
-                'repom.models',
+                'repom.examples.models',
                 allowed_prefixes={'repom.', 'myapp.'}
             )
             # エラーが出なければ成功
@@ -49,10 +49,10 @@ class TestAutoImportModelsByPackage:
 
     def test_security_validation_skipped_when_none(self):
         """allowed_prefixes=None の場合は検証をスキップ"""
-        # repom.models は実際に存在するので、セキュリティチェックだけ確認
+        # repom.examples.models は実際に存在するので、セキュリティチェックだけ確認
         try:
             auto_import_models_by_package(
-                'repom.models',
+                'repom.examples.models',
                 allowed_prefixes=None  # 検証スキップ
             )
             # エラーが出なければ成功
@@ -84,7 +84,7 @@ class TestAutoImportModelsByPackage:
 
         try:
             auto_import_models_by_package(
-                'repom.models',
+                'repom.examples.models',
                 excluded_dirs=excluded,
                 allowed_prefixes={'repom.'}
             )
@@ -100,11 +100,11 @@ class TestAutoImportModelsFromList:
 
     def test_batch_import_multiple_packages(self):
         """複数パッケージを一括インポート"""
-        # repom.models は実際に存在する
+        # repom.examples.models は実際に存在する
         # エラーが出ないことを確認（警告は出るかもしれない）
         try:
             auto_import_models_from_list(
-                package_names=['repom.models'],
+                package_names=['repom.examples.models'],
                 allowed_prefixes={'repom.'}
             )
             # エラーが出なければ成功
@@ -115,7 +115,7 @@ class TestAutoImportModelsFromList:
     def test_fail_on_error_false_continues_on_error(self, capsys):
         """fail_on_error=False の場合、エラーで停止しない"""
         auto_import_models_from_list(
-            package_names=['nonexistent.models', 'repom.models'],
+            package_names=['nonexistent.models', 'repom.examples.models'],
             allowed_prefixes={'nonexistent.', 'repom.'},
             fail_on_error=False
         )
@@ -220,7 +220,7 @@ class TestLoadModelsIntegration:
         original_prefixes = config.allowed_package_prefixes
 
         try:
-            config.model_locations = ['repom.models']  # 実際に存在するパッケージ
+            config.model_locations = ['repom.examples.models']  # 実際に存在するパッケージ
             config.model_excluded_dirs = {'tests'}
             config.allowed_package_prefixes = {'repom.'}
 
@@ -235,7 +235,7 @@ class TestLoadModelsIntegration:
             config.allowed_package_prefixes = original_prefixes
 
     def test_load_models_backward_compatibility(self):
-        """model_locations が None の場合、従来の動作（repom.models インポート）"""
+        """model_locations が None の場合、従来の動作（repom.examples.models インポート）"""
         # 一時的に config を変更
         original_locations = config.model_locations
 
@@ -245,7 +245,7 @@ class TestLoadModelsIntegration:
             # load_models() を呼び出してエラーが出ないことを確認
             load_models()
 
-            # repom.models がインポートされれば成功
+            # repom.examples.models がインポートされれば成功
         finally:
             config.model_locations = original_locations
 
@@ -314,10 +314,10 @@ class TestSecurityScenarios:
 
     def test_multiple_prefixes_can_be_allowed(self):
         """複数のプレフィックスを許可できる"""
-        # repom.models は実際に存在するので、セキュリティチェックのみ確認
+        # repom.examples.models は実際に存在するので、セキュリティチェックのみ確認
         try:
             auto_import_models_by_package(
-                'repom.models',
+                'repom.examples.models',
                 allowed_prefixes={'myapp.', 'shared.', 'repom.', 'plugins.'}
             )
         except ValueError as e:
@@ -358,9 +358,9 @@ class TestRealWorldScenarios:
 
     def test_monorepo_multiple_packages(self):
         """モノレポ構成: 複数パッケージからインポート"""
-        # repom.models のみ実在するので、他はエラーを無視
+        # repom.examples.models のみ実在するので、他はエラーを無視
         auto_import_models_from_list(
-            package_names=['repom.models'],  # 実在するパッケージのみ
+            package_names=['repom.examples.models'],  # 実在するパッケージのみ
             excluded_dirs={'tests', 'migrations'},
             allowed_prefixes={'myapp.', 'shared.', 'repom.'},
             fail_on_error=False
@@ -377,7 +377,7 @@ class TestRealWorldScenarios:
             'myapp.models',
             'myapp.modules.user',
             'myapp.modules.task',
-            'repom.models'
+            'repom.examples.models'
         ]
         test_config.model_excluded_dirs = {'tests', 'migrations', 'scripts'}
         test_config.allowed_package_prefixes = {'myapp.', 'repom.'}
