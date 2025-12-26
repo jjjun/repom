@@ -27,6 +27,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------|--------|-----------|---------||
+| #016 | 論理削除機能のMixin化によるコード可読性向上 | 中 | 🔴 未着手 | [active/016_extract_soft_delete_to_mixin.md](active/016_extract_soft_delete_to_mixin.md) |
 | #015 | Database Manager Unification - セッション・エンジン管理の統合 | 高 | 🔴 未着手 | [active/015_database_manager_unification.md](active/015_database_manager_unification.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
