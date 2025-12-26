@@ -35,6 +35,7 @@ T = TypeVar('T')
 # Logger
 logger = logging.getLogger(__name__)
 
+
 class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], Generic[T]):
     """非同期版のベースリポジトリ
 

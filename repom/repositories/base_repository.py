@@ -13,7 +13,7 @@ T = TypeVar('T')
 logger = logging.getLogger(__name__)
 
 
-class BaseRepository(SoftDeleteRepositoryMixin[T],Generic[T]):
+class BaseRepository(SoftDeleteRepositoryMixin[T], Generic[T]):
     # Default allowed columns for order_by operations (can be extended by subclasses)
     allowed_order_columns = [
         'id', 'title', 'created_at', 'updated_at',
@@ -339,4 +339,3 @@ class BaseRepository(SoftDeleteRepositoryMixin[T],Generic[T]):
         query = select(self.model).where(and_(*filters))
         query = self.set_find_option(query, **kwargs)
         return self.session.execute(query).scalars().all()
-
