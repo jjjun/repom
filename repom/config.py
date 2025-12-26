@@ -1,14 +1,15 @@
 """Runtime configuration helpers for :mod:`repom`."""
 
 from __future__ import annotations
+
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List, Set
 
 try:
-    from _.config_hook import load_hook_function, get_config_from_hook, Config
+    from _.config_hook import get_config_from_hook, Config
 except ImportError:
-    from repom.config_hook import load_hook_function, get_config_from_hook, Config
-from dataclasses import dataclass, field
+    from repom.config_hook import get_config_from_hook, Config
 
 
 @dataclass
