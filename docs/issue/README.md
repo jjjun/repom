@@ -27,7 +27,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------|--------|-----------|---------||
-| #017 | クエリ構築機能のMixin化によるコード一貫性向上 | 低 | 🔴 未着手 | [active/017_extract_query_builder_to_mixin.md](active/017_extract_query_builder_to_mixin.md) |
+
 | #015 | Database Manager Unification - セッション・エンジン管理の統合 | 高 | 🔴 未着手 | [active/015_database_manager_unification.md](active/015_database_manager_unification.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
@@ -39,6 +39,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #016 | クエリ構築機能のMixin化によるコード一貫性向上 | 2025-12-26 | QueryBuilderMixin作成、両リポジトリ約25行削減、409テスト全パス | [completed/016_extract_query_builder_to_mixin.md](completed/016_extract_query_builder_to_mixin.md) |
 | #015 | 論理削除機能のMixin化によるコード可読性向上 | 2025-12-26 | SoftDeleteRepositoryMixin作成、base_repository約150行削減、テスト全パス | [completed/015_extract_soft_delete_to_mixin.md](completed/015_extract_soft_delete_to_mixin.md) |
 | #001 | FastAPI Depends互換性修正 | 2025-12-25 | @contextmanager削除、generator protocol復元、15テスト全パス | [completed/001_fastapi_depends_fix.md](completed/001_fastapi_depends_fix.md) |
 | #014 | repom への論理削除（Soft Delete）機能追加 | 2025-12-10 | SoftDeletableMixin、BaseRepository拡張、22テスト全パス | [completed/014_soft_delete_feature.md](completed/014_soft_delete_feature.md) |
