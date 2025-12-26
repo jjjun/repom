@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Optional
 
 from repom.base_model_auto import BaseModelAuto
+from repom.utility import get_plural_tablename
 
 
 class UserSession(BaseModelAuto, use_id=False, use_created_at=True, use_updated_at=True):
@@ -24,7 +25,7 @@ class UserSession(BaseModelAuto, use_id=False, use_created_at=True, use_updated_
     - info メタデータで description を記述
     """
 
-    __tablename__ = 'user_sessions'
+    __tablename__ = get_plural_tablename(__file__)
 
     # Composite primary key
     user_id: Mapped[int] = mapped_column(

@@ -19,12 +19,13 @@
 repom/
 ├── repom/                      # Main package
 │   ├── custom_types/          # Reusable custom SQLAlchemy types
+│   ├── repositories/          # Repository implementations
 │   ├── scripts/               # CLI scripts (Poetry entry points)
 │   ├── base_model.py          # Base SQLAlchemy model helpers
-│   ├── base_repository.py     # Base repository abstraction（提供メソッドを通じてモデルの取得や操作を行います）
+│   ├── base_repository.py     # [DEPRECATED] Use repom.repositories instead
 │   ├── base_static.py         # Base static model class
 │   ├── config.py              # Environment-aware configuration
-│   ├── db.py                  # Database connection setup
+│   ├── database.py            # Database connection setup
 │   └── utility.py             # Shared utility functions
 ├── tests/                     # Test suite for shared functionality
 │   ├── unit_tests/           # Unit tests for base components
@@ -103,9 +104,9 @@ CONFIG_HOOK=mine_py.config:get_repom_config
 
 ```python
 # mine-py/src/mine_py/config.py
-from repom.config import MineDbConfig
+from repom.config import RepomConfig
 
-class MinePyConfig(MineDbConfig):
+class MinePyConfig(RepomConfig):
     def __init__(self):
         super().__init__()
         
@@ -120,7 +121,7 @@ def get_repom_config():
 
 **Key Changes from Previous Versions:**
 
-- ❌ **Removed**: `MineDbConfig._alembic_versions_path` - no longer exists
+- ❌ **Removed**: `RepomConfig._alembic_versions_path` - no longer exists
 - ❌ **Removed**: `env.py` version_locations override - not needed
 - ✅ **Simplified**: Single source of truth (`alembic.ini` only)
 
@@ -128,7 +129,7 @@ def get_repom_config():
 
 ```python
 # mine-py/src/mine_py/repositories/user.py
-from repom.base_repository import BaseRepository
+from repom import BaseRepository
 from mine_py.models import User
 from sqlalchemy.orm import Session
 
@@ -137,7 +138,7 @@ class UserRepository(BaseRepository[User]):
         super().__init__(User, session)
 
 # Usage
-from repom.db import db_session
+from repom.database import db_session
 repo = UserRepository(session=db_session)
 user = repo.get_by_id(1)
 ```
@@ -153,7 +154,7 @@ user = repo.get_by_id(1)
 
 repom uses **Transaction Rollback** approach for fast, isolated testing:
 
-**⚠️ Important**: When creating tests, always refer to `docs/guides/testing_guide.md` for detailed guidelines.
+**⚠️ Important**: When creating tests, always refer to `docs/guides/testing/testing_guide.md` for detailed guidelines.
 
 **Architecture**:
 - `db_engine` (session scope): Creates DB once per test session
@@ -228,7 +229,7 @@ db_engine, db_test = create_test_fixtures(
 ## Configuration
 
 - **Database Config**: `repom/config.py`
-- **Database Connection**: `repom/db.py`
+- **Database Connection**: `repom/database.py`
 - **Alembic Config**: `alembic.ini` and `alembic/env.py`
 - **Test Config**: `pytest.ini` and `tests/conftest.py`
 
