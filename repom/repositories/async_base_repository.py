@@ -26,11 +26,8 @@ from datetime import datetime
 from sqlalchemy import ColumnElement, UnaryExpression, and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
-from repom.repositories._core import has_soft_delete, parse_order_by, set_find_option
+from repom.repositories._core import has_soft_delete, parse_order_by, set_find_option, FilterParams
 import logging
-
-# FilterParams is imported from base_repository
-from repom.repositories.base_repository import FilterParams
 
 T = TypeVar('T')
 

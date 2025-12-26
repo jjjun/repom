@@ -5,9 +5,123 @@
 
 from typing import Optional, List
 from sqlalchemy import ColumnElement, UnaryExpression, asc, desc
+from pydantic import BaseModel
+import inspect
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class FilterParams(BaseModel):
+    """FastAPI クエリパラメータとして使用できるフィルタパラメータ基底クラス
+
+    このクラスを継承してカスタムフィルタパラメータを定義し、
+    as_query_depends() を使用して FastAPI の Depends() と組み合わせます。
+
+    使用例:
+        class MyFilterParams(FilterParams):
+            name: Optional[str] = None
+            tags: Optional[List[str]] = None
+            _internal_id: Optional[int] = None  # プライベート（除外される）
+
+        @app.get("/items")
+        async def get_items(filters: MyFilterParams = Depends(MyFilterParams.as_query_depends())):
+            # filters を使用して検索
+            items = repo.find_by_params(filters)
+            return items
+    """
+    # セキュリティ: クエリパラメータとして公開しないフィールド
+    _excluded_from_query: set = set()
+
+    @classmethod
+    def as_query_depends(cls):
+        """FilterParams を FastAPI の Query パラメータとして使用できる depends 関数に変換
+
+        List[str] などの配列型も正しくクエリパラメータとして扱われます。
+
+        セキュリティ:
+        - _excluded_from_query に指定されたフィールドは除外されます
+        - プライベートフィールド (_で始まる) は自動的に除外されます
+
+        使用例:
+            class MyFilterParams(FilterParams):
+                name: Optional[str] = None
+                tags: Optional[List[str]] = None
+                _internal_id: Optional[int] = None  # 自動的に除外
+
+            # または明示的に除外
+            class SecureFilterParams(FilterParams):
+                _excluded_from_query = {"sensitive_field"}
+                public_field: Optional[str] = None
+                sensitive_field: Optional[str] = None  # 除外される
+
+            # ルートで使用
+            filter_params: MyFilterParams = Depends(MyFilterParams.as_query_depends())
+
+        Returns:
+            Callable: FastAPI の Depends() で使用できる関数
+        """
+        from fastapi import Query
+
+        # Pydantic v2 のフィールド情報を取得
+        fields = cls.model_fields
+
+        # 除外するフィールドのセット（クラス変数から取得、存在しない場合は空セット）
+        excluded = set()
+        if hasattr(cls, '_excluded_from_query'):
+            excluded_value = getattr(cls, '_excluded_from_query')
+            # ModelPrivateAttr オブジェクトの場合はデフォルト値を取得
+            if hasattr(excluded_value, 'default'):
+                excluded = excluded_value.default if excluded_value.default is not None else set()
+            elif isinstance(excluded_value, set):
+                excluded = excluded_value
+
+        # 動的に関数のシグネチャを構築
+        params = []
+        annotations = {}
+
+        for field_name, field_info in fields.items():
+            # セキュリティ: プライベートフィールドと除外リストをスキップ
+            if field_name.startswith('_') or field_name in excluded:
+                continue
+
+            # 型アノテーションを取得
+            field_type = field_info.annotation
+
+            # デフォルト値を Query() でラップ
+            default_value = field_info.default if field_info.default is not None else None
+
+            # description を取得（あれば）
+            description = field_info.description or f"Filter by {field_name}"
+
+            # Query() パラメータを作成
+            query_param = Query(default_value, description=description)
+
+            params.append((field_name, field_type, query_param))
+            annotations[field_name] = field_type
+
+        # 動的に depends 関数を生成
+        def query_depends(**kwargs):
+            return cls(**kwargs)
+
+        # 関数のシグネチャを動的に設定
+        sig_params = [
+            inspect.Parameter(
+                name=name,
+                kind=inspect.Parameter.KEYWORD_ONLY,
+                default=default,
+                annotation=annotation
+            )
+            for name, annotation, default in params
+        ]
+
+        query_depends.__signature__ = inspect.Signature(
+            parameters=sig_params,
+            return_annotation=cls
+        )
+        query_depends.__annotations__ = annotations
+
+        return query_depends
 
 
 def has_soft_delete(model_class) -> bool:
