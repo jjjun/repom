@@ -139,7 +139,7 @@ class Task(BaseModel):
 ### リポジトリの実装
 
 ```python
-from repom.base_repository import BaseRepository
+from repom.repositories import BaseRepository
 from your_project.models import Task
 from sqlalchemy.orm import Session
 
@@ -211,7 +211,7 @@ def get_task(task_id: int):
 
 ```python
 from repom.base_model_auto import BaseModelAuto, SoftDeletableMixin
-from repom.base_repository import BaseRepository
+from repom.repositories import BaseRepository
 
 # モデルに Mixin を追加
 class Article(BaseModelAuto, SoftDeletableMixin):
@@ -220,15 +220,9 @@ class Article(BaseModelAuto, SoftDeletableMixin):
 
 # Repository で論理削除
 repo = BaseRepository(Article)
-
-# 論理削除（deleted_at に日時を記録）
-repo.soft_delete(article_id)
-
-# 復元（deleted_at を NULL に戻す）
-repo.restore(article_id)
-
-# 物理削除（完全削除）
-repo.permanent_delete(article_id)
+article = repo.soft_delete(article_id)  # 論理削除（deleted_at に日時を記録）
+repo.restore(article_id)                 # 復元（deleted_at を NULL に戻す）
+repo.permanent_delete(article_id)        # 物理削除（完全削除）
 
 # 削除済みを除外して検索（デフォルト）
 active_articles = repo.find()
@@ -261,8 +255,8 @@ poetry run db_sync_master
 
 **データベースファイルの場所:**
 - 本番環境 (`EXEC_ENV=prod`): `data/repom/db.sqlite3`
-- 開発環境 (`EXEC_ENV=dev`): `data/repom/db.dev.sqlite3`
-- テスト環境 (`EXEC_ENV=test`): `data/repom/db.test.sqlite3`
+- 開発環境 (`EXEC_ENV=dev`, デフォルト): `data/repom/db.dev.sqlite3`
+- テスト環境 (`EXEC_ENV=test`): `data/repom/db.test.sqlite3`（テストフレームワークではインメモリDBを使用）
 
 ### マイグレーション操作
 
@@ -335,25 +329,23 @@ export EXEC_ENV=dev
 
 **環境別データベース:**
 - `prod`: `data/repom/db.sqlite3`
-- `dev`: `data/repom/db.dev.sqlite3`
-- `test`: `sqlite:///:memory:` (デフォルト) または `data/repom/db.test.sqlite3`
+- `dev`: `data/repom/db.dev.sqlite3` (デフォルト)
+- `test`: `data/repom/db.test.sqlite3`
 
-**テスト環境でのインメモリDB** (v0.x.x 以降):
+**テスト実行時の注意:**
 
-デフォルトで `test` 環境は自動的に SQLite インメモリDB (`sqlite:///:memory:`) を使用します：
+テストフレームワーク (`create_test_fixtures()`) を使う場合は自動的にインメモリDB (`sqlite:///:memory:`) を使用しますが、`EXEC_ENV=test` で直接実行する場合は `data/repom/db.test.sqlite3` が使用されます：
 
 ```python
 from repom.config import config
 
-# test 環境の場合
+# test 環境の場合（EXEC_ENV=test で直接実行）
 config.exec_env = 'test'
 print(config.db_url)
-# 出力: sqlite:///:memory:
-
-# インメモリDBを無効化してファイルベースに戻す場合
-config.use_in_memory_db_for_tests = False
-print(config.db_url)
 # 出力: sqlite:///C:/path/to/repom/data/repom/db.test.sqlite3
+
+# テストフレームワーク使用時はインメモリDB
+# create_test_fixtures() が自動的に sqlite:///:memory: を使用
 ```
 
 **メリット:**

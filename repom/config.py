@@ -4,7 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional, List, Set
 
-from pathlib import Path
 try:
     from _.config_hook import load_hook_function, get_config_from_hook, Config
 except ImportError:

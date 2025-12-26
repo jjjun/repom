@@ -42,11 +42,11 @@ repom/
 
 ## Environment Management
 
-Configuration is wired through the `CONFIG_HOOK`, allowing consumers to inject their own settings while the project uses environment-specific databases controlled by the `EXEC_ENV` environment variable:
+Configuration is wired through the `CONFIG_HOOK`, allowing consumers to inject their own settings while the project uses environment-specific databases controlled by the `EXEC_ENV` environment variable (default: `dev`):
 
-- **Production**: `db.sqlite3` (default)
-- **Development**: `db.dev.sqlite3` (`EXEC_ENV=dev`)
-- **Test**: `db.test.sqlite3` (`EXEC_ENV=test`)
+- **Production**: `db.sqlite3` (`EXEC_ENV=prod`)
+- **Development**: `db.dev.sqlite3` (default, `EXEC_ENV=dev`)
+- **Test**: `sqlite:///:memory:` (in-memory) or `db.test.sqlite3` (`EXEC_ENV=test`)
 
 ### Setting Environment (Windows PowerShell)
 ```powershell
