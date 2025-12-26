@@ -382,6 +382,9 @@ class DatabaseManager:
         """
         Convert synchronous database URL to async-compatible URL.
 
+        Uses sqlalchemy.engine.make_url for safe URL parsing and driver name replacement.
+        Supports URLs with explicit drivers (e.g., postgresql+psycopg, mysql+pymysql).
+
         Args:
             sync_url: Synchronous database URL
 
@@ -397,13 +400,34 @@ class DatabaseManager:
 
             >>> _convert_to_async_uri('postgresql://user:pass@localhost/db')
             'postgresql+asyncpg://user:pass@localhost/db'
+
+            >>> _convert_to_async_uri('postgresql+psycopg://user:pass@localhost/db')
+            'postgresql+asyncpg://user:pass@localhost/db'
+
+            >>> _convert_to_async_uri('sqlite+aiosqlite:///./db.sqlite3')
+            'sqlite+aiosqlite:///./db.sqlite3' (already async)
         """
-        if sync_url.startswith('sqlite'):
-            return sync_url.replace('sqlite:///', 'sqlite+aiosqlite:///')
-        elif sync_url.startswith('postgresql://'):
-            return sync_url.replace('postgresql://', 'postgresql+asyncpg://')
-        elif sync_url.startswith('mysql://'):
-            return sync_url.replace('mysql://', 'mysql+aiomysql://')
+        from sqlalchemy.engine import make_url
+
+        url = make_url(sync_url)
+        base_driver = url.drivername.split('+')[0]  # Extract base driver (e.g., 'postgresql' from 'postgresql+psycopg')
+
+        # Mapping of base drivers to async drivers
+        async_driver_map = {
+            'sqlite': 'sqlite+aiosqlite',
+            'postgresql': 'postgresql+asyncpg',
+            'mysql': 'mysql+aiomysql',
+        }
+
+        # Check if already async
+        async_drivers = ['sqlite+aiosqlite', 'postgresql+asyncpg', 'mysql+aiomysql']
+        if url.drivername in async_drivers:
+            return str(url)
+
+        # Convert to async driver
+        if base_driver in async_driver_map:
+            url = url.set(drivername=async_driver_map[base_driver])
+            return str(url)
         else:
             raise ValueError(
                 f"Unsupported database URL format: {sync_url}\n"

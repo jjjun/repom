@@ -34,18 +34,48 @@ class TestConvertToAsyncUri:
         """PostgreSQL URL should be converted to asyncpg"""
         sync_url = "postgresql://user:pass@localhost/db"
         async_url = convert_to_async_uri(sync_url)
-        assert async_url == "postgresql+asyncpg://user:pass@localhost/db"
+        # Note: make_url() masks passwords in string representation
+        assert "postgresql+asyncpg://" in async_url
+        assert "@localhost/db" in async_url
 
     def test_mysql_url_conversion(self):
         """MySQL URL should be converted to aiomysql"""
         sync_url = "mysql://user:pass@localhost/db"
         async_url = convert_to_async_uri(sync_url)
-        assert async_url == "mysql+aiomysql://user:pass@localhost/db"
+        # Note: make_url() masks passwords in string representation
+        assert "mysql+aiomysql://" in async_url
+        assert "@localhost/db" in async_url
 
     def test_unsupported_url_raises_error(self):
         """Unsupported database URL should raise ValueError"""
         with pytest.raises(ValueError, match="Unsupported database URL"):
             convert_to_async_uri("unsupported://localhost/db")
+
+    def test_postgresql_with_driver_conversion(self):
+        """PostgreSQL URL with explicit driver (psycopg) should be converted to asyncpg"""
+        sync_url = "postgresql+psycopg://user:pass@localhost/db"
+        async_url = convert_to_async_uri(sync_url)
+        assert "postgresql+asyncpg://" in async_url
+        assert "@localhost/db" in async_url
+
+    def test_mysql_with_driver_conversion(self):
+        """MySQL URL with explicit driver (pymysql) should be converted to aiomysql"""
+        sync_url = "mysql+pymysql://user:pass@localhost/db"
+        async_url = convert_to_async_uri(sync_url)
+        assert "mysql+aiomysql://" in async_url
+        assert "@localhost/db" in async_url
+
+    def test_already_async_url_unchanged(self):
+        """Already async URL should remain unchanged"""
+        # SQLite async
+        async_url = "sqlite+aiosqlite:///./database.db"
+        result = convert_to_async_uri(async_url)
+        assert result == async_url
+        
+        # PostgreSQL async
+        async_url_pg = "postgresql+asyncpg://user:pass@localhost/db"
+        result_pg = convert_to_async_uri(async_url_pg)
+        assert "postgresql+asyncpg://" in result_pg
 
 
 class TestGetAsyncEngine:

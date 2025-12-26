@@ -58,11 +58,14 @@
 from repom.async_base_repository import AsyncBaseRepository
 from repom.database import get_async_db_session
 from your_project.models import Task
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
-# 非同期コンテキストマネージャーで使用
-async with get_async_db_session() as session:
+# FastAPI Depends パターンで使用（推奨）
+async def get_task(task_id: int, session: AsyncSession = Depends(get_async_db_session)):
     repo = AsyncBaseRepository(Task, session)
-    task = await repo.get_by_id(1)
+    task = await repo.get_by_id(task_id)
+    return task
 ```
 
 ### 主要メソッド一覧
@@ -164,40 +167,50 @@ async def get_task(task_id: int, repo: TaskRepoDep):
 ### Create（作成）
 
 ```python
-async def create_tasks():
-    async with get_async_db_session() as session:
-        repo = AsyncBaseRepository(Task, session)
-        
-        # 1件保存
-        task = Task(title="新しいタスク", status="active")
-        saved_task = await repo.save(task)
-        
-        # 辞書から保存
-        task = await repo.dict_save({"title": "タスク2", "status": "pending"})
-        
-        # 複数保存
-        tasks = [Task(title=f"タスク{i}") for i in range(3)]
-        await repo.saves(tasks)
-        
-        # 辞書リストから保存
-        data_list = [{"title": f"タスク{i}"} for i in range(3)]
-        await repo.dict_saves(data_list)
+# FastAPI エンドポイントでの使用例
+@app.post("/tasks")
+async def create_task(
+    task_data: dict,
+    session: AsyncSession = Depends(get_async_db_session)
+):
+    repo = AsyncBaseRepository(Task, session)
+    
+    # 1件保存
+    task = Task(title=task_data["title"], status="active")
+    saved_task = await repo.save(task)
+    
+    # 辞書から保存
+    task = await repo.dict_save({"title": "タスク2", "status": "pending"})
+    
+    # 複数保存
+    tasks = [Task(title=f"タスク{i}") for i in range(3)]
+    await repo.saves(tasks)
+    
+    # 辞書リストから保存
+    data_list = [{"title": f"タスク{i}"} for i in range(3)]
+    await repo.dict_saves(data_list)
+    
+    return saved_task
 ```
 
 ### Read（取得）
 
 ```python
-async def read_tasks():
-    async with get_async_db_session() as session:
-        repo = AsyncBaseRepository(Task, session)
-        
-        # ID で取得
-        task = await repo.get_by_id(1)
-        
-        # カラムで検索（複数件）
-        active_tasks = await repo.get_by('status', 'active')
-        
-        # 単一取得（single=True）
+# FastAPI エンドポイントでの使用例
+@app.get("/tasks/{task_id}")
+async def get_task(
+    task_id: int,
+    session: AsyncSession = Depends(get_async_db_session)
+):
+    repo = AsyncBaseRepository(Task, session)
+    
+    # ID で取得
+    task = await repo.get_by_id(task_id)
+    
+    # カラムで検索（複数件）
+    active_tasks = await repo.get_by('status', 'active')
+    
+    # 単一取得（single=True）
         task = await repo.get_by('title', 'タスク1', single=True)
         
         # 全件取得
