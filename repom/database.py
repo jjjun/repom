@@ -26,7 +26,7 @@ Example (CLI script):
     >>>         # Auto commit on exit
 """
 
-from typing import Optional, AsyncGenerator, Generator
+from typing import Optional, AsyncGenerator, Generator, AsyncContextManager, ContextManager, TypeVar, Generic
 from contextlib import contextmanager, asynccontextmanager  # Only for DatabaseManager internal use
 import asyncio
 
@@ -43,6 +43,46 @@ from repom.config import config
 from repom.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+T = TypeVar('T')
+
+
+class _ContextManagerIterable(Generic[T]):
+    """Adapter to allow generator delegation to context managers."""
+
+    def __init__(self, context_manager: ContextManager[T]):
+        self._context_manager = context_manager
+
+    def __enter__(self) -> T:
+        return self._context_manager.__enter__()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return self._context_manager.__exit__(exc_type, exc_value, traceback)
+
+    def __iter__(self) -> Generator[T, None, None]:
+        with self._context_manager as value:
+            yield value
+
+
+class _AsyncContextManagerIterable(Generic[T]):
+    """Adapter to allow async generator delegation to async context managers."""
+
+    def __init__(self, context_manager: AsyncContextManager[T]):
+        self._context_manager = context_manager
+
+    async def __aenter__(self) -> T:
+        return await self._context_manager.__aenter__()
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        return await self._context_manager.__aexit__(exc_type, exc_value, traceback)
+
+    def __aiter__(self) -> AsyncGenerator[T, None]:
+        async def generator():
+            async with self._context_manager as value:
+                yield value
+
+        return generator()
 
 
 # ========================================
@@ -502,8 +542,7 @@ def get_db_session() -> Generator[Session, None, None]:
         >>>     result = session.execute(select(User))
         >>>     return result.scalars().all()
     """
-    with _db_manager.get_sync_session() as session:
-        yield session
+    yield from _ContextManagerIterable(_db_manager.get_sync_session())
 
 
 def get_db_transaction() -> Generator[Session, None, None]:
@@ -527,8 +566,7 @@ def get_db_transaction() -> Generator[Session, None, None]:
         >>>     # Auto commit on exit
         >>>     return user
     """
-    with _db_manager.get_sync_transaction() as session:
-        yield session
+    yield from _ContextManagerIterable(_db_manager.get_sync_transaction())
 
 
 def get_inspector():
@@ -573,7 +611,7 @@ async def get_async_db_session():
         >>>     result = await session.execute(select(User))
         >>>     return result.scalars().all()
     """
-    async with _db_manager.get_async_session() as session:
+    async for session in _AsyncContextManagerIterable(_db_manager.get_async_session()):
         yield session
 
 
@@ -584,7 +622,7 @@ async def get_async_db_transaction():
     Yields:
         AsyncSession: SQLAlchemy asynchronous session with auto-commit/rollback
     """
-    async with _db_manager.get_async_transaction() as session:
+    async for session in _AsyncContextManagerIterable(_db_manager.get_async_transaction()):
         yield session
 
 
