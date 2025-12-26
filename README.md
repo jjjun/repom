@@ -151,6 +151,42 @@ task = repo.save(Task(title="新しいタスク"))
 all_tasks = repo.find()
 ```
 
+### エンティティの作成・更新
+
+`save()` メソッドは**新規作成でも更新でも使えます**：
+
+```python
+# 新規作成
+task = Task(title="新しいタスク")
+task = repo.save(task)
+# → add() + commit() + refresh() を自動実行
+# → created_at, updated_at が正しく設定される
+
+# 更新
+task.title = "更新されたタスク"
+task = repo.save(task)
+# → 同じメソッドで更新も可能
+
+# 非同期版
+from repom.async_base_repository import AsyncBaseRepository
+async_repo = AsyncBaseRepository(Task, session=async_session)
+task = await async_repo.save(task)
+```
+
+⚠️ **重要**: 直接 `session.add()` + `session.flush()` を使う場合は、必ず `session.refresh()` を呼んでください。
+ただし、**通常は `save()` メソッドを使うことを強く推奨します**（refresh 忘れによるバグを防げます）。
+
+```python
+# ❌ 非推奨: 手動で flush() を使うパターン（refresh を忘れるとバグになる）
+session.add(task)
+await session.flush()
+await session.refresh(task)  # これを忘れると created_at が None
+await session.commit()
+
+# ✅ 推奨: save() を使うパターン（シンプルで安全）
+task = await repo.save(task)
+```
+
 ### FastAPI 統合
 
 ```python
