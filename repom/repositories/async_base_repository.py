@@ -22,12 +22,12 @@ Example:
 """
 
 from typing import Any, Callable, Type, TypeVar, Generic, Optional, List, Dict, Union
-from datetime import datetime
-from sqlalchemy import ColumnElement, UnaryExpression, and_, select
+from sqlalchemy import ColumnElement, and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
-from repom.repositories._core import has_soft_delete, parse_order_by, set_find_option, FilterParams
+from repom.repositories._core import has_soft_delete, FilterParams
 from repom.repositories._soft_delete import AsyncSoftDeleteRepositoryMixin
+from repom.repositories._query_builder import QueryBuilderMixin
 import logging
 
 T = TypeVar('T')
@@ -36,21 +36,15 @@ T = TypeVar('T')
 logger = logging.getLogger(__name__)
 
 
-class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], Generic[T]):
+class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic[T]):
     """非同期版のベースリポジトリ
 
     BaseRepository と同じ機能を非同期で提供します。
     すべてのメソッドは async def で定義されています。
 
     Attributes:
-        allowed_order_columns: ソート可能なカラムのホワイトリスト（サブクラスで拡張可能）
+        allowed_order_columns: ソート可能なカラムのホワイトリスト（サブクラスで拡張可能、同期/非同期共通）
     """
-
-    # Default allowed columns for order_by operations (can be extended by subclasses)
-    allowed_order_columns = [
-        'id', 'title', 'created_at', 'updated_at',
-        'started_at', 'finished_at', 'executed_at'
-    ]
 
     def __init__(self, model: Type[T], session: AsyncSession):
         """AsyncBaseRepository の初期化
@@ -232,44 +226,6 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], Generic[T]):
         except SQLAlchemyError:
             await self.session.rollback()
             raise
-
-    def set_find_option(self, query, **kwargs):
-        """クエリにオプションを設定するメソッド（_core.set_find_option を呼び出し）
-
-        Args:
-            query: SQLAlchemy のクエリオブジェクト
-            **kwargs: offset, limit, order_by, options
-
-        Returns:
-            オプション設定済みのクエリオブジェクト
-        """
-        return set_find_option(query, self.model, self.allowed_order_columns, **kwargs)
-
-    def parse_order_by(self, model_class, order_by_str: str):
-        """Parse order_by string（_core.parse_order_by を呼び出し）
-
-        Args:
-            model_class: The SQLAlchemy model class
-            order_by_str: Order specification string (e.g., "created_at:desc")
-
-        Returns:
-            SQLAlchemy column expression with asc() or desc()
-        """
-        return parse_order_by(model_class, order_by_str, self.allowed_order_columns)
-
-    def _build_filters(self, params: Optional[FilterParams]) -> list:
-        """FilterParams からフィルタ条件を構築
-
-        サブクラスでオーバーライドして独自のフィルタロジックを実装できます。
-
-        Args:
-            params: フィルタパラメータ
-
-        Returns:
-            list: フィルタ条件のリスト
-        """
-        # デフォルトは何もフィルタしない
-        return []
 
     async def find(self, filters: Optional[List[Callable]] = None, include_deleted: bool = False, **kwargs) -> List[T]:
         """共通の find メソッド

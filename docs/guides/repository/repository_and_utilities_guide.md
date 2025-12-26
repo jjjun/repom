@@ -449,6 +449,9 @@ class TaskRepository(BaseRepository[Task]):
 ### ソート可能なカラムの制限
 
 セキュリティのため、ソート可能なカラムは `allowed_order_columns` で制限されています。
+この設定と `parse_order_by()` / `set_find_option()` は `QueryBuilderMixin`
+（`BaseRepository` / `AsyncBaseRepository` で共通継承）にまとめられており、
+同期・非同期の両方で同じロジックが適用されます。
 
 ```python
 # デフォルトで許可されているカラム

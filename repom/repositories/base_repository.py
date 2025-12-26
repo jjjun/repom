@@ -1,10 +1,10 @@
 from typing import Any, Callable, Type, TypeVar, Generic, Optional, List, Dict, Union
-from datetime import datetime
-from sqlalchemy import ColumnElement, UnaryExpression, and_, select
+from sqlalchemy import ColumnElement, and_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from repom.repositories._core import has_soft_delete, parse_order_by, set_find_option, FilterParams
+from repom.repositories._core import has_soft_delete, FilterParams
 from repom.repositories._soft_delete import SoftDeleteRepositoryMixin
+from repom.repositories._query_builder import QueryBuilderMixin
 import logging
 
 T = TypeVar('T')
@@ -13,12 +13,12 @@ T = TypeVar('T')
 logger = logging.getLogger(__name__)
 
 
-class BaseRepository(SoftDeleteRepositoryMixin[T], Generic[T]):
-    # Default allowed columns for order_by operations (can be extended by subclasses)
-    allowed_order_columns = [
-        'id', 'title', 'created_at', 'updated_at',
-        'started_at', 'finished_at', 'executed_at'
-    ]
+class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic[T]):
+    """同期版ベースリポジトリ
+
+    - SoftDeleteRepositoryMixin により論理削除機能を提供
+    - QueryBuilderMixin によりクエリ構築機能を提供（同期/非同期共通の実装）
+    """
 
     def __init__(self, model: Type[T], session: Optional[Session] = None):
         """
@@ -196,35 +196,6 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], Generic[T]):
         except SQLAlchemyError:
             self.session.rollback()
             raise
-
-    def set_find_option(self, query, **kwargs):
-        """
-        クエリにオプションを設定するメソッド（_core.set_find_option を呼び出し）
-
-        Args:
-            query: SQLAlchemy のクエリオブジェクト
-            **kwargs: offset, limit, order_by, options
-
-        Returns:
-            オプション設定済みのクエリオブジェクト
-        """
-        return set_find_option(query, self.model, self.allowed_order_columns, **kwargs)
-
-    def parse_order_by(self, model_class, order_by_str: str):
-        """Parse order_by string（_core.parse_order_by を呼び出し）
-
-        Args:
-            model_class: The SQLAlchemy model class
-            order_by_str: Order specification string (e.g., "created_at:desc")
-
-        Returns:
-            SQLAlchemy column expression with asc() or desc()
-        """
-        return parse_order_by(model_class, order_by_str, self.allowed_order_columns)
-
-    def _build_filters(self, params: Optional[FilterParams]) -> list:
-        # デフォルトは何もフィルタしない
-        return []
 
     def find(self, filters: Optional[List[Callable]] = None, include_deleted: bool = False, **kwargs) -> List[T]:
         """
