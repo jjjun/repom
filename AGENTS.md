@@ -19,7 +19,7 @@
 repom/
 ├── repom/                      # Main package
 │   ├── custom_types/          # Reusable custom SQLAlchemy types
-│   ├── repositories/          # Repository implementations
+│   ├── repositories/          # Repository implementations (query builder & soft delete mixins)
 │   ├── scripts/               # CLI scripts (Poetry entry points)
 │   ├── base_model.py          # Base SQLAlchemy model helpers
 │   ├── base_repository.py     # [DEPRECATED] Use repom.repositories instead
