@@ -611,6 +611,85 @@ db_engine, db_test = create_test_fixtures()
 
 ---
 
+### 「no such table」エラー（repom.session や repom.db を使用する場合）
+
+**症状**: `get_db_session()` や `repom.db.engine` を使用するテストで「no such table」エラーが発生
+
+**エラー例**:
+```python
+# tests/unit_tests/test_session.py
+from repom.session import get_db_session  # ← モジュールレベルでインポート
+
+def test_something(db_test):
+    gen = get_db_session()
+    session = next(gen)
+    # OperationalError: no such table: my_table
+```
+
+**原因**: 
+1. `repom.session` や `repom.db` がモジュールレベルで `engine` を作成
+2. インポート時点で `EXEC_ENV` が設定されていないため、dev 環境のDBを参照
+3. `conftest.py` の `db_test` フィクスチャとは異なる engine のため、テーブルが作成されていない
+
+**解決方法 1: テストファイルの先頭で EXEC_ENV を設定** ⭐ 推奨
+
+```python
+# tests/unit_tests/test_session.py
+import os
+import pytest
+
+# CRITICAL: repom モジュールをインポートする前に設定
+os.environ['EXEC_ENV'] = 'test'
+
+from repom.session import get_db_session  # ← この時点で :memory: DB が使われる
+```
+
+**解決方法 2: repom.db.engine を直接使わない**
+
+```python
+# ❌ 間違い: repom.db.engine を直接使用
+from repom.db import engine
+inspector = inspect(engine)
+
+# ✅ 正しい: db_test fixture の engine を使用
+def test_something(db_test):
+    inspector = inspect(db_test.bind)
+```
+
+**ポイント**:
+- テストファイルで `repom.session`, `repom.db`, `repom.async_session` などをインポートする場合
+- **必ずインポート前に `os.environ['EXEC_ENV'] = 'test'` を設定する**
+- または、`db_test.bind` を使って fixture の engine を参照する
+
+---
+
+### StaticPool 環境でのトランザクション分離の制限
+
+**症状**: `:memory:` + `StaticPool` 環境で、コミットしていないデータが別のセッションで見える
+
+**原因**: 
+- `StaticPool` は単一の接続を全スレッド/セッションで共有
+- トランザクション分離が完全には機能しない
+
+**対処方法**:
+
+```python
+# このようなテストは :memory: + StaticPool では正しく動作しない
+@pytest.mark.skipif(
+    config.db_url == 'sqlite:///:memory:',
+    reason="StaticPool does not fully support transaction isolation"
+)
+def test_session_isolation(db_test):
+    """セッションの独立性をテスト（ファイルベースDBのみ）"""
+    # ...
+```
+
+**ポイント**:
+- トランザクション分離をテストしたい場合は、ファイルベースDBを使用
+- 通常のテストでは `:memory:` + `StaticPool` で問題なし
+
+---
+
 ## ベストプラクティス
 
 ### 1. CONFIG_HOOK を使用する（推奨）

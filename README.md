@@ -141,12 +141,14 @@ class Task(BaseModel):
 ```python
 from repom.base_repository import BaseRepository
 from your_project.models import Task
+from sqlalchemy.orm import Session
 
 class TaskRepository(BaseRepository[Task]):
-    pass
+    def __init__(self, session: Session = None):
+        super().__init__(Task, session)
 
 # 使用例
-repo = TaskRepository(Task)
+repo = TaskRepository(session=db_session)
 task = repo.save(Task(title="新しいタスク"))
 all_tasks = repo.find()
 ```
@@ -483,6 +485,7 @@ poetry add --group dev pytest-asyncio
 **注意事項**:
 - async では lazy loading が使えません（eager loading を使用）
 - Transaction Rollback パターンは async でも同様に動作します
+- テストで `repom.session`, `repom.db` などをインポートする場合は、**インポート前に `os.environ['EXEC_ENV'] = 'test'` を設定**（詳細は [Testing Guide](docs/guides/testing/testing_guide.md#no-such-tableエラーrepomsession-や-repomdb-を使用する場合) 参照）
 
 - **`db_engine`**: session スコープ（全テストで1回だけDB作成）
 - **`db_test`**: function スコープ（各テストで独立したトランザクション）
