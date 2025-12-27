@@ -142,7 +142,6 @@ repo.save(task)
 ```python
 task = repo.get_by_id(1)
 repo.remove(task)
-```
 
 ---
 
@@ -470,7 +469,31 @@ def get_task_ids(session: Session = Depends(get_db_session)):
 | リレーションをたまに使う | `default_options` なし | 必要に応じて `options` を指定 |
 | パフォーマンスが重要 | ケースバイケースで `options` を指定 | 柔軟な最適化 |
 
----
+#### クラス属性で default_options / default_order_by を設定する
+
+コンストラクタで代入する代わりに、クラス属性でまとめて指定できます。`QueryBuilderMixin` がクラス属性を優先して参照するため、継承構造があっても上書きが簡単です。
+
+```python
+from sqlalchemy.orm import joinedload
+from repom.repositories import BaseRepository
+
+class TaskRepository(BaseRepository[Task]):
+    # すべての取得メソッドに適用されるデフォルト eager load
+    default_options = [joinedload(Task.user)]
+    # order_by 未指定時の既定ソート（許可カラムのホワイトリストに含まれる必要あり）
+    default_order_by = 'created_at:desc'
+
+# 使い方
+repo = TaskRepository(session=db_session)
+tasks = repo.find()          # user を eager load 済み & created_at desc でソート
+latest = repo.find_one()     # default_order_by が自動適用
+raw = repo.find(options=[])  # eager loading だけスキップしたい場合
+```
+
+#### options 選択の目安
+
+| パターン | 使用する options | 理由 |
+|---------|-----------------|------|
 | 1対多 / 多対多 | `selectinload` | カルテシアン積を避ける |
 | 深いネスト | `joinedload().joinedload()` | チェーンで接続 |
 | 条件付き取得 | `contains_eager` | フィルタ付き JOIN |
@@ -694,10 +717,37 @@ class TaskRepository(BaseRepository[Task]):
         """FilterParams を使ってカウント"""
         filters = self._build_filters(params)
         return self.count(filters=filters)
+
+### FilterParams のシンプルな使い方とオーバーライドの違い
+
+`field_to_column` を定義すると、`build_filters_from_mapping()` が自動で「等価」「部分一致（contains がある場合）」「IN（リスト指定）」を組み立てます。カスタムロジックが必要な場合だけ `_build_filters()` をオーバーライドしてください。
+
+```python
+from repom.repositories import BaseRepository, FilterParams
+
+class TaskFilterParams(FilterParams):
+    status: str | None = None
+    title: str | None = None
+
+class TaskRepository(BaseRepository[Task]):
+    # フィールドとカラムのマッピングを置くだけ
+    field_to_column = {
+        "status": Task.status,
+        "title": Task.title,
+    }
+
+# 使い方
+repo = TaskRepository()
+tasks = repo.find_by_params(TaskFilterParams(status="active", title="task"))
 ```
 
----
+**違いのまとめ**
 
+- ✅ マッピング方式（上記例）: シンプルな等価・部分一致・リスト検索を自動生成。追加コードなしで `find_by_params()` が使える。  
+- 🔧 オーバーライド方式: 特殊な比較（例: 日付範囲、OR 条件、サブクエリ）が必要なときに `_build_filters()` を実装。
+ 
+---
+ 
 ## カスタムリポジトリ
 
 ### 基本的なカスタムリポジトリ
