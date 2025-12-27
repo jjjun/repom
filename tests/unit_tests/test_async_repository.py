@@ -8,8 +8,9 @@ from sqlalchemy import Integer, inspect, select, desc, and_
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from datetime import datetime
+from typing import Optional
 from repom.base_model import BaseModel
-from repom.repositories import AsyncBaseRepository
+from repom.repositories import AsyncBaseRepository, FilterParams
 
 
 class AsyncSimpleModel(BaseModel):
@@ -21,6 +22,22 @@ class AsyncSimpleModel(BaseModel):
 class AsyncSimpleRepository(AsyncBaseRepository[AsyncSimpleModel]):
     def __init__(self, session):
         super().__init__(AsyncSimpleModel, session)
+
+
+class AsyncSimpleFilterParams(FilterParams):
+    value: Optional[int] = None
+    other: Optional[int] = None
+
+
+class AsyncFilterableRepository(AsyncSimpleRepository):
+    def _build_filters(self, params: Optional[FilterParams]) -> list:
+        filters = super()._build_filters(params)
+        if params is None:
+            return filters
+
+        if params.value is not None:
+            filters.append(AsyncSimpleModel.value == params.value)
+        return filters
 
 
 @pytest.mark.asyncio
@@ -224,6 +241,34 @@ async def test_find_without_limit(async_db_test):
     assert len(all_objs) == 40
     assert all_objs[0].value == 0
     assert all_objs[-1].value == 39
+
+
+@pytest.mark.asyncio
+async def test_async_build_filters_default_empty_when_params_absent_or_empty(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+
+    assert repo._build_filters(None) == []
+    assert repo._build_filters(AsyncSimpleFilterParams()) == []
+
+
+@pytest.mark.asyncio
+async def test_async_find_uses_params_when_filters_not_provided(async_db_test):
+    repo = AsyncFilterableRepository(session=async_db_test)
+    await repo.saves([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
+
+    results = await repo.find(params=AsyncSimpleFilterParams(value=2))
+
+    assert {item.value for item in results} == {2}
+
+
+@pytest.mark.asyncio
+async def test_async_find_prefers_explicit_filters_over_params(async_db_test):
+    repo = AsyncFilterableRepository(session=async_db_test)
+    await repo.saves([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
+
+    results = await repo.find(params=AsyncSimpleFilterParams(value=1), filters=[AsyncSimpleModel.value == 2])
+
+    assert {item.value for item in results} == {2}
 
 
 @pytest.mark.asyncio

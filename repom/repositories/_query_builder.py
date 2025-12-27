@@ -38,5 +38,15 @@ class QueryBuilderMixin(Generic[T]):
         return parse_order_by(model_class, order_by_str, self.allowed_order_columns)
 
     def _build_filters(self, params: Optional[FilterParams]) -> list:
-        """FilterParams からフィルタ条件を構築（デフォルトは空リスト）"""
+        """FilterParams からフィルタ条件を構築
+
+        デフォルト実装では、パラメータが指定されない場合や、すべてのフィールドが
+        None の場合は空リストを返します。
+        """
+        if params is None:
+            return []
+
+        if all(value is None for value in params.model_dump().values()):
+            return []
+
         return []
