@@ -1,7 +1,9 @@
+from contextlib import contextmanager
 from typing import Any, Callable, Type, TypeVar, Generic, Optional, List, Dict, Union
 from sqlalchemy import ColumnElement, and_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from repom.database import get_db_session
 from repom.repositories._core import has_soft_delete, FilterParams
 from repom.repositories._soft_delete import SoftDeleteRepositoryMixin
 from repom.repositories._query_builder import QueryBuilderMixin
@@ -29,7 +31,36 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
             session (Session, optional): データベースセッション. Defaults to None (get_db_session() を使用).
         """
         self.model = model
-        self.session = session
+        self._session_override = session
+        self._scoped_session: Optional[Session] = None
+
+    @property
+    def session(self) -> Optional[Session]:
+        """明示的に渡されたセッション（またはスコープ内の内部セッション）を返却"""
+        return self._session_override or self._scoped_session
+
+    @session.setter
+    def session(self, session: Optional[Session]) -> None:
+        """明示的セッションを設定（None でリセット）"""
+        self._session_override = session
+
+    @contextmanager
+    def _session_scope(self) -> Session:
+        """セッション取得を一元化し、None の場合は get_db_session() で補完"""
+        if self.session is not None:
+            yield self.session
+            return
+
+        session_generator = get_db_session()
+        session = next(session_generator)
+        self._scoped_session = session
+        try:
+            yield session
+        finally:
+            if self._scoped_session is session:
+                session.expunge_all()
+            self._scoped_session = None
+            session_generator.close()
 
     def _has_soft_delete(self) -> bool:
         """モデルが SoftDeletableMixin を持つか確認
@@ -114,7 +145,8 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
         Returns:
             List[T]: 全てのインスタンスのリスト
         """
-        return self.session.query(self.model).all()
+        with self._session_scope() as session:
+            return session.query(self.model).all()
 
     def save(self, instance: T) -> T:
         """
@@ -126,20 +158,22 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
             T: 保存したインスタンス
 
         Note:
-            同期版では refresh() は不要です。
-            理由: SQLAlchemy の同期セッションでは expire_on_commit=True (デフォルト) により、
-                  commit() 後に属性アクセス時、自動的にデータベースから再読み込みが発生します。
-                  そのため、AutoDateTime などのデフォルト値も正しく取得できます。
+            明示的なセッションが渡されている場合、refresh() は不要です。
+            セッション未指定で内部セッションを生成した場合は、commit 後に refresh()
+            を実行し、セッションを閉じても最新値を保持できるようにしています。
 
             非同期版（AsyncBaseRepository.save）では refresh() が必須です。
         """
-        try:
-            self.session.add(instance)
-            self.session.commit()
-            # 同期版では refresh() 不要（expire_on_commit により自動ロードされる）
-        except SQLAlchemyError:
-            self.session.rollback()
-            raise
+        with self._session_scope() as session:
+            using_internal_session = self._session_override is None and self._scoped_session is session
+            try:
+                session.add(instance)
+                session.commit()
+                if using_internal_session:
+                    session.refresh(instance)
+            except SQLAlchemyError:
+                session.rollback()
+                raise
         return instance
 
     def dict_save(self, data: Dict) -> T:
@@ -162,16 +196,21 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
             instances (List[T]): 保存するインスタンスのリスト
 
         Note:
-            同期版では refresh() は不要です（属性アクセス時に自動ロード）。
+            セッション未指定で内部セッションを生成した場合のみ refresh() を実行し、
+            セッションを閉じた後でも最新値を保持します。
             非同期版（AsyncBaseRepository.saves）では各インスタンスの refresh() が必須です。
         """
-        try:
-            self.session.add_all(instances)
-            self.session.commit()
-            # 同期版では refresh() 不要（expire_on_commit により自動ロードされる）
-        except SQLAlchemyError:
-            self.session.rollback()
-            raise
+        with self._session_scope() as session:
+            using_internal_session = self._session_override is None and self._scoped_session is session
+            try:
+                session.add_all(instances)
+                session.commit()
+                if using_internal_session:
+                    for instance in instances:
+                        session.refresh(instance)
+            except SQLAlchemyError:
+                session.rollback()
+                raise
 
     def dict_saves(self, data_list: List[Dict]) -> None:
         """
@@ -190,12 +229,14 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
         Args:
             instance (T): 削除するインスタンス
         """
-        try:
-            self.session.delete(instance)
-            self.session.commit()
-        except SQLAlchemyError:
-            self.session.rollback()
-            raise
+        with self._session_scope() as session:
+            try:
+                managed_instance = session.merge(instance)
+                session.delete(managed_instance)
+                session.commit()
+            except SQLAlchemyError:
+                session.rollback()
+                raise
 
     def find(self, filters: Optional[List[Callable]] = None, include_deleted: bool = False, **kwargs) -> List[T]:
         """
@@ -220,7 +261,8 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
         if all_filters:
             query = query.where(and_(*all_filters))
         query = self.set_find_option(query, **kwargs)
-        return self.session.execute(query).scalars().all()
+        with self._session_scope() as session:
+            return session.execute(query).scalars().all()
 
     def find_one(self, filters: list, options: Optional[List] = None) -> Optional[T]:
         """
@@ -246,8 +288,9 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
         if options:
             query = query.options(*options)
 
-        result = self.session.execute(query).scalars().first()
-        return result
+        with self._session_scope() as session:
+            result = session.execute(query).scalars().first()
+            return result
 
     def count(self, filters: Optional[List[Callable]] = None) -> int:
         """
@@ -259,10 +302,11 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
         Returns:
             int: 一致するレコード数
         """
-        query = self.session.query(self.model)
-        if filters:
-            query = query.filter(and_(*filters))
-        return query.count()
+        with self._session_scope() as session:
+            query = session.query(self.model)
+            if filters:
+                query = query.filter(and_(*filters))
+            return query.count()
 
     def count_by_params(self, params: Optional[FilterParams] = None) -> int:
         filters = self._build_filters(params) if params else []
@@ -309,4 +353,5 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
 
         query = select(self.model).where(and_(*filters))
         query = self.set_find_option(query, **kwargs)
-        return self.session.execute(query).scalars().all()
+        with self._session_scope() as session:
+            return session.execute(query).scalars().all()
