@@ -76,6 +76,7 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
         value: Any,
         *extra_filters: ColumnElement,
         single: bool = False,
+        include_deleted: bool = False,
         options: Optional[List] = None
     ) -> Union[List[T], Optional[T]]:
         """Retrieve records by the specified column name and value.
@@ -89,6 +90,7 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
             value: 検索する値
             extra_filters: 追加のフィルタ条件
             single: True の場合は最初の1件のみ返す
+            include_deleted: 削除済みレコードも含めるか（デフォルト: False）
             options: SQLAlchemy クエリオプション（eager loading等）
 
         Example:
@@ -106,8 +108,8 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
         column = getattr(self.model, column_name)
         filters = [column == value, *extra_filters]
         if single:
-            return self.find_one(filters=filters, options=options)
-        return self.find(filters=filters, options=options)
+            return self.find_one(filters=filters, include_deleted=include_deleted, options=options)
+        return self.find(filters=filters, include_deleted=include_deleted, options=options)
 
     def get_by_id(self, id: int, include_deleted: bool = False, options: Optional[List] = None) -> Optional[T]:
         """
@@ -132,11 +134,7 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
             ...     selectinload(Model.reviews)
             ... ])
         """
-        extra_filters = []
-        if self._has_soft_delete() and not include_deleted:
-            extra_filters.append(self.model.deleted_at.is_(None))
-
-        return self.get_by('id', id, *extra_filters, single=True, options=options)
+        return self.get_by('id', id, single=True, include_deleted=include_deleted, options=options)
 
     def get_all(self) -> List[T]:
         """
@@ -238,7 +236,12 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
                 session.rollback()
                 raise
 
-    def find(self, filters: Optional[List[Callable]] = None, include_deleted: bool = False, **kwargs) -> List[T]:
+    def find(
+        self,
+        filters: Optional[List[Callable]] = None,
+        include_deleted: bool = False,
+        **kwargs
+    ) -> List[T]:
         """
         共通の find メソッド。特に指定が無ければ全件を取得する。
         取得量を絞りたい場合は、offset と limit を指定する。
@@ -246,10 +249,23 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
         Args:
             filters (Optional[List[Callable]]): フィルタ条件のリスト。
             include_deleted (bool): 削除済みレコードも含めるか（デフォルト: False）
-            **kwargs: 任意のキーワード引数。
+            **kwargs: 任意のキーワード引数
+                - offset (int): 取得開始位置
+                - limit (int): 取得件数
+                - order_by (str | UnaryExpression): ソート順
+                - options (list | Load): SQLAlchemy クエリオプション（eager loading等）
 
         Returns:
             List[T]: モデルのリスト。
+
+        Example:
+            >>> from sqlalchemy.orm import selectinload
+            >>> # 複数レコード取得（relationship も eager load）
+            >>> items = repo.find(
+            ...     filters=[Model.status == 'active'],
+            ...     options=[selectinload(Model.tags)],
+            ...     limit=10
+            ... )
         """
         query = select(self.model)
 
@@ -260,17 +276,19 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
 
         if all_filters:
             query = query.where(and_(*all_filters))
+
         query = self.set_find_option(query, **kwargs)
         with self._session_scope() as session:
             return session.execute(query).scalars().all()
 
-    def find_one(self, filters: list, options: Optional[List] = None) -> Optional[T]:
+    def find_one(self, filters: list, include_deleted: bool = False, **kwargs) -> Optional[T]:
         """
-        Retrieve a single record based on the provided filters (SQLAlchemy expressions list).
+        find の最初の1件取得版
 
         Args:
             filters (list): フィルタ条件のリスト。
-            options (Optional[List]): SQLAlchemy クエリオプション（eager loading等）
+            include_deleted (bool): 削除済みレコードも含めるか（デフォルト: False）
+            **kwargs: 任意のキーワード引数（options など）
 
         Returns:
             Optional[T]: インスタンスが見つかった場合はインスタンス、見つからない場合はNone
@@ -282,15 +300,8 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
             ...     options=[selectinload(Model.tags)]
             ... )
         """
-        query = select(self.model).filter(*filters).limit(1)
-
-        # eager loading 対応
-        if options:
-            query = query.options(*options)
-
-        with self._session_scope() as session:
-            result = session.execute(query).scalars().first()
-            return result
+        results = self.find(filters=filters, include_deleted=include_deleted, limit=1, **kwargs)
+        return results[0] if results else None
 
     def count(self, filters: Optional[List[Callable]] = None) -> int:
         """

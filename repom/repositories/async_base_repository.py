@@ -101,6 +101,7 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         value: Any,
         *extra_filters: ColumnElement,
         single: bool = False,
+        include_deleted: bool = False,
         options: Optional[List] = None
     ) -> Union[List[T], Optional[T]]:
         """指定されたカラム名と値でレコードを取得
@@ -114,6 +115,7 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
             value: 検索する値
             extra_filters: 追加のフィルタ条件
             single: True の場合は最初の1件のみ返す
+            include_deleted: 削除済みレコードも含めるか（デフォルト: False）
             options: SQLAlchemy クエリオプション（eager loading等）
 
         Returns:
@@ -137,8 +139,8 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         column = getattr(self.model, column_name)
         filters = [column == value, *extra_filters]
         if single:
-            return await self.find_one(filters=filters, options=options)
-        return await self.find(filters=filters, options=options)
+            return await self.find_one(filters=filters, include_deleted=include_deleted, options=options)
+        return await self.find(filters=filters, include_deleted=include_deleted, options=options)
 
     async def get_by_id(self, id: int, include_deleted: bool = False, options: Optional[List] = None) -> Optional[T]:
         """指定されたIDのインスタンスを取得
@@ -162,11 +164,7 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
             ...     selectinload(Model.reviews)
             ... ])
         """
-        extra_filters = []
-        if self._has_soft_delete() and not include_deleted:
-            extra_filters.append(self.model.deleted_at.is_(None))
-
-        return await self.get_by('id', id, *extra_filters, single=True, options=options)
+        return await self.get_by('id', id, single=True, include_deleted=include_deleted, options=options)
 
     async def get_all(self) -> List[T]:
         """全てのインスタンスを取得
@@ -263,7 +261,12 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
                 await session.rollback()
                 raise
 
-    async def find(self, filters: Optional[List[Callable]] = None, include_deleted: bool = False, **kwargs) -> List[T]:
+    async def find(
+        self,
+        filters: Optional[List[Callable]] = None,
+        include_deleted: bool = False,
+        **kwargs
+    ) -> List[T]:
         """共通の find メソッド
 
         特に指定が無ければ全件を取得する。
@@ -272,10 +275,23 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         Args:
             filters (Optional[List[Callable]]): フィルタ条件のリスト
             include_deleted (bool): 削除済みレコードも含めるか（デフォルト: False）
-            **kwargs: 任意のキーワード引数（offset, limit, order_by, options）
+            **kwargs: 任意のキーワード引数
+                - offset (int): 取得開始位置
+                - limit (int): 取得件数
+                - order_by (str | UnaryExpression): ソート順
+                - options (list | Load): SQLAlchemy クエリオプション（eager loading等）
 
         Returns:
             List[T]: モデルのリスト
+
+        Example:
+            >>> from sqlalchemy.orm import selectinload
+            >>> # 複数レコード取得（relationship も eager load）
+            >>> items = await repo.find(
+            ...     filters=[Model.status == 'active'],
+            ...     options=[selectinload(Model.tags)],
+            ...     limit=10
+            ... )
         """
         query = select(self.model)
 
@@ -286,17 +302,19 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
 
         if all_filters:
             query = query.where(and_(*all_filters))
+
         query = self.set_find_option(query, **kwargs)
         async with self._session_scope() as session:
             result = await session.execute(query)
             return result.scalars().all()
 
-    async def find_one(self, filters: list, options: Optional[List] = None) -> Optional[T]:
-        """指定されたフィルタ条件で単一レコードを取得
+    async def find_one(self, filters: list, include_deleted: bool = False, **kwargs) -> Optional[T]:
+        """find の最初の1件取得版
 
         Args:
             filters (list): フィルタ条件のリスト
-            options (Optional[List]): SQLAlchemy クエリオプション（eager loading等）
+            include_deleted (bool): 削除済みレコードも含めるか（デフォルト: False）
+            **kwargs: 任意のキーワード引数（options など）
 
         Returns:
             Optional[T]: インスタンスが見つかった場合はインスタンス、見つからない場合はNone
@@ -308,15 +326,8 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
             ...     options=[selectinload(Model.tags)]
             ... )
         """
-        query = select(self.model).filter(*filters).limit(1)
-
-        # eager loading 対応
-        if options:
-            query = query.options(*options)
-
-        async with self._session_scope() as session:
-            result = await session.execute(query)
-            return result.scalars().first()
+        results = await self.find(filters=filters, include_deleted=include_deleted, limit=1, **kwargs)
+        return results[0] if results else None
 
     async def count(self, filters: Optional[List[Callable]] = None) -> int:
         """指定したフィルタ条件に一致するレコード数を返す
