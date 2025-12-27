@@ -409,3 +409,202 @@ async def test_find_one_with_options(async_db_test, setup_async_test_data):
     assert book.author is not None
     assert book.author.name == "Author One"
     assert len(book.reviews) == 2
+
+
+# =============================================================================
+# default_options のテスト（非同期版）
+# =============================================================================
+
+@pytest.mark.asyncio
+async def test_default_options_in_constructor(async_db_test, setup_async_test_data):
+    """
+    コンストラクタで default_options を設定し、
+    find() で自動的に適用されることを確認
+    """
+    class BookRepositoryWithDefaults(AsyncBaseRepository[AsyncEagerBookModel]):
+        def __init__(self, session):
+            super().__init__(AsyncEagerBookModel, session)
+            # デフォルトで author を eager load
+            self.default_options = [
+                joinedload(AsyncEagerBookModel.author)
+            ]
+
+    repo = BookRepositoryWithDefaults(session=async_db_test)
+
+    # options を指定せずに find を呼ぶ
+    books = await repo.find()
+
+    assert len(books) == 3
+    # default_options により author がロード済み
+    for book in books:
+        assert book.author is not None
+        assert isinstance(book.author, AsyncEagerAuthorModel)
+
+
+@pytest.mark.asyncio
+async def test_default_options_with_find_one(async_db_test, setup_async_test_data):
+    """
+    default_options が find_one でも適用されることを確認
+    """
+    class BookRepositoryWithDefaults(AsyncBaseRepository[AsyncEagerBookModel]):
+        def __init__(self, session):
+            super().__init__(AsyncEagerBookModel, session)
+            self.default_options = [
+                joinedload(AsyncEagerBookModel.author),
+                selectinload(AsyncEagerBookModel.reviews)
+            ]
+
+    repo = BookRepositoryWithDefaults(session=async_db_test)
+
+    # find_one でも default_options が適用される
+    book = await repo.find_one(filters=[AsyncEagerBookModel.title == "Book 1"])
+
+    assert book is not None
+    assert book.author is not None
+    assert book.author.name == "Author One"
+    assert len(book.reviews) == 2
+
+
+@pytest.mark.asyncio
+async def test_default_options_with_get_by_id(async_db_test, setup_async_test_data):
+    """
+    default_options が get_by_id でも適用されることを確認
+    """
+    data = setup_async_test_data
+    book_id = data['books'][0].id
+
+    class BookRepositoryWithDefaults(AsyncBaseRepository[AsyncEagerBookModel]):
+        def __init__(self, session):
+            super().__init__(AsyncEagerBookModel, session)
+            self.default_options = [
+                joinedload(AsyncEagerBookModel.author),
+                selectinload(AsyncEagerBookModel.reviews)
+            ]
+
+    repo = BookRepositoryWithDefaults(session=async_db_test)
+
+    # get_by_id でも default_options が適用される
+    book = await repo.get_by_id(book_id)
+
+    assert book is not None
+    assert book.author is not None
+    assert book.author.name == "Author One"
+    assert len(book.reviews) == 2
+
+
+@pytest.mark.asyncio
+async def test_default_options_with_get_by(async_db_test, setup_async_test_data):
+    """
+    default_options が get_by でも適用されることを確認
+    """
+    data = setup_async_test_data
+
+    class BookRepositoryWithDefaults(AsyncBaseRepository[AsyncEagerBookModel]):
+        def __init__(self, session):
+            super().__init__(AsyncEagerBookModel, session)
+            self.default_options = [
+                joinedload(AsyncEagerBookModel.author)
+            ]
+
+    repo = BookRepositoryWithDefaults(session=async_db_test)
+
+    # get_by（複数件）
+    books = await repo.get_by('author_id', data['authors'][0].id)
+    assert len(books) == 2
+    for book in books:
+        assert book.author is not None
+
+    # get_by（単一件）
+    book = await repo.get_by('title', 'Book 1', single=True)
+    assert book is not None
+    assert book.author is not None
+
+
+@pytest.mark.asyncio
+async def test_explicit_options_override_default_options(async_db_test, setup_async_test_data):
+    """
+    明示的に options を指定すると default_options が無視されることを確認
+    """
+    class BookRepositoryWithDefaults(AsyncBaseRepository[AsyncEagerBookModel]):
+        def __init__(self, session):
+            super().__init__(AsyncEagerBookModel, session)
+            # デフォルトでは author のみ
+            self.default_options = [
+                joinedload(AsyncEagerBookModel.author)
+            ]
+
+    repo = BookRepositoryWithDefaults(session=async_db_test)
+
+    # 明示的に reviews のみ指定（author は無視される）
+    books = await repo.find(options=[selectinload(AsyncEagerBookModel.reviews)])
+
+    assert len(books) == 3
+    # reviews はロード済み
+    for book in books:
+        if book.reviews:
+            assert isinstance(book.reviews[0], AsyncEagerReviewModel)
+
+
+@pytest.mark.asyncio
+async def test_empty_options_disables_default_options(async_db_test, setup_async_test_data):
+    """
+    options=[] を明示的に渡すと default_options がスキップされることを確認
+    """
+    class BookRepositoryWithDefaults(AsyncBaseRepository[AsyncEagerBookModel]):
+        def __init__(self, session):
+            super().__init__(AsyncEagerBookModel, session)
+            self.default_options = [
+                joinedload(AsyncEagerBookModel.author),
+                selectinload(AsyncEagerBookModel.reviews)
+            ]
+
+    repo = BookRepositoryWithDefaults(session=async_db_test)
+
+    # 空リストを渡すと eager loading なし
+    books = await repo.find(options=[])
+
+    assert len(books) == 3
+    # 関連モデルはロードされていない（後方互換性確認）
+    assert isinstance(books[0], AsyncEagerBookModel)
+
+
+@pytest.mark.asyncio
+async def test_default_options_with_multiple_relationships(async_db_test, setup_async_test_data):
+    """
+    複数の relationship を default_options で設定できることを確認
+    """
+    class BookRepositoryWithDefaults(AsyncBaseRepository[AsyncEagerBookModel]):
+        def __init__(self, session):
+            super().__init__(AsyncEagerBookModel, session)
+            self.default_options = [
+                joinedload(AsyncEagerBookModel.author),
+                selectinload(AsyncEagerBookModel.reviews)
+            ]
+
+    repo = BookRepositoryWithDefaults(session=async_db_test)
+
+    books = await repo.find(filters=[AsyncEagerBookModel.title == "Book 1"])
+
+    assert len(books) == 1
+    book = books[0]
+    # 両方の関連モデルがロード済み
+    assert book.author is not None
+    assert book.author.name == "Author One"
+    assert len(book.reviews) == 2
+    assert all(isinstance(r, AsyncEagerReviewModel) for r in book.reviews)
+
+
+@pytest.mark.asyncio
+async def test_default_options_empty_by_default(async_db_test, setup_async_test_data):
+    """
+    default_options を設定しない場合は空リストがデフォルトであることを確認
+    """
+    repo = AsyncBookRepository(session=async_db_test)
+
+    # default_options が存在し、空リストであることを確認
+    assert hasattr(repo, 'default_options')
+    assert repo.default_options == []
+
+    # 既存の動作は変わらない
+    books = await repo.find()
+    assert len(books) == 3

@@ -14,3 +14,4 @@
 - セッション管理のパターン
 - トランザクション制御
 - FastAPI との統合
+- デフォルト Eager Loading（default_options）

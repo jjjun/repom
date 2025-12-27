@@ -185,7 +185,7 @@ def parse_order_by(model_class, order_by_str: str, allowed_order_columns: List[s
     return desc(column) if direction == 'desc' else asc(column)
 
 
-def set_find_option(query, model, allowed_order_columns: List[str], **kwargs):
+def set_find_option(query, model, allowed_order_columns: List[str], default_options: Optional[List] = None, **kwargs):
     """
     クエリにオプションを設定するメソッド。
 
@@ -199,11 +199,13 @@ def set_find_option(query, model, allowed_order_columns: List[str], **kwargs):
         query: SQLAlchemy のクエリオブジェクト。
         model: SQLAlchemy モデルクラス
         allowed_order_columns: ソート可能なカラム名のリスト
+        default_options: デフォルトの eager loading options（リポジトリの default_options）
         **kwargs: 任意のキーワード引数。以下の引数をサポートします。
             - offset (int): 取得するデータの開始位置。デフォルトは 0。
             - limit (int): 取得するデータの件数。デフォルトは 10。
             - order_by (Callable | str): 結果を並べ替えるための呼び出し可能オブジェクト。デフォルトはモデルの id フィールドの昇順。
             - options (list | Load): SQLAlchemy の load options (joinedload, selectinload など)。
+              None の場合は default_options を使用。空リスト [] を渡すと eager loading なし。
 
     Returns:
         クエリオブジェクトにオプションを設定したものを返します。
@@ -224,6 +226,9 @@ def set_find_option(query, model, allowed_order_columns: List[str], **kwargs):
                 selectinload(Model.tags)
             ]
         )
+
+        # default_options をスキップ（eager loading なし）
+        results = repo.find(options=[])  # 空リストを明示的に渡す
     """
     offset = kwargs.get('offset', None)
     limit = kwargs.get('limit', None)
@@ -232,7 +237,10 @@ def set_find_option(query, model, allowed_order_columns: List[str], **kwargs):
     # order_by が指定されていない場合はデフォルト
     order_by = model.id.asc()
 
-    # options の処理
+    # options の処理: None の場合のみ default_options を使用
+    if options is None and default_options:
+        options = default_options
+
     if options is not None:
         if isinstance(options, list):
             for opt in options:

@@ -449,6 +449,147 @@ tasks = await repo.find(
 )
 ```
 
+---
+
+## デフォルト Eager Loading（default_options）
+
+**NEW in v1.x**: コンストラクタで `default_options` を設定することで、リポジトリのすべての取得メソッドで自動的に eager loading を適用できます。
+
+### 基本的な使い方
+
+```python
+from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
+
+class TaskRepository(AsyncBaseRepository[Task]):
+    def __init__(self, session: AsyncSession):
+        super().__init__(Task, session)
+        # デフォルトで user と comments を eager load
+        self.default_options = [
+            joinedload(Task.user),
+            selectinload(Task.comments)
+        ]
+
+# 使用例
+async def get_tasks():
+    async with get_async_db_session() as session:
+        repo = TaskRepository(session=session)
+        
+        # options を指定しなくても自動的に eager loading される
+        tasks = await repo.find()  # user と comments がロード済み
+        task = await repo.get_by_id(1)  # 同じく自動適用
+        
+        return tasks
+```
+
+### 影響を受けるメソッド
+
+`default_options` は以下のメソッドで自動的に適用されます：
+
+- ✅ `await find()` - 複数レコード取得
+- ✅ `await find_one()` - 単一レコード取得
+- ✅ `await get_by_id()` - ID で取得
+- ✅ `await get_by()` - カラム条件で取得
+
+### options の優先順位
+
+```python
+# 1. options=None（デフォルト）→ default_options を使用
+tasks = await repo.find()  # default_options が適用される
+
+# 2. options=[] （空リスト）→ eager loading なし
+tasks = await repo.find(options=[])  # default_options をスキップ
+
+# 3. options=[...] （明示指定）→ 指定した options を使用
+tasks = await repo.find(options=[
+    selectinload(Task.tags)  # default_options は無視される
+])
+```
+
+### FastAPI での実用例
+
+```python
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from repom.database import get_async_db_session
+
+router = APIRouter()
+
+class TaskRepository(AsyncBaseRepository[Task]):
+    def __init__(self, session: AsyncSession):
+        super().__init__(Task, session)
+        # よく使うリレーションを default_options で設定
+        self.default_options = [
+            joinedload(Task.user),
+            selectinload(Task.tags)
+        ]
+
+@router.get("/tasks")
+async def get_tasks(session: AsyncSession = Depends(get_async_db_session)):
+    repo = TaskRepository(session=session)
+    return await repo.find()  # 自動的に user と tags をロード
+
+@router.get("/tasks/ids")
+async def get_task_ids(session: AsyncSession = Depends(get_async_db_session)):
+    repo = TaskRepository(session=session)
+    # リレーション不要な場合は無効化
+    tasks = await repo.find(options=[])  # eager loading なし
+    return [task.id for task in tasks]
+
+@router.get("/tasks/{task_id}")
+async def get_task(
+    task_id: int,
+    session: AsyncSession = Depends(get_async_db_session)
+):
+    repo = TaskRepository(session=session)
+    task = await repo.get_by_id(task_id)  # default_options 適用
+    if not task:
+        raise HTTPException(status_code=404)
+    return task
+```
+
+### パフォーマンスへの影響
+
+**メリット（N+1 問題の解決）**:
+
+```python
+# Without default_options
+tasks = await repo.find()  # 1回のクエリ
+for task in tasks:
+    print(task.user.name)  # N回のクエリ（N+1 問題）
+# 合計: 1 + N = 101回のクエリ（N=100の場合）
+
+# With default_options
+class TaskRepository(AsyncBaseRepository[Task]):
+    def __init__(self, session: AsyncSession):
+        super().__init__(Task, session)
+        self.default_options = [joinedload(Task.user)]
+
+tasks = await repo.find()  # 2回のクエリ（tasks と users）
+for task in tasks:
+    print(task.user.name)  # クエリなし
+# 合計: 2回のクエリ（N=100でも同じ）
+```
+
+**デメリット（不要な eager load）**:
+
+リレーションを使わない場合でも eager load が発生します。その場合は `options=[]` で無効化：
+
+```python
+# リレーション不要な場合は明示的にスキップ
+task_ids = [task.id for task in await repo.find(options=[])]  # 高速
+```
+
+### ベストプラクティス
+
+| 状況 | 推奨設定 | 理由 |
+|------|---------|------|
+| リレーションを頻繁に使う | `default_options` で設定 | N+1 問題を自動的に回避 |
+| リレーションをたまに使う | `default_options` なし | 必要に応じて `options` を指定 |
+| パフォーマンスが重要 | ケースバイケースで `options` を指定 | 柔軟な最適化 |
+
+---
+
 ### パフォーマンス比較
 
 | 方法 | クエリ数 | パフォーマンス |

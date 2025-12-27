@@ -30,7 +30,8 @@ class QueryBuilderMixin(Generic[T]):
 
     def set_find_option(self, query, **kwargs):
         """クエリにオプションを設定するメソッド（_core.set_find_option を呼び出し）"""
-        return set_find_option(query, self.model, self.allowed_order_columns, **kwargs)
+        default_options = getattr(self, 'default_options', [])
+        return set_find_option(query, self.model, self.allowed_order_columns, default_options, **kwargs)
 
     def parse_order_by(self, model_class, order_by_str: str):
         """Parse order_by string（_core.parse_order_by を呼び出し）"""

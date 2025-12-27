@@ -348,6 +348,129 @@ class TaskRepository(BaseRepository[Task]):
 | パターン | 使用する options | 理由 |
 |---------|-----------------|------|
 | 1対1 / 多対1 | `joinedload` | 1回のクエリで完結 |
+
+
+---
+
+### デフォルト Eager Loading（default_options）
+
+**NEW in v1.x**: コンストラクタで `default_options` を設定することで、リポジトリのすべての取得メソッドで自動的に eager loading を適用できます。
+
+#### 基本的な使い方
+
+```python
+from sqlalchemy.orm import joinedload, selectinload
+
+class TaskRepository(BaseRepository[Task]):
+    def __init__(self, session: Session = None):
+        super().__init__(Task, session)
+        # デフォルトで user と comments を eager load
+        self.default_options = [
+            joinedload(Task.user),
+            selectinload(Task.comments)
+        ]
+
+# 使用例
+repo = TaskRepository(session=db_session)
+
+# options を指定しなくても自動的に eager loading される
+tasks = repo.find()  # user と comments がロード済み
+task = repo.get_by_id(1)  # 同じく自動適用
+```
+
+#### 影響を受けるメソッド
+
+`default_options` は以下のメソッドで自動的に適用されます：
+
+- ✅ `find()` - 複数レコード取得
+- ✅ `find_one()` - 単一レコード取得
+- ✅ `get_by_id()` - ID で取得
+- ✅ `get_by()` - カラム条件で取得
+
+#### options の優先順位
+
+```python
+# 1. options=None（デフォルト）→ default_options を使用
+tasks = repo.find()  # default_options が適用される
+
+# 2. options=[] （空リスト）→ eager loading なし
+tasks = repo.find(options=[])  # default_options をスキップ
+
+# 3. options=[...] （明示指定）→ 指定した options を使用
+tasks = repo.find(options=[
+    selectinload(Task.tags)  # default_options は無視される
+])
+```
+
+#### パフォーマンスへの影響
+
+**メリット（N+1 問題の解決）**:
+
+```python
+# Without default_options
+tasks = repo.find()  # 1回のクエリ
+for task in tasks:
+    print(task.user.name)  # N回のクエリ（N+1 問題）
+# 合計: 1 + N = 101回のクエリ（N=100の場合）
+
+# With default_options
+class TaskRepository(BaseRepository[Task]):
+    def __init__(self, session: Session = None):
+        super().__init__(Task, session)
+        self.default_options = [joinedload(Task.user)]
+
+tasks = repo.find()  # 2回のクエリ（tasks と users）
+for task in tasks:
+    print(task.user.name)  # クエリなし
+# 合計: 2回のクエリ（N=100でも同じ）
+```
+
+**デメリット（不要な eager load）**:
+
+リレーションを使わない場合でも eager load が発生します。その場合は `options=[]` で無効化できます：
+
+```python
+# リレーション不要な場合は明示的にスキップ
+task_ids = [task.id for task in repo.find(options=[])]  # 高速
+```
+
+#### 実用例
+
+```python
+# 例1: FastAPI での使用
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+class TaskRepository(BaseRepository[Task]):
+    def __init__(self, session: Session = None):
+        super().__init__(Task, session)
+        self.default_options = [
+            joinedload(Task.user),
+            selectinload(Task.tags)
+        ]
+
+@router.get("/tasks")
+def get_tasks(session: Session = Depends(get_db_session)):
+    repo = TaskRepository(session=session)
+    return repo.find()  # 自動的に user と tags をロード
+
+# 例2: リレーション不要な場合は無効化
+@router.get("/tasks/ids")
+def get_task_ids(session: Session = Depends(get_db_session)):
+    repo = TaskRepository(session=session)
+    tasks = repo.find(options=[])  # eager loading なし
+    return [task.id for task in tasks]
+```
+
+#### ベストプラクティス
+
+| 状況 | 推奨設定 | 理由 |
+|------|---------|------|
+| リレーションを頻繁に使う | `default_options` で設定 | N+1 問題を自動的に回避 |
+| リレーションをたまに使う | `default_options` なし | 必要に応じて `options` を指定 |
+| パフォーマンスが重要 | ケースバイケースで `options` を指定 | 柔軟な最適化 |
+
+---
 | 1対多 / 多対多 | `selectinload` | カルテシアン積を避ける |
 | 深いネスト | `joinedload().joinedload()` | チェーンで接続 |
 | 条件付き取得 | `contains_eager` | フィルタ付き JOIN |

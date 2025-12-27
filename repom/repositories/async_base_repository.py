@@ -58,6 +58,7 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         self.model = model
         self._session_override = session
         self._scoped_session: Optional[AsyncSession] = None
+        self.default_options: List = []  # デフォルトの eager loading options
 
     @property
     def session(self) -> Optional[AsyncSession]:
