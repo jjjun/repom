@@ -19,9 +19,11 @@
 
 ## 概要
 
-`BaseRepository` は **`session=None` を許容** し、セッションが提供されていない場合は自動的に `get_db_session()` を使用します。これにより、シンプルな使い方から高度なトランザクション制御まで、柔軟な実装が可能です。
+`BaseRepository` は **`session=None` を許容** し、セッションが提供されていない場合は自動的に `get_db_session()` を消費して短命セッションを生成します。内部セッションで書き込みを行う場合は **commit 後に refresh() を実行してからセッションを閉じる** ため、`repo = Repo()`（セッション未指定）でも ID などの最新値を保持したままオブジェクトを扱えます。
 
-**重要**: Repository の `__init__` で `session is None` をチェックして `ValueError` を raise する必要は **ありません**。BaseRepository が自動的に処理します。
+ただし、メソッド呼び出しごとに新しいセッションが開閉されるため、複数操作を 1 トランザクションにまとめたい場合やオブジェクトをまたいで操作したい場合は **必ず明示的に Session / トランザクションを渡してください**。
+
+**重要**: Repository の `__init__` で `session is None` をチェックして `ValueError` を raise する必要は **ありません**（現行コードで自動補完されます）。
 
 ---
 
@@ -33,23 +35,35 @@
 class BaseRepository(Generic[T]):
     def __init__(self, model: Type[T], session: Optional[Session] = None):
         self.model = model
-        self.session = session  # None でも OK
+        self._session_override = session
+        self._scoped_session: Optional[Session] = None
 
-    def get_by_id(self, id: int) -> Optional[T]:
-        # session が None の場合、get_db_session() を使用
-        if self.session is None:
-            with get_db_session() as session:
-                return session.query(self.model).filter_by(id=id).first()
-        else:
-            # 渡されたセッションを使用
-            return self.session.query(self.model).filter_by(id=id).first()
+    @contextmanager
+    def _session_scope(self) -> Session:
+        if self.session is not None:
+            # 明示的に渡されたセッションをそのまま使用
+            yield self.session
+            return
+
+        # セッション未指定の場合は get_db_session() で補完
+        session_generator = get_db_session()
+        session = next(session_generator)
+        self._scoped_session = session
+        try:
+            yield session
+        finally:
+            # refresh() 後にセッションを閉じる（save/saves が担当）
+            if self._scoped_session is session:
+                session.expunge_all()
+            self._scoped_session = None
+            session_generator.close()
 ```
 
 **ポイント**:
-- `session=None` でインスタンス化可能
-- 各メソッドで `self.session is None` をチェック
-- None の場合は `get_db_session()` で自動セッション作成
-- 提供されている場合はそれを使用
+- `session=None` でインスタンス化可能（現行コードは `get_db_session()` を消費して補完）
+- 内部セッションでの書き込みは `save()` / `saves()` が commit → refresh まで実行したうえでクローズ
+- メソッドごとに新しいセッションが開閉されるため、複数操作をまとめる場合は外部から Session / トランザクションを渡す
+- 渡されたセッションがある場合はそれを優先して利用
 
 ---
 
@@ -59,7 +73,7 @@ class BaseRepository(Generic[T]):
 
 **特徴**:
 - ✅ コードが最もシンプル
-- ✅ 単純な CRUD 操作に最適
+- ✅ 単純な CRUD 操作に最適（各メソッドで短命セッションを自動生成）
 - ❌ トランザクション制御なし（各操作が個別コミット）
 - ❌ 複数操作をアトミックにできない
 

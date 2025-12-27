@@ -30,10 +30,10 @@ from sqlalchemy.orm import Session
 
 # カスタムリポジトリを定義（推奨）
 class TaskRepository(BaseRepository[Task]):
-    def __init__(self, session: Session = None):
+    def __init__(self, session: Session):
         super().__init__(Task, session)
 
-# インスタンス化（モデル名の指定が不要）
+# インスタンス化（モデル名の指定が不要 / セッション必須）
 repo = TaskRepository(session=db_session)
 ```
 
@@ -47,9 +47,15 @@ repo = TaskRepository(session=db_session)
 ```python
 from repom.base_repository import BaseRepository
 from your_project.models import Task
+from repom.database import _db_manager
 
 # カスタムリポジトリが不要な場合
-repo = BaseRepository(Task, session=db_session)
+# セッションを明示的に渡す（推奨）
+with _db_manager.get_sync_session() as session:
+    repo = BaseRepository(Task, session=session)
+
+# 短命セッションを自動生成して使いたい場合（単発操作向け）
+# repo = BaseRepository(Task)
 ```
 
 ### 主要メソッド一覧
@@ -506,7 +512,7 @@ def list_tasks(
     filter_params: TaskFilterParams = Depends(TaskFilterParams.as_query_depends())
 ):
     # filter_params を使ってリポジトリで検索
-    repo = TaskRepository()
+    repo = TaskRepository(session=db_session)
     tasks = repo.find_by_params(filter_params)
     return tasks
 ```
@@ -656,7 +662,7 @@ class UserRepository(BaseRepository[User]):
     pass
 
 # 使用例
-repo = UserRepository()
+repo = UserRepository()  # 短命セッションを自動生成する単発利用
 
 # 作成
 user = repo.dict_save({"name": "太郎", "email": "taro@example.com"})
@@ -709,7 +715,7 @@ def list_users(
     offset: int = 0,
     limit: int = 10
 ):
-    repo = UserRepository()
+    repo = UserRepository()  # セッション未指定の場合はメソッドごとに短命セッションを生成
     users = repo.find_by_params(filter_params, offset=offset, limit=limit)
     total = repo.count_by_params(filter_params)
     
@@ -801,7 +807,7 @@ class TaskRepository(BaseRepository[Task]):
 
 ```python
 # ❌ セッションが閉じている
-repo = TaskRepository()
+repo = TaskRepository()  # 短命セッションを自動生成する単発利用
 # ... 長時間経過 ...
 task = repo.get_by_id(1)  # エラー
 
