@@ -81,10 +81,13 @@ class BaseModelAuto(BaseModel):
     - in_update (bool): Update スキーマに含めるか (default: auto)
     - description (str): フィールドの説明
 
-    デフォルトの除外ルール:
-    - システムカラム: id, created_at, updated_at
-    - 外部キー: *_id (ForeignKey を持つカラム)
+    デフォルトの除外ルール（Create/Update スキーマ）:
+    - システムカラム: id, created_at, updated_at（自動生成・自動更新のため）
     - 明示的除外: info={'in_create': False} または info={'in_update': False}
+    
+    外部キーの扱い:
+    - デフォルトで含まれる（ユーザーが設定可能にするため）
+    - センシティブな外部キーは info={'in_create': False} で除外可能
 
     使用例:
         from sqlalchemy.orm import Mapped, mapped_column
