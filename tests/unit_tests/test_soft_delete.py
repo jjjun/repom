@@ -15,8 +15,9 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.base_model_auto import BaseModelAuto, SoftDeletableMixin
+from repom.base_model_auto import BaseModelAuto
 from repom.base_repository import BaseRepository
+from repom.mixins import SoftDeletableMixin
 
 
 # テスト用モデル
