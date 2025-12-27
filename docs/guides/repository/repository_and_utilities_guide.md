@@ -23,8 +23,10 @@
 
 #### 推奨パターン: カスタム __init__ を定義
 
+※ `repom.base_repository` からのインポートは非推奨で DeprecationWarning が出るため、`repom.repositories` から読み込んでください。
+
 ```python
-from repom.base_repository import BaseRepository
+from repom.repositories import BaseRepository
 from your_project.models import Task
 from sqlalchemy.orm import Session
 
@@ -45,7 +47,7 @@ repo = TaskRepository(session=db_session)
 #### 代替パターン: BaseRepository を直接使用
 
 ```python
-from repom.base_repository import BaseRepository
+from repom.repositories import BaseRepository
 from your_project.models import Task
 
 # カスタムリポジトリが不要な場合
@@ -485,7 +487,7 @@ active_count = repo.count(filters=filters)
 ### 基本的な FilterParams
 
 ```python
-from repom.base_repository import FilterParams
+from repom.repositories import FilterParams
 from typing import Optional
 
 class TaskFilterParams(FilterParams):
@@ -835,7 +837,7 @@ if count > 0:
 
 - **[auto_import_models ガイド](../core/auto_import_models_guide.md)**: モデルの自動インポート
 - **[BaseModelAuto ガイド](../core/base_model_auto_guide.md)**: スキーマ自動生成
-- **[BaseRepository ソースコード](../../repom/base_repository.py)**: 実装の詳細
+- **[BaseRepository ソースコード](../../repom/repositories/base_repository.py)**: 実装の詳細
 
 ---
 
