@@ -144,7 +144,8 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
             List[T]: 全てのインスタンスのリスト
         """
         with self._session_scope() as session:
-            return session.query(self.model).all()
+            result = session.execute(select(self.model))
+            return result.scalars().all()
 
     def save(self, instance: T) -> T:
         """
