@@ -70,3 +70,91 @@ def test_server_default_applied_without_payload(db_test):
     db_test.refresh(record)
 
     assert record.status == 'pending'
+
+
+def test_server_default_with_nullable():
+    """server_default と nullable=True の組み合わせが Optional として扱われることを確認"""
+    class NullableServerDefaultModel(BaseModelAuto):
+        __tablename__ = 'nullable_server_default_model'
+        
+        status: Mapped[Optional[str]] = mapped_column(
+            String(50),
+            nullable=True,
+            server_default=text("'pending'")
+        )
+    
+    CreateSchema = NullableServerDefaultModel.get_create_schema()
+    status_field = CreateSchema.model_fields['status']
+    
+    assert not status_field.is_required()
+    assert status_field.default is None
+    assert status_field.annotation == Optional[str]
+
+
+def test_server_default_with_client_default():
+    """server_default と client-side default の両方がある場合"""
+    class BothDefaultsModel(BaseModelAuto):
+        __tablename__ = 'both_defaults_model'
+        
+        status: Mapped[str] = mapped_column(
+            String(50),
+            nullable=False,
+            default='client_default',
+            server_default=text("'server_default'")
+        )
+    
+    CreateSchema = BothDefaultsModel.get_create_schema()
+    status_field = CreateSchema.model_fields['status']
+    
+    # col.default が優先されるため、必須ではない
+    assert not status_field.is_required()
+    # client-side default が使われる
+    assert status_field.default == 'client_default'
+
+
+def test_server_default_with_explicit_required_override():
+    """info={'create_required': True} で明示的に必須にオーバーライドできることを確認"""
+    class ExplicitRequiredModel(BaseModelAuto):
+        __tablename__ = 'explicit_required_model'
+        
+        status: Mapped[str] = mapped_column(
+            String(50),
+            nullable=False,
+            server_default=text("'pending'"),
+            info={'create_required': True, 'description': '明示的に必須'}
+        )
+    
+    CreateSchema = ExplicitRequiredModel.get_create_schema()
+    status_field = CreateSchema.model_fields['status']
+    
+    # info で明示的に必須としているため、Required
+    assert status_field.is_required()
+    assert status_field.annotation == str  # Optional ではない
+
+
+def test_server_default_in_update_schema():
+    """server_default が Update スキーマにも影響しないことを確認（全フィールド Optional）"""
+    CreateSchema = ServerDefaultModel.get_create_schema()
+    UpdateSchema = ServerDefaultModel.get_update_schema()
+    
+    # Create スキーマでは Optional
+    create_field = CreateSchema.model_fields['status']
+    assert not create_field.is_required()
+    assert create_field.annotation == Optional[str]
+    
+    # Update スキーマでも Optional（全フィールド Optional が仕様）
+    update_field = UpdateSchema.model_fields['status']
+    assert not update_field.is_required()
+    assert update_field.annotation == Optional[str]
+
+
+def test_server_default_not_in_response_schema():
+    """server_default は Response スキーマには影響しない（カラムは含まれる）"""
+    ResponseSchema = ServerDefaultModel.get_response_schema()
+    
+    # Response スキーマにはカラムが含まれる
+    assert 'status' in ResponseSchema.model_fields
+    
+    # nullable=False なので、Response では Optional ではない
+    response_field = ResponseSchema.model_fields['status']
+    assert response_field.annotation == str  # Optional[str] ではない

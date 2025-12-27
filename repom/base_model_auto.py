@@ -263,6 +263,15 @@ class BaseModelAuto(BaseModel):
                 field_definitions[col.name] = (python_type, Field(**field_kwargs))
                 continue
 
+            # client-side default がある場合は優先（server_default より優先度高い）
+            if default_value is not None:
+                field_definitions[col.name] = (
+                    python_type,
+                    Field(default=default_value, **field_kwargs)
+                )
+                continue
+
+            # server_default のみがある場合（client-side default がない）
             if col.server_default is not None:
                 # DB サーバー側で値が補完されるため、非 NULL カラムでも入力不要とする
                 field_definitions[col.name] = (
@@ -271,17 +280,11 @@ class BaseModelAuto(BaseModel):
                 )
                 continue
 
-            if default_value is None:
-                # nullable または info で任意指定の場合は Optional + default=None
-                field_definitions[col.name] = (
-                    Optional[python_type],
-                    Field(default=None, **field_kwargs)
-                )
-            else:
-                field_definitions[col.name] = (
-                    python_type,
-                    Field(default=default_value, **field_kwargs)
-                )
+            # nullable または info で任意指定の場合は Optional + default=None
+            field_definitions[col.name] = (
+                Optional[python_type],
+                Field(default=None, **field_kwargs)
+            )
 
         # スキーマ生成
         if validator_mixin:
