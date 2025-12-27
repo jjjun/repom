@@ -1,10 +1,12 @@
 from tests._init import *
-from sqlalchemy import Integer, inspect, select, desc, and_
+from sqlalchemy import Integer, String, inspect, select, desc, and_
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from datetime import datetime
 from repom.base_model import BaseModel
 from repom.base_repository import BaseRepository
+from repom.base_model_auto import BaseModelAuto
+from repom.mixins import SoftDeletableMixin
 
 
 class SimpleModel(BaseModel):
@@ -16,6 +18,14 @@ class SimpleModel(BaseModel):
 class SimpleRepository(BaseRepository[SimpleModel]):
     def __init__(self, session):
         super().__init__(SimpleModel, session)
+
+
+class SoftDeleteCountModel(BaseModelAuto, SoftDeletableMixin):
+    """count の include_deleted フラグ検証用モデル"""
+
+    __tablename__ = 'soft_delete_count_items'
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
 def test_create(db_test):
@@ -222,6 +232,31 @@ def test_count(db_test):
     # 存在しない値
     filters = [SimpleModel.value == 999]
     assert repo.count(filters) == 0
+
+
+def test_count_respects_soft_delete_flag_on_soft_deletable_model(db_test):
+    """count() はデフォルトで削除済みを除外し、フラグで含められる"""
+    repo = BaseRepository(SoftDeleteCountModel, db_test)
+
+    active = SoftDeleteCountModel(name="active")
+    deleted = SoftDeleteCountModel(name="deleted")
+    db_test.add_all([active, deleted])
+    db_test.commit()
+
+    deleted.soft_delete()
+    db_test.commit()
+
+    assert repo.count() == 1
+    assert repo.count(include_deleted=True) == 2
+
+
+def test_count_on_non_soft_deletable_model_accepts_flag(db_test):
+    """非ソフトデリートモデルでも include_deleted が指定できる（挙動は変わらない）"""
+    repo = SimpleRepository(session=db_test)
+    repo.saves([SimpleModel(value=i) for i in range(2)])
+
+    assert repo.count() == 2
+    assert repo.count(include_deleted=True) == 2
 
 
 def test_default_session_fallback():

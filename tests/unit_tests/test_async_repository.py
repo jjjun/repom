@@ -247,6 +247,19 @@ async def test_count(async_db_test):
 
 
 @pytest.mark.asyncio
+async def test_count_respects_soft_delete_flag(async_db_test):
+    """count() はデフォルトで削除済みを除外し、フラグで含められる"""
+    repo = AsyncSimpleRepository(session=async_db_test)
+
+    # Soft delete 非対応モデルでは include_deleted の指定で挙動が変わらないが、
+    # フラグが受け取れることを確認する。
+    await repo.saves([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
+
+    assert await repo.count() == 2
+    assert await repo.count(include_deleted=True) == 2
+
+
+@pytest.mark.asyncio
 async def test_async_default_session_fallback():
     """
     セッション未指定時に get_async_db_session() を使用して動作することを確認
