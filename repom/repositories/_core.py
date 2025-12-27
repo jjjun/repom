@@ -185,12 +185,21 @@ def parse_order_by(model_class, order_by_str: str, allowed_order_columns: List[s
     return desc(column) if direction == 'desc' else asc(column)
 
 
-def set_find_option(query, model, allowed_order_columns: List[str], default_options: Optional[List] = None, **kwargs):
+def set_find_option(
+    query,
+    model,
+    allowed_order_columns: List[str],
+    default_options: Optional[List] = None,
+    default_order_by=None,
+    **kwargs
+):
     """
     クエリにオプションを設定するメソッド。
 
     このメソッドは、クエリに対して offset、limit、order_by、および options を設定します。
     デフォルトでは、order_by はモデルの id フィールドの昇順に設定されます。
+    リポジトリの default_order_by（クラス/インスタンス属性）を指定すると、
+    order_by 引数が渡されていない場合にその設定が優先されます。
 
     desc(降順): 値が大きいものから小さいもの順に並べる
     asc(昇順): 値が小さいものから大きいもの順に並べる
@@ -200,6 +209,9 @@ def set_find_option(query, model, allowed_order_columns: List[str], default_opti
         model: SQLAlchemy モデルクラス
         allowed_order_columns: ソート可能なカラム名のリスト
         default_options: デフォルトの eager loading options（リポジトリの default_options）
+            クラス属性が優先され、options=None のときのみ適用されます。
+        default_order_by: デフォルトの order_by 設定（リポジトリの default_order_by）
+            クラス属性が優先され、order_by が未指定の場合に適用されます。
         **kwargs: 任意のキーワード引数。以下の引数をサポートします。
             - offset (int): 取得するデータの開始位置。デフォルトは 0。
             - limit (int): 取得するデータの件数。デフォルトは 10。
@@ -233,9 +245,8 @@ def set_find_option(query, model, allowed_order_columns: List[str], default_opti
     offset = kwargs.get('offset', None)
     limit = kwargs.get('limit', None)
     options = kwargs.get('options', None)
-    # 特に指定しない場合、デフォルトで昇順になるんだけど、此処では明示的に指定してる
     # order_by が指定されていない場合はデフォルト
-    order_by = model.id.asc()
+    order_by = kwargs.get('order_by') if 'order_by' in kwargs else default_order_by
 
     # options の処理: None の場合のみ default_options を使用
     if options is None and default_options:
@@ -249,13 +260,15 @@ def set_find_option(query, model, allowed_order_columns: List[str], default_opti
             query = query.options(options)
 
     # order_by の型に応じて処理を分岐
-    if 'order_by' in kwargs:
-        if isinstance(kwargs['order_by'], str):
-            # 文字列の場合は変換
-            order_by = parse_order_by(model, kwargs['order_by'], allowed_order_columns)
-        elif isinstance(kwargs['order_by'], (UnaryExpression, ColumnElement)):
-            # SQLAlchemy のカラムオブジェクトの場合はそのまま使用
-            order_by = kwargs['order_by']
+    if isinstance(order_by, str):
+        # 文字列の場合は変換
+        order_by = parse_order_by(model, order_by, allowed_order_columns)
+    elif isinstance(order_by, (UnaryExpression, ColumnElement)):
+        # SQLAlchemy のカラムオブジェクトの場合はそのまま使用
+        pass
+    else:
+        # 指定がない場合や未対応の型はデフォルト（id の昇順）
+        order_by = model.id.asc()
 
     if offset is not None:
         if not isinstance(offset, int):

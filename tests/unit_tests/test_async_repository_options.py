@@ -442,6 +442,30 @@ async def test_default_options_in_constructor(async_db_test, setup_async_test_da
 
 
 @pytest.mark.asyncio
+async def test_class_level_default_options_are_applied(async_db_test, setup_async_test_data):
+    """
+    default_options をクラス属性で指定しても適用されることを確認
+    """
+
+    class AsyncBookRepositoryWithClassDefaults(AsyncBaseRepository[AsyncEagerBookModel]):
+        default_options = [
+            joinedload(AsyncEagerBookModel.author)
+        ]
+
+        def __init__(self, session):
+            super().__init__(AsyncEagerBookModel, session)
+
+    repo = AsyncBookRepositoryWithClassDefaults(session=async_db_test)
+
+    books = await repo.find()
+
+    assert len(books) == 3
+    for book in books:
+        assert book.author is not None
+        assert isinstance(book.author, AsyncEagerAuthorModel)
+
+
+@pytest.mark.asyncio
 async def test_default_options_with_find_one(async_db_test, setup_async_test_data):
     """
     default_options が find_one でも適用されることを確認
@@ -608,3 +632,27 @@ async def test_default_options_empty_by_default(async_db_test, setup_async_test_
     # 既存の動作は変わらない
     books = await repo.find()
     assert len(books) == 3
+
+
+# =============================================================================
+# default_order_by のテスト
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_default_order_by_applied_when_order_by_not_specified(async_db_test, setup_async_test_data):
+    """
+    default_order_by をクラス属性で指定した場合に order_by 未指定でも適用されることを確認
+    """
+
+    class OrderedAsyncBookRepository(AsyncBaseRepository[AsyncEagerBookModel]):
+        default_order_by = 'title:desc'
+
+        def __init__(self, session):
+            super().__init__(AsyncEagerBookModel, session)
+
+    repo = OrderedAsyncBookRepository(session=async_db_test)
+
+    titles = [book.title for book in await repo.find()]
+
+    assert titles == ["Book 3", "Book 2", "Book 1"]
