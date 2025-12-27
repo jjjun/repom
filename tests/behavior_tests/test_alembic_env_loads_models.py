@@ -234,9 +234,9 @@ def test_alembic_revision_autogenerate_works():
         # 出力から生成されたファイル名を抽出
         # 例: "Generating C:\...\alembic\versions\abc123_test_migration_generation.py"
         generated_file_match = re.search(
-            r"Generating.*versions[/\\]([a-f0-9]+_.*\.py)",
+            r"Generating\s+.*versions[/\\]([a-f0-9]+_.*\.py)",
             result.stdout,
-            re.IGNORECASE
+            re.IGNORECASE | re.DOTALL
         )
 
         assert generated_file_match, (

@@ -14,8 +14,9 @@ N+1 問題を解決するための一括取得メソッドです。
 import pytest
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.base_model_auto import BaseModelAuto, SoftDeletableMixin
+from repom.base_model_auto import BaseModelAuto
 from repom.base_repository import BaseRepository
+from repom.mixins import SoftDeletableMixin
 
 
 # テスト用モデル

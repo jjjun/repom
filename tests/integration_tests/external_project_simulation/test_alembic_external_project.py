@@ -1,23 +1,23 @@
 """Integration test: Alembic with external project (simulates mine-py scenario)
 
-This test simulates the scenario where:
-1. repom has old migration files in repom/alembic/versions/
-2. External project (mine-py) wants to use its own alembic/versions/
-3. CONFIG_HOOK sets custom alembic_versions_path
+This test simulates the scenario where an external project relies on its own
+alembic.ini configuration (script_location/version_locations) and no longer
+expects repom to expose alembic_versions_path via RepomConfig.
 
 Expected behavior:
-- Only external project's versions/ should be used
+- Version locations are controlled solely by alembic.ini
 - repom's old migrations should NOT be referenced
 """
 import pytest
 import tempfile
 import shutil
 from pathlib import Path
+from alembic.config import Config
 from repom.config import RepomConfig
 
 
 def test_alembic_versions_path_isolation():
-    """Verify that custom alembic_versions_path completely isolates migration history"""
+    """Verify that version_locations are controlled by alembic.ini, not RepomConfig"""
 
     # Simulate external project config
     class ExternalProjectConfig(RepomConfig):
@@ -27,19 +27,50 @@ def test_alembic_versions_path_isolation():
 
     # Create temp directory for external project
     with tempfile.TemporaryDirectory() as tmpdir:
-        external_versions_path = str(Path(tmpdir) / 'external_migrations' / 'versions')
+        external_versions_path = Path(tmpdir) / 'external_migrations' / 'versions'
+        external_versions_path.mkdir(parents=True)
 
-        config = ExternalProjectConfig(external_versions_path)
+        # Create a minimal alembic.ini that points version_locations to the custom path
+        alembic_ini = Path(tmpdir) / "alembic.ini"
+        alembic_ini.write_text(
+            "\n".join([
+                "[alembic]",
+                f"script_location = {Path(__file__).parent.parent.parent.parent / 'alembic'}",
+                f"version_locations = {external_versions_path}",
+                "",
+                "[loggers]",
+                "keys = root",
+                "",
+                "[handlers]",
+                "keys = console",
+                "",
+                "[formatters]",
+                "keys = generic",
+                "",
+                "[logger_root]",
+                "level = WARN",
+                "handlers = console",
+                "qualname =",
+                "",
+                "[handler_console]",
+                "class = StreamHandler",
+                "args = (sys.stderr,)",
+                "level = NOTSET",
+                "formatter = generic",
+                "",
+                "[formatter_generic]",
+                "format = %(levelname)-5.5s [%(name)s] %(message)s",
+            ]),
+            encoding="utf-8",
+        )
 
-        # Verify path is set correctly
-        assert config.alembic_versions_path == external_versions_path
+        # RepomConfig should not expose alembic_versions_path anymore
+        config = ExternalProjectConfig(str(external_versions_path))
+        with pytest.raises(AttributeError):
+            _ = config.alembic_versions_path  # noqa: B018
 
-        # Verify it's different from repom's default
-        repom_config = RepomConfig()
-        repom_config.root_path = str(Path(__file__).parent.parent.parent.parent)
-        repom_config.init()
-
-        assert config.alembic_versions_path != repom_config.alembic_versions_path
+        alembic_config = Config(str(alembic_ini))
+        assert alembic_config.get_main_option("version_locations") == str(external_versions_path)
 
 
 def test_repom_has_no_migration_files():
@@ -67,7 +98,7 @@ def test_repom_has_no_migration_files():
 
 
 def test_env_py_uses_version_locations_in_context():
-    """Verify that env.py passes version_locations to context.configure()"""
+    """Verify that env.py defers version_locations control to alembic.ini"""
 
     # Read env.py to check implementation
     repom_root = Path(__file__).parent.parent.parent.parent
@@ -75,17 +106,10 @@ def test_env_py_uses_version_locations_in_context():
 
     env_py_content = env_py_path.read_text()
 
-    # Check that version_locations is passed to context.configure() in both modes
-    assert 'version_locations=db_config.alembic_versions_path' in env_py_content, (
-        "env.py must pass version_locations parameter to context.configure()\n"
-        "This ensures Alembic uses the custom path instead of script_location/versions/"
+    # env.py should no longer pass version_locations explicitly (alembic.ini is the source of truth)
+    assert 'version_locations=' not in env_py_content, (
+        "env.py should not hardcode version_locations; alembic.ini controls it."
     )
-
-    # Count occurrences (should be in both offline and online mode)
-    count = env_py_content.count('version_locations=db_config.alembic_versions_path')
-    assert count == 2, f"version_locations should be set in both offline and online mode (found {count})"
-
-    print("\n✅ env.py correctly passes version_locations to context.configure()")
 
 
 if __name__ == '__main__':

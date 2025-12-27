@@ -32,7 +32,6 @@ from weakref import WeakKeyDictionary
 from datetime import datetime, date
 from pydantic import BaseModel as PydanticBaseModel, create_model, Field
 from repom.base_model import BaseModel
-from repom.mixins import SoftDeletableMixin
 from sqlalchemy import Enum as SQLAlchemyEnum, inspect
 import re
 import logging
@@ -156,11 +155,6 @@ class BaseModelAuto(BaseModel):
             to_dict_method._response_fields = fields
             return to_dict_method
         return decorator
-
-    @classmethod
-    def _is_foreign_key(cls, col) -> bool:
-        """カラムが外部キーかどうかを判定"""
-        return len(col.foreign_keys) > 0
 
     @classmethod
     def _should_exclude_from_schema(cls, col, schema_type: str) -> bool:
@@ -488,8 +482,6 @@ class BaseModelAuto(BaseModel):
                 forward_refs={'FinHamaCFResponse': FinHamaCFResponse}
             )
         """
-        from typing import List, Dict, Optional, Set, Tuple, Union
-
         # to_dictメソッドから_response_fieldsを読み取り、レジストリに登録
         if cls not in _EXTRA_FIELDS_REGISTRY:
             to_dict_method = getattr(cls, 'to_dict', None)
