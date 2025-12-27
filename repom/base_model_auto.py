@@ -255,27 +255,33 @@ class BaseModelAuto(BaseModel):
             # Field パラメータを構築
             field_kwargs = cls._build_field_kwargs(col, info)
 
-            # デフォルト値を決定
+            # 必須/任意の判定とデフォルト値の組み立て
+            is_required = cls._is_required_for_create(col, info)
             default_value = cls._get_default_value(col, for_create=True)
 
-            # フィールド定義を追加
-            if default_value is ...:
-                # 必須フィールド
+            if is_required:
                 field_definitions[col.name] = (python_type, Field(**field_kwargs))
+                continue
+
+            if col.server_default is not None:
+                # DB サーバー側で値が補完されるため、非 NULL カラムでも入力不要とする
+                field_definitions[col.name] = (
+                    Optional[python_type],
+                    Field(default=None, **field_kwargs)
+                )
+                continue
+
+            if default_value is None:
+                # nullable または info で任意指定の場合は Optional + default=None
+                field_definitions[col.name] = (
+                    Optional[python_type],
+                    Field(default=None, **field_kwargs)
+                )
             else:
-                # オプショナルまたはデフォルト値あり
-                if col.nullable and default_value is None:
-                    # nullable の場合は Optional
-                    field_definitions[col.name] = (
-                        Optional[python_type],
-                        Field(default=None, **field_kwargs)
-                    )
-                else:
-                    # デフォルト値あり
-                    field_definitions[col.name] = (
-                        python_type,
-                        Field(default=default_value, **field_kwargs)
-                    )
+                field_definitions[col.name] = (
+                    python_type,
+                    Field(default=default_value, **field_kwargs)
+                )
 
         # スキーマ生成
         if validator_mixin:
@@ -419,6 +425,24 @@ class BaseModelAuto(BaseModel):
         return field_kwargs
 
     @classmethod
+    def _is_required_for_create(cls, col, info: Dict) -> bool:
+        """Create スキーマで必須かどうかを判定する"""
+        for key in ('create_required', 'required_on_create', 'required'):
+            if key in info:
+                return bool(info[key])
+
+        if col.default is not None:
+            return False
+
+        if col.server_default is not None:
+            return False
+
+        if col.nullable:
+            return False
+
+        return True
+
+    @classmethod
     def _get_default_value(cls, col, for_create: bool = True):
         """フィールドのデフォルト値を取得
 
@@ -427,7 +451,7 @@ class BaseModelAuto(BaseModel):
             for_create: Create用の場合True、Update用の場合False
 
         Returns:
-            デフォルト値、または ... (必須)
+            デフォルト値（利用可能な場合）または None
         """
         if not for_create:
             # Update では全て None
@@ -438,16 +462,16 @@ class BaseModelAuto(BaseModel):
             if callable(col.default.arg):
                 # callable の場合は実行しない（例: datetime.now）
                 # Pydantic の default_factory を使うべきだが、ここでは None を返す
-                return None if col.nullable else ...
+                return None
             else:
                 return col.default.arg
 
-        # nullable の場合は None
-        if col.nullable:
+        # server_default は DB 側で補完されるため、入力値は None で良い
+        if col.server_default is not None:
             return None
 
-        # それ以外は必須
-        return ...
+        # その他（デフォルトなし）は None を返す（必須判定は別メソッドで実施）
+        return None
 
     @classmethod
     def get_response_schema(
