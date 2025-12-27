@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from datetime import datetime
 from repom.base_model import BaseModel
-from repom.async_base_repository import AsyncBaseRepository
+from repom.repositories import AsyncBaseRepository
 
 
 class AsyncSimpleModel(BaseModel):
@@ -250,7 +250,19 @@ async def test_count(async_db_test):
 async def test_async_default_session_fallback():
     """
     セッション未指定時に get_async_db_session() を使用して動作することを確認
+
+    Note: このテストはデフォルトの async engine を使用するため、
+    テーブルを明示的に作成する必要がある（:memory: DB は engine ごとに独立）
     """
+    from repom.base_model import Base
+    from repom.database import get_async_engine
+
+    # デフォルトの async engine にテーブルを作成
+    engine = await get_async_engine()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # セッション未指定でリポジトリを作成（フォールバックを使用）
     repo = AsyncBaseRepository(AsyncSimpleModel)
     created = await repo.save(AsyncSimpleModel(value=222))
 

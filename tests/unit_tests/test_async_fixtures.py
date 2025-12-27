@@ -95,6 +95,8 @@ class TestTransactionRollback:
         )
         async_db_test.add(user)
         await async_db_test.flush()
+        # Note: flush() のみで commit しないため、トランザクション内に留まる
+        # これは意図的な動作で、テスト終了時に自動ロールバックされる
 
         # データが存在することを確認
         stmt = select(AsyncTestUser).where(

@@ -64,4 +64,6 @@ filterwarnings = [
   "ignore::DeprecationWarning:sqlalchemy.*",
   "ignore:The default date adapter is deprecated.*:DeprecationWarning",
   "ignore:The default datetime adapter is deprecated.*:DeprecationWarning",
+  "ignore:The garbage collector is trying to clean up non-checked-in connection.*:sqlalchemy.exc.SAWarning",
+  "ignore:Task was destroyed but it is pending.*:RuntimeWarning",
 ]

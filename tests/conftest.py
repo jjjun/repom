@@ -51,6 +51,9 @@ def setup_repom_db_tables():
     from repom.utility import load_models
     load_models()
 
+    # Note: load_models() が既にテストモデルも含めてロードしているため、
+    # 明示的なインポートは不要（重複定義エラーを避ける）
+
     # 同期 engine にテーブル作成
     engine = get_sync_engine()
     Base.metadata.create_all(bind=engine)

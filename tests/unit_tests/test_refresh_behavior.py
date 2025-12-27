@@ -9,11 +9,10 @@ from datetime import datetime
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.base_model import BaseModel
-from repom.base_repository import BaseRepository
-from repom.async_base_repository import AsyncBaseRepository
+from repom.repositories import BaseRepository, AsyncBaseRepository
 
 
-class TestModel(BaseModel, use_created_at=True, use_updated_at=True):
+class RefreshTestModel(BaseModel, use_created_at=True, use_updated_at=True):
     """Test model with AutoDateTime fields"""
     __tablename__ = 'test_refresh_model'
     __table_args__ = {'extend_existing': True}
@@ -26,10 +25,10 @@ class TestRefreshBehaviorSync:
 
     def test_save_without_refresh_created_at_is_none(self, db_test):
         """Test if created_at is None after save() without refresh()"""
-        repo = BaseRepository(TestModel, session=db_test)
+        repo = BaseRepository(RefreshTestModel, session=db_test)
 
         # Create instance without setting created_at/updated_at
-        instance = TestModel(name="Test Item")
+        instance = RefreshTestModel(name="Test Item")
 
         # Before save, created_at should be None
         assert instance.created_at is None
@@ -54,25 +53,21 @@ class TestRefreshBehaviorSync:
 
         # Let's also check if database has the values
         db_test.commit()  # Ensure database is updated
-        fetched = db_test.query(TestModel).filter_by(id=saved.id).first()
+        fetched = db_test.query(RefreshTestModel).filter_by(id=saved.id).first()
 
         print(f"\nFetched from database:")
         print(f"  created_at: {fetched.created_at}")
         print(f"  updated_at: {fetched.updated_at}")
 
-        # Record results for analysis
-        return {
-            'saved_created_at_is_none': is_created_at_none,
-            'saved_updated_at_is_none': is_updated_at_none,
-            'db_created_at': fetched.created_at,
-            'db_updated_at': fetched.updated_at
-        }
+        # Verify the results
+        assert fetched.created_at is not None
+        assert fetched.updated_at is not None
 
     def test_save_with_manual_refresh(self, db_test):
         """Test if manual refresh() fixes the issue"""
-        repo = BaseRepository(TestModel, session=db_test)
+        repo = BaseRepository(RefreshTestModel, session=db_test)
 
-        instance = TestModel(name="Test Item 2")
+        instance = RefreshTestModel(name="Test Item 2")
         saved = repo.save(instance)
 
         # Manually refresh
@@ -95,10 +90,10 @@ class TestRefreshBehaviorAsync:
 
     async def test_save_without_refresh_created_at_is_none(self, async_db_test):
         """Test if created_at is None after save() without refresh() (async)"""
-        repo = AsyncBaseRepository(TestModel, session=async_db_test)
+        repo = AsyncBaseRepository(RefreshTestModel, session=async_db_test)
 
         # Create instance without setting created_at/updated_at
-        instance = TestModel(name="Test Item Async")
+        instance = RefreshTestModel(name="Test Item Async")
 
         # Before save
         assert instance.created_at is None
@@ -118,16 +113,15 @@ class TestRefreshBehaviorAsync:
         print(f"  created_at is None: {is_created_at_none}")
         print(f"  updated_at is None: {is_updated_at_none}")
 
-        return {
-            'saved_created_at_is_none': is_created_at_none,
-            'saved_updated_at_is_none': is_updated_at_none,
-        }
+        # Verify the results
+        assert saved.created_at is not None
+        assert saved.updated_at is not None
 
     async def test_save_with_manual_refresh(self, async_db_test):
         """Test if manual refresh() fixes the issue (async)"""
-        repo = AsyncBaseRepository(TestModel, session=async_db_test)
+        repo = AsyncBaseRepository(RefreshTestModel, session=async_db_test)
 
-        instance = TestModel(name="Test Item Async 2")
+        instance = RefreshTestModel(name="Test Item Async 2")
         saved = await repo.save(instance)
 
         # Manually refresh
