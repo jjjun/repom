@@ -4,11 +4,11 @@ AsyncBaseRepository の非同期版テスト
 test_repository.py の全テストケースを非同期版に変換したもの。
 """
 from tests._init import *
-from sqlalchemy import Integer, inspect, select, desc, and_
+from sqlalchemy import Integer, inspect, select, desc, and_, String
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from repom.base_model import BaseModel
 from repom.repositories import AsyncBaseRepository, FilterParams
 
@@ -38,6 +38,30 @@ class AsyncFilterableRepository(AsyncSimpleRepository):
         if params.value is not None:
             filters.append(AsyncSimpleModel.value == params.value)
         return filters
+
+
+class AsyncAutoFilterModel(BaseModel):
+    __tablename__ = 'async_auto_filter_model'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    number: Mapped[int] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(100))
+
+
+class AsyncAutoFilterParams(FilterParams):
+    number: Optional[int] = None
+    numbers: Optional[List[int]] = None
+    name: Optional[str] = None
+
+
+class AsyncAutoFilterRepository(AsyncBaseRepository[AsyncAutoFilterModel]):
+    field_to_column = {
+        "number": AsyncAutoFilterModel.number,
+        "numbers": AsyncAutoFilterModel.number,
+        "name": AsyncAutoFilterModel.name,
+    }
+
+    def __init__(self, session):
+        super().__init__(AsyncAutoFilterModel, session)
 
 
 @pytest.mark.asyncio
@@ -269,6 +293,22 @@ async def test_async_find_prefers_explicit_filters_over_params(async_db_test):
     results = await repo.find(params=AsyncSimpleFilterParams(value=1), filters=[AsyncSimpleModel.value == 2])
 
     assert {item.value for item in results} == {2}
+
+
+@pytest.mark.asyncio
+async def test_async_build_filters_from_mapping_applies_ops(async_db_test):
+    repo = AsyncAutoFilterRepository(session=async_db_test)
+    await repo.saves([
+        AsyncAutoFilterModel(number=1, name="alpha"),
+        AsyncAutoFilterModel(number=2, name="beta"),
+        AsyncAutoFilterModel(number=2, name="alphabet"),
+    ])
+
+    params = AsyncAutoFilterParams(numbers=[2], name="alpha")
+    results = await repo.find(params=params)
+
+    assert {item.number for item in results} == {2}
+    assert {item.name for item in results} == {"alphabet"}
 
 
 @pytest.mark.asyncio
