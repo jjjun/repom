@@ -244,3 +244,19 @@ async def test_count(async_db_test):
     # 存在しない値
     filters = [AsyncSimpleModel.value == 999]
     assert await repo.count(filters) == 0
+
+
+@pytest.mark.asyncio
+async def test_async_default_session_fallback():
+    """
+    セッション未指定時に get_async_db_session() を使用して動作することを確認
+    """
+    repo = AsyncBaseRepository(AsyncSimpleModel)
+    created = await repo.save(AsyncSimpleModel(value=222))
+
+    fetched = await repo.get_by_id(created.id)
+    assert fetched is not None
+    assert fetched.value == 222
+
+    await repo.remove(fetched)
+    assert await repo.get_by_id(created.id) is None

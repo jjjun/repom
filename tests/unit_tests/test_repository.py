@@ -222,3 +222,18 @@ def test_count(db_test):
     # 存在しない値
     filters = [SimpleModel.value == 999]
     assert repo.count(filters) == 0
+
+
+def test_default_session_fallback():
+    """
+    セッション未指定時に get_db_session() を使用して動作することを確認
+    """
+    repo = BaseRepository(SimpleModel)
+    created = repo.save(SimpleModel(value=111))
+
+    fetched = repo.get_by_id(created.id)
+    assert fetched is not None
+    assert fetched.value == 111
+
+    repo.remove(fetched)
+    assert repo.get_by_id(created.id) is None

@@ -21,10 +21,12 @@ Example:
     >>>     return users
 """
 
+from contextlib import asynccontextmanager
 from typing import Any, Callable, Type, TypeVar, Generic, Optional, List, Dict, Union
 from sqlalchemy import ColumnElement, and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
+from repom.database import get_async_db_session
 from repom.repositories._core import has_soft_delete, FilterParams
 from repom.repositories._soft_delete import AsyncSoftDeleteRepositoryMixin
 from repom.repositories._query_builder import QueryBuilderMixin
@@ -46,15 +48,44 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         allowed_order_columns: ソート可能なカラムのホワイトリスト（サブクラスで拡張可能、同期/非同期共通）
     """
 
-    def __init__(self, model: Type[T], session: AsyncSession):
+    def __init__(self, model: Type[T], session: Optional[AsyncSession] = None):
         """AsyncBaseRepository の初期化
 
         Args:
             model (Type[T]): モデルクラス
-            session (AsyncSession): 非同期データベースセッション
+            session (AsyncSession, optional): 非同期データベースセッション. Defaults to None (get_async_db_session() を使用).
         """
         self.model = model
-        self.session = session
+        self._session_override = session
+        self._scoped_session: Optional[AsyncSession] = None
+
+    @property
+    def session(self) -> Optional[AsyncSession]:
+        """明示的に渡されたセッション（またはスコープ内の内部セッション）を返却"""
+        return self._session_override or self._scoped_session
+
+    @session.setter
+    def session(self, session: Optional[AsyncSession]) -> None:
+        """明示的セッションを設定（None でリセット）"""
+        self._session_override = session
+
+    @asynccontextmanager
+    async def _session_scope(self) -> AsyncSession:
+        """セッション取得を一元化し、None の場合は get_async_db_session() で補完"""
+        if self.session is not None:
+            yield self.session
+            return
+
+        session_generator = get_async_db_session()
+        session = await anext(session_generator)
+        self._scoped_session = session
+        try:
+            yield session
+        finally:
+            if self._scoped_session is session:
+                session.expunge_all()
+            self._scoped_session = None
+            await session_generator.aclose()
 
     def _has_soft_delete(self) -> bool:
         """モデルが SoftDeletableMixin を持つか確認
@@ -143,8 +174,9 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         Returns:
             List[T]: 全てのインスタンスのリスト
         """
-        result = await self.session.execute(select(self.model))
-        return result.scalars().all()
+        async with self._session_scope() as session:
+            result = await session.execute(select(self.model))
+            return result.scalars().all()
 
     async def save(self, instance: T) -> T:
         """インスタンスを保存
@@ -163,14 +195,15 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
             理由: expire_on_commit=True (デフォルト) により、commit() 後に属性アクセス時
                   自動的にデータベースから再読み込みが発生するため。
         """
-        try:
-            self.session.add(instance)
-            await self.session.commit()
-            # 非同期環境では refresh() が必須（AutoDateTime等のDB自動設定値を反映）
-            await self.session.refresh(instance)
-        except SQLAlchemyError:
-            await self.session.rollback()
-            raise
+        async with self._session_scope() as session:
+            try:
+                session.add(instance)
+                await session.commit()
+                # 非同期環境では refresh() が必須（AutoDateTime等のDB自動設定値を反映）
+                await session.refresh(instance)
+            except SQLAlchemyError:
+                await session.rollback()
+                raise
         return instance
 
     async def dict_save(self, data: Dict) -> T:
@@ -195,15 +228,16 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
             大量データの一括保存でパフォーマンスが問題になる場合は、
             保存後に get_by_id() で再取得する方法も検討してください。
         """
-        try:
-            self.session.add_all(instances)
-            await self.session.commit()
-            # 非同期環境では各インスタンスの refresh() が必須
-            for instance in instances:
-                await self.session.refresh(instance)
-        except SQLAlchemyError:
-            await self.session.rollback()
-            raise
+        async with self._session_scope() as session:
+            try:
+                session.add_all(instances)
+                await session.commit()
+                # 非同期環境では各インスタンスの refresh() が必須
+                for instance in instances:
+                    await session.refresh(instance)
+            except SQLAlchemyError:
+                await session.rollback()
+                raise
 
     async def dict_saves(self, data_list: List[Dict]) -> None:
         """Listの中に入ったdict型のデータをモデルインスタンスにして保存
@@ -220,12 +254,14 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         Args:
             instance (T): 削除するインスタンス
         """
-        try:
-            await self.session.delete(instance)
-            await self.session.commit()
-        except SQLAlchemyError:
-            await self.session.rollback()
-            raise
+        async with self._session_scope() as session:
+            try:
+                managed_instance = await session.merge(instance)
+                await session.delete(managed_instance)
+                await session.commit()
+            except SQLAlchemyError:
+                await session.rollback()
+                raise
 
     async def find(self, filters: Optional[List[Callable]] = None, include_deleted: bool = False, **kwargs) -> List[T]:
         """共通の find メソッド
@@ -251,8 +287,9 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         if all_filters:
             query = query.where(and_(*all_filters))
         query = self.set_find_option(query, **kwargs)
-        result = await self.session.execute(query)
-        return result.scalars().all()
+        async with self._session_scope() as session:
+            result = await session.execute(query)
+            return result.scalars().all()
 
     async def find_one(self, filters: list, options: Optional[List] = None) -> Optional[T]:
         """指定されたフィルタ条件で単一レコードを取得
@@ -277,8 +314,9 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         if options:
             query = query.options(*options)
 
-        result = await self.session.execute(query)
-        return result.scalars().first()
+        async with self._session_scope() as session:
+            result = await session.execute(query)
+            return result.scalars().first()
 
     async def count(self, filters: Optional[List[Callable]] = None) -> int:
         """指定したフィルタ条件に一致するレコード数を返す
@@ -294,8 +332,9 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         query = select(func.count()).select_from(self.model)
         if filters:
             query = query.where(and_(*filters))
-        result = await self.session.execute(query)
-        return result.scalar()
+        async with self._session_scope() as session:
+            result = await session.execute(query)
+            return result.scalar()
 
     async def count_by_params(self, params: Optional[FilterParams] = None) -> int:
         """FilterParams によるレコード数カウント
@@ -350,5 +389,6 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
 
         query = select(self.model).where(and_(*filters))
         query = self.set_find_option(query, **kwargs)
-        result = await self.session.execute(query)
-        return result.scalars().all()
+        async with self._session_scope() as session:
+            result = await session.execute(query)
+            return result.scalars().all()
