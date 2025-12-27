@@ -264,6 +264,7 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
 
     async def find(
         self,
+        params: Optional[FilterParams] = None,
         filters: Optional[List[Callable]] = None,
         include_deleted: bool = False,
         **kwargs
@@ -274,6 +275,7 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         取得量を絞りたい場合は、offset と limit を指定する。
 
         Args:
+            params (Optional[FilterParams]): FilterParams からフィルタを生成するためのパラメータ。
             filters (Optional[List[Callable]]): フィルタ条件のリスト
             include_deleted (bool): 削除済みレコードも含めるか（デフォルト: False）
             **kwargs: 任意のキーワード引数
@@ -297,7 +299,8 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         query = select(self.model)
 
         # 論理削除フィルタを追加
-        all_filters = list(filters) if filters else []
+        base_filters = filters if filters is not None else self._build_filters(params)
+        all_filters = list(base_filters) if base_filters else []
         if self._has_soft_delete() and not include_deleted:
             all_filters.append(self.model.deleted_at.is_(None))
 
@@ -363,7 +366,7 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         Returns:
             int: 一致するレコード数
         """
-        filters = self._build_filters(params) if params else []
+        filters = self._build_filters(params)
         return await self.count(filters=filters, include_deleted=include_deleted)
 
     async def find_by_ids(

@@ -3,10 +3,12 @@ from sqlalchemy import Integer, String, inspect, select, desc, and_
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from datetime import datetime
+from typing import Optional
 from repom.base_model import BaseModel
 from repom.base_repository import BaseRepository
 from repom.base_model_auto import BaseModelAuto
 from repom.mixins import SoftDeletableMixin
+from repom.repositories import FilterParams
 
 
 class SimpleModel(BaseModel):
@@ -18,6 +20,22 @@ class SimpleModel(BaseModel):
 class SimpleRepository(BaseRepository[SimpleModel]):
     def __init__(self, session):
         super().__init__(SimpleModel, session)
+
+
+class SimpleFilterParams(FilterParams):
+    value: Optional[int] = None
+    other: Optional[int] = None
+
+
+class FilterableRepository(SimpleRepository):
+    def _build_filters(self, params: Optional[FilterParams]) -> list:
+        filters = super()._build_filters(params)
+        if params is None:
+            return filters
+
+        if params.value is not None:
+            filters.append(SimpleModel.value == params.value)
+        return filters
 
 
 class SoftDeleteCountModel(BaseModelAuto, SoftDeletableMixin):
@@ -213,6 +231,31 @@ def test_find_without_limit(db_test):
     assert len(all_objs) == 40
     assert all_objs[0].value == 0
     assert all_objs[-1].value == 39
+
+
+def test_build_filters_default_empty_when_params_absent_or_empty(db_test):
+    repo = SimpleRepository(session=db_test)
+
+    assert repo._build_filters(None) == []
+    assert repo._build_filters(SimpleFilterParams()) == []
+
+
+def test_find_uses_params_when_filters_not_provided(db_test):
+    repo = FilterableRepository(session=db_test)
+    repo.saves([SimpleModel(value=1), SimpleModel(value=2)])
+
+    results = repo.find(params=SimpleFilterParams(value=1))
+
+    assert {item.value for item in results} == {1}
+
+
+def test_find_prefers_explicit_filters_over_params(db_test):
+    repo = FilterableRepository(session=db_test)
+    repo.saves([SimpleModel(value=1), SimpleModel(value=2)])
+
+    results = repo.find(params=SimpleFilterParams(value=1), filters=[SimpleModel.value == 2])
+
+    assert {item.value for item in results} == {2}
 
 
 def test_count(db_test):
