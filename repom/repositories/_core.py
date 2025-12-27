@@ -3,7 +3,8 @@
 このモジュールは、同期版・非同期版リポジトリで共有されるロジックを提供します。
 """
 
-from typing import Optional, List
+from typing import Optional, List, Mapping, Any
+from collections.abc import Iterable
 from sqlalchemy import ColumnElement, UnaryExpression, asc, desc
 from pydantic import BaseModel
 import inspect
@@ -134,6 +135,47 @@ def has_soft_delete(model_class) -> bool:
         bool: deleted_at カラムが存在する場合 True
     """
     return hasattr(model_class, 'deleted_at')
+
+
+def _value_to_filter(column: Any, value: Any):
+    """Map a single value to a SQLAlchemy filter expression.
+
+    - Iterable values (except str/bytes) use ``column.in_(...)``
+    - str values try ``column.contains(...)`` if available, otherwise ``==``
+    - Other values fall back to ``==``
+    """
+    if isinstance(value, Iterable) and not isinstance(value, (str, bytes)):
+        return column.in_(list(value))
+
+    if isinstance(value, str) and hasattr(column, 'contains'):
+        return column.contains(value)
+
+    return column == value
+
+
+def build_filters_from_mapping(params: FilterParams, field_to_column: Mapping[str, Any]) -> list:
+    """Convert FilterParams into SQLAlchemy filters using a field->column mapping.
+
+    Args:
+        params: Filter parameters instance (None values are ignored)
+        field_to_column: Mapping of FilterParams field names to SQLAlchemy columns/expressions
+
+    Returns:
+        list: SQLAlchemy filter expressions generated from non-None fields
+    """
+    filters = []
+
+    for field_name, column in field_to_column.items():
+        if column is None:
+            continue
+
+        value = getattr(params, field_name, None)
+        if value is None:
+            continue
+
+        filters.append(_value_to_filter(column, value))
+
+    return filters
 
 
 def parse_order_by(model_class, order_by_str: str, allowed_order_columns: List[str]):

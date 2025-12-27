@@ -7,7 +7,12 @@
 
 from typing import Generic, Optional, TypeVar
 
-from repom.repositories._core import FilterParams, parse_order_by, set_find_option
+from repom.repositories._core import (
+    FilterParams,
+    parse_order_by,
+    set_find_option,
+    build_filters_from_mapping,
+)
 
 T = TypeVar('T')
 
@@ -71,4 +76,13 @@ class QueryBuilderMixin(Generic[T]):
         if all(value is None for value in params.model_dump().values()):
             return []
 
-        return []
+        filters = []
+
+        mapping = None
+        if hasattr(self, 'field_to_column'):
+            mapping = self._get_attr_with_class_priority('field_to_column')
+
+        if mapping:
+            filters.extend(build_filters_from_mapping(params, mapping))
+
+        return filters

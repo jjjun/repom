@@ -3,7 +3,7 @@ from sqlalchemy import Integer, String, inspect, select, desc, and_
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from repom.base_model import BaseModel
 from repom.base_repository import BaseRepository
 from repom.base_model_auto import BaseModelAuto
@@ -36,6 +36,30 @@ class FilterableRepository(SimpleRepository):
         if params.value is not None:
             filters.append(SimpleModel.value == params.value)
         return filters
+
+
+class AutoFilterModel(BaseModel):
+    __tablename__ = 'auto_filter_model'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    number: Mapped[int] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(100))
+
+
+class AutoFilterParams(FilterParams):
+    number: Optional[int] = None
+    numbers: Optional[List[int]] = None
+    name: Optional[str] = None
+
+
+class AutoFilterRepository(BaseRepository[AutoFilterModel]):
+    field_to_column = {
+        "number": AutoFilterModel.number,
+        "numbers": AutoFilterModel.number,
+        "name": AutoFilterModel.name,
+    }
+
+    def __init__(self, session):
+        super().__init__(AutoFilterModel, session)
 
 
 class SoftDeleteCountModel(BaseModelAuto, SoftDeletableMixin):
@@ -238,6 +262,21 @@ def test_build_filters_default_empty_when_params_absent_or_empty(db_test):
 
     assert repo._build_filters(None) == []
     assert repo._build_filters(SimpleFilterParams()) == []
+
+
+def test_build_filters_from_mapping_applies_ops(db_test):
+    repo = AutoFilterRepository(session=db_test)
+    repo.saves([
+        AutoFilterModel(number=1, name="alpha"),
+        AutoFilterModel(number=2, name="beta"),
+        AutoFilterModel(number=2, name="alphabet"),
+    ])
+
+    params = AutoFilterParams(numbers=[2], name="alpha")
+    results = repo.find(params=params)
+
+    assert {item.number for item in results} == {2}
+    assert {item.name for item in results} == {"alphabet"}
 
 
 def test_find_uses_params_when_filters_not_provided(db_test):
