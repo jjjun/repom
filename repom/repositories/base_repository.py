@@ -304,25 +304,31 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
         results = self.find(filters=filters, include_deleted=include_deleted, limit=1, **kwargs)
         return results[0] if results else None
 
-    def count(self, filters: Optional[List[Callable]] = None) -> int:
+    def count(self, filters: Optional[List[Callable]] = None, include_deleted: bool = False) -> int:
         """
         指定したフィルタ条件に一致するレコード数を返す
 
         Args:
             filters (Optional[List[Callable]]): フィルタ条件のリスト。
+            include_deleted (bool): 削除済みレコードも含めるか（デフォルト: False）
 
         Returns:
             int: 一致するレコード数
         """
         with self._session_scope() as session:
             query = session.query(self.model)
-            if filters:
-                query = query.filter(and_(*filters))
+
+            all_filters = list(filters) if filters else []
+            if self._has_soft_delete() and not include_deleted:
+                all_filters.append(self.model.deleted_at.is_(None))
+
+            if all_filters:
+                query = query.filter(and_(*all_filters))
             return query.count()
 
-    def count_by_params(self, params: Optional[FilterParams] = None) -> int:
+    def count_by_params(self, params: Optional[FilterParams] = None, include_deleted: bool = False) -> int:
         filters = self._build_filters(params) if params else []
-        return self.count(filters=filters)
+        return self.count(filters=filters, include_deleted=include_deleted)
 
     def find_by_ids(
         self,

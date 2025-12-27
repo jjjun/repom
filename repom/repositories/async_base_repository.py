@@ -329,11 +329,12 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         results = await self.find(filters=filters, include_deleted=include_deleted, limit=1, **kwargs)
         return results[0] if results else None
 
-    async def count(self, filters: Optional[List[Callable]] = None) -> int:
+    async def count(self, filters: Optional[List[Callable]] = None, include_deleted: bool = False) -> int:
         """指定したフィルタ条件に一致するレコード数を返す
 
         Args:
             filters (Optional[List[Callable]]): フィルタ条件のリスト
+            include_deleted (bool): 削除済みレコードも含めるか（デフォルト: False）
 
         Returns:
             int: 一致するレコード数
@@ -341,23 +342,28 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         from sqlalchemy import func
 
         query = select(func.count()).select_from(self.model)
-        if filters:
-            query = query.where(and_(*filters))
+        all_filters = list(filters) if filters else []
+        if self._has_soft_delete() and not include_deleted:
+            all_filters.append(self.model.deleted_at.is_(None))
+
+        if all_filters:
+            query = query.where(and_(*all_filters))
         async with self._session_scope() as session:
             result = await session.execute(query)
             return result.scalar()
 
-    async def count_by_params(self, params: Optional[FilterParams] = None) -> int:
+    async def count_by_params(self, params: Optional[FilterParams] = None, include_deleted: bool = False) -> int:
         """FilterParams によるレコード数カウント
 
         Args:
             params: フィルタパラメータ
+            include_deleted: 削除済みレコードも含めるか（デフォルト: False）
 
         Returns:
             int: 一致するレコード数
         """
         filters = self._build_filters(params) if params else []
-        return await self.count(filters=filters)
+        return await self.count(filters=filters, include_deleted=include_deleted)
 
     async def find_by_ids(
         self,

@@ -140,6 +140,21 @@ class TestBaseRepositoryAutoFiltering:
         assert result.id == item_id
         assert result.is_deleted is True
 
+    def test_count_excludes_deleted_by_default(self, db_test):
+        """count() はデフォルトで削除済みを除外し、フラグで含められる"""
+        repo = BaseRepository(SoftDeleteTestModel, db_test)
+
+        active = SoftDeleteTestModel(name="active")
+        deleted = SoftDeleteTestModel(name="deleted")
+        db_test.add_all([active, deleted])
+        db_test.commit()
+
+        deleted.soft_delete()
+        db_test.commit()
+
+        assert repo.count() == 1
+        assert repo.count(include_deleted=True) == 2
+
 
 class TestRepositorySoftDelete:
     """Repository.soft_delete() メソッドのテスト"""
