@@ -84,7 +84,7 @@ class BaseModelAuto(BaseModel):
     デフォルトの除外ルール（Create/Update スキーマ）:
     - システムカラム: id, created_at, updated_at（自動生成・自動更新のため）
     - 明示的除外: info={'in_create': False} または info={'in_update': False}
-    
+
     外部キーの扱い:
     - デフォルトで含まれる（ユーザーが設定可能にするため）
     - センシティブな外部キーは info={'in_create': False} で除外可能
