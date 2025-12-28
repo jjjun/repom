@@ -324,10 +324,15 @@ def setup_refresh_repo(db_test):
   - 5つのテストクラスを修正（19テスト）
   - 約160行削減（40%削減）
   - 全23テスト合格、警告なし
+- [x] **test_save_for_creation.py のリファクタリング完了** (2025-12-28)
+  - save_repo 非同期フィクスチャ追加（リポジトリのみパターン）
+  - 2つのテストクラスを修正（4テスト）
+  - 全4テスト合格
+  - 非同期フィクスチャの await パターン適用
+  - import 修正（repom.repositories へ移行）
 
 ### 🚧 進行中
 
-- [ ] test_save_for_creation.py のリファクタリング
 - [ ] test_refresh_behavior.py のリファクタリング
 - [ ] 全テスト検証
 - [ ] ドキュメント更新
