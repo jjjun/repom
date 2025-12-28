@@ -15,8 +15,7 @@
 5. [検索とフィルタリング](#検索とフィルタリング)
 6. [Eager Loading（N+1 問題の解決）](#eager-loading)
 7. [並行処理パターン](#並行処理パターン)
-8. [論理削除（SoftDelete）](#論理削除)
-9. [ベストプラクティス](#ベストプラクティス)
+8. [ベストプラクティス](#ベストプラクティス)
 
 ---
 
@@ -242,13 +241,10 @@ async def delete_task(task_id: int):
     async with get_async_db_session() as session:
         repo = AsyncBaseRepository(Task, session)
         
-        # 物理削除
+        # 物理削除（完全削除）
         task = await repo.get_by_id(task_id)
         if task:
             await repo.remove(task)
-        
-        # または論理削除（SoftDelete）
-        success = await repo.soft_delete(task_id)
 ```
 
 ---
@@ -703,87 +699,6 @@ async def process_tasks_in_batches(task_ids: List[int], batch_size: int = 10):
 
 ---
 
-## 論理削除
-
-AsyncBaseRepository は SoftDelete パターンをサポートしています。
-
-### 論理削除の実行
-
-```python
-async def soft_delete_task(task_id: int):
-    async with get_async_db_session() as session:
-        repo = AsyncBaseRepository(Task, session)
-        
-        # 論理削除（deleted_at を設定）
-        success = await repo.soft_delete(task_id)
-        if success:
-            print(f"Task {task_id} was soft deleted")
-        else:
-            print(f"Task {task_id} not found")
-```
-
-### 削除済みデータの復元
-
-```python
-async def restore_task(task_id: int):
-    async with get_async_db_session() as session:
-        repo = AsyncBaseRepository(Task, session)
-        
-        # 復元（deleted_at を NULL に）
-        success = await repo.restore(task_id)
-        if success:
-            print(f"Task {task_id} was restored")
-```
-
-### 物理削除（完全削除）
-
-```python
-async def permanently_delete_task(task_id: int):
-    async with get_async_db_session() as session:
-        repo = AsyncBaseRepository(Task, session)
-        
-        # データベースから完全削除（取り消し不可）
-        success = await repo.permanent_delete(task_id)
-        if success:
-            print(f"Task {task_id} was permanently deleted")
-```
-
-### 削除済みデータの取得
-
-```python
-async def list_deleted_tasks():
-    async with get_async_db_session() as session:
-        repo = AsyncBaseRepository(Task, session)
-        
-        # 削除済みのみ取得
-        deleted_tasks = await repo.find_deleted()
-        
-        # 特定期間より前に削除されたもの
-        from datetime import datetime, timedelta, timezone
-        threshold = datetime.now(timezone.utc) - timedelta(days=30)
-        old_deleted = await repo.find_deleted_before(threshold)
-        
-        return {
-            "all_deleted": deleted_tasks,
-            "old_deleted": old_deleted
-        }
-```
-
-### 削除済みデータを含めて取得
-
-```python
-# デフォルト（削除済みは除外）
-tasks = await repo.find()
-
-# 削除済みも含める
-all_tasks = await repo.find(include_deleted=True)
-
-# ID取得も同様
-task = await repo.get_by_id(1, include_deleted=True)
-```
-
----
-
 ## ベストプラクティス
 
 ### ✅ DO: セッション管理
@@ -972,11 +887,14 @@ async with get_async_db_session() as session:
 - すべてのメソッドは `async def` で `await` が必要
 - `options` パラメータで eager loading をサポート（N+1 問題解決）
 - `asyncio.gather` で並行処理が可能
-- 論理削除（SoftDelete）もサポート
 - カスタムリポジトリを作成してビジネスロジックを集約
+- 論理削除については [SoftDelete ガイド](repository_soft_delete_guide.md) を参照
 
 詳細は以下のドキュメントも参照してください：
 
-- [BaseRepository ガイド](repository_and_utilities_guide.md) - 同期版の詳細
+- [BaseRepository ガイド](base_repository_guide.md) - 基本的な CRUD 操作
+- [Repository Advanced ガイド](repository_advanced_guide.md) - 検索、eager loading、パフォーマンス最適化
+- [FilterParams ガイド](repository_filter_params_guide.md) - FastAPI での検索パラメータ統合
+- [SoftDelete ガイド](repository_soft_delete_guide.md) - 論理削除機能
 - [Session Management ガイド](repository_session_patterns.md) - セッション管理
 - [Testing ガイド](../testing/testing_guide.md) - AsyncBaseRepository のテスト方法
