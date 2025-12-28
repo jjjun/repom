@@ -287,8 +287,10 @@ def set_find_option(
     offset = kwargs.get('offset', None)
     limit = kwargs.get('limit', None)
     options = kwargs.get('options', None)
-    # order_by が指定されていない場合はデフォルト
-    order_by = kwargs.get('order_by') if 'order_by' in kwargs else default_order_by
+    # order_by の処理: None または空文字の場合は default_order_by を適用
+    order_by = kwargs.get('order_by')
+    if not order_by:  # None, "", その他falsyな値
+        order_by = default_order_by
 
     # options の処理: None の場合のみ default_options を使用
     if options is None and default_options:
@@ -308,8 +310,8 @@ def set_find_option(
     elif isinstance(order_by, (UnaryExpression, ColumnElement)):
         # SQLAlchemy のカラムオブジェクトの場合はそのまま使用
         pass
-    else:
-        # 指定がない場合や未対応の型はデフォルト（id の昇順）
+    elif order_by is None:
+        # 指定がない場合はデフォルト（id の昇順）
         order_by = model.id.asc()
 
     if offset is not None:
