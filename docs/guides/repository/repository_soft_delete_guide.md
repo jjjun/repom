@@ -4,6 +4,8 @@
 
 **対象読者**: データの復元可能な削除が必要な開発者・AI エージェント
 
+**前提**: このガイドは非同期コード（`AsyncBaseRepository`）を使用しています。同期版（`BaseRepository`）も同様に動作しますが、`await` を削除してください。
+
 **関連ドキュメント**:
 - [基礎編：CRUD操作](base_repository_guide.md) - 基本的なデータ操作
 - [上級編：検索・フィルタ](repository_advanced_guide.md) - 削除済みデータの検索
@@ -94,11 +96,11 @@ poetry run alembic upgrade head
 ### 論理削除（soft_delete）
 
 ```python
-from repom.repositories import BaseRepository
+from repom.async_base_repository import AsyncBaseRepository
+from sqlalchemy.ext.asyncio import AsyncSession
 
-# 同期版
-repo = BaseRepository(Task, session=db_session)
-success = repo.soft_delete(task_id=1)
+repo = AsyncBaseRepository(Task, session=async_session)
+success = await repo.soft_delete(task_id=1)
 
 if success:
     print("タスクを削除しました（復元可能）")
@@ -106,13 +108,7 @@ else:
     print("タスクが見つかりません")
 ```
 
-```python
-# 非同期版
-from repom.async_base_repository import AsyncBaseRepository
-
-repo = AsyncBaseRepository(Task, session=async_session)
-success = await repo.soft_delete(task_id=1)
-```
+**同期版**: `from repom.repositories import BaseRepository` でインポートし、`await` を削除してください。
 
 **動作**:
 - `deleted_at` に現在時刻（UTC）を設定
@@ -122,16 +118,10 @@ success = await repo.soft_delete(task_id=1)
 ### 復元（restore）
 
 ```python
-# 同期版
-success = repo.restore(task_id=1)
+success = await repo.restore(task_id=1)
 
 if success:
     print("タスクを復元しました")
-```
-
-```python
-# 非同期版
-success = await repo.restore(task_id=1)
 ```
 
 **動作**:
@@ -144,16 +134,10 @@ success = await repo.restore(task_id=1)
 論理削除されたデータを完全に削除：
 
 ```python
-# 同期版
-success = repo.permanent_delete(task_id=1)
+success = await repo.permanent_delete(task_id=1)
 
 if success:
     print("タスクを完全に削除しました（復元不可）")
-```
-
-```python
-# 非同期版
-success = await repo.permanent_delete(task_id=1)
 ```
 
 **警告**: この操作は取り消せません。データベースから完全に削除されます。
@@ -164,8 +148,8 @@ success = await repo.permanent_delete(task_id=1)
 
 ```python
 # 物理削除（SoftDelete を使わない）
-task = repo.get_by_id(1)
-repo.remove(task)  # データベースから完全削除
+task = await repo.get_by_id(1)
+await repo.remove(task)  # データベースから完全削除
 ```
 
 ---
@@ -178,39 +162,33 @@ repo.remove(task)  # データベースから完全削除
 
 ```python
 # 削除済みは自動的に除外される
-tasks = repo.find()  # is_deleted=False のみ
-task = repo.get_by_id(1)  # 削除済みの場合は None
+tasks = await repo.find()  # is_deleted=False のみ
+task = await repo.get_by_id(1)  # 削除済みの場合は None
 ```
 
 ### 削除済みを含めて取得
 
 ```python
 # 削除済みも含める
-all_tasks = repo.find(include_deleted=True)
+all_tasks = await repo.find(include_deleted=True)
 
 # ID で取得（削除済みも含める）
-task = repo.get_by_id(1, include_deleted=True)
+task = await repo.get_by_id(1, include_deleted=True)
 
 # カラム検索（削除済みも含める）
-tasks = repo.get_by('status', 'active', include_deleted=True)
+tasks = await repo.get_by('status', 'active', include_deleted=True)
 ```
 
 ### 削除済みのみ取得
 
 ```python
 # 削除済みのみ
-deleted_tasks = repo.find_deleted()
+deleted_tasks = await repo.find_deleted()
 
 # 特定期間より前に削除されたもの
 from datetime import datetime, timedelta, timezone
 
 threshold = datetime.now(timezone.utc) - timedelta(days=30)
-old_deleted = repo.find_deleted_before(threshold)
-```
-
-```python
-# 非同期版
-deleted_tasks = await repo.find_deleted()
 old_deleted = await repo.find_deleted_before(threshold)
 ```
 
@@ -218,10 +196,10 @@ old_deleted = await repo.find_deleted_before(threshold)
 
 ```python
 # デフォルト（削除済みは除外）
-tasks = repo.find_by_ids([1, 2, 3])
+tasks = await repo.find_by_ids([1, 2, 3])
 
 # 削除済みも含める
-tasks = repo.find_by_ids([1, 2, 3], include_deleted=True)
+tasks = await repo.find_by_ids([1, 2, 3], include_deleted=True)
 ```
 
 詳細は [上級編：find_by_ids()](repository_advanced_guide.md#find_by_ids-メソッド---効率的な一括取得) を参照してください。
@@ -234,16 +212,16 @@ tasks = repo.find_by_ids([1, 2, 3], include_deleted=True)
 
 ```python
 # 物理削除（従来の方法）
-task = repo.get_by_id(1)
-repo.remove(task)
+task = await repo.get_by_id(1)
+await repo.remove(task)
 # → データベースから完全削除、復元不可
 
 # 論理削除（SoftDelete）
-repo.soft_delete(1)
+await repo.soft_delete(1)
 # → deleted_at を設定、復元可能
 
 # 復元
-repo.restore(1)
+await repo.restore(1)
 # → deleted_at を NULL に、再び表示される
 ```
 
@@ -283,116 +261,7 @@ SELECT * FROM tasks WHERE id = 1;
 
 ## 実装パターン
 
-### パターン1: FastAPI での使用
-
-```python
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from repom.repositories import BaseRepository
-
-router = APIRouter()
-
-@router.delete("/tasks/{task_id}")
-def soft_delete_task(
-    task_id: int,
-    session: Session = Depends(get_db_session)
-):
-    """タスクを論理削除"""
-    repo = BaseRepository(Task, session)
-    
-    if not repo.soft_delete(task_id):
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    return {"message": "Task deleted successfully"}
-
-
-@router.post("/tasks/{task_id}/restore")
-def restore_task(
-    task_id: int,
-    session: Session = Depends(get_db_session)
-):
-    """タスクを復元"""
-    repo = BaseRepository(Task, session)
-    
-    if not repo.restore(task_id):
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    return {"message": "Task restored successfully"}
-
-
-@router.get("/tasks/deleted")
-def list_deleted_tasks(session: Session = Depends(get_db_session)):
-    """削除済みタスク一覧"""
-    repo = BaseRepository(Task, session)
-    deleted = repo.find_deleted()
-    return deleted
-```
-
-### パターン2: カスタムリポジトリ
-
-```python
-from repom.repositories import BaseRepository
-from typing import List
-from datetime import datetime, timedelta, timezone
-
-class TaskRepository(BaseRepository[Task]):
-    def __init__(self, session: Session = None):
-        super().__init__(Task, session)
-    
-    def cleanup_old_deleted(self, days: int = 30) -> int:
-        """古い削除済みデータを物理削除"""
-        threshold = datetime.now(timezone.utc) - timedelta(days=days)
-        old_deleted = self.find_deleted_before(threshold)
-        
-        count = 0
-        for task in old_deleted:
-            if self.permanent_delete(task.id):
-                count += 1
-        
-        return count
-    
-    def get_active_with_recently_deleted(self, days: int = 7) -> List[Task]:
-        """アクティブ + 最近削除されたタスクを取得"""
-        recent_threshold = datetime.now(timezone.utc) - timedelta(days=days)
-        
-        # アクティブなタスク
-        active = self.find(filters=[Task.status == 'active'])
-        
-        # 最近削除されたタスク
-        recent_deleted = self.find_deleted_before(
-            before=datetime.now(timezone.utc)
-        )
-        recent_deleted = [
-            t for t in recent_deleted
-            if t.deleted_at and t.deleted_at >= recent_threshold
-        ]
-        
-        return active + recent_deleted
-```
-
-### パターン3: バッチ処理
-
-```python
-def cleanup_old_deleted_tasks(days: int = 90):
-    """90日以上前に削除されたタスクを物理削除"""
-    from repom.database import db_session
-    
-    with db_session() as session:
-        repo = BaseRepository(Task, session)
-        
-        threshold = datetime.now(timezone.utc) - timedelta(days=days)
-        old_deleted = repo.find_deleted_before(threshold)
-        
-        print(f"Found {len(old_deleted)} old deleted tasks")
-        
-        for task in old_deleted:
-            print(f"Permanently deleting task {task.id}: {task.title}")
-            repo.permanent_delete(task.id)
-        
-        print("Cleanup completed")
-```
-
-### パターン4: 非同期版（FastAPI）
+### パターン1: FastAPI での使用（推奨）
 
 ```python
 from fastapi import APIRouter, Depends, HTTPException
@@ -406,7 +275,7 @@ async def soft_delete_task(
     task_id: int,
     session: AsyncSession = Depends(get_async_db_session)
 ):
-    """タスクを論理削除（非同期）"""
+    """タスクを論理削除"""
     repo = AsyncBaseRepository(Task, session)
     
     if not await repo.soft_delete(task_id):
@@ -415,15 +284,100 @@ async def soft_delete_task(
     return {"message": "Task deleted successfully"}
 
 
+@router.post("/tasks/{task_id}/restore")
+async def restore_task(
+    task_id: int,
+    session: AsyncSession = Depends(get_async_db_session)
+):
+    """タスクを復元"""
+    repo = AsyncBaseRepository(Task, session)
+    
+    if not await repo.restore(task_id):
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return {"message": "Task restored successfully"}
+
+
 @router.get("/tasks/deleted")
 async def list_deleted_tasks(
     session: AsyncSession = Depends(get_async_db_session)
 ):
-    """削除済みタスク一覧（非同期）"""
+    """削除済みタスク一覧"""
     repo = AsyncBaseRepository(Task, session)
     deleted = await repo.find_deleted()
     return deleted
 ```
+
+**同期版（FastAPI）**: `AsyncSession` → `Session`、`AsyncBaseRepository` → `BaseRepository`、`await` を削除してください。
+
+### パターン2: カスタムリポジトリ
+
+```python
+from repom.async_base_repository import AsyncBaseRepository
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
+from datetime import datetime, timedelta, timezone
+
+class TaskRepository(AsyncBaseRepository[Task]):
+    def __init__(self, session: AsyncSession = None):
+        super().__init__(Task, session)
+    
+    async def cleanup_old_deleted(self, days: int = 30) -> int:
+        """古い削除済みデータを物理削除"""
+        threshold = datetime.now(timezone.utc) - timedelta(days=days)
+        old_deleted = await self.find_deleted_before(threshold)
+        
+        count = 0
+        for task in old_deleted:
+            if await self.permanent_delete(task.id):
+                count += 1
+        
+        return count
+    
+    async def get_active_with_recently_deleted(self, days: int = 7) -> List[Task]:
+        """アクティブ + 最近削除されたタスクを取得"""
+        recent_threshold = datetime.now(timezone.utc) - timedelta(days=days)
+        
+        # アクティブなタスク
+        active = await self.find(filters=[Task.status == 'active'])
+        
+        # 最近削除されたタスク
+        recent_deleted = await self.find_deleted_before(
+            before=datetime.now(timezone.utc)
+        )
+        recent_deleted = [
+            t for t in recent_deleted
+            if t.deleted_at and t.deleted_at >= recent_threshold
+        ]
+        
+        return active + recent_deleted
+```
+
+**同期版**: `AsyncBaseRepository` → `BaseRepository`、`AsyncSession` → `Session`、`async def` → `def`、`await` を削除してください。
+
+### パターン3: バッチ処理
+
+```python
+async def cleanup_old_deleted_tasks(days: int = 90):
+    """90日以上前に削除されたタスクを物理削除"""
+    from repom.database import get_async_db_session
+    
+    async with get_async_db_session() as session:
+        repo = AsyncBaseRepository(Task, session)
+        
+        threshold = datetime.now(timezone.utc) - timedelta(days=days)
+        old_deleted = await repo.find_deleted_before(threshold)
+        
+        print(f"Found {len(old_deleted)} old deleted tasks")
+        
+        for task in old_deleted:
+            print(f"Permanently deleting task {task.id}: {task.title}")
+            await repo.permanent_delete(task.id)
+        
+        print("Cleanup completed")
+```
+
+**同期版**: `async with get_async_db_session()` → `with db_session`、`async def` → `def`、`await` を削除してください。
 
 ---
 
@@ -440,23 +394,22 @@ class Task(BaseModelAuto, SoftDeletableMixin):
     deleted_reason: Mapped[str | None] = mapped_column(String(500))
 
 # 使用
-task = repo.get_by_id(1)
+task = await repo.get_by_id(1)
 task.deleted_reason = "User requested deletion"
-repo.soft_delete(1)
+await repo.soft_delete(1)
 ```
 
 ### ✅ DO: 定期的にクリーンアップ
 
 ```python
 # 古い削除済みデータを定期的に物理削除
-def scheduled_cleanup():
+async def scheduled_cleanup():
     """90日以上前の削除済みデータをクリーンアップ"""
-    repo = BaseRepository(Task, session=db_session)
     threshold = datetime.now(timezone.utc) - timedelta(days=90)
-    old_deleted = repo.find_deleted_before(threshold)
+    old_deleted = await repo.find_deleted_before(threshold)
     
     for task in old_deleted:
-        repo.permanent_delete(task.id)
+        await repo.permanent_delete(task.id)
 ```
 
 ### ✅ DO: 削除済みデータへのアクセス制御
@@ -464,15 +417,15 @@ def scheduled_cleanup():
 ```python
 # 管理者のみ削除済みを閲覧可能
 @router.get("/tasks/deleted")
-def list_deleted_tasks(
+async def list_deleted_tasks(
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_db_session)
+    session: AsyncSession = Depends(get_async_db_session)
 ):
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin only")
     
-    repo = BaseRepository(Task, session)
-    return repo.find_deleted()
+    repo = AsyncBaseRepository(Task, session)
+    return await repo.find_deleted()
 ```
 
 ### ❌ DON'T: 削除済みデータを無制限に蓄積
@@ -492,8 +445,8 @@ def list_deleted_tasks(
 # → GDPR 違反のリスク
 
 # Good: センシティブなデータは物理削除
-task = repo.get_by_id(1)
-repo.remove(task)  # 完全削除
+task = await repo.get_by_id(1)
+await repo.remove(task)  # 完全削除
 ```
 
 ---
@@ -521,23 +474,23 @@ class Task(BaseModelAuto, SoftDeletableMixin):
 
 ```python
 # 削除済みは自動的に除外される
-tasks = repo.find()  # 削除済みは含まれない
+tasks = await repo.find()  # 削除済みは含まれない
 
 # 削除済みも含めるには
-tasks = repo.find(include_deleted=True)
+tasks = await repo.find(include_deleted=True)
 ```
 
 ### 復元できない
 
 ```python
 # 物理削除されたデータは復元不可
-task = repo.get_by_id(1)
-repo.remove(task)  # 物理削除
-repo.restore(1)  # False（復元できない）
+task = await repo.get_by_id(1)
+await repo.remove(task)  # 物理削除
+await repo.restore(1)  # False（復元できない）
 
 # 論理削除なら復元可能
-repo.soft_delete(1)
-repo.restore(1)  # True（復元成功）
+await repo.soft_delete(1)
+await repo.restore(1)  # True（復元成功）
 ```
 
 ---
