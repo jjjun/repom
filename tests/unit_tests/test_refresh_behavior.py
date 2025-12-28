@@ -99,7 +99,7 @@ class TestRefreshBehaviorAsync:
     async def test_save_without_refresh_created_at_is_none(self, async_refresh_repo):
         """Test if created_at is None after save() without refresh() (async)"""
         repo = await async_refresh_repo
-        
+
         # Create instance without setting created_at/updated_at
         instance = RefreshTestModel(name="Test Item Async")
 
@@ -128,7 +128,7 @@ class TestRefreshBehaviorAsync:
     async def test_save_with_manual_refresh(self, async_refresh_repo, async_db_test):
         """Test if manual refresh() fixes the issue (async)"""
         repo = await async_refresh_repo
-        
+
         instance = RefreshTestModel(name="Test Item Async 2")
         saved = await repo.save(instance)
 

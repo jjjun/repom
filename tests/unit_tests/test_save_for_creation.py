@@ -134,7 +134,7 @@ class TestSaveMethodReplacesMinePatterns:
     async def test_mine_py_video_asset_link_pattern(self, save_repo):
         """Simulate the pattern from mine-py video_asset_routes.py"""
         repo = await save_repo
-        
+
         # mine-py pattern (問題があるパターン):
         # link = AniVideoAssetLinkModel(...)
         # session.add(link)

@@ -39,10 +39,10 @@ class NormalTestModel(BaseModelAuto):
 @pytest.fixture
 def setup_soft_delete_item(db_test):
     """論理削除対応モデルの単一アイテム用フィクスチャ
-    
+
     SoftDeletableMixin の基本機能テスト用。
     各テストで単一のアイテムが必要な場合に使用。
-    
+
     Returns:
         SoftDeleteTestModel: 保存済みのテストアイテム
     """
@@ -55,23 +55,23 @@ def setup_soft_delete_item(db_test):
 @pytest.fixture
 def setup_soft_delete_items(db_test):
     """論理削除対応モデルの複数アイテム用フィクスチャ
-    
+
     Repository の自動フィルタリングテスト用。
     アクティブと削除済みの両方のアイテムを提供。
-    
+
     Returns:
         dict: repo, active_item, deleted_item を含む辞書
     """
     repo = BaseRepository(SoftDeleteTestModel, db_test)
-    
+
     active_item = SoftDeleteTestModel(name="active")
     deleted_item = SoftDeleteTestModel(name="deleted")
     db_test.add_all([active_item, deleted_item])
     db_test.commit()
-    
+
     deleted_item.soft_delete()
     db_test.commit()
-    
+
     return {
         'repo': repo,
         'active_item': active_item,
@@ -82,10 +82,10 @@ def setup_soft_delete_items(db_test):
 @pytest.fixture
 def setup_normal_item(db_test):
     """論理削除非対応モデル用フィクスチャ
-    
+
     エラーハンドリングテスト用。
     論理削除機能を持たないモデルを提供。
-    
+
     Returns:
         dict: repo, item を含む辞書
     """
@@ -93,7 +93,7 @@ def setup_normal_item(db_test):
     item = NormalTestModel(name="test")
     db_test.add(item)
     db_test.commit()
-    
+
     return {
         'repo': repo,
         'item': item,
@@ -103,10 +103,10 @@ def setup_normal_item(db_test):
 @pytest.fixture
 def setup_soft_delete_repo(db_test):
     """論理削除対応リポジトリのフィクスチャ
-    
+
     Repository のソフトデリートメソッドテスト用。
     保存済みのアイテムとリポジトリを提供。
-    
+
     Returns:
         dict: repo, item を含む辞書
     """
@@ -114,7 +114,7 @@ def setup_soft_delete_repo(db_test):
     item = SoftDeleteTestModel(name="test")
     db_test.add(item)
     db_test.commit()
-    
+
     return {
         'repo': repo,
         'item': item,
@@ -161,7 +161,7 @@ class TestBaseRepositoryAutoFiltering:
     def test_find_excludes_deleted_by_default(self, setup_soft_delete_items):
         """find() が削除済みを自動除外"""
         data = setup_soft_delete_items
-        
+
         results = data['repo'].find()
         assert len(results) == 1
         assert results[0].id == data['active_item'].id
@@ -169,7 +169,7 @@ class TestBaseRepositoryAutoFiltering:
     def test_find_with_include_deleted(self, setup_soft_delete_items):
         """find(include_deleted=True) が全レコード取得"""
         data = setup_soft_delete_items
-        
+
         results = data['repo'].find(include_deleted=True)
         assert len(results) == 2
 
@@ -177,7 +177,7 @@ class TestBaseRepositoryAutoFiltering:
         """get_by_id() が削除済みを自動除外"""
         data = setup_soft_delete_items
         deleted_id = data['deleted_item'].id
-        
+
         result = data['repo'].get_by_id(deleted_id)
         assert result is None
 
@@ -185,7 +185,7 @@ class TestBaseRepositoryAutoFiltering:
         """get_by_id(include_deleted=True) が削除済みも取得"""
         data = setup_soft_delete_items
         deleted_id = data['deleted_item'].id
-        
+
         result = data['repo'].get_by_id(deleted_id, include_deleted=True)
         assert result is not None
         assert result.id == deleted_id
@@ -194,7 +194,7 @@ class TestBaseRepositoryAutoFiltering:
     def test_count_excludes_deleted_by_default(self, setup_soft_delete_items):
         """count() はデフォルトで削除済みを除外し、フラグで含められる"""
         data = setup_soft_delete_items
-        
+
         assert data['repo'].count() == 1
         assert data['repo'].count(include_deleted=True) == 2
 
