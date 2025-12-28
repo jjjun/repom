@@ -27,6 +27,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
+| #019 | テストのフィクスチャ化によるコード品質向上 | 中 | 🟢 進行中 | [active/019_refactor_tests_to_use_fixtures.md](active/019_refactor_tests_to_use_fixtures.md) |
 | #018 | Repository Default Eager Loading Options Support | 中 | 📝 実装予定 | [active/018_repository_default_eager_loading_options.md](active/018_repository_default_eager_loading_options.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
