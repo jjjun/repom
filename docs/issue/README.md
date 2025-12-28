@@ -27,7 +27,6 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
-| #019 | テストのフィクスチャ化によるコード品質向上 | 中 | 🟢 進行中 | [active/019_refactor_tests_to_use_fixtures.md](active/019_refactor_tests_to_use_fixtures.md) |
 | #018 | Repository Default Eager Loading Options Support | 中 | 📝 実装予定 | [active/018_repository_default_eager_loading_options.md](active/018_repository_default_eager_loading_options.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
@@ -39,6 +38,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #019 | テストのフィクスチャ化によるコード品質向上 | 2025-12-28 | 3ファイルリファクタリング、181行削減、31テスト全パス、0.33秒 | [completed/019_refactor_tests_to_use_fixtures.md](completed/019_refactor_tests_to_use_fixtures.md) |
 | #017 | server_default カラムの Create スキーマ必須化問題 | 2025-12-27 | server_default 対応修正、バグ修正（優先度）、9テスト追加、442テスト全パス | [completed/017_server_default_create_schema_mismatch.md](completed/017_server_default_create_schema_mismatch.md) |
 | #016 | クエリ構築機能のMixin化によるコード一貫性向上 | 2025-12-26 | QueryBuilderMixin作成、両リポジトリ約25行削減、409テスト全パス | [completed/016_extract_query_builder_to_mixin.md](completed/016_extract_query_builder_to_mixin.md) |
 | #015 | 論理削除機能のMixin化によるコード可読性向上 | 2025-12-26 | SoftDeleteRepositoryMixin作成、base_repository約150行削減、テスト全パス | [completed/015_extract_soft_delete_to_mixin.md](completed/015_extract_soft_delete_to_mixin.md) |
