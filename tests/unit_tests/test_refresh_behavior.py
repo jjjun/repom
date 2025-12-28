@@ -20,13 +20,23 @@ class RefreshTestModel(BaseModel, use_created_at=True, use_updated_at=True):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
+@pytest.fixture
+def refresh_repo(db_test):
+    """Repository only - data created per test due to different patterns"""
+    return BaseRepository(RefreshTestModel, session=db_test)
+
+
+@pytest.fixture
+async def async_refresh_repo(async_db_test):
+    """Async repository only - data created per test due to different patterns"""
+    return AsyncBaseRepository(RefreshTestModel, session=async_db_test)
+
+
 class TestRefreshBehaviorSync:
     """Test refresh behavior for synchronous repository"""
 
-    def test_save_without_refresh_created_at_is_none(self, db_test):
+    def test_save_without_refresh_created_at_is_none(self, refresh_repo, db_test):
         """Test if created_at is None after save() without refresh()"""
-        repo = BaseRepository(RefreshTestModel, session=db_test)
-
         # Create instance without setting created_at/updated_at
         instance = RefreshTestModel(name="Test Item")
 
@@ -35,7 +45,7 @@ class TestRefreshBehaviorSync:
         assert instance.updated_at is None
 
         # Save without refresh
-        saved = repo.save(instance)
+        saved = refresh_repo.save(instance)
 
         # CRITICAL TEST: Are created_at/updated_at still None?
         print(f"\nAfter save (no refresh):")
@@ -63,12 +73,10 @@ class TestRefreshBehaviorSync:
         assert fetched.created_at is not None
         assert fetched.updated_at is not None
 
-    def test_save_with_manual_refresh(self, db_test):
+    def test_save_with_manual_refresh(self, refresh_repo, db_test):
         """Test if manual refresh() fixes the issue"""
-        repo = BaseRepository(RefreshTestModel, session=db_test)
-
         instance = RefreshTestModel(name="Test Item 2")
-        saved = repo.save(instance)
+        saved = refresh_repo.save(instance)
 
         # Manually refresh
         db_test.refresh(saved)
@@ -88,10 +96,10 @@ class TestRefreshBehaviorSync:
 class TestRefreshBehaviorAsync:
     """Test refresh behavior for asynchronous repository"""
 
-    async def test_save_without_refresh_created_at_is_none(self, async_db_test):
+    async def test_save_without_refresh_created_at_is_none(self, async_refresh_repo):
         """Test if created_at is None after save() without refresh() (async)"""
-        repo = AsyncBaseRepository(RefreshTestModel, session=async_db_test)
-
+        repo = await async_refresh_repo
+        
         # Create instance without setting created_at/updated_at
         instance = RefreshTestModel(name="Test Item Async")
 
@@ -117,10 +125,10 @@ class TestRefreshBehaviorAsync:
         assert saved.created_at is not None
         assert saved.updated_at is not None
 
-    async def test_save_with_manual_refresh(self, async_db_test):
+    async def test_save_with_manual_refresh(self, async_refresh_repo, async_db_test):
         """Test if manual refresh() fixes the issue (async)"""
-        repo = AsyncBaseRepository(RefreshTestModel, session=async_db_test)
-
+        repo = await async_refresh_repo
+        
         instance = RefreshTestModel(name="Test Item Async 2")
         saved = await repo.save(instance)
 
