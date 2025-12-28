@@ -289,7 +289,7 @@ def set_find_option(
     options = kwargs.get('options', None)
     # order_by の処理: None または空文字の場合は default_order_by を適用
     order_by = kwargs.get('order_by')
-    if not order_by:  # None, "", その他falsyな値
+    if order_by is None or order_by == "":
         order_by = default_order_by
 
     # options の処理: None の場合のみ default_options を使用
