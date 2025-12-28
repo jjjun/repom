@@ -251,97 +251,33 @@ async def delete_task(task_id: int):
 
 ## 検索とフィルタリング
 
-### 基本的な検索
+非同期版でも検索・フィルタリング機能は同期版と同じです。詳細は **[Repository 上級ガイド](repository_advanced_guide.md)** を参照してください。
+
+### クイックリファレンス
 
 ```python
-async def search_tasks():
-    async with get_async_db_session() as session:
-        repo = AsyncBaseRepository(Task, session)
-        
-        # フィルタなし（全件）
-        all_tasks = await repo.find()
-        
-        # 単一条件
-        tasks = await repo.find(filters=[Task.status == 'active'])
-        
-        # 複数条件（AND）
-        from sqlalchemy import and_
-        tasks = await repo.find(
-            filters=[
-                Task.status == 'active',
-                Task.priority == 'high'
-            ]
-        )
+async with get_async_db_session() as session:
+    repo = AsyncBaseRepository(Task, session)
+    
+    # 基本検索
+    tasks = await repo.find(filters=[Task.status == 'active'])
+    
+    # ページネーション
+    tasks = await repo.find(offset=0, limit=20, order_by='created_at:desc')
+    
+    # カウント
+    count = await repo.count(filters=[Task.status == 'active'])
 ```
 
-### ページネーション
-
-```python
-# offset と limit
-tasks = await repo.find(
-    offset=0,
-    limit=20,
-    order_by='created_at:desc'
-)
-
-# ページング関数
-async def get_paginated_tasks(page: int = 1, per_page: int = 20):
-    offset = (page - 1) * per_page
-    tasks = await repo.find(offset=offset, limit=per_page)
-    total = await repo.count()
-    return {
-        "items": tasks,
-        "total": total,
-        "page": page,
-        "per_page": per_page
-    }
-```
-
-### ソート（order_by）
-
-```python
-# 文字列指定
-tasks = await repo.find(order_by='created_at:desc')
-tasks = await repo.find(order_by='priority:asc')
-
-# SQLAlchemy 式
-from sqlalchemy import desc
-tasks = await repo.find(order_by=desc(Task.created_at))
-```
-
-### カウント
-
-```python
-# 全件カウント
-total = await repo.count()
-
-# 条件付きカウント
-active_count = await repo.count(filters=[Task.status == 'active'])
-
-# 複数条件
-high_priority_count = await repo.count(
-    filters=[
-        Task.status == 'active',
-        Task.priority == 'high'
-    ]
-)
-```
+詳細なフィルタリングパターン（AND/OR、LIKE、IN句など）は [Repository 上級ガイド](repository_advanced_guide.md#検索とフィルタリング) を参照してください。
 
 ---
 
-## Eager Loading
+## Eager Loading（N+1 問題の解決）
 
-### N+1 問題の解決
+非同期版でも Eager Loading の仕組みは同期版と同じです。詳細は **[Repository 上級ガイド](repository_advanced_guide.md#eager-loadingn1問題の解決)** を参照してください。
 
-AsyncBaseRepository は `options` パラメータをサポートし、SQLAlchemy の `joinedload` や `selectinload` を使って N+1 問題を解決できます。
-
-**対応メソッド**:
-- ✅ `await find()` - 複数レコード取得
-- ✅ `await find_one()` - 単一レコード取得
-- ✅ `await get_by_id()` - ID で単一レコード取得
-- ✅ `await get_by()` - カラム条件で取得（単一/複数両対応）
-
-### 基本的な使い方
+### クイックリファレンス
 
 ```python
 from sqlalchemy.orm import joinedload, selectinload
@@ -370,172 +306,110 @@ task = await repo.find_one(
 )
 ```
 
-### joinedload（多対一関係）
+詳細な使い方、パフォーマンス比較、ベストプラクティスは [Repository 上級ガイド](repository_advanced_guide.md#eager-loadingn1問題の解決) を参照してください。
+
+### default_options による自動適用
 
 ```python
-from sqlalchemy.orm import joinedload
-
-async def get_tasks_with_user():
-    async with get_async_db_session() as session:
-        repo = AsyncBaseRepository(Task, session)
-        
-        # Task と関連する User を一度に取得
-        tasks = await repo.find(
-            options=[joinedload(Task.user)]
-        )
-        
-        # N+1 なしで user にアクセス可能
-        for task in tasks:
-            print(f"{task.title} by {task.user.name}")
-```
-
-### selectinload（一対多関係）
-
-```python
-from sqlalchemy.orm import selectinload
-
-async def get_projects_with_tasks():
-    repo = AsyncBaseRepository(Project, session)
-    
-    # Project と関連する Tasks を一度に取得
-    projects = await repo.find(
-        options=[selectinload(Project.tasks)]
-    )
-    
-    # N+1 なしで tasks にアクセス可能
-    for project in projects:
-        print(f"{project.name}: {len(project.tasks)} tasks")
-```
-
-### 複数の options を組み合わせ
-
-```python
-# 複数の関連モデルを同時に eager load
-tasks = await repo.find(
-    options=[
+class TaskRepository(AsyncBaseRepository[Task]):
+    # クラス属性で指定（推奨）
+    default_options = [
         joinedload(Task.user),
-        selectinload(Task.comments),
-        joinedload(Task.category)
+        selectinload(Task.comments)
     ]
-)
+
+# すべての取得メソッドで自動適用
+repo = TaskRepository(session=session)
+tasks = await repo.find()  # user と comments が自動ロード
+task = await repo.get_by_id(1)  # 同じく自動適用
 ```
 
-### ネストした eager loading
-
-```python
-from sqlalchemy.orm import joinedload
-
-# Comment → Task → User とネストして取得
-comments = await comment_repo.find(
-    options=[
-        joinedload(Comment.task).joinedload(Task.user)
-    ]
-)
-```
-
-### options とフィルタの組み合わせ
-
-```python
-# フィルタ + eager loading
-tasks = await repo.find(
-    filters=[Task.status == 'active'],
-    options=[joinedload(Task.user)],
-    order_by='created_at:desc',
-    limit=10
-)
-```
+詳細は [Repository 上級ガイド](repository_advanced_guide.md#eager-loadingn1問題の解決) を参照してください。
 
 ---
 
-## デフォルト Eager Loading（default_options）
+## カスタムリポジトリ
 
-**NEW in v1.x**: コンストラクタで `default_options` を設定することで、リポジトリのすべての取得メソッドで自動的に eager loading を適用できます。
+ビジネスロジックを含むカスタムリポジトリの作成方法は **[Repository 上級ガイド](repository_advanced_guide.md#カスタムリポジトリ)** を参照してください。
 
-### 基本的な使い方
+### クイックリファレンス
 
 ```python
-from sqlalchemy.orm import joinedload, selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
-
 class TaskRepository(AsyncBaseRepository[Task]):
-    def __init__(self, session: AsyncSession):
-        super().__init__(Task, session)
-        # デフォルトで user と comments を eager load
-        self.default_options = [
-            joinedload(Task.user),
-            selectinload(Task.comments)
-        ]
+    async def find_active(self) -> List[Task]:
+        return await self.find(filters=[Task.status == 'active'])
+    
+    async def find_overdue(self) -> List[Task]:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        return await self.find(
+            filters=[
+                Task.status != 'completed',
+                Task.due_date < now
+            ]
+        )
+```
 
-# 使用例
-async def get_tasks():
+複雑な検索ロジック、関連モデル操作、ビジネスロジック統合の詳細は [Repository 上級ガイド](repository_advanced_guide.md#カスタムリポジトリ) を参照してください。
+
+---
+
+## 論理削除（SoftDelete）
+
+論理削除機能の使い方は **[SoftDelete ガイド](repository_soft_delete_guide.md)** を参照してください。非同期版の実装例も含まれています。
+
+### クイックリファレンス
+
+```python
+# 論理削除
+await repo.soft_delete(task_id)
+
+# 復元
+await repo.restore(task_id)
+
+# 削除済みを含めて検索
+tasks = await repo.find(include_deleted=True)
+
+# 削除済みのみ取得
+deleted_tasks = await repo.find_deleted()
+```
+
+詳細は [SoftDelete ガイド](repository_soft_delete_guide.md) を参照してください。
+
+---
+
+## 非同期特有の機能
+
+以下のセクションは AsyncBaseRepository に特有の機能です。
+
+---
+
+## 並行処理パターン
+
+### asyncio.gather による並行実行
+
+```python
+import asyncio
+
+async def fetch_multiple_resources():
     async with get_async_db_session() as session:
-        repo = TaskRepository(session=session)
+        task_repo = AsyncBaseRepository(Task, session)
+        user_repo = AsyncBaseRepository(User, session)
+        project_repo = AsyncBaseRepository(Project, session)
         
-        # options を指定しなくても自動的に eager loading される
-        tasks = await repo.find()  # user と comments がロード済み
-        task = await repo.get_by_id(1)  # 同じく自動適用
+        # 3つのクエリを並行実行
+        tasks, users, projects = await asyncio.gather(
+            task_repo.find(filters=[Task.status == 'active']),
+            user_repo.get_all(),
+            project_repo.find(limit=10)
+        )
         
-        return tasks
+        return {
+            "tasks": tasks,
+            "users": users,
+            "projects": projects
+        }
 ```
-
-### 影響を受けるメソッド
-
-`default_options` は以下のメソッドで自動的に適用されます：
-
-- ✅ `await find()` - 複数レコード取得
-- ✅ `await find_one()` - 単一レコード取得
-- ✅ `await get_by_id()` - ID で取得
-- ✅ `await get_by()` - カラム条件で取得
-
-### options の優先順位
-
-```python
-# 1. options=None（デフォルト）→ default_options を使用
-tasks = await repo.find()  # default_options が適用される
-
-# 2. options=[] （空リスト）→ eager loading なし
-tasks = await repo.find(options=[])  # default_options をスキップ
-
-# 3. options=[...] （明示指定）→ 指定した options を使用
-tasks = await repo.find(options=[
-    selectinload(Task.tags)  # default_options は無視される
-])
-```
-
-### FastAPI での実用例
-
-```python
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from repom.database import get_async_db_session
-
-router = APIRouter()
-
-class TaskRepository(AsyncBaseRepository[Task]):
-    def __init__(self, session: AsyncSession):
-        super().__init__(Task, session)
-        # よく使うリレーションを default_options で設定
-        self.default_options = [
-            joinedload(Task.user),
-            selectinload(Task.tags)
-        ]
-
-@router.get("/tasks")
-async def get_tasks(session: AsyncSession = Depends(get_async_db_session)):
-    repo = TaskRepository(session=session)
-    return await repo.find()  # 自動的に user と tags をロード
-
-@router.get("/tasks/ids")
-async def get_task_ids(session: AsyncSession = Depends(get_async_db_session)):
-    repo = TaskRepository(session=session)
-    # リレーション不要な場合は無効化
-    tasks = await repo.find(options=[])  # eager loading なし
-    return [task.id for task in tasks]
-
-@router.get("/tasks/{task_id}")
-async def get_task(
-    task_id: int,
-    session: AsyncSession = Depends(get_async_db_session)
 ):
     repo = TaskRepository(session=session)
     task = await repo.get_by_id(task_id)  # default_options 適用
@@ -883,18 +757,40 @@ async with get_async_db_session() as session:
 
 ## まとめ
 
-- **AsyncBaseRepository** は FastAPI など非同期フレームワークで使用
+### AsyncBaseRepository の特徴
+
+- **FastAPI など非同期フレームワークで使用**
 - すべてのメソッドは `async def` で `await` が必要
-- `options` パラメータで eager loading をサポート（N+1 問題解決）
-- `asyncio.gather` で並行処理が可能
-- カスタムリポジトリを作成してビジネスロジックを集約
-- 論理削除については [SoftDelete ガイド](repository_soft_delete_guide.md) を参照
+- **並行処理**: `asyncio.gather` で複数クエリを並行実行
+- **セッション管理**: `async with` または FastAPI の `Depends` で管理
 
-詳細は以下のドキュメントも参照してください：
+### 機能別ガイド
 
-- [BaseRepository ガイド](base_repository_guide.md) - 基本的な CRUD 操作
-- [Repository Advanced ガイド](repository_advanced_guide.md) - 検索、eager loading、パフォーマンス最適化
-- [FilterParams ガイド](repository_filter_params_guide.md) - FastAPI での検索パラメータ統合
-- [SoftDelete ガイド](repository_soft_delete_guide.md) - 論理削除機能
-- [Session Management ガイド](repository_session_patterns.md) - セッション管理
-- [Testing ガイド](../testing/testing_guide.md) - AsyncBaseRepository のテスト方法
+| 機能 | ガイド | 概要 |
+|------|--------|------|
+| 基本的な CRUD | [BaseRepository ガイド](base_repository_guide.md) | 取得・作成・更新・削除 |
+| 検索・フィルタリング | [Repository 上級ガイド](repository_advanced_guide.md#検索とフィルタリング) | find(), ページング、ソート |
+| Eager Loading | [Repository 上級ガイド](repository_advanced_guide.md#eager-loadingn1問題の解決) | N+1 問題の解決、default_options |
+| カスタムリポジトリ | [Repository 上級ガイド](repository_advanced_guide.md#カスタムリポジトリ) | ビジネスロジックの統合 |
+| 論理削除 | [SoftDelete ガイド](repository_soft_delete_guide.md) | soft_delete, restore |
+| FastAPI 統合 | [FilterParams ガイド](repository_filter_params_guide.md) | クエリパラメータの型安全処理 |
+| テスト | [Testing ガイド](../testing/testing_guide.md) | 非同期テストのベストプラクティス |
+
+### 非同期版の利点
+
+✅ **高並行性**: 複数のクエリを並行実行できる  
+✅ **I/O効率**: データベース待機中に他の処理を実行  
+✅ **FastAPI統合**: Depends パターンでシームレスに統合  
+✅ **スケーラビリティ**: 多数の同時リクエストを効率的に処理
+
+### 次のステップ
+
+1. **基礎を学ぶ**: [BaseRepository ガイド](base_repository_guide.md) で CRUD 操作を理解
+2. **高度な検索**: [Repository 上級ガイド](repository_advanced_guide.md) で検索パターンを学習
+3. **FastAPI統合**: [FilterParams ガイド](repository_filter_params_guide.md) で実践的な統合を実装
+4. **並行処理**: このガイドの「並行処理パターン」を活用
+
+---
+
+**最終更新**: 2025-12-28  
+**対象バージョン**: repom v2.0+

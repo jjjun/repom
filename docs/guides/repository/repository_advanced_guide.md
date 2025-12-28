@@ -1,12 +1,15 @@
-# BaseRepository 上級ガイド（検索・フィルタ・options）
+# Repository 上級ガイド（検索・フィルタ・options）
 
 **目的**: 複雑な検索、パフォーマンス最適化、カスタムリポジトリの実装
 
 **対象読者**: 複雑な検索機能やパフォーマンス最適化が必要な開発者・AI エージェント
 
+**前提**: このガイドは非同期コード（`AsyncBaseRepository`）を使用しています。同期版（`BaseRepository`）も同様に動作しますが、`await` を削除してください。
+
 **関連ドキュメント**:
 - [基礎編：CRUD操作](base_repository_guide.md) - リポジトリの基本的な使い方
 - [FastAPI 統合編：FilterParams](repository_filter_params_guide.md) - FastAPI での検索パラメータ処理
+- [非同期版](async_repository_guide.md) - AsyncBaseRepository 固有の機能（並行処理など）
 
 ---
 
@@ -28,11 +31,11 @@
 ```python
 # N+1 問題を避ける（❌ 悪い例）
 for task_id in task_ids:
-    task = repo.get_by_id(task_id)  # N回のクエリ！
+    task = await repo.get_by_id(task_id)  # N回のクエリ！
     # ... 処理
 
 # 一括取得で解決（✅ 良い例）
-tasks = repo.find_by_ids(task_ids)  # 1回のクエリ
+tasks = await repo.find_by_ids(task_ids)  # 1回のクエリ
 task_dict = {task.id: task for task in tasks}
 for task_id in task_ids:
     task = task_dict.get(task_id)
@@ -44,26 +47,26 @@ for task_id in task_ids:
 ```python
 # 複数IDで一括取得
 ids = [1, 2, 3]
-tasks = repo.find_by_ids(ids)  # List[Task]
+tasks = await repo.find_by_ids(ids)  # List[Task]
 
 # 空リスト
-tasks = repo.find_by_ids([])  # []
+tasks = await repo.find_by_ids([])  # []
 
 # 存在しないIDは無視される
-tasks = repo.find_by_ids([1, 999, 3])  # ID 999は取得されない
+tasks = await repo.find_by_ids([1, 999, 3])  # ID 999は取得されない
 
 # 重複IDは自動で除外
-tasks = repo.find_by_ids([1, 1, 2])  # IDが1のレコードは1つだけ
+tasks = await repo.find_by_ids([1, 1, 2])  # IDが1のレコードは1つだけ
 ```
 
 **ソフトデリート対応**
 
 ```python
 # 論理削除されたレコードも含める
-tasks = repo.find_by_ids([1, 2, 3], include_deleted=True)
+tasks = await repo.find_by_ids([1, 2, 3], include_deleted=True)
 
 # デフォルトは論理削除を除外
-tasks = repo.find_by_ids([1, 2, 3])  # include_deleted=False
+tasks = await repo.find_by_ids([1, 2, 3])  # include_deleted=False
 ```
 
 **論理削除の詳細** については [SoftDelete ガイド](repository_soft_delete_guide.md) を参照してください。
@@ -85,18 +88,18 @@ tasks = repo.find_by_ids([1, 2, 3])  # include_deleted=False
 from sqlalchemy import and_, or_
 
 # 基本的な検索
-tasks = repo.find()  # 全件
+tasks = await repo.find()  # 全件
 
 # フィルタ条件付き
 filters = [Task.status == 'active']
-tasks = repo.find(filters=filters)
+tasks = await repo.find(filters=filters)
 
 # 複数条件（AND）
 filters = [
     Task.status == 'active',
     Task.priority == 'high'
 ]
-tasks = repo.find(filters=filters)
+tasks = await repo.find(filters=filters)
 
 # OR 条件
 filters = [
@@ -105,43 +108,45 @@ filters = [
         Task.status == 'pending'
     )
 ]
-tasks = repo.find(filters=filters)
+tasks = await repo.find(filters=filters)
 ```
 
 ### ページネーション
 
 ```python
 # offset と limit
-tasks = repo.find(offset=0, limit=10)
+tasks = await repo.find(offset=0, limit=10)
 
 # 2ページ目（1ページ10件）
-tasks = repo.find(offset=10, limit=10)
+tasks = await repo.find(offset=10, limit=10)
 ```
 
 ### ソート
 
 ```python
 # デフォルト: id 昇順
-tasks = repo.find()
+tasks = await repo.find()
 
 # 文字列指定（簡易）
-tasks = repo.find(order_by='created_at:desc')
-tasks = repo.find(order_by='title:asc')
+tasks = await repo.find(order_by='created_at:desc')
+tasks = await repo.find(order_by='title:asc')
 
 # SQLAlchemy 式
 from sqlalchemy import desc
-tasks = repo.find(order_by=desc(Task.created_at))
+tasks = await repo.find(order_by=desc(Task.created_at))
 
 # 複数ソート（カスタムリポジトリで実装）
 from sqlalchemy import select, desc
+from repom.async_base_repository import AsyncBaseRepository
 
-class TaskRepository(BaseRepository[Task]):
-    def find_sorted(self):
+class TaskRepository(AsyncBaseRepository[Task]):
+    async def find_sorted(self):
         query = select(Task).order_by(
             desc(Task.priority),
             Task.created_at
         )
-        return self.session.execute(query).scalars().all()
+        result = await self.session.execute(query)
+        return result.scalars().all()
 ```
 
 ### ソート可能なカラムの制限
@@ -152,40 +157,46 @@ class TaskRepository(BaseRepository[Task]):
 同期・非同期の両方で同じロジックが適用されます。
 
 ```python
+from repom.async_base_repository import AsyncBaseRepository
+
 # デフォルトで許可されているカラム
-BaseRepository.allowed_order_columns = [
+AsyncBaseRepository.allowed_order_columns = [
     'id', 'title', 'created_at', 'updated_at',
     'started_at', 'finished_at', 'executed_at'
 ]
 
 # カスタムリポジトリで拡張
-class TaskRepository(BaseRepository[Task]):
-    allowed_order_columns = BaseRepository.allowed_order_columns + [
+class TaskRepository(AsyncBaseRepository[Task]):
+    allowed_order_columns = AsyncBaseRepository.allowed_order_columns + [
         'priority', 'status'
     ]
 ```
+
+**同期版**: `AsyncBaseRepository` → `BaseRepository` に変更してください。
 
 **トラブルシューティング**:
 
 ```python
 # ❌ 許可されていないカラムでソート
-tasks = repo.find(order_by='custom_field:desc')
+tasks = await repo.find(order_by='custom_field:desc')
 # → ValueError: Column 'custom_field' is not allowed for sorting
 
 # ✅ allowed_order_columns を拡張
-class TaskRepository(BaseRepository[Task]):
-    allowed_order_columns = BaseRepository.allowed_order_columns + ['custom_field']
+from repom.async_base_repository import AsyncBaseRepository
+
+class TaskRepository(AsyncBaseRepository[Task]):
+    allowed_order_columns = AsyncBaseRepository.allowed_order_columns + ['custom_field']
 ```
 
 ### 件数カウント
 
 ```python
 # 全件数
-total = repo.count()
+total = await repo.count()
 
 # 条件付きカウント
 filters = [Task.status == 'active']
-active_count = repo.count(filters=filters)
+active_count = await repo.count(filters=filters)
 ```
 
 ---
@@ -208,29 +219,29 @@ SQLAlchemy の `options` パラメータを使用して、N+1 問題を解決で
 from sqlalchemy.orm import joinedload, selectinload
 
 # find() で使用
-tasks = repo.find(
+tasks = await repo.find(
     filters=[Task.status == 'active'],
     options=[joinedload(Task.user)]
 )
 
 # get_by_id() で使用
-task = repo.get_by_id(1, options=[
+task = await repo.get_by_id(1, options=[
     joinedload(Task.user),
     selectinload(Task.comments)
 ])
 
 # get_by() で使用（単一取得）
-task = repo.get_by('title', 'タスク1', single=True, options=[
+task = await repo.get_by('title', 'タスク1', single=True, options=[
     joinedload(Task.user)
 ])
 
 # get_by() で使用（複数取得）
-tasks = repo.get_by('status', 'active', options=[
+tasks = await repo.get_by('status', 'active', options=[
     selectinload(Task.comments)
 ])
 
 # find_one() で使用
-task = repo.find_one(
+task = await repo.find_one(
     filters=[Task.id == 1],
     options=[joinedload(Task.user)]
 )
@@ -242,7 +253,7 @@ task = repo.find_one(
 from sqlalchemy.orm import joinedload
 
 # 基本的な使い方
-tasks = repo.find(
+tasks = await repo.find(
     filters=[Task.status == 'active'],
     options=[joinedload(Task.user)]  # user を JOIN で取得
 )
@@ -266,7 +277,7 @@ WHERE tasks.status = 'active';
 from sqlalchemy.orm import selectinload
 
 # コレクション（1対多）を効率的に取得
-users = user_repo.find(
+users = await user_repo.find(
     options=[selectinload(User.tasks)]  # 関連するタスクを取得
 )
 
@@ -288,7 +299,7 @@ SELECT * FROM tasks WHERE user_id IN (1, 2, 3, ...);
 ### 複数の関連モデルを同時に取得
 
 ```python
-tasks = repo.find(
+tasks = await repo.find(
     options=[
         joinedload(Task.user),        # 1対1
         selectinload(Task.tags),      # 1対多
@@ -301,7 +312,7 @@ tasks = repo.find(
 
 ```python
 # task → user → department
-tasks = repo.find(
+tasks = await repo.find(
     options=[
         joinedload(Task.user).joinedload(User.department)
     ]
@@ -319,9 +330,11 @@ for task in tasks:
 
 ```python
 from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
+from repom.async_base_repository import AsyncBaseRepository
 
-class TaskRepository(BaseRepository[Task]):
-    def __init__(self, session: Session = None):
+class TaskRepository(AsyncBaseRepository[Task]):
+    def __init__(self, session: AsyncSession = None):
         super().__init__(Task, session)
         # デフォルトで user と comments を eager load
         self.default_options = [
@@ -330,12 +343,14 @@ class TaskRepository(BaseRepository[Task]):
         ]
 
 # 使用例
-repo = TaskRepository(session=db_session)
+repo = TaskRepository(session=async_session)
 
 # options を指定しなくても自動的に eager loading される
-tasks = repo.find()  # user と comments がロード済み
-task = repo.get_by_id(1)  # 同じく自動適用
+tasks = await repo.find()  # user と comments がロード済み
+task = await repo.get_by_id(1)  # 同じく自動適用
 ```
+
+**同期版**: `AsyncSession` → `Session`、`AsyncBaseRepository` → `BaseRepository`、`await` を削除してください。
 
 #### 影響を受けるメソッド
 
@@ -350,13 +365,13 @@ task = repo.get_by_id(1)  # 同じく自動適用
 
 ```python
 # 1. options=None（デフォルト）→ default_options を使用
-tasks = repo.find()  # default_options が適用される
+tasks = await repo.find()  # default_options が適用される
 
 # 2. options=[] （空リスト）→ eager loading なし
-tasks = repo.find(options=[])  # default_options をスキップ
+tasks = await repo.find(options=[])  # default_options をスキップ
 
 # 3. options=[...] （明示指定）→ 指定した options を使用
-tasks = repo.find(options=[
+tasks = await repo.find(options=[
     selectinload(Task.tags)  # default_options は無視される
 ])
 ```
@@ -464,23 +479,25 @@ comments = task.comments  # クエリなし
 ### 基本的なカスタムリポジトリ
 
 ```python
-from repom.repositories import BaseRepository
+from repom.repositories import AsyncBaseRepository
 from typing import List
 
-class TaskRepository(BaseRepository[Task]):
-    def find_active(self) -> List[Task]:
+class TaskRepository(AsyncBaseRepository[Task]):
+    async def find_active(self) -> List[Task]:
         """アクティブなタスクを取得"""
-        return self.get_by('status', 'active')
+        return await self.get_by('status', 'active')
     
-    def find_by_priority(self, priority: str) -> List[Task]:
+    async def find_by_priority(self, priority: str) -> List[Task]:
         """優先度で検索"""
-        return self.get_by('priority', priority)
+        return await self.get_by('priority', priority)
     
-    def count_active(self) -> int:
+    async def count_active(self) -> int:
         """アクティブなタスクをカウント"""
         filters = [Task.status == 'active']
-        return self.count(filters=filters)
+        return await self.count(filters=filters)
 ```
+
+**同期版**: `AsyncBaseRepository` → `BaseRepository`、`async def` → `def`、`await` を削除してください。
 
 ### 複雑な検索ロジック
 
@@ -488,8 +505,8 @@ class TaskRepository(BaseRepository[Task]):
 from sqlalchemy import and_, or_, select
 from datetime import datetime, timedelta
 
-class TaskRepository(BaseRepository[Task]):
-    def find_urgent_tasks(self) -> List[Task]:
+class TaskRepository(AsyncBaseRepository[Task]):
+    async def find_urgent_tasks(self) -> List[Task]:
         """緊急タスク（高優先度 かつ 期限間近）"""
         deadline = datetime.now() + timedelta(days=3)
         
@@ -499,9 +516,9 @@ class TaskRepository(BaseRepository[Task]):
             Task.status != 'completed'
         ]
         
-        return self.find(filters=filters, order_by='due_date:asc')
+        return await self.find(filters=filters, order_by='due_date:asc')
     
-    def find_overdue_tasks(self) -> List[Task]:
+    async def find_overdue_tasks(self) -> List[Task]:
         """期限切れタスク"""
         query = select(Task).where(
             and_(
@@ -510,7 +527,8 @@ class TaskRepository(BaseRepository[Task]):
             )
         ).order_by(Task.due_date)
         
-        return self.session.execute(query).scalars().all()
+        result = await self.session.execute(query)
+        return result.scalars().all()
 ```
 
 ### 関連モデルの操作
@@ -518,18 +536,19 @@ class TaskRepository(BaseRepository[Task]):
 ```python
 from sqlalchemy import select
 
-class TaskRepository(BaseRepository[Task]):
-    def find_with_user(self, user_id: int) -> List[Task]:
+class TaskRepository(AsyncBaseRepository[Task]):
+    async def find_with_user(self, user_id: int) -> List[Task]:
         """特定ユーザーのタスクを取得"""
-        return self.get_by('user_id', user_id)
+        return await self.get_by('user_id', user_id)
     
-    def find_by_tags(self, tags: List[str]) -> List[Task]:
+    async def find_by_tags(self, tags: List[str]) -> List[Task]:
         """タグで検索（多対多）"""
         query = select(Task).join(Task.tags).where(
             Tag.name.in_(tags)
         ).distinct()
         
-        return self.session.execute(query).scalars().all()
+        result = await self.session.execute(query)
+        return result.scalars().all()
 ```
 
 ### options を活用したカスタムメソッド
@@ -537,17 +556,17 @@ class TaskRepository(BaseRepository[Task]):
 ```python
 from sqlalchemy.orm import joinedload, selectinload
 
-class TaskRepository(BaseRepository[Task]):
-    def find_with_user(self, **kwargs):
+class TaskRepository(AsyncBaseRepository[Task]):
+    async def find_with_user(self, **kwargs):
         """ユーザー情報を含めて取得"""
-        return self.find(
+        return await self.find(
             options=[joinedload(Task.user)],
             **kwargs
         )
     
-    def find_full(self, **kwargs):
+    async def find_full(self, **kwargs):
         """すべての関連情報を含めて取得"""
-        return self.find(
+        return await self.find(
             options=[
                 joinedload(Task.user),
                 selectinload(Task.tags),
@@ -565,8 +584,8 @@ class TaskRepository(BaseRepository[Task]):
 from datetime import datetime
 from typing import List
 
-class OrderRepository(BaseRepository[Order]):
-    def create_order(self, user_id: int, items: List[dict]) -> Order:
+class OrderRepository(AsyncBaseRepository[Order]):
+    async def create_order(self, user_id: int, items: List[dict]) -> Order:
         """注文を作成（ビジネスロジック）"""
         # 合計金額を計算
         total = sum(item['price'] * item['quantity'] for item in items)
@@ -578,11 +597,11 @@ class OrderRepository(BaseRepository[Order]):
             total_amount=total
         )
         
-        return self.save(order)
+        return await self.save(order)
     
-    def complete_order(self, order_id: int) -> Order:
+    async def complete_order(self, order_id: int) -> Order:
         """注文を完了"""
-        order = self.get_by_id(order_id)
+        order = await self.get_by_id(order_id)
         if not order:
             raise ValueError(f"Order {order_id} not found")
         
@@ -592,11 +611,11 @@ class OrderRepository(BaseRepository[Order]):
         order.status = 'completed'
         order.completed_at = datetime.now()
         
-        return self.save(order)
+        return await self.save(order)
     
-    def cancel_order(self, order_id: int) -> Order:
+    async def cancel_order(self, order_id: int) -> Order:
         """注文をキャンセル"""
-        order = self.get_by_id(order_id)
+        order = await self.get_by_id(order_id)
         if not order:
             raise ValueError(f"Order {order_id} not found")
         
@@ -606,8 +625,10 @@ class OrderRepository(BaseRepository[Order]):
         order.status = 'cancelled'
         order.cancelled_at = datetime.now()
         
-        return self.save(order)
+        return await self.save(order)
 ```
+
+**同期版**: `AsyncBaseRepository` → `BaseRepository`、`async def` → `def`、`await` を削除してください。
 
 ---
 
