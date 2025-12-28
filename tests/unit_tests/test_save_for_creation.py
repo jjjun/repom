@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.base_model import BaseModel
-from repom.async_base_repository import AsyncBaseRepository
+from repom.repositories import AsyncBaseRepository
 
 
 class SaveCreationTestModel(BaseModel, use_created_at=True, use_updated_at=True):
@@ -17,13 +17,26 @@ class SaveCreationTestModel(BaseModel, use_created_at=True, use_updated_at=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
+@pytest.fixture
+async def save_repo(async_db_test):
+    """SaveCreationTestModel 用のリポジトリフィクスチャ
+
+    各テストでデータ作成パターンが異なるため、
+    リポジトリのみを提供してデータは各テスト内で作成する。
+
+    Returns:
+        AsyncBaseRepository: SaveCreationTestModel のリポジトリ
+    """
+    return AsyncBaseRepository(SaveCreationTestModel, session=async_db_test)
+
+
 @pytest.mark.asyncio
 class TestSaveMethodForCreation:
     """Verify that save() method works for both creation and update"""
 
-    async def test_save_method_for_new_entity_creation(self, async_db_test):
+    async def test_save_method_for_new_entity_creation(self, save_repo):
         """Test: save() can be used for NEW entity creation"""
-        repo = AsyncBaseRepository(SaveCreationTestModel, session=async_db_test)
+        repo = await save_repo
 
         # Create NEW entity (not yet in database)
         new_entity = SaveCreationTestModel(name="New Entity")
@@ -50,9 +63,9 @@ class TestSaveMethodForCreation:
 
         print(f"\n✅ RESULT: save() works for NEW entity creation!")
 
-    async def test_save_method_for_existing_entity_update(self, async_db_test):
+    async def test_save_method_for_existing_entity_update(self, save_repo):
         """Test: save() can be used for EXISTING entity update"""
-        repo = AsyncBaseRepository(SaveCreationTestModel, session=async_db_test)
+        repo = await save_repo
 
         # First: Create entity
         entity = SaveCreationTestModel(name="Original Name")
@@ -82,9 +95,9 @@ class TestSaveMethodForCreation:
 
         print(f"\n✅ RESULT: save() works for EXISTING entity update!")
 
-    async def test_save_vs_manual_flush_comparison(self, async_db_test):
+    async def test_save_vs_manual_flush_comparison(self, save_repo, async_db_test):
         """Compare: save() vs manual add+flush+refresh pattern"""
-        repo = AsyncBaseRepository(SaveCreationTestModel, session=async_db_test)
+        repo = await save_repo
 
         # Pattern 1: Using save() method
         entity1 = SaveCreationTestModel(name="Using save()")
@@ -118,10 +131,10 @@ class TestSaveMethodForCreation:
 class TestSaveMethodReplacesMinePatterns:
     """Verify that save() can replace the patterns used in mine-py"""
 
-    async def test_mine_py_video_asset_link_pattern(self, async_db_test):
+    async def test_mine_py_video_asset_link_pattern(self, save_repo):
         """Simulate the pattern from mine-py video_asset_routes.py"""
-        repo = AsyncBaseRepository(SaveCreationTestModel, session=async_db_test)
-
+        repo = await save_repo
+        
         # mine-py pattern (問題があるパターン):
         # link = AniVideoAssetLinkModel(...)
         # session.add(link)
