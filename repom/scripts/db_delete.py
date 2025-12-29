@@ -7,6 +7,7 @@ logger = get_logger(__name__)
 
 def main():
     load_models(context="db_delete")
+    engine = get_sync_engine()
     Base.metadata.drop_all(bind=engine)
     logger.info(f"Database tables dropped: {engine.url}")
 

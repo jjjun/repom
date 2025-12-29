@@ -127,7 +127,7 @@ def main():
 
     try:
         # トランザクション内で全ファイルを処理
-        with transaction() as session:
+        with get_db_transaction() as session:
             total_count = 0
             file_count = 0
 

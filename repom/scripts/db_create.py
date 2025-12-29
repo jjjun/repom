@@ -7,6 +7,7 @@ logger = get_logger(__name__)
 
 def main():
     load_models(context="db_create")
+    engine = get_sync_engine()
     Base.metadata.create_all(bind=engine)
     logger.info(f"Database created: {engine.url}")
 
