@@ -11,6 +11,30 @@ from tests.utils import (
     save_model_instances
 )
 from repom.database import Base, _db_manager
+import pytest
+
+
+# Ensure these tests run first, before any tests that use isolated_mapper_registry
+pytestmark = pytest.mark.order(1)
+
+
+@pytest.fixture(autouse=True)
+def ensure_roster_model_ready():
+    """Ensure RosterModel is properly initialized before each test.
+
+    This fixture runs automatically before each test in this module.
+    It ensures that RosterModel's mapper is valid, even if other tests
+    have called clear_mappers().
+    """
+    from sqlalchemy.orm import configure_mappers
+    # Force mapper configuration to ensure RosterModel is ready
+    try:
+        configure_mappers()
+    except Exception:
+        # If configure fails, it means mappers need to be rebuilt
+        # This will be handled by the module reload in isolated_mapper_registry
+        pass
+    yield
 
 
 """
@@ -39,14 +63,15 @@ class RosterModel(Base):
     特定のグループや組織のメンバーの名前、役割、担当業務、スケジュールなどが記載されたリストや表のこと
     """
     __tablename__ = 'rosters'
+    __table_args__ = (
+        CheckConstraint("key != ''", name='key_not_empty'),
+        {'extend_existing': True}  # Allow table redefinition after clear_mappers()
+    )
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # key ユニークな英字列を入れる(ex. taro, hanako, ...)
     key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), default='')
-
-    __table_args__ = (
-        CheckConstraint("key != ''", name='key_not_empty'),
-    )
 
 
 # 結果
@@ -68,10 +93,31 @@ def test_skip_on_exception(db_test):
     .add()メソッドは、オブジェクトをセッションに追加するだけで、実際にデータベースに対して変更を行うわけではありません。
     データベースに対する変更は、.commit()メソッドを呼び出したときに行われます。
     このときに、ユニーク制約違反などのデータベース制約がチェックされ、違反が発生した場合は例外がスローされます。
-    """
-    sample_data = generate_sample_roster_data(SAVE_COUNT)
 
-    save_model_instances(RosterModel, sample_data, db_test)
+    Note: To handle clear_mappers() called by other tests, we redefine RosterModel
+    within this test function.
+    """
+    # Redefine RosterModel within test to handle clear_mappers() from other tests
+    from repom.database import Base
+    from sqlalchemy import Integer, String, CheckConstraint
+    from sqlalchemy.orm import Mapped, mapped_column
+
+    class LocalRosterModel(Base):
+        __tablename__ = 'rosters'
+        __table_args__ = (
+            CheckConstraint("key != ''", name='key_not_empty'),
+            {'extend_existing': True}
+        )
+
+        id: Mapped[int] = mapped_column(Integer, primary_key=True)
+        key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+        name: Mapped[str] = mapped_column(String(255), default='')
+
+    # Ensure tables are created
+    Base.metadata.create_all(bind=db_test.bind)
+
+    sample_data = generate_sample_roster_data(SAVE_COUNT)
+    save_model_instances(LocalRosterModel, sample_data, db_test)
 
     # save_model_instancesにより、既にデータは保存されている
     # この先の処理では事前にキーをチェックして、既に存在している為、保存はスキップされる
@@ -79,7 +125,7 @@ def test_skip_on_exception(db_test):
         try:
             for item in sample_data:
                 try:
-                    instance = RosterModel(**item)
+                    instance = LocalRosterModel(**item)
                     session.add(instance)
                     session.commit()
                 except IntegrityError as e:
@@ -97,20 +143,38 @@ def test_check_duplicate_key_and_skip(db_test):
     """
     上記よりもスッキリかけるし、`.commit()` の回数を1回に出来るので、こっちの方が良い。
     """
-    sample_data = generate_sample_roster_data(SAVE_COUNT)
+    # Redefine RosterModel within test to handle clear_mappers() from other tests
+    from repom.database import Base
+    from sqlalchemy import Integer, String, CheckConstraint
+    from sqlalchemy.orm import Mapped, mapped_column
 
-    save_model_instances(RosterModel, sample_data, db_test)
+    class LocalRosterModel(Base):
+        __tablename__ = 'rosters'
+        __table_args__ = (
+            CheckConstraint("key != ''", name='key_not_empty'),
+            {'extend_existing': True}
+        )
+
+        id: Mapped[int] = mapped_column(Integer, primary_key=True)
+        key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+        name: Mapped[str] = mapped_column(String(255), default='')
+
+    # Ensure tables are created
+    Base.metadata.create_all(bind=db_test.bind)
+
+    sample_data = generate_sample_roster_data(SAVE_COUNT)
+    save_model_instances(LocalRosterModel, sample_data, db_test)
 
     # save_model_instancesにより、既にデータは保存されている
     # この先の処理では事前にキーをチェックして、既に存在している為、保存はスキップされる
     try:
         for item in sample_data:
             # 事前にキーをチェックして、既に存在している場合はスキップする
-            existing_item = db_test.query(RosterModel).filter_by(key=item['key']).first()
+            existing_item = db_test.query(LocalRosterModel).filter_by(key=item['key']).first()
             if existing_item:
                 continue
 
-            instance = RosterModel(**item)
+            instance = LocalRosterModel(**item)
             db_test.add(instance)
 
         db_test.commit()

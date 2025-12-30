@@ -267,7 +267,7 @@ def load_models(context: Optional[str] = None) -> None:
     logger = get_logger(__name__)
     context_prefix = f"[{context}] " if context else ""
 
-    logger.info(f"{context_prefix}Starting model loading...")
+    logger.debug(f"{context_prefix}Starting model loading...")
 
     if config.model_locations:
         auto_import_models_from_list(
@@ -291,6 +291,6 @@ def load_models(context: Optional[str] = None) -> None:
     try:
         # Get table names from metadata (most reliable method)
         table_names = sorted(Base.metadata.tables.keys())
-        logger.info(f"{context_prefix}Loaded {len(table_names)} models: {', '.join(table_names)}")
+        logger.debug(f"{context_prefix}Loaded {len(table_names)} models: {', '.join(table_names)}")
     except Exception as e:
         logger.warning(f"{context_prefix}Could not retrieve model list: {e}")
