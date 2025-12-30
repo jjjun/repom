@@ -4,11 +4,11 @@ repom の基本機能とコアコンポーネントに関するガイドです�
 
 ## 📋 ガイド一覧
 
-- **[auto_import_models_guide.md](auto_import_models_guide.md)** - モデルの自動インポート機能
+現在、コア設定に関するガイドは [features/auto_import_models_guide.md](../features/auto_import_models_guide.md) に移動しました。
 
 ## 🎯 このディレクトリの対象
 
-- モデルの自動検出とインポート
+- データベース基礎設定
 - CONFIG_HOOK による設定カスタマイズ
 
 ## 🔗 関連ガイド

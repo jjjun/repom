@@ -5,7 +5,6 @@ repom の使い方を機能別に整理したガイド集です。
 ## 📂 ガイドカテゴリ
 
 ### 🔧 [core/](core/) - コア機能
-- モデル自動インポート
 - CONFIG_HOOK による設定カスタマイズ
 - データベース基礎設定
 
@@ -22,6 +21,7 @@ repom の使い方を機能別に整理したガイド集です。
 - AsyncBaseRepository
 
 ### ⚡ [features/](features/) - 機能別ガイド
+- モデルの自動インポート
 - マスターデータ同期
 - ロギング
 
@@ -38,8 +38,9 @@ repom の使い方を機能別に整理したガイド集です。
 
 ## 📖 全ガイド一覧
 
-### Core (1)
-- [auto_import_models_guide.md](core/auto_import_models_guide.md)
+### Core (0)
+
+現在、core ディレクトリには個別ガイドがありません。CONFIG_HOOK の設定については各機能のガイドを参照してください。
 
 ### Model (3)
 - [base_model_auto_guide.md](model/base_model_auto_guide.md)
@@ -51,7 +52,8 @@ repom の使い方を機能別に整理したガイド集です。
 - [repository_and_utilities_guide.md](repository/repository_and_utilities_guide.md)
 - [repository_session_patterns.md](repository/repository_session_patterns.md)
 
-### Features (2)
+### Features (3)
+- [auto_import_models_guide.md](features/auto_import_models_guide.md)
 - [logging_guide.md](features/logging_guide.md)
 - [master_data_sync_guide.md](features/master_data_sync_guide.md)
 

@@ -4,6 +4,7 @@ repom の個別機能に関するガイドです。
 
 ## 📋 ガイド一覧
 
+- **[auto_import_models_guide.md](auto_import_models_guide.md)** - モデルの自動インポート機能
 - **[master_data_sync_guide.md](master_data_sync_guide.md)** - マスターデータ同期機能
 - **[logging_guide.md](logging_guide.md)** - ログ機能の設定と使い方
 
