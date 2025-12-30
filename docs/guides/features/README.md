@@ -4,13 +4,15 @@ repom の個別機能に関するガイドです。
 
 ## 📋 ガイド一覧
 
-- **[soft_delete_guide.md](soft_delete_guide.md)** - ソフトデリート機能の使い方
 - **[master_data_sync_guide.md](master_data_sync_guide.md)** - マスターデータ同期機能
 - **[logging_guide.md](logging_guide.md)** - ログ機能の設定と使い方
 
 ## 🎯 このディレクトリの対象
 
-- 論理削除（ソフトデリート）
 - マスターデータの管理
 - ロギング設定
 - その他の付加機能
+
+## 🔗 関連ガイド
+
+論理削除（ソフトデリート）機能のガイドは [Model Guides](../model/soft_delete_guide.md) に移動しました。

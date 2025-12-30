@@ -5,11 +5,15 @@ repom の使い方を機能別に整理したガイド集です。
 ## 📂 ガイドカテゴリ
 
 ### 🔧 [core/](core/) - コア機能
+- モデル自動インポート
+- CONFIG_HOOK による設定カスタマイズ
+- データベース基礎設定
+
+### 🎨 [model/](model/) - モデル定義
 - BaseModel の拡張機能
 - Pydantic スキーマ自動生成
-- カスタム型の実装
-- モデル自動インポート
-- データベース基礎設定
+- システムカラムとカスタム型
+- 論理削除（ソフトデリート）
 
 ### 📦 [repository/](repository/) - リポジトリパターン
 - BaseRepository の使い方
@@ -18,7 +22,6 @@ repom の使い方を機能別に整理したガイド集です。
 - AsyncBaseRepository
 
 ### ⚡ [features/](features/) - 機能別ガイド
-- ソフトデリート
 - マスターデータ同期
 - ロギング
 
@@ -30,29 +33,31 @@ repom の使い方を機能別に整理したガイド集です。
 
 1. **初めての方**: [repository/repository_and_utilities_guide.md](repository/repository_and_utilities_guide.md) から始めてください
 2. **FastAPI統合**: [repository/repository_session_patterns.md](repository/repository_session_patterns.md) の FastAPI セクションを参照
-3. **スキーマ生成**: [core/base_model_auto_guide.md](core/base_model_auto_guide.md) を参照
+3. **スキーマ生成**: [model/base_model_auto_guide.md](model/base_model_auto_guide.md) を参照
 4. **テスト作成**: [testing/testing_guide.md](testing/testing_guide.md) を参照
 
 ## 📖 全ガイド一覧
 
-### Core (3)
+### Core (1)
 - [auto_import_models_guide.md](core/auto_import_models_guide.md)
-- [base_model_auto_guide.md](core/base_model_auto_guide.md)
-- [system_columns_and_custom_types.md](core/system_columns_and_custom_types.md)
+
+### Model (3)
+- [base_model_auto_guide.md](model/base_model_auto_guide.md)
+- [system_columns_and_custom_types.md](model/system_columns_and_custom_types.md)
+- [soft_delete_guide.md](model/soft_delete_guide.md)
 
 ### Repository (3)
 - [async_repository_guide.md](repository/async_repository_guide.md)
 - [repository_and_utilities_guide.md](repository/repository_and_utilities_guide.md)
 - [repository_session_patterns.md](repository/repository_session_patterns.md)
 
-### Features (3)
+### Features (2)
 - [logging_guide.md](features/logging_guide.md)
 - [master_data_sync_guide.md](features/master_data_sync_guide.md)
-- [soft_delete_guide.md](features/soft_delete_guide.md)
 
 ### Testing (1)
 - [testing_guide.md](testing/testing_guide.md)
 
 ---
 
-**合計**: 10 ガイド (削減前: 13 ガイド)
+**合計**: 10 ガイド
