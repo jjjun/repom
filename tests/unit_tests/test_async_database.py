@@ -523,6 +523,15 @@ class TestStandaloneAsyncTransaction:
             # execute メソッドが呼び出し可能
             assert callable(session.execute)
 
+    @pytest.mark.asyncio
+    async def test_public_api_works_with_async_with(self):
+        """Public API (get_standalone_async_transaction) が async with で使えることを確認"""
+        from repom.database import get_standalone_async_transaction
+
+        async with get_standalone_async_transaction() as session:
+            assert isinstance(session, AsyncSession)
+            assert hasattr(session, 'execute')
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

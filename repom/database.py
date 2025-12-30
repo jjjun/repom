@@ -669,7 +669,7 @@ async def get_async_db_transaction():
         yield session
 
 
-async def get_standalone_async_transaction():
+def get_standalone_async_transaction():
     """
     Get an asynchronous database session for standalone scripts.
 
@@ -679,8 +679,8 @@ async def get_standalone_async_transaction():
     For FastAPI applications, use get_async_db_transaction() with
     lifespan_context() instead.
 
-    Yields:
-        AsyncSession: SQLAlchemy asynchronous session
+    Returns:
+        AsyncContextManager[AsyncSession]: Async context manager that yields AsyncSession
 
     Example:
         >>> import asyncio
@@ -698,8 +698,7 @@ async def get_standalone_async_transaction():
         >>> if __name__ == "__main__":
         >>>     asyncio.run(main())
     """
-    async for session in _AsyncContextManagerIterable(_db_manager.get_standalone_async_transaction()):
-        yield session
+    return _db_manager.get_standalone_async_transaction()
 
 
 # ========================================
