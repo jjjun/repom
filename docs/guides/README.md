@@ -4,10 +4,6 @@ repom の使い方を機能別に整理したガイド集です。
 
 ## 📂 ガイドカテゴリ
 
-### 🔧 [core/](core/) - コア機能
-- CONFIG_HOOK による設定カスタマイズ
-- データベース基礎設定
-
 ### 🎨 [model/](model/) - モデル定義
 - BaseModel の拡張機能
 - Pydantic スキーマ自動生成
@@ -37,10 +33,6 @@ repom の使い方を機能別に整理したガイド集です。
 4. **テスト作成**: [testing/testing_guide.md](testing/testing_guide.md) を参照
 
 ## 📖 全ガイド一覧
-
-### Core (0)
-
-現在、core ディレクトリには個別ガイドがありません。CONFIG_HOOK の設定については各機能のガイドを参照してください。
 
 ### Model (3)
 - [base_model_auto_guide.md](model/base_model_auto_guide.md)
