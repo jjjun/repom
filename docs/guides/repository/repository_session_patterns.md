@@ -616,6 +616,162 @@ asyncio_mode = "auto"
 
 ---
 
+## 非同期版のセッション管理パターン
+
+### AsyncBaseRepository のセッション管理
+
+非同期版の `AsyncBaseRepository` も同様に `session=None` を許容し、柔軟なセッション管理が可能です。
+
+### 非同期パターン 1: FastAPI での使用（推奨）
+
+**特徴**:
+- ✅ `lifespan_context()` で自動的にエンジンをクリーンアップ
+- ✅ `Depends` パターンでシンプルに統合
+- ✅ `dispose_async()` の手動呼び出し不要
+
+```python
+from fastapi import FastAPI, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from repom.database import get_async_db_session, get_lifespan_manager
+from repom.async_base_repository import AsyncBaseRepository
+from your_project.models import Task
+
+# lifespan で自動クリーンアップ
+app = FastAPI(lifespan=get_lifespan_manager())
+
+@app.get("/tasks/{task_id}")
+async def get_task(
+    task_id: int,
+    session: AsyncSession = Depends(get_async_db_session)
+):
+    repo = AsyncBaseRepository(Task, session)
+    task = await repo.get_by_id(task_id)
+    return task
+```
+
+**ポイント**:
+- `lifespan=get_lifespan_manager()` が shutdown 時に自動的に `dispose_all()` を呼ぶ
+- エンジンのクリーンアップを気にする必要なし
+
+---
+
+### 非同期パターン 2: スタンドアロンスクリプト（CLI、バッチ、Jupyter）
+
+**特徴**:
+- ✅ 自動的に `dispose_async()` を呼ぶ
+- ✅ プログラムが正常に終了する
+- ✅ CLI ツール、バッチスクリプトに最適
+
+**❌ よくある問題**:
+
+```python
+# ❌ これはプログラムが終了しない
+import asyncio
+from repom.database import _db_manager
+
+async def main():
+    async with _db_manager.get_async_transaction() as session:
+        # データベース操作
+        pass
+    # ここで終了するはずだが、プログラムが停止しない
+
+if __name__ == "__main__":
+    asyncio.run(main())  # ハングする
+```
+
+**理由**: SQLAlchemy の非同期エンジンは接続プールとバックグラウンドタスクを保持し続けるため、明示的に `dispose_async()` を呼ばないと終了しません。
+
+**✅ 解決方法 1: `get_standalone_async_transaction()` を使う（推奨）**:
+
+```python
+import asyncio
+from repom.database import get_standalone_async_transaction
+from sqlalchemy import select
+from your_project.models import Task
+
+async def main():
+    async with get_standalone_async_transaction() as session:
+        # データベース操作
+        result = await session.execute(select(Task).limit(10))
+        tasks = result.scalars().all()
+        for task in tasks:
+            print(task.title)
+    # 自動的に dispose_async() が呼ばれる
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+**✅ 解決方法 2: 手動で `dispose_async()` を呼ぶ**:
+
+```python
+import asyncio
+from repom.database import _db_manager
+
+async def main():
+    try:
+        async with _db_manager.get_async_transaction() as session:
+            # データベース操作
+            pass
+    finally:
+        # 接続プールをクリーンアップ（必須！）
+        await _db_manager.dispose_async()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+---
+
+### 非同期パターンの選択ガイド
+
+| ユースケース | 推奨パターン | クリーンアップ |
+|-------------|-------------|---------------|
+| **FastAPI アプリ** | `get_async_db_session()` + `lifespan` | 自動 |
+| **CLI ツール** | `get_standalone_async_transaction()` | 自動 |
+| **バッチスクリプト** | `get_standalone_async_transaction()` | 自動 |
+| **Jupyter Notebook** | `get_standalone_async_transaction()` | 自動 |
+| **pytest での非同期テスト** | fixture + `dispose_async()` | fixture で管理 |
+
+---
+
+### 非同期版のベストプラクティス
+
+#### ✅ DO: FastAPI では lifespan を使う
+
+```python
+# Good: lifespan が自動的にクリーンアップ
+from fastapi import FastAPI
+from repom.database import get_lifespan_manager
+
+app = FastAPI(lifespan=get_lifespan_manager())
+```
+
+#### ✅ DO: スタンドアロンスクリプトでは専用ヘルパーを使う
+
+```python
+# Good: 自動的に dispose される
+import asyncio
+from repom.database import get_standalone_async_transaction
+
+async def main():
+    async with get_standalone_async_transaction() as session:
+        # 処理
+
+asyncio.run(main())
+```
+
+#### ❌ DON'T: スタンドアロンで dispose を忘れる
+
+```python
+# Bad: プログラムが終了しない
+async with _db_manager.get_async_transaction() as session:
+    pass
+# dispose_async() を呼んでいない
+```
+
+---
+
 ## まとめ
 
 **覚えておくべき 3 つのポイント**:
@@ -624,15 +780,21 @@ asyncio_mode = "auto"
 2. **シンプルな操作はパターン 1** - セッションを渡さず、そのまま使う
 3. **複数操作はパターン 2** - `get_db_transaction()` でラップする
 
-**基本ルール**:
+**基本ルール（同期版）**:
 - 単純な操作 → セッションなし
 - 複雑な操作 → 明示的トランザクション
 - FastAPI → Depends パターン
+
+**基本ルール（非同期版）**:
+- FastAPI → `get_async_db_session()` + `lifespan_context()`
+- CLI/バッチ → `get_standalone_async_transaction()`
+- 手動管理 → `get_async_transaction()` + `dispose_async()`
 
 **避けるべきこと**:
 - ❌ Repository の `__init__` で `session is None` チェックして raise
 - ❌ `__init__` で `get_db_session()` を直接呼ぶ
 - ❌ パターン 1 で複数操作を実行
+- ❌ スタンドアロンスクリプトで `dispose_async()` を忘れる
 
 ---
 

@@ -457,5 +457,72 @@ class TestFastAPIDependsPattern:
                 pass
 
 
+class TestStandaloneAsyncTransaction:
+    """get_standalone_async_transaction() のテスト
+
+    注意: standalone transaction は自動的に dispose するため、
+    通常の fixture とは分離してテストする必要があります。
+    """
+
+    @pytest.mark.asyncio
+    async def test_yields_async_session(self):
+        """AsyncSession が返されることを確認"""
+        from repom.database import _db_manager
+
+        async with _db_manager.get_standalone_async_transaction() as session:
+            assert isinstance(session, AsyncSession)
+
+    @pytest.mark.asyncio
+    async def test_dispose_async_called_on_exit(self):
+        """終了時に dispose_async() が呼ばれることを確認（最重要）"""
+        manager = DatabaseManager()
+
+        # Engine を作成
+        await manager.get_async_engine()
+        assert manager._async_engine is not None
+
+        # standalone transaction を使用
+        async with manager.get_standalone_async_transaction() as session:
+            assert isinstance(session, AsyncSession)
+
+        # dispose されていることを確認
+        assert manager._async_engine is None
+
+    @pytest.mark.asyncio
+    async def test_dispose_async_called_on_error(self):
+        """エラー時も dispose_async() が呼ばれることを確認"""
+        manager = DatabaseManager()
+
+        # Engine を作成
+        await manager.get_async_engine()
+        assert manager._async_engine is not None
+
+        # エラーを発生させる
+        with pytest.raises(ValueError):
+            async with manager.get_standalone_async_transaction() as session:
+                raise ValueError("Test error")
+
+        # エラー時も dispose されていることを確認
+        assert manager._async_engine is None
+
+    @pytest.mark.asyncio
+    async def test_session_has_required_methods(self):
+        """返されるセッションが必要なメソッドを持つことを確認"""
+        from repom.database import _db_manager
+
+        async with _db_manager.get_standalone_async_transaction() as session:
+            # 必要なメソッドが存在することを確認
+            assert hasattr(session, 'execute')
+            assert hasattr(session, 'add')
+            assert hasattr(session, 'delete')
+            assert hasattr(session, 'commit')
+            assert hasattr(session, 'rollback')
+            assert hasattr(session, 'flush')
+            assert hasattr(session, 'close')
+
+            # execute メソッドが呼び出し可能
+            assert callable(session.execute)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -16,7 +16,7 @@ Example (FastAPI with lifespan):
     >>>     result = await session.execute(select(User))
     >>>     return result.scalars().all()
 
-Example (CLI script):
+Example (CLI script - sync):
     >>> from repom.database import get_db_transaction
     >>> 
     >>> def main():
@@ -24,6 +24,18 @@ Example (CLI script):
     >>>         user = User(name="test")
     >>>         session.add(user)
     >>>         # Auto commit on exit
+
+Example (CLI script - async):
+    >>> import asyncio
+    >>> from repom.database import get_standalone_async_transaction
+    >>> 
+    >>> async def main():
+    >>>     async with get_standalone_async_transaction() as session:
+    >>>         result = await session.execute(select(User))
+    >>>         users = result.scalars().all()
+    >>> 
+    >>> if __name__ == "__main__":
+    >>>     asyncio.run(main())
 """
 
 from typing import Optional, AsyncGenerator, Generator, AsyncContextManager, ContextManager, TypeVar, Generic
@@ -364,6 +376,37 @@ class DatabaseManager:
         finally:
             await session.close()
 
+    @asynccontextmanager
+    async def get_standalone_async_transaction(self) -> AsyncGenerator[AsyncSession, None]:
+        """
+        Get an asynchronous database session for standalone scripts.
+
+        Automatically disposes the engine on exit, making it suitable for
+        CLI tools, batch scripts, and other standalone applications.
+
+        For FastAPI, use get_async_transaction() with lifespan_context() instead.
+
+        Yields:
+            AsyncSession: SQLAlchemy asynchronous session
+
+        Example:
+            >>> import asyncio
+            >>> from repom.database import _db_manager
+            >>> 
+            >>> async def main():
+            >>>     async with _db_manager.get_standalone_async_transaction() as session:
+            >>>         result = await session.execute(select(User))
+            >>>         users = result.scalars().all()
+            >>> 
+            >>> if __name__ == "__main__":
+            >>>     asyncio.run(main())
+        """
+        try:
+            async with self.get_async_transaction() as session:
+                yield session
+        finally:
+            await self.dispose_async()
+
     async def dispose_async(self):
         """
         Dispose the asynchronous engine and clear cached factories.
@@ -626,6 +669,39 @@ async def get_async_db_transaction():
         yield session
 
 
+async def get_standalone_async_transaction():
+    """
+    Get an asynchronous database session for standalone scripts.
+
+    Automatically disposes the engine on exit, making it suitable for
+    CLI tools, batch scripts, Jupyter notebooks, and other standalone applications.
+
+    For FastAPI applications, use get_async_db_transaction() with
+    lifespan_context() instead.
+
+    Yields:
+        AsyncSession: SQLAlchemy asynchronous session
+
+    Example:
+        >>> import asyncio
+        >>> from repom.database import get_standalone_async_transaction
+        >>> from sqlalchemy import select
+        >>> from your_project.models import User
+        >>> 
+        >>> async def main():
+        >>>     async with get_standalone_async_transaction() as session:
+        >>>         result = await session.execute(select(User).limit(10))
+        >>>         users = result.scalars().all()
+        >>>         for user in users:
+        >>>             print(user.name)
+        >>> 
+        >>> if __name__ == "__main__":
+        >>>     asyncio.run(main())
+    """
+    async for session in _AsyncContextManagerIterable(_db_manager.get_standalone_async_transaction()):
+        yield session
+
+
 # ========================================
 # Public API - Lifecycle
 # ========================================
@@ -673,6 +749,7 @@ __all__ = [
     'get_async_engine',
     'get_async_db_session',
     'get_async_db_transaction',
+    'get_standalone_async_transaction',
     'convert_to_async_uri',
     # Lifecycle
     'dispose_engines',

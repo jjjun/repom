@@ -14,10 +14,6 @@ from repom.database import Base, _db_manager
 import pytest
 
 
-# Ensure these tests run first, before any tests that use isolated_mapper_registry
-pytestmark = pytest.mark.order(1)
-
-
 @pytest.fixture(autouse=True)
 def ensure_roster_model_ready():
     """Ensure RosterModel is properly initialized before each test.
@@ -102,7 +98,7 @@ def test_skip_on_exception(db_test):
     from sqlalchemy import Integer, String, CheckConstraint
     from sqlalchemy.orm import Mapped, mapped_column
 
-    class LocalRosterModel(Base):
+    class LocalRosterModel1(Base):
         __tablename__ = 'rosters'
         __table_args__ = (
             CheckConstraint("key != ''", name='key_not_empty'),
@@ -117,7 +113,7 @@ def test_skip_on_exception(db_test):
     Base.metadata.create_all(bind=db_test.bind)
 
     sample_data = generate_sample_roster_data(SAVE_COUNT)
-    save_model_instances(LocalRosterModel, sample_data, db_test)
+    save_model_instances(LocalRosterModel1, sample_data, db_test)
 
     # save_model_instancesにより、既にデータは保存されている
     # この先の処理では事前にキーをチェックして、既に存在している為、保存はスキップされる
@@ -125,7 +121,7 @@ def test_skip_on_exception(db_test):
         try:
             for item in sample_data:
                 try:
-                    instance = LocalRosterModel(**item)
+                    instance = LocalRosterModel1(**item)
                     session.add(instance)
                     session.commit()
                 except IntegrityError as e:
@@ -148,7 +144,7 @@ def test_check_duplicate_key_and_skip(db_test):
     from sqlalchemy import Integer, String, CheckConstraint
     from sqlalchemy.orm import Mapped, mapped_column
 
-    class LocalRosterModel(Base):
+    class LocalRosterModel2(Base):
         __tablename__ = 'rosters'
         __table_args__ = (
             CheckConstraint("key != ''", name='key_not_empty'),
@@ -163,18 +159,18 @@ def test_check_duplicate_key_and_skip(db_test):
     Base.metadata.create_all(bind=db_test.bind)
 
     sample_data = generate_sample_roster_data(SAVE_COUNT)
-    save_model_instances(LocalRosterModel, sample_data, db_test)
+    save_model_instances(LocalRosterModel2, sample_data, db_test)
 
     # save_model_instancesにより、既にデータは保存されている
     # この先の処理では事前にキーをチェックして、既に存在している為、保存はスキップされる
     try:
         for item in sample_data:
             # 事前にキーをチェックして、既に存在している場合はスキップする
-            existing_item = db_test.query(LocalRosterModel).filter_by(key=item['key']).first()
+            existing_item = db_test.query(LocalRosterModel2).filter_by(key=item['key']).first()
             if existing_item:
                 continue
 
-            instance = LocalRosterModel(**item)
+            instance = LocalRosterModel2(**item)
             db_test.add(instance)
 
         db_test.commit()
