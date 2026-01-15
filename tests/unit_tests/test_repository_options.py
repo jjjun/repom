@@ -9,7 +9,7 @@ from sqlalchemy import Integer, String, ForeignKey, select
 from sqlalchemy.orm import Mapped, mapped_column, relationship, joinedload, selectinload
 import pytest
 from repom.base_model import BaseModel
-from repom.base_repository import BaseRepository
+from repom import BaseRepository
 
 
 # テスト用モデル定義

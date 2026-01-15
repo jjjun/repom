@@ -5,8 +5,7 @@ import pytest
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.base_model import BaseModel
-from repom.base_repository import BaseRepository
-from repom.async_base_repository import AsyncBaseRepository
+from repom import BaseRepository, AsyncBaseRepository
 
 
 class InitTestModel(BaseModel):

@@ -5,7 +5,7 @@ import pytest
 from datetime import datetime
 from typing import Optional, List
 from repom.base_model import BaseModel
-from repom.base_repository import BaseRepository
+from repom import BaseRepository
 from repom.base_model_auto import BaseModelAuto
 from repom.mixins import SoftDeletableMixin
 from repom.repositories import FilterParams

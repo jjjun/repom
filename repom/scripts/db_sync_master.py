@@ -20,7 +20,7 @@ from typing import Generator, Tuple, Type, List, Dict, Any
 from repom.utility import load_models
 from repom.config import config
 from repom.database import get_db_transaction
-from repom.base_repository import BaseRepository
+from repom import BaseRepository
 
 
 def load_master_data_files(directory: str) -> Generator[Tuple[Type, List[Dict[str, Any]]], None, None]:

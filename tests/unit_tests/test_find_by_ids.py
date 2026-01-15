@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.base_model_auto import BaseModelAuto
-from repom.base_repository import BaseRepository
+from repom import BaseRepository
 from repom.mixins import SoftDeletableMixin
 
 

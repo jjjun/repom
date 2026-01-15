@@ -343,7 +343,7 @@ if FASTAPI_AVAILABLE:
 
     def test_fastapi_end_to_end_with_database(db_test):
         """実際のデータベースと連携したエンドツーエンドテスト"""
-        from repom.base_repository import BaseRepository
+        from repom import BaseRepository
 
         # リポジトリを作成
         repo = BaseRepository(ProductModel)
