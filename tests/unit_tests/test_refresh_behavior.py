@@ -99,7 +99,7 @@ class TestRefreshBehaviorAsync:
 
     async def test_save_without_refresh_created_at_is_none(self, async_refresh_repo):
         """Test if created_at is None after save() with external session (async)
-        
+
         外部セッション使用時、save() は flush のみを実行し、refresh は実行しません。
         そのため、DB側で自動設定される created_at/updated_at はまだ Python オブジェクトに反映されていません。
         明示的な refresh が必要です。

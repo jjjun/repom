@@ -37,7 +37,7 @@ class TestSaveMethodForCreation:
 
     async def test_save_method_for_new_entity_creation(self, save_repo):
         """Test: save() can be used for NEW entity creation with external session
-        
+
         外部セッション使用時、save() は flush のみを実行します。
         created_at/updated_at の確認には明示的な refresh が必要です。
         """
@@ -100,7 +100,7 @@ class TestSaveMethodForCreation:
 
     async def test_save_vs_manual_flush_comparison(self, save_repo, async_db_test):
         """Compare: save() vs manual add+flush pattern with external session
-        
+
         外部セッション使用時、save() は flush のみを実行します。
         これは手動での add+flush パターンと同等の動作です。
         """
@@ -126,11 +126,11 @@ class TestSaveMethodForCreation:
         # 外部セッション使用時: 両方とも flush のみなので created_at は None
         assert entity1.created_at is None
         assert entity2.created_at is None
-        
+
         # 明示的に refresh すれば値が取得できる
         await async_db_test.refresh(entity1)
         await async_db_test.refresh(entity2)
-        
+
         assert entity1.created_at is not None
         assert entity2.created_at is not None
 
@@ -144,10 +144,10 @@ class TestSaveMethodReplacesMinePatterns:
 
     async def test_mine_py_video_asset_link_pattern(self, save_repo):
         """Simulate the pattern from mine-py video_asset_routes.py with external session
-        
+
         外部セッション使用時、save() は flush のみを実行するため、
         created_at/updated_at を取得するには明示的な refresh が必要です。
-        
+
         ただし、トランザクション管理が簡潔になり、commit は呼び出し側で制御できます。
         """
         repo = save_repo
@@ -167,7 +167,7 @@ class TestSaveMethodReplacesMinePatterns:
         # （flush のみ実行、refresh は実行されない）
         assert link.created_at is None
         assert link.updated_at is None
-        
+
         # id は設定されている（flush で採番）
         assert link.id is not None
 
