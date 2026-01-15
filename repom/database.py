@@ -245,6 +245,36 @@ class DatabaseManager:
         finally:
             session.close()
 
+    @contextmanager
+    def get_standalone_sync_transaction(self) -> Generator[Session, None, None]:
+        """
+        Get a synchronous database session for standalone scripts.
+
+        Automatically disposes the engine on exit, making it suitable for
+        CLI tools, batch scripts, and other standalone applications.
+
+        For FastAPI, use get_sync_transaction() with Depends instead.
+
+        Yields:
+            Session: SQLAlchemy synchronous session
+
+        Example:
+            >>> from repom.database import _db_manager
+            >>> 
+            >>> def main():
+            >>>     with _db_manager.get_standalone_sync_transaction() as session:
+            >>>         result = session.execute(select(User))
+            >>>         users = result.scalars().all()
+            >>> 
+            >>> if __name__ == "__main__":
+            >>>     main()
+        """
+        try:
+            with self.get_sync_transaction() as session:
+                yield session
+        finally:
+            self.dispose_sync()
+
     def get_inspector(self):
         """
         Get database inspector for schema introspection.
@@ -612,6 +642,36 @@ def get_db_transaction() -> Generator[Session, None, None]:
     yield from _ContextManagerIterable(_db_manager.get_sync_transaction())
 
 
+def get_standalone_sync_transaction():
+    """
+    Get a synchronous database session for standalone scripts.
+
+    Automatically disposes the engine on exit, making it suitable for
+    CLI tools, batch scripts, and other standalone applications.
+
+    For FastAPI applications, use get_db_transaction() with Depends instead.
+
+    Returns:
+        ContextManager[Session]: Context manager that yields Session
+
+    Example:
+        >>> from repom.database import get_standalone_sync_transaction
+        >>> from sqlalchemy import select
+        >>> from your_project.models import User
+        >>> 
+        >>> def main():
+        >>>     with get_standalone_sync_transaction() as session:
+        >>>         result = session.execute(select(User).limit(10))
+        >>>         users = result.scalars().all()
+        >>>         for user in users:
+        >>>             print(user.name)
+        >>> 
+        >>> if __name__ == "__main__":
+        >>>     main()
+    """
+    return _db_manager.get_standalone_sync_transaction()
+
+
 def get_inspector():
     """
     Get database inspector for schema introspection.
@@ -743,6 +803,7 @@ __all__ = [
     'get_sync_engine',
     'get_db_session',
     'get_db_transaction',
+    'get_standalone_sync_transaction',
     'get_inspector',
     # Async API
     'get_async_engine',
