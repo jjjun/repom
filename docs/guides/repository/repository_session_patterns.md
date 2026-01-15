@@ -91,6 +91,11 @@ scripts = repo.get_all()
 - ✅ トランザクション制御が明確
 - ⚠️ やや冗長（with 文が必要）
 
+**重要な動作**:
+- 外部セッションを渡した場合、Repository の `save()` / `saves()` / `remove()` は `commit()` を実行しません
+- 代わりに `flush()` のみが実行され、変更はトランザクション内で保留されます
+- `commit()` は `with` ブロック終了時（または明示的な呼び出し）まで実行されません
+
 ```python
 from repom.database import _db_manager
 from your_project.models import VoiceScript
@@ -103,8 +108,15 @@ with _db_manager.get_sync_transaction() as session:
     repo = VoiceScriptRepository(session)
     script = repo.get_by_id(1)
     script.title = "更新"
+    
+    # save() は flush のみ実行（commit しない）
     repo.save(script)
-    # with ブロック終了時に自動コミット
+    
+    # 追加の操作も同じトランザクション内
+    script2 = repo.get_by_id(2)
+    repo.remove(script2)  # これも flush のみ
+    
+    # with ブロック終了時に全ての変更が commit される
 ```
 
 **適用場面**:
@@ -381,6 +393,80 @@ def create_task(
 | FastAPI エンドポイント | パターン 3（Depends） | FastAPI の慣習に従う |
 | CLI スクリプト | パターン 2（明示的トランザクション） | エラーハンドリングが明確 |
 | バックグラウンドジョブ | パターン 2（明示的トランザクション） | トランザクション制御が重要 |
+
+---
+
+## トランザクション管理の詳細
+
+### 内部セッション vs 外部セッション
+
+repom の Repository は渡されたセッションの種類を自動判定し、適切な動作を選択します：
+
+| セッションタイプ | 判定方法 | `save()` の動作 | `commit()` の責任 |
+|----------------|---------|---------------|-----------------|
+| **内部セッション** | `session=None` で初期化 | `flush()` + `commit()` | Repository |
+| **外部セッション** | 明示的に渡される | `flush()` のみ | 呼び出し側 |
+
+### 判定ロジック
+
+```python
+# BaseRepository / AsyncBaseRepository 内部の判定
+using_internal_session = (
+    self._session_override is None and 
+    self._scoped_session is session
+)
+
+if using_internal_session:
+    session.commit()  # 内部セッション: Repository が commit
+else:
+    session.flush()   # 外部セッション: 呼び出し側が commit
+```
+
+### 外部セッションの利点
+
+1. **アトミック性**: 複数の Repository 操作を 1 トランザクションにまとめられる
+2. **ロールバック制御**: エラー時の rollback を一箇所で管理
+3. **パフォーマンス**: commit を最後にまとめることで DB アクセスを削減
+
+### 実装例
+
+```python
+# 複数 Repository を 1 トランザクションで使用
+from repom.database import _db_manager
+
+with _db_manager.get_sync_transaction() as session:
+    user_repo = UserRepository(session)
+    order_repo = OrderRepository(session)
+    
+    # ユーザー作成（flush のみ）
+    user = user_repo.save(User(name="太郎"))
+    
+    # 注文作成（flush のみ）
+    order = order_repo.save(Order(user_id=user.id, total=1000))
+    
+    # 全てまとめて commit（with ブロック終了時）
+```
+
+**注意事項**:
+- 外部セッションでは `save()` が `flush()` のみ実行し、`refresh()` は実行しません
+  * **同期版（BaseRepository）**: 内部セッション使用時のみ `refresh()` を実行
+  * **非同期版（AsyncBaseRepository）**: 内部セッション使用時のみ `refresh()` を実行
+- AutoDateTime などの DB 自動設定値を取得するには、明示的な `refresh()` が必要です
+  ```python
+  # 外部セッション使用時
+  with _db_manager.get_sync_transaction() as session:
+      repo = UserRepository(session)
+      user = repo.save(User(name="太郎"))
+      
+      # created_at はまだ None（flush のみ実行）
+      assert user.created_at is None
+      
+      # 明示的に refresh すれば取得可能
+      session.refresh(user)
+      assert user.created_at is not None
+  ```
+- エラー発生時、外部セッションでは Repository が rollback を実行せず、呼び出し側に委ねます
+- 内部セッション使用時の動作は変更なし（後方互換性を維持）
 
 ---
 

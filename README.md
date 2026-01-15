@@ -163,11 +163,22 @@ all_tasks = repo.find()
 `save()` メソッドは**新規作成でも更新でも使えます**：
 
 ```python
-# 新規作成
+# セッションなし（内部セッション）: 自動 commit
+repo = TaskRepository()
 task = Task(title="新しいタスク")
 task = repo.save(task)
 # → add() + commit() + refresh() を自動実行
 # → created_at, updated_at が正しく設定される
+
+# 外部セッション使用時: flush のみ、commit は呼び出し側
+from repom.database import _db_manager
+
+with _db_manager.get_sync_transaction() as session:
+    repo = TaskRepository(session)
+    task = Task(title="トランザクション内")
+    task = repo.save(task)
+    # → add() + flush() のみ実行
+    # → commit は with ブロック終了時に自動実行
 
 # 更新
 task.title = "更新されたタスク"
@@ -183,6 +194,42 @@ task = await async_repo.save(task)
 ⚠️ **重要**: 直接 `session.add()` + `session.flush()` を使う場合は、必ず `session.refresh()` を呼んでください。
 ただし、**通常は `save()` メソッドを使うことを強く推奨します**（refresh 忘れによるバグを防げます）。
 
+**トランザクション管理**:
+
+repom の Repository は**内部セッションと外部セッションを自動判定**します：
+
+- **内部セッション**（`session=None`で初期化）: 
+  * `save()` が自動的に `commit()` と `refresh()` を実行
+  * `created_at` / `updated_at` などの DB 自動設定値が即座に取得可能
+
+- **外部セッション**（明示的に渡す）: 
+  * `save()` は `flush()` のみ実行、`commit()` は呼び出し側の責任
+  * `refresh()` は実行されないため、DB 自動設定値の取得には明示的な `refresh()` が必要
+  * トランザクション境界を呼び出し側で制御可能
+
+```python
+# 内部セッション: 自動 commit + refresh
+repo = TaskRepository()
+task = repo.save(Task(title="タスク"))
+assert task.created_at is not None  # 自動的に設定される
+
+# 外部セッション: flush のみ、refresh は手動
+from repom.database import _db_manager
+
+with _db_manager.get_sync_transaction() as session:
+    repo = TaskRepository(session)
+    task = repo.save(Task(title="タスク"))
+    
+    # created_at はまだ None（flush のみ実行）
+    assert task.created_at is None
+    
+    # 明示的に refresh すれば取得可能
+    session.refresh(task)
+    assert task.created_at is not None
+    
+    # commit は with ブロック終了時に自動実行
+```
+
 ```python
 # ❌ 非推奨: 手動で flush() を使うパターン（refresh を忘れるとバグになる）
 session.add(task)
@@ -193,6 +240,8 @@ await session.commit()
 # ✅ 推奨: save() を使うパターン（シンプルで安全）
 task = await repo.save(task)
 ```
+
+**詳細**: [セッション管理パターンガイド](docs/guides/repository/repository_session_patterns.md)
 
 ### FastAPI 統合
 

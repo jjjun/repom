@@ -36,7 +36,11 @@ class TestSaveMethodForCreation:
     """Verify that save() method works for both creation and update"""
 
     async def test_save_method_for_new_entity_creation(self, save_repo):
-        """Test: save() can be used for NEW entity creation"""
+        """Test: save() can be used for NEW entity creation with external session
+        
+        外部セッション使用時、save() は flush のみを実行します。
+        created_at/updated_at の確認には明示的な refresh が必要です。
+        """
         repo = save_repo
 
         # Create NEW entity (not yet in database)
@@ -47,22 +51,20 @@ class TestSaveMethodForCreation:
         print(f"  created_at: {new_entity.created_at}")
         print(f"  updated_at: {new_entity.updated_at}")
 
-        # Use save() method
+        # Use save() method (external session: flush only)
         saved_entity = await repo.save(new_entity)
 
-        print(f"\n[TEST] After save():")
+        print(f"\n[TEST] After save() (before refresh):")
         print(f"  id: {saved_entity.id}")
         print(f"  created_at: {saved_entity.created_at}")
         print(f"  updated_at: {saved_entity.updated_at}")
 
-        # Verify: NEW entity was created successfully
-        assert saved_entity.id is not None  # Auto-increment id was set
-        assert saved_entity.created_at is not None  # AutoDateTime was set
-        assert saved_entity.updated_at is not None  # AutoDateTime was set
-        assert isinstance(saved_entity.created_at, datetime)
-        assert isinstance(saved_entity.updated_at, datetime)
+        # 外部セッション使用時: id は設定されるが、created_at/updated_at はまだ None
+        assert saved_entity.id is not None  # Auto-increment id was set by flush
+        assert saved_entity.created_at is None  # Not refreshed yet
+        assert saved_entity.updated_at is None  # Not refreshed yet
 
-        print(f"\n✅ RESULT: save() works for NEW entity creation!")
+        print(f"\n✅ RESULT: save() works for NEW entity creation (flush mode)!")
 
     async def test_save_method_for_existing_entity_update(self, save_repo):
         """Test: save() can be used for EXISTING entity update"""
@@ -97,35 +99,43 @@ class TestSaveMethodForCreation:
         print(f"\n✅ RESULT: save() works for EXISTING entity update!")
 
     async def test_save_vs_manual_flush_comparison(self, save_repo, async_db_test):
-        """Compare: save() vs manual add+flush+refresh pattern"""
+        """Compare: save() vs manual add+flush pattern with external session
+        
+        外部セッション使用時、save() は flush のみを実行します。
+        これは手動での add+flush パターンと同等の動作です。
+        """
         repo = save_repo
 
-        # Pattern 1: Using save() method
+        # Pattern 1: Using save() method (external session: flush only)
         entity1 = SaveCreationTestModel(name="Using save()")
         entity1 = await repo.save(entity1)
 
-        print(f"\n[PATTERN 1] Using save():")
+        print(f"\n[PATTERN 1] Using save() with external session:")
         print(f"  created_at: {entity1.created_at}")
         print(f"  Lines of code: 2 lines")
 
-        # Pattern 2: Manual add + flush + refresh + commit
+        # Pattern 2: Manual add + flush (同等の動作)
         entity2 = SaveCreationTestModel(name="Manual pattern")
         async_db_test.add(entity2)
         await async_db_test.flush()
-        await async_db_test.refresh(entity2)
-        await async_db_test.commit()
 
-        print(f"\n[PATTERN 2] Manual add+flush+refresh+commit:")
+        print(f"\n[PATTERN 2] Manual add+flush:")
         print(f"  created_at: {entity2.created_at}")
-        print(f"  Lines of code: 4 lines")
+        print(f"  Lines of code: 2 lines")
 
-        # Both should have created_at set
+        # 外部セッション使用時: 両方とも flush のみなので created_at は None
+        assert entity1.created_at is None
+        assert entity2.created_at is None
+        
+        # 明示的に refresh すれば値が取得できる
+        await async_db_test.refresh(entity1)
+        await async_db_test.refresh(entity2)
+        
         assert entity1.created_at is not None
         assert entity2.created_at is not None
 
-        print(f"\n✅ RESULT: save() is simpler and safer!")
-        print(f"   - save(): 2 lines, no mistakes possible")
-        print(f"   - manual: 4 lines, easy to forget refresh()")
+        print(f"\n✅ RESULT: save() with external session = flush only (same as manual pattern)")
+        print(f"   - Both patterns require explicit refresh for AutoDateTime values")
 
 
 @pytest.mark.asyncio
@@ -133,24 +143,35 @@ class TestSaveMethodReplacesMinePatterns:
     """Verify that save() can replace the patterns used in mine-py"""
 
     async def test_mine_py_video_asset_link_pattern(self, save_repo):
-        """Simulate the pattern from mine-py video_asset_routes.py"""
+        """Simulate the pattern from mine-py video_asset_routes.py with external session
+        
+        外部セッション使用時、save() は flush のみを実行するため、
+        created_at/updated_at を取得するには明示的な refresh が必要です。
+        
+        ただし、トランザクション管理が簡潔になり、commit は呼び出し側で制御できます。
+        """
         repo = save_repo
 
-        # mine-py pattern (問題があるパターン):
+        # mine-py pattern (元のパターン):
         # link = AniVideoAssetLinkModel(...)
         # session.add(link)
         # await session.flush()
         # await session.refresh(link)  # これを忘れるとバグ
         # await session.commit()
 
-        # 改善案: save() を使う
+        # 改善案: save() を使う（外部セッション: flush のみ）
         link = SaveCreationTestModel(name="Video Asset Link")
         link = await repo.save(link)
 
-        # created_at, updated_at が正しく設定されている
-        assert link.created_at is not None
-        assert link.updated_at is not None
+        # 外部セッション使用時: created_at/updated_at はまだ None
+        # （flush のみ実行、refresh は実行されない）
+        assert link.created_at is None
+        assert link.updated_at is None
+        
+        # id は設定されている（flush で採番）
+        assert link.id is not None
 
-        print(f"\n✅ mine-py pattern can be replaced with save()!")
-        print(f"   Before: 5 lines (add + flush + refresh + commit)")
-        print(f"   After:  2 lines (just save())")
+        print(f"\n✅ save() simplifies transaction management!")
+        print(f"   - External session: save() = flush only")
+        print(f"   - Commit is controlled by caller (with block)")
+        print(f"   - Explicit refresh needed for AutoDateTime values")

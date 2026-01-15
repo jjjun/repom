@@ -195,13 +195,18 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
                   自動的にデータベースから再読み込みが発生するため。
         """
         async with self._session_scope() as session:
+            using_internal_session = self._session_override is None and self._scoped_session is session
             try:
                 session.add(instance)
-                await session.commit()
-                # 非同期環境では refresh() が必須（AutoDateTime等のDB自動設定値を反映）
-                await session.refresh(instance)
+                if using_internal_session:
+                    await session.commit()
+                    # 非同期環境では refresh() が必須（AutoDateTime等のDB自動設定値を反映）
+                    await session.refresh(instance)
+                else:
+                    await session.flush()
             except SQLAlchemyError:
-                await session.rollback()
+                if using_internal_session:
+                    await session.rollback()
                 raise
         return instance
 
@@ -228,14 +233,19 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
             保存後に get_by_id() で再取得する方法も検討してください。
         """
         async with self._session_scope() as session:
+            using_internal_session = self._session_override is None and self._scoped_session is session
             try:
                 session.add_all(instances)
-                await session.commit()
-                # 非同期環境では各インスタンスの refresh() が必須
-                for instance in instances:
-                    await session.refresh(instance)
+                if using_internal_session:
+                    await session.commit()
+                    # 非同期環境では各インスタンスの refresh() が必須
+                    for instance in instances:
+                        await session.refresh(instance)
+                else:
+                    await session.flush()
             except SQLAlchemyError:
-                await session.rollback()
+                if using_internal_session:
+                    await session.rollback()
                 raise
 
     async def dict_saves(self, data_list: List[Dict]) -> None:
@@ -254,12 +264,17 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
             instance (T): 削除するインスタンス
         """
         async with self._session_scope() as session:
+            using_internal_session = self._session_override is None and self._scoped_session is session
             try:
                 managed_instance = await session.merge(instance)
                 await session.delete(managed_instance)
-                await session.commit()
+                if using_internal_session:
+                    await session.commit()
+                else:
+                    await session.flush()
             except SQLAlchemyError:
-                await session.rollback()
+                if using_internal_session:
+                    await session.rollback()
                 raise
 
     async def find(

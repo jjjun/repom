@@ -98,7 +98,12 @@ class TestRefreshBehaviorAsync:
     """Test refresh behavior for asynchronous repository"""
 
     async def test_save_without_refresh_created_at_is_none(self, async_refresh_repo):
-        """Test if created_at is None after save() without refresh() (async)"""
+        """Test if created_at is None after save() with external session (async)
+        
+        外部セッション使用時、save() は flush のみを実行し、refresh は実行しません。
+        そのため、DB側で自動設定される created_at/updated_at はまだ Python オブジェクトに反映されていません。
+        明示的な refresh が必要です。
+        """
         repo = async_refresh_repo
 
         # Create instance without setting created_at/updated_at
@@ -108,10 +113,10 @@ class TestRefreshBehaviorAsync:
         assert instance.created_at is None
         assert instance.updated_at is None
 
-        # Save without refresh
+        # Save with external session (flush only, no refresh)
         saved = await repo.save(instance)
 
-        print(f"\n[ASYNC] After save (no refresh):")
+        print(f"\n[ASYNC] After save (external session, no auto-refresh):")
         print(f"  created_at: {saved.created_at}")
         print(f"  updated_at: {saved.updated_at}")
 
@@ -122,9 +127,9 @@ class TestRefreshBehaviorAsync:
         print(f"  created_at is None: {is_created_at_none}")
         print(f"  updated_at is None: {is_updated_at_none}")
 
-        # Verify the results
-        assert saved.created_at is not None
-        assert saved.updated_at is not None
+        # 外部セッション使用時: save() は flush のみ実行、refresh は実行されない
+        assert saved.created_at is None
+        assert saved.updated_at is None
 
     async def test_save_with_manual_refresh(self, async_refresh_repo, async_db_test):
         """Test if manual refresh() fixes the issue (async)"""

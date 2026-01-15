@@ -159,17 +159,28 @@ class TestRepositorySaveVsFlush:
     """Compare save() method vs flush() pattern"""
 
     async def test_save_method_automatically_refreshes(self, async_db_test):
-        """Test that save() method handles refresh automatically"""
+        """Test that save() method handles refresh automatically with external session
+
+        Note: 外部セッション使用時は flush のみ実行され、refresh は実行されません。
+        そのため、created_at/updated_at は flush 時点では None です。
+        明示的な refresh が必要な場合は、手動で実行してください。
+        """
         repo = AsyncBaseRepository(FlushTestModel, session=async_db_test)
 
         instance = FlushTestModel(name="Via save() method")
         saved = await repo.save(instance)
 
-        print(f"\n[COMPARE] Using repo.save():")
-        print(f"  created_at: {saved.created_at}")
-        print(f"  updated_at: {saved.updated_at}")
+        print(f"\n[COMPARE] Using repo.save() with external session:")
+        print(f"  created_at (before refresh): {saved.created_at}")
+        print(f"  updated_at (before refresh): {saved.updated_at}")
 
-        # save() includes refresh, so these should be set
+        # 外部セッション使用時: save() は flush のみ実行、refresh は実行されない
+        # created_at/updated_at はまだ None
+        assert saved.created_at is None
+        assert saved.updated_at is None
+
+        # 明示的に refresh すれば値が取得できる
+        await async_db_test.refresh(saved)
         assert saved.created_at is not None
         assert saved.updated_at is not None
 

@@ -168,11 +168,14 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
             using_internal_session = self._session_override is None and self._scoped_session is session
             try:
                 session.add(instance)
-                session.commit()
                 if using_internal_session:
+                    session.commit()
                     session.refresh(instance)
+                else:
+                    session.flush()
             except SQLAlchemyError:
-                session.rollback()
+                if using_internal_session:
+                    session.rollback()
                 raise
         return instance
 
@@ -204,12 +207,15 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
             using_internal_session = self._session_override is None and self._scoped_session is session
             try:
                 session.add_all(instances)
-                session.commit()
                 if using_internal_session:
+                    session.commit()
                     for instance in instances:
                         session.refresh(instance)
+                else:
+                    session.flush()
             except SQLAlchemyError:
-                session.rollback()
+                if using_internal_session:
+                    session.rollback()
                 raise
 
     def dict_saves(self, data_list: List[Dict]) -> None:
@@ -230,12 +236,17 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
             instance (T): 削除するインスタンス
         """
         with self._session_scope() as session:
+            using_internal_session = self._session_override is None and self._scoped_session is session
             try:
                 managed_instance = session.merge(instance)
                 session.delete(managed_instance)
-                session.commit()
+                if using_internal_session:
+                    session.commit()
+                else:
+                    session.flush()
             except SQLAlchemyError:
-                session.rollback()
+                if using_internal_session:
+                    session.rollback()
                 raise
 
     def find(

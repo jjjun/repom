@@ -77,11 +77,20 @@ repo = BaseRepository(Task, session=db_session)
 ### Create（作成）
 
 ```python
-# 1件保存
+# 内部セッション: 自動 commit
+repo = TaskRepository()
 task = Task(title="新しいタスク", status="active")
-saved_task = repo.save(task)
+saved_task = repo.save(task)  # commit が自動実行
 
-# 辞書から保存
+# 外部セッション: 呼び出し側が commit
+from repom.database import _db_manager
+
+with _db_manager.get_sync_transaction() as session:
+    repo = TaskRepository(session)
+    task = Task(title="新しいタスク", status="active")
+    saved_task = repo.save(task)  # flush のみ、commit は with 終了時
+
+# 辞書から保存（同様の動作）
 task = repo.dict_save({"title": "タスク2", "status": "pending"})
 
 # 複数保存
@@ -92,6 +101,11 @@ repo.saves(tasks)
 data_list = [{"title": f"タスク{i}"} for i in range(3)]
 repo.dict_saves(data_list)
 ```
+
+**注意**: 外部セッションを使用する場合、`save()` / `saves()` は `flush()` のみを実行します。
+変更を確定するには、`with` ブロックを抜けるか、明示的に `session.commit()` を呼んでください。
+
+**詳細**: [セッション管理パターンガイド](repository_session_patterns.md#トランザクション管理の詳細)
 
 ### Read（取得）
 
