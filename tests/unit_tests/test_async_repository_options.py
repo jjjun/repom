@@ -11,7 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, joinedload, sele
 import pytest
 import pytest_asyncio
 from repom.base_model import BaseModel
-from repom.async_base_repository import AsyncBaseRepository
+from repom.repositories import AsyncBaseRepository
 
 
 # テスト用モデル定義
