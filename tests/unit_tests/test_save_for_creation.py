@@ -2,6 +2,7 @@
 Test to verify if save() method can be used for entity creation (not just updates)
 """
 import pytest
+import pytest_asyncio
 from datetime import datetime
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -17,7 +18,7 @@ class SaveCreationTestModel(BaseModel, use_created_at=True, use_updated_at=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def save_repo(async_db_test):
     """SaveCreationTestModel 用のリポジトリフィクスチャ
 
@@ -36,7 +37,7 @@ class TestSaveMethodForCreation:
 
     async def test_save_method_for_new_entity_creation(self, save_repo):
         """Test: save() can be used for NEW entity creation"""
-        repo = await save_repo
+        repo = save_repo
 
         # Create NEW entity (not yet in database)
         new_entity = SaveCreationTestModel(name="New Entity")
@@ -65,7 +66,7 @@ class TestSaveMethodForCreation:
 
     async def test_save_method_for_existing_entity_update(self, save_repo):
         """Test: save() can be used for EXISTING entity update"""
-        repo = await save_repo
+        repo = save_repo
 
         # First: Create entity
         entity = SaveCreationTestModel(name="Original Name")
@@ -97,7 +98,7 @@ class TestSaveMethodForCreation:
 
     async def test_save_vs_manual_flush_comparison(self, save_repo, async_db_test):
         """Compare: save() vs manual add+flush+refresh pattern"""
-        repo = await save_repo
+        repo = save_repo
 
         # Pattern 1: Using save() method
         entity1 = SaveCreationTestModel(name="Using save()")
@@ -133,7 +134,7 @@ class TestSaveMethodReplacesMinePatterns:
 
     async def test_mine_py_video_asset_link_pattern(self, save_repo):
         """Simulate the pattern from mine-py video_asset_routes.py"""
-        repo = await save_repo
+        repo = save_repo
 
         # mine-py pattern (問題があるパターン):
         # link = AniVideoAssetLinkModel(...)

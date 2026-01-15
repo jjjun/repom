@@ -8,6 +8,7 @@ from tests._init import *
 from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
+import pytest_asyncio
 from repom.base_model import BaseModel
 from repom.repositories import AsyncBaseRepository
 
@@ -37,12 +38,12 @@ class SimpleAsyncOrderRepository(AsyncBaseRepository[AsyncOrderTestModel]):
         super().__init__(AsyncOrderTestModel, session)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def setup_method(async_db_test):
     """非同期テスト用のセットアップフィクスチャ
 
-    pytest-asyncio は autouse=True の非同期フィクスチャをサポートしていないため、
-    autouse=False にして各テストで明示的に受け取る形にする。
+    pytest-asyncio は @pytest_asyncio.fixture を使用して非同期フィクスチャを定義します。
+    これにより、テストメソッドで自動的に await されます。
 
     Returns:
         dict: repo, item1, item2, item3 を含む辞書
@@ -60,7 +61,7 @@ async def setup_method(async_db_test):
     }
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def simple_setup_method(async_db_test):
     """default_order_by なしのリポジトリ用セットアップフィクスチャ"""
     repo = SimpleAsyncOrderRepository(session=async_db_test)
@@ -82,7 +83,7 @@ class TestAsyncDefaultOrderBy:
     @pytest.mark.asyncio
     async def test_find_without_order_by_uses_default(self, setup_method):
         """order_by 未指定の場合、default_order_by が適用される"""
-        data = await setup_method
+        data = setup_method
         results = await data['repo'].find()
 
         # default_order_by = 'id:desc' なので降順
@@ -94,7 +95,7 @@ class TestAsyncDefaultOrderBy:
     @pytest.mark.asyncio
     async def test_find_with_none_uses_default(self, setup_method):
         """order_by=None の場合、default_order_by が適用される"""
-        data = await setup_method
+        data = setup_method
         results = await data['repo'].find(order_by=None)
 
         # default_order_by = 'id:desc' なので降順
@@ -106,7 +107,7 @@ class TestAsyncDefaultOrderBy:
     @pytest.mark.asyncio
     async def test_find_with_empty_string_uses_default(self, setup_method):
         """order_by="" の場合、default_order_by が適用される"""
-        data = await setup_method
+        data = setup_method
         results = await data['repo'].find(order_by="")
 
         # default_order_by = 'id:desc' なので降順
@@ -118,7 +119,7 @@ class TestAsyncDefaultOrderBy:
     @pytest.mark.asyncio
     async def test_find_with_explicit_order_overrides_default(self, setup_method):
         """明示的な order_by が default_order_by を上書きする"""
-        data = await setup_method
+        data = setup_method
         results = await data['repo'].find(order_by='id:asc')
 
         # 明示的に id:asc を指定したので昇順
@@ -130,7 +131,7 @@ class TestAsyncDefaultOrderBy:
     @pytest.mark.asyncio
     async def test_find_with_different_column_order(self, setup_method):
         """別カラムでのソート指定が default_order_by を上書きする"""
-        data = await setup_method
+        data = setup_method
         results = await data['repo'].find(order_by='priority:asc')
 
         # priority 昇順でソート
@@ -142,7 +143,7 @@ class TestAsyncDefaultOrderBy:
     @pytest.mark.asyncio
     async def test_find_without_default_order_by_uses_fallback(self, simple_setup_method):
         """default_order_by なしの場合、id:asc がフォールバック"""
-        data = await simple_setup_method
+        data = simple_setup_method
         results = await data['repo'].find()
 
         # default_order_by がないので id:asc（フォールバック）
@@ -154,7 +155,7 @@ class TestAsyncDefaultOrderBy:
     @pytest.mark.asyncio
     async def test_find_without_default_and_none_uses_fallback(self, simple_setup_method):
         """default_order_by なしで order_by=None の場合も id:asc がフォールバック"""
-        data = await simple_setup_method
+        data = simple_setup_method
         results = await data['repo'].find(order_by=None)
 
         # default_order_by がないので id:asc（フォールバック）
@@ -201,7 +202,7 @@ class TestAsyncDefaultOrderByFastAPIPattern:
     @pytest.mark.asyncio
     async def test_fastapi_query_none_pattern(self, setup_method):
         """FastAPI の Query(None) パターンをシミュレート"""
-        data = await setup_method
+        data = setup_method
 
         # FastAPI エンドポイントでクエリパラメータなしの場合
         # order_by: str = Query(None) → order_by=None が渡される
@@ -219,7 +220,7 @@ class TestAsyncDefaultOrderByFastAPIPattern:
     @pytest.mark.asyncio
     async def test_fastapi_query_empty_string_pattern(self, setup_method):
         """FastAPI で空文字が渡された場合のパターン"""
-        data = await setup_method
+        data = setup_method
 
         # FastAPI で ?order_by= のように空文字が渡される場合
         results = await data['repo'].find(order_by="")

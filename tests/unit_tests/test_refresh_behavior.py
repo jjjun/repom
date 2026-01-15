@@ -5,6 +5,7 @@ This test verifies the claim in the mine-py issue document:
 https://github.com/mine-py/docs/issues/repom_async_repository_refresh_issue.md
 """
 import pytest
+import pytest_asyncio
 from datetime import datetime
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -26,7 +27,7 @@ def refresh_repo(db_test):
     return BaseRepository(RefreshTestModel, session=db_test)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def async_refresh_repo(async_db_test):
     """Async repository only - data created per test due to different patterns"""
     return AsyncBaseRepository(RefreshTestModel, session=async_db_test)
@@ -98,7 +99,7 @@ class TestRefreshBehaviorAsync:
 
     async def test_save_without_refresh_created_at_is_none(self, async_refresh_repo):
         """Test if created_at is None after save() without refresh() (async)"""
-        repo = await async_refresh_repo
+        repo = async_refresh_repo
 
         # Create instance without setting created_at/updated_at
         instance = RefreshTestModel(name="Test Item Async")
@@ -127,7 +128,7 @@ class TestRefreshBehaviorAsync:
 
     async def test_save_with_manual_refresh(self, async_refresh_repo, async_db_test):
         """Test if manual refresh() fixes the issue (async)"""
-        repo = await async_refresh_repo
+        repo = async_refresh_repo
 
         instance = RefreshTestModel(name="Test Item Async 2")
         saved = await repo.save(instance)
