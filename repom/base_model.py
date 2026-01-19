@@ -163,6 +163,11 @@ class BaseModel(Base):
         特定のフィールドは更新を拒否します。
         変更があった場合は True を返します。
 
+        重要:
+        - 実際のDBカラムのみが更新対象です
+        - @property などの読み取り専用属性は自動的に無視されます
+        - 辞書に存在しないカラムのキーがあっても問題ありません
+
         Args:
             data (dict): 更新するデータ。
             exclude_fields (list, optional): 更新を拒否するフィールドのリスト。デフォルトは None。
@@ -180,13 +185,20 @@ class BaseModel(Base):
             exclude_fields = set()
         exclude_fields = exclude_fields.union(default_exclude_fields)
 
+        # SQLAlchemy の mapper を使って、実際のDBカラム名のセットを取得
+        mapper = inspect(self.__class__)
+        column_keys = {col.key for col in mapper.column_attrs}
+
         updated = False
         for key, value in data.items():
             # 更新を拒否するフィールドをスキップ
             if key in exclude_fields:
                 continue
-            # フィールドが存在し、値が異なる場合のみ更新
-            if hasattr(self, key) and getattr(self, key) != value:
+            # 実際のDBカラムでない場合はスキップ（@property などを除外）
+            if key not in column_keys:
+                continue
+            # 値が異なる場合のみ更新
+            if getattr(self, key) != value:
                 setattr(self, key, value)
                 updated = True
         return updated
