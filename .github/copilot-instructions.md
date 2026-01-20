@@ -18,7 +18,7 @@ This is **repom** - a shared SQLAlchemy foundation package for Python projects.
 
 **Strategy**: Transaction Rollback パターン（９倍高速化を実現）
 
-**重要**: テスト作成時は必ず `docs/guides/testing_guide.md` を参照してください。
+**重要**: テスト作成時は必ず `docs/guides/testing/testing_guide.md` を参照してください。
 
 ```python
 # tests/conftest.py で使用
@@ -146,7 +146,7 @@ Follow the workflow in `docs/issue/README.md`:
 ### Feature-Specific Guides (機能実装時に参照)
 
 #### BaseModelAuto & スキーマ自動生成
-**ファイル**: `docs/guides/base_model_auto_guide.md`
+**ファイル**: `docs/guides/model/base_model_auto_guide.md`
 
 **対象機能**:
 - BaseModelAuto による Pydantic スキーマ自動生成
@@ -163,32 +163,57 @@ Follow the workflow in `docs/issue/README.md`:
 
 **ユーザーへの指示例**:
 ```
-「docs/guides/base_model_auto_guide.md を見て、
+「docs/guides/model/base_model_auto_guide.md を見て、
  User モデルに FastAPI スキーマを追加してください」
 ```
 
 ---
 
-#### BaseRepository, FilterParams & Utilities
-**ファイル**: `docs/guides/repository_and_utilities_guide.md`
+#### BaseRepository & Repository Patterns
+**ファイル群**: `docs/guides/repository/` ディレクトリ
+
+**主要ガイド**:
+- `base_repository_guide.md` - BaseRepository の基礎（CRUD 操作）
+- `repository_advanced_guide.md` - 検索・クエリ・Eager Loading（N+1 問題解決）
+- `repository_filter_params_guide.md` - FilterParams による型安全な検索パラメータ
+- `repository_session_patterns.md` - セッション管理とトランザクション
+- `repository_soft_delete_guide.md` - 論理削除機能
+- `async_repository_guide.md` - 非同期リポジトリ
 
 **対象機能**:
-- BaseRepository（データアクセス層）
+- BaseRepository / AsyncBaseRepository（データアクセス層）
 - FilterParams（検索パラメータ）
 - as_query_depends()（FastAPI 統合）
-- auto_import_models（モデル自動インポート）
+- Eager loading（default_options）
+- セッション管理パターン
 
 **使用タイミング**:
 - データベース操作を実装する場合
 - 検索・フィルタ機能を実装する場合
 - FastAPI のクエリパラメータを型安全に扱いたい場合
-- モデルの自動インポートを設定する場合
+- N+1 問題を解決したい場合
 
 **ユーザーへの指示例**:
 ```
-「docs/guides/repository_and_utilities_guide.md を見て、
+「docs/guides/repository/repository_filter_params_guide.md を見て、
  FilterParams を使った検索機能を実装してください」
+
+「docs/guides/repository/repository_advanced_guide.md を見て、
+ Eager loading で N+1 問題を解決してください」
 ```
+
+---
+
+#### Auto Import Models
+**ファイル**: `docs/guides/features/auto_import_models_guide.md`
+
+**対象機能**:
+- auto_import_models（モデル自動インポート）
+- CONFIG_HOOK による設定カスタマイズ
+
+**使用タイミング**:
+- モデルの自動インポートを設定する場合
+- Alembic マイグレーションでモデルを自動検出したい場合
 
 ---
 
@@ -211,7 +236,6 @@ Follow the workflow in `docs/issue/README.md`:
 docs/
 ├── guides/             # 📘 Usage guides (concise, practical, for teaching other AI agents)
 ├── ideas/              # 💡 Feature proposals and enhancement ideas
-├── research/           # 🔬 Investigation for ideal implementations (future improvements)
 ├── technical/          # 🔧 Implementation decisions and constraints (for AI improvement work)
 └── issue/              # 📋 Problem tracking and resolution
     ├── README.md      # Issue index (MUST update when moving files)
@@ -268,26 +292,26 @@ docs/
 
 4. **Lifecycle Progression**
    ```
-   ideas/ → research/ (if needs investigation)
+   ideas/ → technical/ (if needs deep technical analysis)
            → issue/active/ (if ready to implement)
    ```
 
 #### When Technical Investigation is Needed
 
-1. **Create Research Document**
+1. **Create Technical Document**
    ```bash
-   docs/research/topic_name.md
+   docs/technical/topic_name.md
    ```
 
 2. **Include Comprehensive Analysis**
    - Current state and problems
    - Multiple approaches with pros/cons
-   - Implementation roadmap
+   - Implementation decisions and constraints
    - Security, performance, compatibility considerations
 
 3. **Link to Related Issues**
    - Reference related idea or issue files
-   - Update issue files to reference research
+   - Update issue files to reference technical docs
 
 ### 📋 Issue Lifecycle (Automated)
 
@@ -321,7 +345,7 @@ Create: docs/ideas/feature_name.md
     ↓
 Evaluate feasibility
     ↓
-If needs research → docs/research/topic.md
+If needs investigation → docs/technical/topic.md
 If ready → docs/issue/active/XXX_name.md
 ```
 ### 🔄 Automatic Completion Triggers
@@ -371,14 +395,14 @@ When user says any of these phrases, **AUTOMATICALLY** complete the issue:
 
 **Idea Template**: Use template from `docs/ideas/README.md`
 
-**Research Template**: Use guidelines from `docs/research/README.md`
+**Technical Template**: Use guidelines from `docs/technical/README.md`
 
 ### 🎯 Best Practices for AI Agents
 
 1. **Always confirm** before creating documentation
 2. **Update indexes** (README.md files) when moving/creating files
 3. **Use sequential numbering** for completed issues (001, 002, ...)
-4. **Link related documents** (issue ↔ research ↔ technical)
+4. **Link related documents** (issue ↔ idea ↔ technical)
 5. **Commit frequently** with descriptive messages
 6. **Ask clarifying questions** rather than making assumptions
 7. **Validate with tests** before marking issues complete

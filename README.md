@@ -13,18 +13,25 @@
 
 このドキュメントは基本的な情報のみを記載しています。詳細な使用方法は以下のガイドを参照してください：
 
-- **[BaseModelAuto & スキーマ自動生成ガイド](docs/guides/core/base_model_auto_guide.md)**
+- **[BaseModelAuto & スキーマ自動生成ガイド](docs/guides/model/base_model_auto_guide.md)**
   - Pydantic スキーマ自動生成（`get_create_schema()`, `get_update_schema()`, `get_response_schema()`）
   - `@response_field` デコレータの使い方
   - FastAPI 統合の実装例
   - 前方参照の解決方法
 
-- **[BaseRepository & Utilities ガイド](docs/guides/repository/repository_and_utilities_guide.md)**
-  - BaseRepository によるデータアクセス
+- **[BaseRepository 基礎ガイド](docs/guides/repository/base_repository_guide.md)**
+  - BaseRepository の基本的な使い方
+  - CRUD 操作の実装パターン
+
+- **[Repository 高度なガイド](docs/guides/repository/repository_advanced_guide.md)**
+  - 検索・クエリ・ソート・ページネーション
   - **Eager loading サポート（joinedload, selectinload）- N+1 問題の解決** ⭐ NEW
-  - FilterParams（FastAPI クエリパラメータ統合）
+  - `default_options` による自動 eager loading
+
+- **[FilterParams ガイド](docs/guides/repository/repository_filter_params_guide.md)**
+  - FastAPI クエリパラメータ統合
   - `as_query_depends()` メカニズム
-  - `auto_import_models` ユーティリティ
+  - 型安全な検索パラメータ
 
 - **[AsyncBaseRepository ガイド](docs/guides/repository/async_repository_guide.md)** ⭐ NEW
   - 完全非同期版リポジトリ（FastAPI 向け）
@@ -33,7 +40,7 @@
   - `asyncio.gather` による並行処理パターン
   - 論理削除（SoftDelete）の非同期操作
 
-- **[論理削除（Soft Delete）ガイド](docs/guides/features/soft_delete_guide.md)** ⭐ NEW
+- **[論理削除（Soft Delete）ガイド](docs/guides/model/soft_delete_guide.md)** ⭐ NEW
   - SoftDeletableMixin による論理削除機能
   - 削除済みレコードの自動フィルタリング
   - 復元・物理削除の管理
@@ -797,10 +804,11 @@ poetry run python -c "from repom.config import config; print(config)"
 
 - **[AGENTS.md](AGENTS.md)**: AI アシスタント向けプロジェクト情報
 - **[docs/guides/](docs/guides/)**: 全ガイド一覧（機能別に整理）
-  - [core/](docs/guides/core/) - BaseModel、スキーマ生成、カスタム型
+  - [model/](docs/guides/model/) - BaseModel、スキーマ生成、システムカラム、論理削除
   - [repository/](docs/guides/repository/) - リポジトリパターン、セッション管理、データベース接続
-  - [features/](docs/guides/features/) - 論理削除、マスターデータ、ロギング
+  - [features/](docs/guides/features/) - マスターデータ同期、ロギング、モデル自動インポート
   - [testing/](docs/guides/testing/) - テスト戦略とフィクスチャ
+- **[docs/technical/](docs/technical/)**: 技術詳細と実装判断記録
 - **[.github/copilot-instructions.md](.github/copilot-instructions.md)**: GitHub Copilot 専用の指示
 
 ---
