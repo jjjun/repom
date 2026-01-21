@@ -1,21 +1,21 @@
-# AsyncBaseRepository ガイド
+# AsyncBaseRepository ガイチE
 
-**目的**: repom の `AsyncBaseRepository` による非同期データアクセスパターンを理解する
+**目皁E*: repom の `AsyncBaseRepository` による非同期データアクセスパターンを理解する
 
-**対象読者**: FastAPI など非同期フレームワークで repom を使う開発者・AI エージェント
+**対象読老E*: FastAPI など非同期フレームワークで repom を使ぁE��発老E�EAI エージェンチE
 
 ---
 
 ## 📚 目次
 
 1. [はじめに](#はじめに)
-2. [基本的な使い方](#基本的な使い方)
-3. [FastAPI 統合](#fastapi-統合)
-4. [非同期 CRUD 操作](#非同期-crud-操作)
+2. [基本皁E��使ぁE��](#基本皁E��使ぁE��)
+3. [FastAPI 統吁E(#fastapi-統吁E
+4. [非同朁ECRUD 操作](#非同朁Ecrud-操佁E
 5. [検索とフィルタリング](#検索とフィルタリング)
-6. [Eager Loading（N+1 問題の解決）](#eager-loading)
-7. [並行処理パターン](#並行処理パターン)
-8. [ベストプラクティス](#ベストプラクティス)
+6. [Eager Loading�E�E+1 問題�E解決�E�](#eager-loading)
+7. [並行�E琁E��ターン](#並行�E琁E��ターン)
+8. [ベスト�EラクチE��ス](#ベスト�EラクチE��ス)
 
 ---
 
@@ -23,80 +23,80 @@
 
 ### AsyncBaseRepository とは
 
-`AsyncBaseRepository` は `BaseRepository` の完全非同期版です。すべてのメソッドが `async def` で定義され、`AsyncSession` を使用してデータベース操作を行います。
+`AsyncBaseRepository` は `BaseRepository` の完�E非同期版です。すべてのメソチE��ぁE`async def` で定義され、`AsyncSession` を使用してチE�Eタベ�Eス操作を行います、E
 
 ### BaseRepository との違い
 
-| 項目 | BaseRepository | AsyncBaseRepository |
+| 頁E�� | BaseRepository | AsyncBaseRepository |
 |------|----------------|---------------------|
-| セッション型 | `Session` | `AsyncSession` |
-| メソッド | 同期（通常の関数） | 非同期（`async def`） |
-| 呼び出し | `repo.find()` | `await repo.find()` |
-| 用途 | 同期アプリケーション | FastAPI, 非同期アプリ |
+| セチE��ョン垁E| `Session` | `AsyncSession` |
+| メソチE�� | 同期�E�通常の関数�E�E| 非同期！Easync def`�E�E|
+| 呼び出ぁE| `repo.find()` | `await repo.find()` |
+| 用送E| 同期アプリケーション | FastAPI, 非同期アプリ |
 
-### いつ使うか
+### ぁE��使ぁE��
 
-✅ **AsyncBaseRepository を使うべき場合**:
+✁E**AsyncBaseRepository を使ぁE��き場吁E*:
 - FastAPI などの非同期フレームワーク
 - 高並行性が求められるアプリケーション
-- I/O バウンドな処理が多い場合
-- asyncio.gather で並行処理したい場合
+- I/O バウンドな処琁E��多い場吁E
+- asyncio.gather で並行�E琁E��たい場吁E
 
-❌ **BaseRepository で十分な場合**:
-- スクリプトやバッチ処理
-- 単純な CRUD 操作のみ
-- 並行性が不要な場合
+❁E**BaseRepository で十�Eな場吁E*:
+- スクリプトめE��チE��処琁E
+- 単純な CRUD 操作�Eみ
+- 並行性が不要な場吁E
 
 ---
 
-## 基本的な使い方
+## 基本皁E��使ぁE��
 
-### リポジトリの作成
+### リポジトリの作�E
 
 ```python
-from repom.async_base_repository import AsyncBaseRepository
+from repom import AsyncBaseRepository
 from repom.database import get_async_db_session
 from your_project.models import Task
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# FastAPI Depends パターンで使用（推奨）
+# FastAPI Depends パターンで使用�E�推奨�E�E
 async def get_task(task_id: int, session: AsyncSession = Depends(get_async_db_session)):
     repo = AsyncBaseRepository(Task, session)
     task = await repo.get_by_id(task_id)
     return task
 ```
 
-### 主要メソッド一覧
+### 主要メソチE��一覧
 
-すべてのメソッドは `async def` で、`await` が必要です。
+すべてのメソチE��は `async def` で、`await` が忁E��です、E
 
-| メソッド | 用途 | 戻り値 |
+| メソチE�� | 用送E| 戻り値 |
 |---------|------|--------|
-| `await get_by_id(id)` | ID で取得 | `Optional[T]` |
+| `await get_by_id(id)` | ID で取征E| `Optional[T]` |
 | `await get_by(column, value)` | カラムで検索 | `List[T]` |
-| `await get_all()` | 全件取得 | `List[T]` |
+| `await get_all()` | 全件取征E| `List[T]` |
 | `await find(filters, **options)` | 条件検索 | `List[T]` |
 | `await find_one(filters)` | 単一検索 | `Optional[T]` |
-| `await count(filters)` | 件数カウント | `int` |
-| `await save(instance)` | 保存 | `T` |
-| `await saves(instances)` | 一括保存 | `None` |
+| `await count(filters)` | 件数カウンチE| `int` |
+| `await save(instance)` | 保孁E| `T` |
+| `await saves(instances)` | 一括保孁E| `None` |
 | `await remove(instance)` | 削除 | `None` |
 | `await soft_delete(id)` | 論理削除 | `bool` |
-| `await restore(id)` | 復元 | `bool` |
-| `await find_deleted()` | 削除済み取得 | `List[T]` |
+| `await restore(id)` | 復允E| `bool` |
+| `await find_deleted()` | 削除済み取征E| `List[T]` |
 
 ---
 
-## FastAPI 統合
+## FastAPI 統吁E
 
-### 基本的な統合パターン
+### 基本皁E��統合パターン
 
 ```python
 from fastapi import FastAPI, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from repom.database import get_async_db_session
-from repom.async_base_repository import AsyncBaseRepository
+from repom import AsyncBaseRepository
 from your_project.models import Task
 
 app = FastAPI()
@@ -113,21 +113,21 @@ async def get_task(
     return task
 ```
 
-### カスタムリポジトリを使う方法
+### カスタムリポジトリを使ぁE��況E
 
 ```python
 from typing import List
-from repom.async_base_repository import AsyncBaseRepository
+from repom import AsyncBaseRepository
 
 class TaskRepository(AsyncBaseRepository[Task]):
     """タスク専用リポジトリ"""
     
     async def find_active_tasks(self) -> List[Task]:
-        """アクティブなタスクのみ取得"""
+        """アクチE��ブなタスクのみ取征E""
         return await self.find(filters=[Task.status == 'active'])
     
     async def find_by_user(self, user_id: int) -> List[Task]:
-        """特定ユーザーのタスクを取得"""
+        """特定ユーザーのタスクを取征E""
         return await self.find(filters=[Task.user_id == user_id])
 
 # FastAPI で使用
@@ -137,7 +137,7 @@ async def get_active_tasks(session: AsyncSession = Depends(get_async_db_session)
     return await repo.find_active_tasks()
 ```
 
-### リポジトリを Depends で注入
+### リポジトリめEDepends で注入
 
 ```python
 from typing import Annotated
@@ -161,12 +161,12 @@ async def get_task(task_id: int, repo: TaskRepoDep):
 
 ---
 
-## 非同期 CRUD 操作
+## 非同朁ECRUD 操佁E
 
-### Create（作成）
+### Create�E�作�E�E�E
 
 ```python
-# FastAPI エンドポイントでの使用例
+# FastAPI エンド�Eイントでの使用侁E
 @app.post("/tasks")
 async def create_task(
     task_data: dict,
@@ -174,28 +174,28 @@ async def create_task(
 ):
     repo = AsyncBaseRepository(Task, session)
     
-    # 1件保存
+    # 1件保孁E
     task = Task(title=task_data["title"], status="active")
     saved_task = await repo.save(task)
     
-    # 辞書から保存
+    # 辞書から保孁E
     task = await repo.dict_save({"title": "タスク2", "status": "pending"})
     
-    # 複数保存
+    # 褁E��保孁E
     tasks = [Task(title=f"タスク{i}") for i in range(3)]
     await repo.saves(tasks)
     
-    # 辞書リストから保存
+    # 辞書リストから保孁E
     data_list = [{"title": f"タスク{i}"} for i in range(3)]
     await repo.dict_saves(data_list)
     
     return saved_task
 ```
 
-### Read（取得）
+### Read�E�取得！E
 
 ```python
-# FastAPI エンドポイントでの使用例
+# FastAPI エンド�Eイントでの使用侁E
 @app.get("/tasks/{task_id}")
 async def get_task(
     task_id: int,
@@ -203,20 +203,20 @@ async def get_task(
 ):
     repo = AsyncBaseRepository(Task, session)
     
-    # ID で取得
+    # ID で取征E
     task = await repo.get_by_id(task_id)
     
-    # カラムで検索（複数件）
+    # カラムで検索�E�褁E��件�E�E
     active_tasks = await repo.get_by('status', 'active')
     
-    # 単一取得（single=True）
+    # 単一取得！Eingle=True�E�E
         task = await repo.get_by('title', 'タスク1', single=True)
         
-        # 全件取得
+        # 全件取征E
         all_tasks = await repo.get_all()
 ```
 
-### Update（更新）
+### Update�E�更新�E�E
 
 ```python
 async def update_task(task_id: int):
@@ -229,19 +229,19 @@ async def update_task(task_id: int):
             task.status = 'completed'
             await repo.save(task)
         
-        # または BaseModel の update_from_dict を使用
+        # また�E BaseModel の update_from_dict を使用
         task.update_from_dict({"status": "completed"})
         await repo.save(task)
 ```
 
-### Delete（削除）
+### Delete�E�削除�E�E
 
 ```python
 async def delete_task(task_id: int):
     async with get_async_db_session() as session:
         repo = AsyncBaseRepository(Task, session)
         
-        # 物理削除（完全削除）
+        # 物琁E��除�E�完�E削除�E�E
         task = await repo.get_by_id(task_id)
         if task:
             await repo.remove(task)
@@ -251,9 +251,9 @@ async def delete_task(task_id: int):
 
 ## 検索とフィルタリング
 
-非同期版でも検索・フィルタリング機能は同期版と同じです。詳細は **[Repository 上級ガイド](repository_advanced_guide.md)** を参照してください。
+非同期版でも検索・フィルタリング機�Eは同期版と同じです。詳細は **[Repository 上級ガイド](repository_advanced_guide.md)** を参照してください、E
 
-### クイックリファレンス
+### クイチE��リファレンス
 
 ```python
 async with get_async_db_session() as session:
@@ -262,22 +262,22 @@ async with get_async_db_session() as session:
     # 基本検索
     tasks = await repo.find(filters=[Task.status == 'active'])
     
-    # ページネーション
+    # ペ�Eジネ�Eション
     tasks = await repo.find(offset=0, limit=20, order_by='created_at:desc')
     
-    # カウント
+    # カウンチE
     count = await repo.count(filters=[Task.status == 'active'])
 ```
 
-詳細なフィルタリングパターン（AND/OR、LIKE、IN句など）は [Repository 上級ガイド](repository_advanced_guide.md#検索とフィルタリング) を参照してください。
+詳細なフィルタリングパターン�E�END/OR、LIKE、IN句など�E��E [Repository 上級ガイド](repository_advanced_guide.md#検索とフィルタリング) を参照してください、E
 
 ---
 
-## Eager Loading（N+1 問題の解決）
+## Eager Loading�E�E+1 問題�E解決�E�E
 
-非同期版でも Eager Loading の仕組みは同期版と同じです。詳細は **[Repository 上級ガイド](repository_advanced_guide.md#eager-loadingn1問題の解決)** を参照してください。
+非同期版でめEEager Loading の仕絁E��は同期版と同じです。詳細は **[Repository 上級ガイド](repository_advanced_guide.md#eager-loadingn1問題�E解決)** を参照してください、E
 
-### クイックリファレンス
+### クイチE��リファレンス
 
 ```python
 from sqlalchemy.orm import joinedload, selectinload
@@ -288,51 +288,51 @@ tasks = await repo.find(
     options=[joinedload(Task.user)]
 )
 
-# get_by_id() で使用（NEW!）
+# get_by_id() で使用�E�EEW!�E�E
 task = await repo.get_by_id(1, options=[
     joinedload(Task.user),
     selectinload(Task.comments)
 ])
 
-# get_by() で使用（NEW!）
+# get_by() で使用�E�EEW!�E�E
 task = await repo.get_by('title', 'タスク1', single=True, options=[
     joinedload(Task.user)
 ])
 
-# find_one() で使用（NEW!）
+# find_one() で使用�E�EEW!�E�E
 task = await repo.find_one(
     filters=[Task.id == 1],
     options=[joinedload(Task.user)]
 )
 ```
 
-詳細な使い方、パフォーマンス比較、ベストプラクティスは [Repository 上級ガイド](repository_advanced_guide.md#eager-loadingn1問題の解決) を参照してください。
+詳細な使ぁE��、パフォーマンス比輁E���Eスト�EラクチE��スは [Repository 上級ガイド](repository_advanced_guide.md#eager-loadingn1問題�E解決) を参照してください、E
 
 ### default_options による自動適用
 
 ```python
 class TaskRepository(AsyncBaseRepository[Task]):
-    # クラス属性で指定（推奨）
+    # クラス属性で持E��（推奨�E�E
     default_options = [
         joinedload(Task.user),
         selectinload(Task.comments)
     ]
 
-# すべての取得メソッドで自動適用
+# すべての取得メソチE��で自動適用
 repo = TaskRepository(session=session)
-tasks = await repo.find()  # user と comments が自動ロード
-task = await repo.get_by_id(1)  # 同じく自動適用
+tasks = await repo.find()  # user と comments が�E動ローチE
+task = await repo.get_by_id(1)  # 同じく�E動適用
 ```
 
-詳細は [Repository 上級ガイド](repository_advanced_guide.md#eager-loadingn1問題の解決) を参照してください。
+詳細は [Repository 上級ガイド](repository_advanced_guide.md#eager-loadingn1問題�E解決) を参照してください、E
 
 ---
 
 ## カスタムリポジトリ
 
-ビジネスロジックを含むカスタムリポジトリの作成方法は **[Repository 上級ガイド](repository_advanced_guide.md#カスタムリポジトリ)** を参照してください。
+ビジネスロジチE��を含むカスタムリポジトリの作�E方法�E **[Repository 上級ガイド](repository_advanced_guide.md#カスタムリポジトリ)** を参照してください、E
 
-### クイックリファレンス
+### クイチE��リファレンス
 
 ```python
 class TaskRepository(AsyncBaseRepository[Task]):
@@ -350,43 +350,43 @@ class TaskRepository(AsyncBaseRepository[Task]):
         )
 ```
 
-複雑な検索ロジック、関連モデル操作、ビジネスロジック統合の詳細は [Repository 上級ガイド](repository_advanced_guide.md#カスタムリポジトリ) を参照してください。
+褁E��な検索ロジチE��、E��連モチE��操作、ビジネスロジチE��統合�E詳細は [Repository 上級ガイド](repository_advanced_guide.md#カスタムリポジトリ) を参照してください、E
 
 ---
 
-## 論理削除（SoftDelete）
+## 論理削除�E�EoftDelete�E�E
 
-論理削除機能の使い方は **[SoftDelete ガイド](repository_soft_delete_guide.md)** を参照してください。非同期版の実装例も含まれています。
+論理削除機�Eの使ぁE��は **[SoftDelete ガイド](repository_soft_delete_guide.md)** を参照してください。非同期版�E実裁E��も含まれてぁE��す、E
 
-### クイックリファレンス
+### クイチE��リファレンス
 
 ```python
 # 論理削除
 await repo.soft_delete(task_id)
 
-# 復元
+# 復允E
 await repo.restore(task_id)
 
 # 削除済みを含めて検索
 tasks = await repo.find(include_deleted=True)
 
-# 削除済みのみ取得
+# 削除済みのみ取征E
 deleted_tasks = await repo.find_deleted()
 ```
 
-詳細は [SoftDelete ガイド](repository_soft_delete_guide.md) を参照してください。
+詳細は [SoftDelete ガイド](repository_soft_delete_guide.md) を参照してください、E
 
 ---
 
-## 非同期特有の機能
+## 非同期特有�E機�E
 
-以下のセクションは AsyncBaseRepository に特有の機能です。
+以下�Eセクションは AsyncBaseRepository に特有�E機�Eです、E
 
 ---
 
-## 並行処理パターン
+## 並行�E琁E��ターン
 
-### asyncio.gather による並行実行
+### asyncio.gather による並行実衁E
 
 ```python
 import asyncio
@@ -397,7 +397,7 @@ async def fetch_multiple_resources():
         user_repo = AsyncBaseRepository(User, session)
         project_repo = AsyncBaseRepository(Project, session)
         
-        # 3つのクエリを並行実行
+        # 3つのクエリを並行実衁E
         tasks, users, projects = await asyncio.gather(
             task_repo.find(filters=[Task.status == 'active']),
             user_repo.get_all(),
@@ -420,14 +420,14 @@ async def fetch_multiple_resources():
 
 ### パフォーマンスへの影響
 
-**メリット（N+1 問題の解決）**:
+**メリチE���E�E+1 問題�E解決�E�E*:
 
 ```python
 # Without default_options
-tasks = await repo.find()  # 1回のクエリ
+tasks = await repo.find()  # 1回�Eクエリ
 for task in tasks:
-    print(task.user.name)  # N回のクエリ（N+1 問題）
-# 合計: 1 + N = 101回のクエリ（N=100の場合）
+    print(task.user.name)  # N回�Eクエリ�E�E+1 問題！E
+# 合訁E 1 + N = 101回�Eクエリ�E�E=100の場合！E
 
 # With default_options
 class TaskRepository(AsyncBaseRepository[Task]):
@@ -435,48 +435,48 @@ class TaskRepository(AsyncBaseRepository[Task]):
         super().__init__(Task, session)
         self.default_options = [joinedload(Task.user)]
 
-tasks = await repo.find()  # 2回のクエリ（tasks と users）
+tasks = await repo.find()  # 2回�Eクエリ�E�Easks と users�E�E
 for task in tasks:
-    print(task.user.name)  # クエリなし
-# 合計: 2回のクエリ（N=100でも同じ）
+    print(task.user.name)  # クエリなぁE
+# 合訁E 2回�Eクエリ�E�E=100でも同じ！E
 ```
 
-**デメリット（不要な eager load）**:
+**チE��リチE���E�不要な eager load�E�E*:
 
-リレーションを使わない場合でも eager load が発生します。その場合は `options=[]` で無効化：
+リレーションを使わなぁE��合でめEeager load が発生します。その場合�E `options=[]` で無効化！E
 
 ```python
-# リレーション不要な場合は明示的にスキップ
-task_ids = [task.id for task in await repo.find(options=[])]  # 高速
+# リレーション不要な場合�E明示皁E��スキチE�E
+task_ids = [task.id for task in await repo.find(options=[])]  # 高送E
 ```
 
-### ベストプラクティス
+### ベスト�EラクチE��ス
 
-| 状況 | 推奨設定 | 理由 |
+| 状況E| 推奨設宁E| 琁E�� |
 |------|---------|------|
-| リレーションを頻繁に使う | `default_options` で設定 | N+1 問題を自動的に回避 |
-| リレーションをたまに使う | `default_options` なし | 必要に応じて `options` を指定 |
-| パフォーマンスが重要 | ケースバイケースで `options` を指定 | 柔軟な最適化 |
+| リレーションを頻繁に使ぁE| `default_options` で設宁E| N+1 問題を自動的に回避 |
+| リレーションをたまに使ぁE| `default_options` なぁE| 忁E��に応じて `options` を指宁E|
+| パフォーマンスが重要E| ケースバイケースで `options` を指宁E| 柔軟な最適匁E|
 
 ---
 
-### パフォーマンス比較
+### パフォーマンス比輁E
 
-| 方法 | クエリ数 | パフォーマンス |
+| 方況E| クエリ数 | パフォーマンス |
 |-----|---------|--------------|
-| Lazy loading | N+1 回 | ❌ 遅い |
-| joinedload | 1回（JOIN） | ✅ 速い |
-| selectinload | 2回（IN） | ✅ 速い |
+| Lazy loading | N+1 囁E| ❁E遁E�� |
+| joinedload | 1回！EOIN�E�E| ✁E速い |
+| selectinload | 2回！EN�E�E| ✁E速い |
 
 **推奨**:
-- 多対一（`Task.user`）: `joinedload`
-- 一対多（`Project.tasks`）: `selectinload`
+- 多対一�E�ETask.user`�E�E `joinedload`
+- 一対多！EProject.tasks`�E�E `selectinload`
 
 ---
 
-## 並行処理パターン
+## 並行�E琁E��ターン
 
-### asyncio.gather による並行実行
+### asyncio.gather による並行実衁E
 
 ```python
 import asyncio
@@ -487,7 +487,7 @@ async def fetch_multiple_resources():
         user_repo = AsyncBaseRepository(User, session)
         project_repo = AsyncBaseRepository(Project, session)
         
-        # 3つのクエリを並行実行
+        # 3つのクエリを並行実衁E
         tasks, users, projects = await asyncio.gather(
             task_repo.find(filters=[Task.status == 'active']),
             user_repo.get_all(),
@@ -501,7 +501,7 @@ async def fetch_multiple_resources():
         }
 ```
 
-### FastAPI での並行処理
+### FastAPI での並行�E琁E
 
 ```python
 @app.get("/dashboard")
@@ -509,7 +509,7 @@ async def get_dashboard(session: AsyncSession = Depends(get_async_db_session)):
     task_repo = AsyncBaseRepository(Task, session)
     user_repo = AsyncBaseRepository(User, session)
     
-    # 複数のカウントを並行実行
+    # 褁E��のカウントを並行実衁E
     total_tasks, active_tasks, total_users = await asyncio.gather(
         task_repo.count(),
         task_repo.count(filters=[Task.status == 'active']),
@@ -523,7 +523,7 @@ async def get_dashboard(session: AsyncSession = Depends(get_async_db_session)):
     }
 ```
 
-### エラーハンドリング付き並行処理
+### エラーハンドリング付き並行�E琁E
 
 ```python
 async def fetch_with_fallback():
@@ -538,7 +538,7 @@ async def fetch_with_fallback():
                 return_exceptions=True  # エラーを例外として返す
             )
             
-            # 成功したものだけフィルタ
+            # 成功したも�Eだけフィルタ
             valid_results = [r for r in results if not isinstance(r, Exception)]
             return valid_results
         except Exception as e:
@@ -546,43 +546,43 @@ async def fetch_with_fallback():
             return []
 ```
 
-### バッチ処理パターン
+### バッチ�E琁E��ターン
 
 ```python
 async def process_tasks_in_batches(task_ids: List[int], batch_size: int = 10):
-    """大量のタスクをバッチ処理"""
+    """大量�EタスクをバチE��処琁E""
     async with get_async_db_session() as session:
         repo = AsyncBaseRepository(Task, session)
         
-        # バッチに分割
+        # バッチに刁E��
         for i in range(0, len(task_ids), batch_size):
             batch_ids = task_ids[i:i + batch_size]
             
-            # find_by_ids で一括取得
+            # find_by_ids で一括取征E
             tasks = await repo.find_by_ids(batch_ids)
             
-            # 処理
+            # 処琁E
             for task in tasks:
                 task.status = 'processed'
             
             await repo.saves(tasks)
             
-            # 少し待機（負荷軽減）
+            # 少し征E��（負荷軽減！E
             await asyncio.sleep(0.1)
 ```
 
 ---
 
-## ベストプラクティス
+## ベスト�EラクチE��ス
 
-### ✅ DO: セッション管理
+### ✁EDO: セチE��ョン管琁E
 
 ```python
-# Good: コンテキストマネージャーで自動管理
+# Good: コンチE��スト�Eネ�Eジャーで自動管琁E
 async with get_async_db_session() as session:
     repo = AsyncBaseRepository(Task, session)
     task = await repo.get_by_id(1)
-    # session は自動的にクローズされる
+    # session は自動的にクローズされめE
 
 # Good: FastAPI の Depends で注入
 @app.get("/tasks")
@@ -592,14 +592,14 @@ async def list_tasks(session: AsyncSession = Depends(get_async_db_session)):
 ```
 
 ```python
-# Bad: セッションを手動管理（クローズ忘れのリスク）
+# Bad: セチE��ョンを手動管琁E��クローズ忘れのリスク�E�E
 session = AsyncSession(async_engine)
 repo = AsyncBaseRepository(Task, session)
 task = await repo.get_by_id(1)
 await session.close()  # 忘れる可能性
 ```
 
-### ✅ DO: Eager Loading の使用
+### ✁EDO: Eager Loading の使用
 
 ```python
 # Good: N+1 問題を回避
@@ -607,30 +607,30 @@ tasks = await repo.find(
     options=[joinedload(Task.user)]
 )
 
-# Bad: Lazy loading（N+1 問題発生）
+# Bad: Lazy loading�E�E+1 問題発生！E
 tasks = await repo.find()
 for task in tasks:
-    print(task.user.name)  # 各タスクで個別クエリ
+    print(task.user.name)  # 吁E��スクで個別クエリ
 ```
 
-### ✅ DO: 並行処理の活用
+### ✁EDO: 並行�E琁E�E活用
 
 ```python
-# Good: 独立したクエリは並行実行
+# Good: 独立したクエリは並行実衁E
 tasks, users = await asyncio.gather(
     task_repo.find(),
     user_repo.find()
 )
 
-# Bad: 順次実行（遅い）
+# Bad: 頁E��実行（遅ぁE��E
 tasks = await task_repo.find()
 users = await user_repo.find()
 ```
 
-### ✅ DO: エラーハンドリング
+### ✁EDO: エラーハンドリング
 
 ```python
-# Good: 適切なエラーハンドリング
+# Good: 適刁E��エラーハンドリング
 try:
     task = await repo.get_by_id(task_id)
     if not task:
@@ -641,10 +641,10 @@ except SQLAlchemyError as e:
     raise HTTPException(status_code=500, detail="Database error")
 ```
 
-### ✅ DO: カスタムリポジトリの作成
+### ✁EDO: カスタムリポジトリの作�E
 
 ```python
-# Good: ビジネスロジックをリポジトリに集約
+# Good: ビジネスロジチE��をリポジトリに雁E��E
 class TaskRepository(AsyncBaseRepository[Task]):
     async def find_active_tasks(self) -> List[Task]:
         return await self.find(filters=[Task.status == 'active'])
@@ -660,19 +660,19 @@ class TaskRepository(AsyncBaseRepository[Task]):
         )
 ```
 
-### ❌ DON'T: リポジトリ内での並行処理
+### ❁EDON'T: リポジトリ冁E��の並行�E琁E
 
 ```python
-# Bad: リポジトリメソッド内で asyncio.gather
+# Bad: リポジトリメソチE��冁E�� asyncio.gather
 class TaskRepository(AsyncBaseRepository[Task]):
     async def get_tasks_and_users(self):
-        # これはやらない - 責務が不明確
+        # これはめE��なぁE- 責務が不�E確
         return await asyncio.gather(
             self.find(),
-            user_repo.find()  # 他のリポジトリに依存
+            user_repo.find()  # 他�Eリポジトリに依孁E
         )
 
-# Good: エンドポイントで並行処理
+# Good: エンド�Eイントで並行�E琁E
 @app.get("/data")
 async def get_data(session: AsyncSession = Depends(get_async_db_session)):
     task_repo = TaskRepository(Task, session)
@@ -685,10 +685,10 @@ async def get_data(session: AsyncSession = Depends(get_async_db_session)):
     return {"tasks": tasks, "users": users}
 ```
 
-### ❌ DON'T: 過度な eager loading
+### ❁EDON'T: 過度な eager loading
 
 ```python
-# Bad: 不要な関連まで取得
+# Bad: 不要な関連まで取征E
 tasks = await repo.find(
     options=[
         joinedload(Task.user).joinedload(User.profile),
@@ -697,37 +697,37 @@ tasks = await repo.find(
     ]
 )
 
-# Good: 必要なものだけ取得
+# Good: 忁E��なも�Eだけ取征E
 tasks = await repo.find(
     options=[joinedload(Task.user)]
 )
 ```
 
-### ✅ DO: トランザクション管理
+### ✁EDO: トランザクション管琁E
 
 ```python
-# Good: 複数操作をトランザクションでまとめる
+# Good: 褁E��操作をトランザクションでまとめる
 async with get_async_db_session() as session:
     repo = AsyncBaseRepository(Task, session)
     
     try:
         task1 = await repo.save(Task(title="Task 1"))
         task2 = await repo.save(Task(title="Task 2"))
-        # commit は session close 時に自動実行
+        # commit は session close 時に自動実衁E
     except Exception:
-        # rollback は自動実行
+        # rollback は自動実衁E
         raise
 ```
 
 ---
 
-## 同期版との比較
+## 同期版との比輁E
 
-### コード比較
+### コード比輁E
 
-**同期版 (BaseRepository)**:
+**同期牁E(BaseRepository)**:
 ```python
-from repom.base_repository import BaseRepository
+from repom import BaseRepository
 from repom.db import db_session
 
 with db_session() as session:
@@ -738,7 +738,7 @@ with db_session() as session:
 
 **非同期版 (AsyncBaseRepository)**:
 ```python
-from repom.async_base_repository import AsyncBaseRepository
+from repom import AsyncBaseRepository
 from repom.database import get_async_db_session
 
 async with get_async_db_session() as session:
@@ -749,48 +749,48 @@ async with get_async_db_session() as session:
 
 ### 主な変更点
 
-1. `async with` でセッション取得
-2. すべてのリポジトリメソッドに `await` が必要
-3. 並行処理は `asyncio.gather` で実現
+1. `async with` でセチE��ョン取征E
+2. すべてのリポジトリメソチE��に `await` が忁E��E
+3. 並行�E琁E�E `asyncio.gather` で実現
 
 ---
 
-## まとめ
+## まとめE
 
 ### AsyncBaseRepository の特徴
 
 - **FastAPI など非同期フレームワークで使用**
-- すべてのメソッドは `async def` で `await` が必要
-- **並行処理**: `asyncio.gather` で複数クエリを並行実行
-- **セッション管理**: `async with` または FastAPI の `Depends` で管理
+- すべてのメソチE��は `async def` で `await` が忁E��E
+- **並行�E琁E*: `asyncio.gather` で褁E��クエリを並行実衁E
+- **セチE��ョン管琁E*: `async with` また�E FastAPI の `Depends` で管琁E
 
-### 機能別ガイド
+### 機�E別ガイチE
 
-| 機能 | ガイド | 概要 |
+| 機�E | ガイチE| 概要E|
 |------|--------|------|
-| 基本的な CRUD | [BaseRepository ガイド](base_repository_guide.md) | 取得・作成・更新・削除 |
-| 検索・フィルタリング | [Repository 上級ガイド](repository_advanced_guide.md#検索とフィルタリング) | find(), ページング、ソート |
-| Eager Loading | [Repository 上級ガイド](repository_advanced_guide.md#eager-loadingn1問題の解決) | N+1 問題の解決、default_options |
-| カスタムリポジトリ | [Repository 上級ガイド](repository_advanced_guide.md#カスタムリポジトリ) | ビジネスロジックの統合 |
+| 基本皁E�� CRUD | [BaseRepository ガイド](base_repository_guide.md) | 取得�E作�E・更新・削除 |
+| 検索・フィルタリング | [Repository 上級ガイド](repository_advanced_guide.md#検索とフィルタリング) | find(), ペ�Eジング、ソーチE|
+| Eager Loading | [Repository 上級ガイド](repository_advanced_guide.md#eager-loadingn1問題�E解決) | N+1 問題�E解決、default_options |
+| カスタムリポジトリ | [Repository 上級ガイド](repository_advanced_guide.md#カスタムリポジトリ) | ビジネスロジチE��の統吁E|
 | 論理削除 | [SoftDelete ガイド](repository_soft_delete_guide.md) | soft_delete, restore |
-| FastAPI 統合 | [FilterParams ガイド](repository_filter_params_guide.md) | クエリパラメータの型安全処理 |
-| テスト | [Testing ガイド](../testing/testing_guide.md) | 非同期テストのベストプラクティス |
+| FastAPI 統吁E| [FilterParams ガイド](repository_filter_params_guide.md) | クエリパラメータの型安�E処琁E|
+| チE��チE| [Testing ガイド](../testing/testing_guide.md) | 非同期テスト�Eベスト�EラクチE��ス |
 
 ### 非同期版の利点
 
-✅ **高並行性**: 複数のクエリを並行実行できる  
-✅ **I/O効率**: データベース待機中に他の処理を実行  
-✅ **FastAPI統合**: Depends パターンでシームレスに統合  
-✅ **スケーラビリティ**: 多数の同時リクエストを効率的に処理
+✁E**高並行性**: 褁E��のクエリを並行実行できる  
+✁E**I/O効玁E*: チE�Eタベ�Eス征E��中に他�E処琁E��実衁E 
+✁E**FastAPI統吁E*: Depends パターンでシームレスに統吁E 
+✁E**スケーラビリチE��**: 多数の同時リクエストを効玁E��に処琁E
 
-### 次のステップ
+### 次のスチE��チE
 
-1. **基礎を学ぶ**: [BaseRepository ガイド](base_repository_guide.md) で CRUD 操作を理解
-2. **高度な検索**: [Repository 上級ガイド](repository_advanced_guide.md) で検索パターンを学習
-3. **FastAPI統合**: [FilterParams ガイド](repository_filter_params_guide.md) で実践的な統合を実装
-4. **並行処理**: このガイドの「並行処理パターン」を活用
+1. **基礎を学ぶ**: [BaseRepository ガイド](base_repository_guide.md) で CRUD 操作を琁E��
+2. **高度な検索**: [Repository 上級ガイド](repository_advanced_guide.md) で検索パターンを学翁E
+3. **FastAPI統吁E*: [FilterParams ガイド](repository_filter_params_guide.md) で実践皁E��統合を実裁E
+4. **並行�E琁E*: こ�Eガイド�E「並行�E琁E��ターン」を活用
 
 ---
 
 **最終更新**: 2025-12-28  
-**対象バージョン**: repom v2.0+
+**対象バ�Eジョン**: repom v2.0+

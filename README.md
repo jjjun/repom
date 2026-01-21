@@ -193,7 +193,7 @@ task = repo.save(task)
 # → 同じメソッドで更新も可能
 
 # 非同期版
-from repom.async_base_repository import AsyncBaseRepository
+from repom import AsyncBaseRepository
 async_repo = AsyncBaseRepository(Task, session=async_session)
 task = await async_repo.save(task)
 ```

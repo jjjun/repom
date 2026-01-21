@@ -16,7 +16,7 @@
 2. **ライブラリ**: 他のアプリケーションから import されて使用される
 
 **例**:
-- **repom**: `poetry run db_create` + `from repom.base_repository import BaseRepository`
+- **repom**: `poetry run db_create` + `from repom import BaseRepository`
 - **fast-domain**: `poetry run domain_command` + `from fast_domain.service import DomainService`
 - **Alembic**: `alembic upgrade head` + `from alembic import context`
 - **Django**: `django-admin migrate` + `from django.db import models`

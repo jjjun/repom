@@ -88,7 +88,7 @@ class MyModel(BaseModel):
 
 ### Using Repository
 ```python
-from repom.base_repository import BaseRepository
+from repom import BaseRepository
 from sqlalchemy.orm import Session
 
 class MyRepository(BaseRepository[MyModel]):

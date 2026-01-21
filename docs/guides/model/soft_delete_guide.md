@@ -1,42 +1,42 @@
-# 論理削除（Soft Delete）ガイド
+# 論理削除�E�Eoft Delete�E�ガイチE
 
-このガイドでは、repom の論理削除機能の使用方法を説明します。
+こ�Eガイドでは、repom の論理削除機�Eの使用方法を説明します、E
 
 ## 目次
 
-- [概要](#概要)
-- [基本的な使い方](#基本的な使い方)
+- [概要](#概要E
+- [基本皁E��使ぁE��](#基本皁E��使ぁE��)
 - [API リファレンス](#api-リファレンス)
-- [使用例](#使用例)
+- [使用例](#使用侁E
 - [マイグレーション](#マイグレーション)
-- [ベストプラクティス](#ベストプラクティス)
-- [トラブルシューティング](#トラブルシューティング)
+- [ベスト�EラクチE��ス](#ベスト�EラクチE��ス)
+- [トラブルシューチE��ング](#トラブルシューチE��ング)
 
 ---
 
-## 概要
+## 概要E
 
-論理削除（Soft Delete）は、データベースレコードを物理的に削除せず、「削除済み」フラグを立てることでデータを保持する手法です。
+論理削除�E�Eoft Delete�E��E、データベ�Eスレコードを物琁E��に削除せず、「削除済み」フラグを立てることでチE�Eタを保持する手法です、E
 
 ### 主な利点
 
-- **誤削除からの復元**: 削除されたデータを簡単に復元可能
+- **誤削除からの復允E*: 削除されたデータを簡単に復允E��能
 - **監査証跡**: 削除履歴を保持できる
-- **段階的削除**: 論理削除 → 一定期間保持 → 物理削除のフローを実現
-- **参照整合性**: 外部キー制約を維持しながら削除状態を管理
+- **段階的削除**: 論理削除 ↁE一定期間保持 ↁE物琁E��除のフローを実現
+- **参�E整合性**: 外部キー制紁E��維持しながら削除状態を管琁E
 
-### repom の論理削除機能
+### repom の論理削除機�E
 
-repom は以下の2つのコンポーネントで論理削除をサポートします：
+repom は以下�E2つのコンポ�Eネントで論理削除をサポ�Eトします！E
 
-1. **SoftDeletableMixin**: モデルに `deleted_at` カラムと削除操作メソッドを追加
-2. **BaseRepository 拡張**: 削除済みレコードの自動フィルタリングと管理メソッド
+1. **SoftDeletableMixin**: モチE��に `deleted_at` カラムと削除操作メソチE��を追加
+2. **BaseRepository 拡張**: 削除済みレコード�E自動フィルタリングと管琁E��ソチE��
 
 ---
 
-## 基本的な使い方
+## 基本皁E��使ぁE��
 
-### 1. モデルに Mixin を追加
+### 1. モチE��に Mixin を追加
 
 ```python
 from sqlalchemy import String
@@ -50,45 +50,45 @@ class Article(BaseModelAuto, SoftDeletableMixin):
     content: Mapped[str] = mapped_column(String)
 ```
 
-これだけで、以下が自動的に追加されます：
+これだけで、以下が自動的に追加されます！E
 
-- `deleted_at` カラム（DateTime(timezone=True)、インデックス付き）
-- `soft_delete()` メソッド
-- `restore()` メソッド
+- `deleted_at` カラム�E�EateTime(timezone=True)、インチE��クス付き�E�E
+- `soft_delete()` メソチE��
+- `restore()` メソチE��
 - `is_deleted` プロパティ
 
 ### 2. Repository での使用
 
 ```python
-from repom.base_repository import BaseRepository
+from repom import BaseRepository
 
 repo = BaseRepository(Article)
 
 # 論理削除
 repo.soft_delete(article_id)
 
-# 復元
+# 復允E
 repo.restore(article_id)
 
-# 物理削除（完全削除）
+# 物琁E��除�E�完�E削除�E�E
 repo.permanent_delete(article_id)
 ```
 
 ### 3. 自動フィルタリング
 
-論理削除されたレコードは、デフォルトで自動的に除外されます：
+論理削除されたレコード�E、デフォルトで自動的に除外されます！E
 
 ```python
-# 削除済みを除外（デフォルト）
+# 削除済みを除外（デフォルト！E
 active_articles = repo.find()
 
 # 削除済みも含める
 all_articles = repo.find(include_deleted=True)
 
-# ID で取得（削除済みを除外）
+# ID で取得（削除済みを除外！E
 article = repo.get_by_id(1)
 
-# ID で取得（削除済みも含む）
+# ID で取得（削除済みも含む�E�E
 article = repo.get_by_id(1, include_deleted=True)
 ```
 
@@ -100,15 +100,15 @@ article = repo.get_by_id(1, include_deleted=True)
 
 #### deleted_at: Mapped[datetime | None]
 
-削除日時を記録するカラム。NULL の場合は削除されていません。
+削除日時を記録するカラム、EULL の場合�E削除されてぁE��せん、E
 
-- **型**: `DateTime(timezone=True)`
-- **デフォルト**: `None`
-- **インデックス**: あり
+- **垁E*: `DateTime(timezone=True)`
+- **チE��ォルチE*: `None`
+- **インチE��クス**: あり
 
 #### soft_delete() -> None
 
-論理削除を実行します。`deleted_at` に現在時刻（UTC）を設定します。
+論理削除を実行します。`deleted_at` に現在時刻�E�ETC�E�を設定します、E
 
 ```python
 article = repo.get_by_id(1)
@@ -116,11 +116,11 @@ article.soft_delete()
 session.commit()
 ```
 
-**注意**: セッションのコミットは呼び出し側で行う必要があります。
+**注愁E*: セチE��ョンのコミット�E呼び出し�Eで行う忁E��があります、E
 
 #### restore() -> None
 
-削除を取り消します。`deleted_at` を NULL に戻します。
+削除を取り消します。`deleted_at` めENULL に戻します、E
 
 ```python
 article = repo.get_by_id(1, include_deleted=True)
@@ -131,28 +131,28 @@ if article and article.is_deleted:
 
 #### is_deleted: bool (プロパティ)
 
-削除済みかどうかを返します。
+削除済みかどぁE��を返します、E
 
 ```python
 if article.is_deleted:
-    print("この記事は削除されています")
+    print("こ�E記事�E削除されてぁE��ぁE)
 ```
 
 ---
 
-### BaseRepository メソッド
+### BaseRepository メソチE��
 
 #### find(filters=None, include_deleted=False, **kwargs) -> List[T]
 
-レコードを検索します。
+レコードを検索します、E
 
 **パラメータ**:
-- `filters`: SQLAlchemy フィルタ条件のリスト
-- `include_deleted`: 削除済みも含めるか（デフォルト: False）
+- `filters`: SQLAlchemy フィルタ条件のリスチE
+- `include_deleted`: 削除済みも含めるか（デフォルチE False�E�E
 - `**kwargs`: `offset`, `limit`, `order_by` などのオプション
 
 ```python
-# 削除済みを除外
+# 削除済みを除夁E
 active = repo.find()
 
 # 削除済みも含む
@@ -164,14 +164,14 @@ published = repo.find(filters=[Article.status == 'published'])
 
 #### get_by_id(id, include_deleted=False) -> Optional[T]
 
-ID でレコードを取得します。
+ID でレコードを取得します、E
 
 **パラメータ**:
-- `id`: レコードの ID
-- `include_deleted`: 削除済みも含めるか（デフォルト: False）
+- `id`: レコード�E ID
+- `include_deleted`: 削除済みも含めるか（デフォルチE False�E�E
 
 ```python
-# 削除済みを除外
+# 削除済みを除夁E
 article = repo.get_by_id(1)
 
 # 削除済みも含む
@@ -180,17 +180,17 @@ article = repo.get_by_id(1, include_deleted=True)
 
 #### soft_delete(id) -> bool
 
-論理削除を実行します。
+論理削除を実行します、E
 
 **パラメータ**:
-- `id`: 削除するレコードの ID
+- `id`: 削除するレコード�E ID
 
 **戻り値**:
 - `True`: 削除成功
-- `False`: レコードが見つからない
+- `False`: レコードが見つからなぁE
 
-**例外**:
-- `ValueError`: モデルが SoftDeletableMixin を持たない場合
+**例夁E*:
+- `ValueError`: モチE��ぁESoftDeletableMixin を持たなぁE��吁E
 
 ```python
 if repo.soft_delete(1):
@@ -201,80 +201,80 @@ else:
 
 #### restore(id) -> bool
 
-削除を復元します。
+削除を復允E��ます、E
 
 **パラメータ**:
-- `id`: 復元するレコードの ID
+- `id`: 復允E��るレコード�E ID
 
 **戻り値**:
-- `True`: 復元成功
-- `False`: 削除済みレコードが見つからない
+- `True`: 復允E�E劁E
+- `False`: 削除済みレコードが見つからなぁE
 
 ```python
 if repo.restore(1):
-    print("復元成功")
+    print("復允E�E劁E)
 ```
 
 #### permanent_delete(id) -> bool
 
-物理削除（完全削除）を実行します。
+物琁E��除�E�完�E削除�E�を実行します、E
 
-**警告**: この操作は取り消せません。
+**警呁E*: こ�E操作�E取り消せません、E
 
 **パラメータ**:
-- `id`: 削除するレコードの ID
+- `id`: 削除するレコード�E ID
 
 **戻り値**:
 - `True`: 削除成功
-- `False`: レコードが見つからない
+- `False`: レコードが見つからなぁE
 
 ```python
 if repo.permanent_delete(1):
-    print("物理削除完了")
+    print("物琁E��除完亁E)
 ```
 
 #### find_deleted(**kwargs) -> List[T]
 
-削除済みレコードのみを取得します。
+削除済みレコード�Eみを取得します、E
 
 ```python
 deleted_articles = repo.find_deleted()
-print(f"{len(deleted_articles)} 件の削除済み記事")
+print(f"{len(deleted_articles)} 件の削除済み記亁E)
 ```
 
 #### find_deleted_before(before_date, **kwargs) -> List[T]
 
-指定日時より前に削除されたレコードを取得します。
+持E��日時より前に削除されたレコードを取得します、E
 
 **パラメータ**:
-- `before_date`: この日時より前に削除されたレコードを検索
+- `before_date`: こ�E日時より前に削除されたレコードを検索
 
 ```python
 from datetime import datetime, timedelta, timezone
 
-# 30日以上前に削除されたレコードを取得
+# 30日以上前に削除されたレコードを取征E
 threshold = datetime.now(timezone.utc) - timedelta(days=30)
 old_deleted = repo.find_deleted_before(threshold)
 
-# 物理削除
+# 物琁E��除
 for item in old_deleted:
     repo.permanent_delete(item.id)
 ```
 
 ---
 
-## 使用例
+## 使用侁E
 
-### 基本的な CRUD + 削除フロー
+### 基本皁E�� CRUD + 削除フロー
 
 ```python
-from repom.base_repository import BaseRepository
+from repom import BaseRepository
 from myapp.models import Article
 
 repo = BaseRepository(Article)
 
-# 作成
-article = Article(title="新しい記事", content="内容...")
+# 作�E
+article = Article(title="新しい記亁E, content="冁E��...")
 repo.save(article)
 
 # 読み取り
@@ -287,13 +287,13 @@ repo.save(article)
 # 論理削除
 repo.soft_delete(1)
 
-# 削除済みは取得できない
+# 削除済みは取得できなぁE
 article = repo.get_by_id(1)  # None
 
-# 復元
+# 復允E
 repo.restore(1)
 
-# 物理削除
+# 物琁E��除
 repo.permanent_delete(1)
 ```
 
@@ -301,7 +301,7 @@ repo.permanent_delete(1)
 
 ```python
 from fastapi import APIRouter, HTTPException, Depends
-from repom.base_repository import BaseRepository
+from repom import BaseRepository
 from myapp.models import Article
 
 router = APIRouter()
@@ -316,32 +316,32 @@ def soft_delete_article(article_id: int):
 
 @router.post("/articles/{article_id}/restore")
 def restore_article(article_id: int):
-    """削除した記事を復元"""
+    """削除した記事を復允E""
     repo = BaseRepository(Article)
     if repo.restore(article_id):
-        return {"success": True, "message": "記事を復元しました"}
+        return {"success": True, "message": "記事を復允E��ました"}
     raise HTTPException(status_code=404, detail="削除済み記事が見つかりません")
 
 @router.get("/articles")
 def list_articles(include_deleted: bool = False):
-    """記事一覧を取得"""
+    """記事一覧を取征E""
     repo = BaseRepository(Article)
     articles = repo.find(include_deleted=include_deleted)
     return [article.to_dict() for article in articles]
 ```
 
-### バッチ処理での物理削除
+### バッチ�E琁E��の物琁E��除
 
 ```python
 from datetime import datetime, timedelta, timezone
-from repom.base_repository import BaseRepository
+from repom import BaseRepository
 from myapp.models import Article
 import logging
 
 logger = logging.getLogger(__name__)
 
 def cleanup_old_deleted_articles():
-    """30日以上前に削除された記事を物理削除"""
+    """30日以上前に削除された記事を物琁E��除"""
     repo = BaseRepository(Article)
     
     threshold = datetime.now(timezone.utc) - timedelta(days=30)
@@ -368,11 +368,11 @@ def cleanup_old_deleted_articles():
     }
 ```
 
-### ファイルも含めた削除処理（mine-py での例）
+### ファイルも含めた削除処琁E��Eine-py での例！E
 
 ```python
 from pathlib import Path
-from repom.base_repository import BaseRepository
+from repom import BaseRepository
 from myapp.models import AssetItem
 import logging
 
@@ -380,12 +380,12 @@ logger = logging.getLogger(__name__)
 
 class AssetRepository(BaseRepository[AssetItem]):
     def permanent_delete_with_file(self, asset_id: int) -> bool:
-        """物理ファイルも含めて削除"""
+        """物琁E��ァイルも含めて削除"""
         asset = self.get_by_id(asset_id, include_deleted=True)
         if not asset:
             return False
         
-        # 物理ファイル削除
+        # 物琁E��ァイル削除
         file_path = Path(asset.storage_path)
         if file_path.exists():
             try:
@@ -403,15 +403,15 @@ class AssetRepository(BaseRepository[AssetItem]):
 
 ## マイグレーション
 
-### repom 単体で使用する場合
+### repom 単体で使用する場吁E
 
-マイグレーションファイルを自動生成します：
+マイグレーションファイルを�E動生成します！E
 
 ```bash
 poetry run alembic revision --autogenerate -m "add soft delete to articles"
 ```
 
-生成されるマイグレーション例：
+生�Eされる�Eイグレーション例！E
 
 ```python
 def upgrade():
@@ -425,45 +425,45 @@ def downgrade():
     op.drop_column('articles', 'deleted_at')
 ```
 
-適用：
+適用�E�E
 
 ```bash
 poetry run alembic upgrade head
 ```
 
-### 外部プロジェクトで使用する場合
+### 外部プロジェクトで使用する場吁E
 
-外部プロジェクト（例: mine-py）で使用する場合も同様です：
+外部プロジェクト（侁E mine-py�E�で使用する場合も同様です！E
 
 ```bash
-# mine-py/ ディレクトリで実行
+# mine-py/ チE��レクトリで実衁E
 poetry run alembic revision --autogenerate -m "add soft delete to asset_items"
 poetry run alembic upgrade head
 ```
 
 ---
 
-## ベストプラクティス
+## ベスト�EラクチE��ス
 
-### 1. 論理削除 vs 物理削除の使い分け
+### 1. 論理削除 vs 物琁E��除の使ぁE�EぁE
 
-**論理削除を使うべき場合**:
-- ユーザーデータ（記事、コメント、アセットなど）
-- 監査証跡が必要なデータ
-- 誤削除からの復元が必要なデータ
-- 外部キーで参照されているデータ
+**論理削除を使ぁE��き場吁E*:
+- ユーザーチE�Eタ�E�記事、コメント、アセチE��など�E�E
+- 監査証跡が忁E��なチE�Eタ
+- 誤削除からの復允E��忁E��なチE�Eタ
+- 外部キーで参�EされてぁE��チE�Eタ
 
-**物理削除を使うべき場合**:
-- 一時データ（セッション、キャッシュなど）
-- プライバシー法で削除が義務付けられているデータ（GDPR など）
-- ディスク容量が逼迫している場合
+**物琁E��除を使ぁE��き場吁E*:
+- 一時データ�E�セチE��ョン、キャチE��ュなど�E�E
+- プライバシー法で削除が義務付けられてぁE��チE�Eタ�E�EDPR など�E�E
+- チE��スク容量が逼迫してぁE��場吁E
 
-### 2. 定期的なクリーンアップ
+### 2. 定期皁E��クリーンアチE�E
 
-論理削除されたデータは蓄積するため、定期的な物理削除が推奨されます：
+論理削除されたデータは蓁E��するため、定期皁E��物琁E��除が推奨されます！E
 
 ```python
-# 毎日実行するバッチジョブ
+# 毎日実行するバチE��ジョチE
 def daily_cleanup():
     repos = [
         BaseRepository(Article),
@@ -479,14 +479,14 @@ def daily_cleanup():
             repo.permanent_delete(item.id)
 ```
 
-### 3. 管理画面での確認
+### 3. 管琁E��面での確誁E
 
-削除済みデータを管理画面で確認できるようにします：
+削除済みチE�Eタを管琁E��面で確認できるようにします！E
 
 ```python
 @router.get("/admin/deleted-articles")
 def list_deleted_articles():
-    """削除済み記事の管理画面"""
+    """削除済み記事�E管琁E��面"""
     repo = BaseRepository(Article)
     deleted = repo.find_deleted(order_by="deleted_at:desc", limit=100)
     return [
@@ -501,7 +501,7 @@ def list_deleted_articles():
 
 ### 4. ログ記録
 
-削除・復元操作はログに記録します：
+削除・復允E��作�Eログに記録します！E
 
 ```python
 import logging
@@ -516,9 +516,9 @@ def delete_article(article_id: int):
     return False
 ```
 
-### 5. 外部キー制約
+### 5. 外部キー制紁E
 
-論理削除を使用する場合、外部キー制約は維持されます：
+論理削除を使用する場合、外部キー制紁E�E維持されます！E
 
 ```python
 class Comment(BaseModelAuto, SoftDeletableMixin):
@@ -528,79 +528,79 @@ class Comment(BaseModelAuto, SoftDeletableMixin):
     content: Mapped[str] = mapped_column(String)
 ```
 
-記事が論理削除されても、コメントは保持されます。
-必要に応じて、コメントも連動して論理削除するロジックを実装できます。
+記事が論理削除されても、コメント�E保持されます、E
+忁E��に応じて、コメントも連動して論理削除するロジチE��を実裁E��きます、E
 
 ---
 
-## トラブルシューティング
+## トラブルシューチE��ング
 
-### Q: 論理削除非対応モデルで soft_delete() を呼ぶとエラー
+### Q: 論理削除非対応モチE��で soft_delete() を呼ぶとエラー
 
 **エラー**:
 ```
 ValueError: MyModel does not support soft delete. Add SoftDeletableMixin to the model.
 ```
 
-**解決策**:
-モデルに `SoftDeletableMixin` を追加してください：
+**解決筁E*:
+モチE��に `SoftDeletableMixin` を追加してください�E�E
 
 ```python
 class MyModel(BaseModelAuto, SoftDeletableMixin):
     # ...
 ```
 
-### Q: find() で削除済みが取得されてしまう
+### Q: find() で削除済みが取得されてしまぁE
 
-**原因**: モデルが `SoftDeletableMixin` を継承していない
+**原因**: モチE��ぁE`SoftDeletableMixin` を継承してぁE��ぁE
 
-**確認方法**:
+**確認方況E*:
 ```python
-print(hasattr(MyModel, 'deleted_at'))  # False の場合は Mixin がない
+print(hasattr(MyModel, 'deleted_at'))  # False の場合�E Mixin がなぁE
 ```
 
-**解決策**:
-モデル定義を確認し、`SoftDeletableMixin` を追加してください。
+**解決筁E*:
+モチE��定義を確認し、`SoftDeletableMixin` を追加してください、E
 
-### Q: 既存データに deleted_at カラムを追加したい
+### Q: 既存データに deleted_at カラムを追加したぁE
 
-**手順**:
+**手頁E*:
 
-1. モデルに Mixin を追加
-2. マイグレーションファイル生成
-3. マイグレーション実行
+1. モチE��に Mixin を追加
+2. マイグレーションファイル生�E
+3. マイグレーション実衁E
 
 ```bash
 poetry run alembic revision --autogenerate -m "add soft delete"
 poetry run alembic upgrade head
 ```
 
-既存のレコードは `deleted_at = NULL`（削除されていない）として扱われます。
+既存�Eレコード�E `deleted_at = NULL`�E�削除されてぁE��ぁE��として扱われます、E
 
-### Q: 物理削除と論理削除を間違えた
+### Q: 物琁E��除と論理削除を間違えぁE
 
-**論理削除を物理削除してしまった場合**:
-- バックアップから復元する必要があります
-- 定期的なバックアップを推奨します
+**論理削除を物琁E��除してしまった場吁E*:
+- バックアチE�Eから復允E��る忁E��がありまぁE
+- 定期皁E��バックアチE�Eを推奨しまぁE
 
-**物理削除すべきところを論理削除してしまった場合**:
+**物琁E��除すべきところを論理削除してしまった場吁E*:
 ```python
-# 後から物理削除できます
+# 後から物琁E��除できまぁE
 repo.permanent_delete(item_id)
 ```
 
-### Q: パフォーマンスが低下した
+### Q: パフォーマンスが低下しぁE
 
-**原因**: deleted_at にインデックスがない可能性
+**原因**: deleted_at にインチE��クスがなぁE��能性
 
-**確認**:
+**確誁E*:
 ```sql
 SHOW INDEX FROM articles WHERE Column_name = 'deleted_at';
 ```
 
-**解決策**:
-`SoftDeletableMixin` はデフォルトで `index=True` を設定していますが、
-手動でマイグレーションした場合はインデックスを追加してください：
+**解決筁E*:
+`SoftDeletableMixin` はチE��ォルトで `index=True` を設定してぁE��すが、E
+手動でマイグレーションした場合�EインチE��クスを追加してください�E�E
 
 ```python
 def upgrade():
@@ -609,11 +609,11 @@ def upgrade():
 
 ---
 
-## 関連ドキュメント
+## 関連ドキュメンチE
 
 - [BaseModelAuto ガイド](base_model_auto_guide.md) - Mixin パターンの詳細
 - [BaseRepository ガイド](repository_and_utilities_guide.md) - Repository パターンの詳細
-- [Testing ガイド](testing_guide.md) - テスト戦略
+- [Testing ガイド](testing_guide.md) - チE��ト戦略
 
 ---
 
