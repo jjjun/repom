@@ -588,7 +588,7 @@ print(f"Cached schemas: {MyModel._response_schemas.keys()}")
 
 ## See Also
 
-- `repom/base_model.py` - Implementation
+- `repom/models/base_model_auto.py` - get_response_schema() implementation
 - `tests/unit_tests/test_response_field.py` - Test cases
 - Pydantic documentation: https://docs.pydantic.dev/latest/
 - FastAPI with Pydantic: https://fastapi.tiangolo.com/tutorial/response-model/

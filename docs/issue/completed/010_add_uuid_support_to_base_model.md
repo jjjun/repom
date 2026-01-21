@@ -53,7 +53,7 @@ retrieved = repo.get_by_id(user.id)
 ## 影響範囲
 
 ### 変更ファイル
-- `repom/base_model.py`: use_uuid パラメータの実装
+- `repom/models/base_model.py`: use_uuid パラメータの実装
 - `tests/unit_tests/test_base_model_uuid.py`: 包括的なテスト（17テスト）
 
 ### 影響を受ける機能
@@ -251,7 +251,7 @@ session.commit()
 ## 関連リソース
 
 ### コード
-- `repom/base_model.py`: UUID サポート実装
+- `repom/models/base_model.py`: UUID サポート実装
 - `tests/unit_tests/test_base_model_uuid.py`: UUID テスト
 
 ### ドキュメント

@@ -120,7 +120,7 @@ def test_forward_refs_generic_list_response_pattern(db_test):
 
 **関連ファイル**:
 - `repom/custom_types/AutoDateTime.py`
-- `repom/base_model_auto.py` (get_response_schema)
+- `repom/models/base_model_auto.py` (get_response_schema)
 - `tests/unit_tests/test_response_schema_forward_refs.py`
 - **ドキュメント**: `docs/guides/system_columns_and_custom_types.md`
 
@@ -208,8 +208,8 @@ posts: Mapped[List["Post"]] = relationship(back_populates="user")
 |---------|--------|--------|------|
 | `repom/models/sample.py` | 2 | 高 | サンプルモデル（ユーザー参照） |
 | `repom/models/user_session.py` | 6 | 高 | サンプルモデル（ユーザー参照） |
-| `repom/base_model.py` | 3 | **最重要** | すべてのモデルに影響 |
-| `repom/base_model_auto.py` | 5+ | 高 | ドキュメントコメント |
+| `repom/models/base_model.py` | 3 | **最重要** | すべてのモデルに影響 |
+| `repom/models/base_model_auto.py` | 5+ | 高 | ドキュメントコメント |
 | `tests/unit_tests/*.py` | 100+ | 中 | テストモデル |
 | `tests/behavior_tests/*.py` | 20+ | 中 | テストモデル |
 
@@ -241,7 +241,7 @@ repom を使用しているすべてのプロジェクトで、以下の移行�
 
 #### 1.1. BaseModel の修正 ✅ (完了: Commit 964504d)
 
-**ファイル**: `repom/base_model.py`
+**ファイル**: `repom/models/base_model.py`
 
 **実装内容** (Option A: 型安全性が高いが、やや複雑):
 ```python
@@ -333,7 +333,7 @@ class UserSession(BaseModelAuto, use_id=False):
 
 #### 1.3. BaseModelAuto のドキュメント更新 ✅ (完了: Commit a65f6fe, c7d787a)
 
-**ファイル**: `repom/base_model_auto.py`, `repom/custom_types/AutoDateTime.py`
+**ファイル**: `repom/models/base_model_auto.py`, `repom/custom_types/AutoDateTime.py`
 
 **変更内容**: docstring 内の例を `Mapped[]` スタイルに更新
 
@@ -536,7 +536,7 @@ posts: Mapped[List[Post]] = relationship(back_populates="user")
 ## 完了条件
 
 ### Phase 1 完了条件 ✅ (完了)
-- [x] **Phase 1.1**: `repom/base_model.py` が `Mapped[]` スタイル (Commit: 964504d)
+- [x] **Phase 1.1**: `repom/models/base_model.py` が `Mapped[]` スタイル (Commit: 964504d)
 - [x] **Phase 1.2**: `repom/models/*.py` が `Mapped[]` スタイル (Commit: ae71332)
 - [x] **Phase 1.3**: カスタム型のドキュメント/例が `Mapped[]` スタイル (Commit: a65f6fe)
 - [x] **Phase 1.4**: `base_model_auto.py` のドキュメントが `Mapped[]` スタイル (Commit: c7d787a)

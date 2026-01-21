@@ -638,7 +638,8 @@ class OrderRepository(AsyncBaseRepository[Order]):
 
 - **[auto_import_models ガイド](../features/auto_import_models_guide.md)**: モデルの自動インポート
 - **[BaseModelAuto ガイド](../model/base_model_auto_guide.md)**: スキーマ自動生成
-- **[BaseRepository ソースコード](../../../repom/repositories/base_repository.py)**: 実装の詳細
+- **[BaseModel ソースコード](../../../repom/models/base_model.py)**: BaseModel 実装の詳細
+- **[BaseRepository ソースコード](../../../repom/repositories/base_repository.py)**: BaseRepository 実装の詳細
 
 ---
 

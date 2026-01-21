@@ -18,12 +18,11 @@
 ```
 repom/
 ├── repom/                      # Main package
+│   ├── models/                # Model base classes (BaseModel, BaseModelAuto, BaseStaticModel)
 │   ├── custom_types/          # Reusable custom SQLAlchemy types
 │   ├── repositories/          # Repository implementations (query builder & soft delete mixins)
+│   ├── mixins/                # Reusable mixins (SoftDeletableMixin, etc.)
 │   ├── scripts/               # CLI scripts (Poetry entry points)
-│   ├── base_model.py          # Base SQLAlchemy model helpers
-│   ├── base_repository.py     # [DEPRECATED] Use repom.repositories instead
-│   ├── base_static.py         # Base static model class
 │   ├── config.py              # Environment-aware configuration
 │   ├── database.py            # Database connection setup
 │   └── utility.py             # Shared utility functions

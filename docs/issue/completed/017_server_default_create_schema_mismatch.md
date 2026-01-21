@@ -50,7 +50,7 @@
 
 ## 影響範囲
 
-- `repom/base_model_auto.py` 
+- `repom/models/base_model_auto.py` 
   - `_get_default_value()` メソッド
   - `get_create_schema()` メソッド（処理順序修正）
   - `_is_required_for_create()` メソッド
@@ -98,4 +98,4 @@ $ poetry run pytest tests/unit_tests/test_base_model_auto*.py -v
 ## 関連リソース
 
 - `tests/unit_tests/test_base_model_auto_server_default.py` (9 tests)
-- `repom/base_model_auto.py` (修正済み)
+- `repom/models/base_model_auto.py` (修正済み)

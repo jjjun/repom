@@ -329,7 +329,7 @@ GitHub Copilot + Claude は**動的にコンテキストを管理**します：
 [コンテキストに自動追加されるもの]
 1. base_repository.py の全内容（常時）: 約2,000トークン
 2. 関連ファイル（AI判断で自動追加）:
-   - repom/base_model.py: 約1,500トークン
+   - repom/models/base_model.py: 約1,500トークン
    - repom/db.py: 約500トークン
 3. README.md（必須）: 22,000トークン
 4. 会話履歴: 20,000トークン

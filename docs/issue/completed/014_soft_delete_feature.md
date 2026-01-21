@@ -33,10 +33,10 @@ repom に **SoftDeletableMixin** と論理削除対応の Repository メソッ�
 
 ### 影響を受けるファイル
 
-- `repom/base_model_auto.py` - SoftDeletableMixin 追加
-- `repom/base_repository.py` - 論理削除メソッド追加
+- `repom/mixins/soft_delete.py` - SoftDeletableMixin (Mixin 分離後)
+- `repom/repositories/base_repository.py` - 論理削除メソッド追加
 - `tests/unit_tests/test_soft_delete.py` - 新規テストファイル
-- `docs/guides/soft_delete_guide.md` - 新規ガイド作成
+- `docs/guides/model/soft_delete_guide.md` - 新規ガイド作成
 - `README.md` - 機能説明追加
 
 ### 影響を受ける機能
@@ -290,7 +290,7 @@ for asset in old_deleted:
 **Phase 1: repom への基盤追加** - 完了
 
 #### 1. SoftDeletableMixin の実装
-- ✅ `repom/base_model_auto.py` に追加
+- ✅ `repom/mixins/soft_delete.py` に追加 (Mixin 分離後)
 - ✅ `deleted_at` カラム（DateTime(timezone=True)、インデックス付き）
 - ✅ `soft_delete()` メソッド
 - ✅ `restore()` メソッド
@@ -338,7 +338,7 @@ tests/unit_tests (全体) - 260 passed, 0 failed
 ### 📚 成果物
 
 1. **実装ファイル**
-   - `repom/base_model_auto.py` - SoftDeletableMixin 追加
+   - `repom/mixins/soft_delete.py` - SoftDeletableMixin 追加 (Mixin 分離後)
    - `repom/base_repository.py` - 論理削除メソッド追加
 
 2. **テストファイル**
