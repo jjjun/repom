@@ -151,7 +151,7 @@ class Task(BaseModel):
 ### リポジトリの実装
 
 ```python
-from repom.repositories import BaseRepository
+from repom import BaseRepository
 from your_project.models import Task
 from sqlalchemy.orm import Session
 
@@ -272,7 +272,7 @@ def get_task(task_id: int):
 
 ```python
 from repom.base_model_auto import BaseModelAuto, SoftDeletableMixin
-from repom.repositories import BaseRepository
+from repom import BaseRepository
 
 # モデルに Mixin を追加
 class Article(BaseModelAuto, SoftDeletableMixin):

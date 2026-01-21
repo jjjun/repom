@@ -108,7 +108,7 @@ else:
     print("タスクが見つかりません")
 ```
 
-**同期版**: `from repom.repositories import BaseRepository` でインポートし、`await` を削除してください。
+**同期版**: `from repom import BaseRepository` でインポートし、`await` を削除してください。
 
 **動作**:
 - `deleted_at` に現在時刻（UTC）を設定

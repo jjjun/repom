@@ -25,10 +25,8 @@
 
 #### 推奨パターン: カスタム __init__ を定義
 
-※ `repom.base_repository` からのインポートは非推奨で DeprecationWarning が出るため、`repom.repositories` から読み込んでください。
-
 ```python
-from repom.repositories import BaseRepository
+from repom import BaseRepository
 from your_project.models import Task
 from sqlalchemy.orm import Session
 
@@ -49,7 +47,7 @@ repo = TaskRepository(session=db_session)
 #### 代替パターン: BaseRepository を直接使用
 
 ```python
-from repom.repositories import BaseRepository
+from repom import BaseRepository
 from your_project.models import Task
 
 # カスタムリポジトリが不要な場合

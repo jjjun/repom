@@ -23,7 +23,7 @@
 ## 基本的な FilterParams
 
 ```python
-from repom.repositories import FilterParams
+from repom import FilterParams
 from typing import Optional
 
 class TaskFilterParams(FilterParams):
@@ -93,7 +93,7 @@ class SecureFilterParams(FilterParams):
 特殊な比較（日付範囲、OR条件、サブクエリなど）が必要な場合に使用します。
 
 ```python
-from repom.repositories import BaseRepository, FilterParams
+from repom import BaseRepository, FilterParams
 from typing import Optional, List
 
 class TaskFilterParams(FilterParams):
@@ -141,7 +141,7 @@ class TaskRepository(BaseRepository[Task]):
 等価・部分一致・リスト検索のみの場合は、マッピングだけで自動生成できます。
 
 ```python
-from repom.repositories import BaseRepository, FilterParams
+from repom import BaseRepository, FilterParams
 
 class TaskFilterParams(FilterParams):
     status: str | None = None
@@ -176,7 +176,7 @@ tasks = repo.find_by_params(TaskFilterParams(status="active", title="task"))
 
 ```python
 from fastapi import APIRouter, Depends
-from repom.repositories import BaseRepository, FilterParams
+from repom import BaseRepository, FilterParams
 from typing import Optional, List
 
 # FilterParams 定義

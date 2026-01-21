@@ -15,12 +15,18 @@ from repom.async_base_repository import AsyncBaseRepository
 ### 推奨されるインポート
 
 ```python
-# ✅ 推奨（v2.0 以降）
-from repom import BaseRepository, AsyncBaseRepository
+# ✅ 推奨（シンプルで一貫性のある方法）
+from repom import BaseRepository, AsyncBaseRepository, FilterParams
 
-# または
-from repom.repositories import BaseRepository, AsyncBaseRepository
+# 代替（モジュール構造を明示）
+from repom.repositories import BaseRepository, AsyncBaseRepository, FilterParams
 ```
+
+**なぜ `from repom import` が推奨か？**
+
+- **一貫性**: FastAPI、SQLAlchemy などの主要ライブラリの慣習に従う
+- **シンプル**: パッケージ名のみで覚えやすい
+- **安定性**: 内部構造が変更されてもインポートパスは不変
 
 ---
 

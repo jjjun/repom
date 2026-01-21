@@ -10,17 +10,10 @@ Available Classes:
 - FilterParams: 検索パラメータの基底クラス
 - SoftDeletableMixin: 論理削除機能を追加する Mixin
 
-Backward Compatibility:
-以下のインポートパスは後方互換性のために維持されています：
+Recommended Import Style (推奨):
     from repom import BaseRepository, AsyncBaseRepository
     from repom import FilterParams, SoftDeletableMixin
     from repom import BaseModel, BaseModelAuto
-
-推奨される新しいインポートパス：
-    from repom.repositories import BaseRepository, AsyncBaseRepository, FilterParams
-    from repom.mixins import SoftDeletableMixin
-    from repom.base_model import BaseModel
-    from repom.base_model_auto import BaseModelAuto
 """
 
 # Core models
