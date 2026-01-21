@@ -6,10 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List, Set
 
-try:
-    from _.config_hook import get_config_from_hook, Config
-except ImportError:
-    from repom.config_hook import get_config_from_hook, Config
+from repom._.config_hook import Config, get_config_from_hook
 
 
 @dataclass
@@ -241,6 +238,16 @@ class RepomConfig(Config):
                 kwargs['connect_args'] = {'check_same_thread': False}
 
         return kwargs
+
+
+def hook_config(config: dataclass) -> dataclass:
+    """設定フック関数
+    """
+    root_path = Path(__file__).parent.parent
+
+    config.root_path = str(root_path)
+
+    return config
 
 
 config = RepomConfig()
