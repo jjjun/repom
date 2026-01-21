@@ -1,4 +1,4 @@
-"""Test script to reproduce the migration file location issue.
+﻿"""Test script to reproduce the migration file location issue.
 
 This script simulates the exact scenario from mine-py:
 1. CONFIG_HOOK sets custom alembic_versions_path

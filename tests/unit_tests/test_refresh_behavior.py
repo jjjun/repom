@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test to verify if refresh() is needed after commit for AutoDateTime fields.
 
 This test verifies the claim in the mine-py issue document:
@@ -9,7 +9,7 @@ import pytest_asyncio
 from datetime import datetime
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom.repositories import BaseRepository, AsyncBaseRepository
 
 

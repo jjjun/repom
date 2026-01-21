@@ -1,10 +1,10 @@
-"""システムカラムの保護とupdated_atの自動更新をテスト"""
+﻿"""システムカラムの保護とupdated_atの自動更新をテスト"""
 import pytest
 from datetime import datetime
 from time import sleep
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 
 
 class SystemProtectionModel(BaseModel):

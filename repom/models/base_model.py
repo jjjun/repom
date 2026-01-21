@@ -1,4 +1,4 @@
-import json
+﻿import json
 import uuid
 from sqlalchemy import Integer, String, event, inspect
 from sqlalchemy.orm import Mapped, mapped_column

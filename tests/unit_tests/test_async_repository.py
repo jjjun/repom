@@ -1,4 +1,4 @@
-"""
+﻿"""
 AsyncBaseRepository の非同期版テスト
 
 test_repository.py の全テストケースを非同期版に変換したもの。
@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from datetime import datetime
 from typing import Optional, List
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom.repositories import AsyncBaseRepository, FilterParams
 
 
@@ -352,7 +352,7 @@ async def test_async_default_session_fallback():
     Note: このテストはデフォルトの async engine を使用するため、
     テーブルを明示的に作成する必要がある（:memory: DB は engine ごとに独立）
     """
-    from repom.base_model import Base
+    from repom.models.base_model import Base
     from repom.database import get_async_engine
 
     # デフォルトの async engine にテーブルを作成

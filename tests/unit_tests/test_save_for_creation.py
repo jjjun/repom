@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test to verify if save() method can be used for entity creation (not just updates)
 """
 import pytest
@@ -6,7 +6,7 @@ import pytest_asyncio
 from datetime import datetime
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom.repositories import AsyncBaseRepository
 
 

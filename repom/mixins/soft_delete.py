@@ -1,4 +1,4 @@
-"""Soft delete functionality for SQLAlchemy models
+﻿"""Soft delete functionality for SQLAlchemy models
 
 このモジュールは、SQLAlchemy モデルに論理削除機能を追加する Mixin を提供します。
 """
@@ -21,7 +21,7 @@ class SoftDeletableMixin:
 
     使用方法:
         from repom.mixins import SoftDeletableMixin
-        from repom.base_model_auto import BaseModelAuto
+        from repom.models.base_model_auto import BaseModelAuto
 
         class MyModel(BaseModelAuto, SoftDeletableMixin):
             __tablename__ = "my_table"

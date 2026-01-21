@@ -1,4 +1,4 @@
-# isolated_mapper_registry フィクスチャガイド
+﻿# isolated_mapper_registry フィクスチャガイド
 
 一時的なモデル定義を行うテストで使用する専用フィクスチャのガイドです。
 
@@ -87,7 +87,7 @@ def test_temporary_model(isolated_mapper_registry, db_test):
 ```python
 def test_my_temporary_model(isolated_mapper_registry, db_test):
     """isolated_mapper_registry を受け取るだけ"""
-    from repom.base_model import BaseModel
+    from repom.models import BaseModel
     from sqlalchemy import String
     from sqlalchemy.orm import Mapped, mapped_column
     
@@ -145,7 +145,7 @@ def test_second_temporary_model(isolated_mapper_registry, db_test):
 @pytest.fixture
 def isolated_mapper_registry(db_test):
     from sqlalchemy.orm import clear_mappers, configure_mappers
-    from repom.base_model import BaseModel
+    from repom.models import BaseModel
     import importlib
     import sys
     
@@ -254,7 +254,7 @@ isolated_mapper_registry 受け取り
 def test_type_checking_with_forward_reference(isolated_mapper_registry, db_test):
     """TYPE_CHECKING ブロック内で前方参照を使用するテスト"""
     from typing import TYPE_CHECKING
-    from repom.base_model_auto import BaseModelAuto
+    from repom.models import BaseModelAuto
     from sqlalchemy import String, Integer, ForeignKey
     from sqlalchemy.orm import Mapped, mapped_column, relationship
     
@@ -292,7 +292,7 @@ def test_type_checking_with_forward_reference(isolated_mapper_registry, db_test)
 ```python
 def test_alembic_migration_generation(isolated_mapper_registry, db_test):
     """use_id=False のモデルでマイグレーション生成をテスト"""
-    from repom.base_model import BaseModel
+    from repom.models import BaseModel
     from sqlalchemy import String
     from sqlalchemy.orm import Mapped, mapped_column
     
@@ -312,7 +312,7 @@ def test_alembic_migration_generation(isolated_mapper_registry, db_test):
 ```python
 def test_model_inheritance(isolated_mapper_registry, db_test):
     """モデル継承が正しく動作するかテスト"""
-    from repom.base_model import BaseModel
+    from repom.models import BaseModel
     from sqlalchemy import String, Integer
     from sqlalchemy.orm import Mapped, mapped_column
     

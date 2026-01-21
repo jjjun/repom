@@ -1,9 +1,9 @@
-from tests._init import *
+﻿from tests._init import *
 from sqlalchemy import Integer, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.exc import StatementError
 from repom.custom_types.ListJSON import ListJSON, listjson_filter
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom.repositories import BaseRepository
 from repom.repositories._core import FilterParams
 from typing import Optional, List

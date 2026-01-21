@@ -1,12 +1,12 @@
-"""Tests for BaseModelAuto.get_create_schema and server_default handling"""
+﻿"""Tests for BaseModelAuto.get_create_schema and server_default handling"""
 
 from typing import Optional
 
 from tests._init import *
 from sqlalchemy import String, func, text
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.base_model import Base
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model import Base
+from repom.models.base_model_auto import BaseModelAuto
 
 
 class ServerDefaultModel(BaseModelAuto):

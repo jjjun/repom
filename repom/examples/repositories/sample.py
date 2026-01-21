@@ -1,4 +1,4 @@
-from typing import Optional, Union, List, Callable
+﻿from typing import Optional, Union, List, Callable
 from sqlalchemy import select, desc, and_
 from repom.examples.models.sample import SampleModel
 from repom import BaseRepository, FilterParams

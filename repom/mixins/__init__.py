@@ -1,4 +1,4 @@
-"""Mixin classes for SQLAlchemy models
+﻿"""Mixin classes for SQLAlchemy models
 
 このモジュールは、SQLAlchemy モデルに追加機能を提供する Mixin クラスを含みます。
 

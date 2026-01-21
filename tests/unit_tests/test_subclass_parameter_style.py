@@ -1,4 +1,4 @@
-"""
+﻿"""
 __init_subclass__ パラメータ方式と従来のクラス属性方式の両方が正しく動作することを検証
 
 このテストでは以下を確認:
@@ -13,8 +13,8 @@ from sqlalchemy import String, Integer, Date, Time
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import date as date_type, time as time_type
 from typing import Optional
-from repom.base_model import BaseModel
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model import BaseModel
+from repom.models.base_model_auto import BaseModelAuto
 
 
 # ===== パラメータ方式のテスト =====

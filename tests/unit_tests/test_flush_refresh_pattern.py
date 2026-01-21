@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test to verify if refresh() is needed after flush() for AutoDateTime fields.
 
 This test verifies the issue described in:
@@ -8,7 +8,7 @@ import pytest
 from datetime import datetime
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom import BaseRepository, AsyncBaseRepository
 
 

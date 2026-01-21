@@ -1,4 +1,4 @@
-"""Core repository utilities shared by sync and async implementations
+﻿"""Core repository utilities shared by sync and async implementations
 
 このモジュールは、同期版・非同期版リポジトリで共有されるロジックを提供します。
 """

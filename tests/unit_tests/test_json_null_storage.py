@@ -1,10 +1,10 @@
-from tests._init import *
+﻿from tests._init import *
 from typing import Any
 from sqlalchemy import Integer, text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 
 
 class JsonNullModel(BaseModel):

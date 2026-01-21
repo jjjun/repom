@@ -1,4 +1,4 @@
-"""
+﻿"""
 詳細調査: TYPE_CHECKING と auto_import_models の関係
 
 このテストでは、以下を詳しく調査します:
@@ -45,7 +45,7 @@ def test_inspect_import_order():
             (models_dir / filename).write_text(f"""
 print(f"Importing: {filename}")
 
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import String
 
@@ -76,7 +76,7 @@ class {filename[:-3].title().replace('_', '')}Model(BaseModelAuto):
             modules_to_remove = [key for key in sys.modules.keys() if key.startswith('test_order')]
             for module in modules_to_remove:
                 del sys.modules[module]
-            from repom.base_model import BaseModel
+            from repom.models.base_model import BaseModel
             BaseModel.metadata.clear()
 
     finally:
@@ -111,7 +111,7 @@ def test_sqlalchemy_relationship_lazy_resolution(isolated_mapper_registry):
 from typing import TYPE_CHECKING, List
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy import String
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 
 if TYPE_CHECKING:
     from .z_child import ZChildModel
@@ -135,7 +135,7 @@ print(">>> a_parent.py: AParentModel defined successfully")
 from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 
 if TYPE_CHECKING:
     from .a_parent import AParentModel
@@ -191,7 +191,7 @@ print(">>> z_child.py: ZChildModel defined successfully")
 
             # データベースを作成
             engine = create_engine("sqlite:///:memory:", echo=False)
-            from repom.base_model import BaseModel
+            from repom.models.base_model import BaseModel
             BaseModel.metadata.create_all(engine)
 
             # モデルを取得
@@ -213,7 +213,7 @@ print(">>> z_child.py: ZChildModel defined successfully")
             modules_to_remove = [key for key in sys.modules.keys() if key.startswith('test_lazy')]
             for module in modules_to_remove:
                 del sys.modules[module]
-            from repom.base_model import BaseModel
+            from repom.models.base_model import BaseModel
             BaseModel.metadata.clear()
 
     finally:
@@ -250,7 +250,7 @@ def test_actual_failure_scenario(isolated_mapper_registry):
 from typing import TYPE_CHECKING, List
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy import String
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 
 if TYPE_CHECKING:
     from .child_not_imported import ChildNotImportedModel
@@ -305,7 +305,7 @@ class ParentModel(BaseModelAuto):
             modules_to_remove = [key for key in sys.modules.keys() if key.startswith('test_failure')]
             for module in modules_to_remove:
                 del sys.modules[module]
-            from repom.base_model import BaseModel
+            from repom.models.base_model import BaseModel
             BaseModel.metadata.clear()
 
     finally:

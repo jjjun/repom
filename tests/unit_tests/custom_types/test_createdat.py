@@ -1,8 +1,8 @@
-from tests._init import *
+﻿from tests._init import *
 from sqlalchemy import Integer
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.custom_types.AutoDateTime import AutoDateTime
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from datetime import datetime, timedelta
 from typing import Optional
 

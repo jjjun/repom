@@ -1,4 +1,4 @@
-# Issue Tracker - repom
+﻿# Issue Tracker - repom
 
 このディレクトリは、repom プロジェクトの改善提案と課題管理のためのドキュメントを格納します。
 

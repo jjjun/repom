@@ -1,4 +1,4 @@
-"""
+﻿"""
 database.py のユニットテスト（同期 API）
 
 DatabaseManager の同期セッション管理機能を検証します。
@@ -11,7 +11,7 @@ from repom.database import (
     get_inspector,
     DatabaseManager,
 )
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 import os
 import pytest
 from sqlalchemy import Column, Integer, String, Engine

@@ -1,4 +1,4 @@
-"""Tests for BaseModel UUID support
+﻿"""Tests for BaseModel UUID support
 
 BaseModel の use_uuid=True パラメータによる UUID 主キーのサポートをテスト。
 
@@ -15,7 +15,7 @@ import uuid
 import pytest
 from sqlalchemy import String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom.repositories import BaseRepository
 from repom.database import Base
 

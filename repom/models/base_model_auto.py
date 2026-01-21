@@ -1,4 +1,4 @@
-"""自動スキーマ生成機能を持つ BaseModel 拡張
+﻿"""自動スキーマ生成機能を持つ BaseModel 拡張
 
 このモジュールは、SQLAlchemy の mapped_column 定義から FastAPI の Pydantic スキーマを
 自動生成する機能を提供します。
@@ -31,7 +31,7 @@ from typing import Type, Any, Optional, Dict, List, Callable, Set, Literal
 from weakref import WeakKeyDictionary
 from datetime import datetime, date
 from pydantic import BaseModel as PydanticBaseModel, create_model, Field
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from sqlalchemy import Enum as SQLAlchemyEnum, inspect
 import re
 import logging

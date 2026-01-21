@@ -1,1 +1,1 @@
-# External project simulation for testing Alembic integration
+﻿# External project simulation for testing Alembic integration

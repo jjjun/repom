@@ -1,4 +1,4 @@
-"""async test fixtures のテスト
+﻿"""async test fixtures のテスト
 
 create_async_test_fixtures() によって作成される async_db_engine と
 async_db_test フィクスチャの動作を検証します。
@@ -13,7 +13,7 @@ async_db_test フィクスチャの動作を検証します。
 import pytest
 from sqlalchemy import String, select
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 
 
 # テスト用モデル

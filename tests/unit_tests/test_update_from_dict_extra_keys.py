@@ -1,10 +1,10 @@
-"""
+﻿"""
 update_from_dict() が余計なキー（モデルに存在しないキー）と読み取り専用プロパティを正しく処理することを確認
 """
 import pytest
 from sqlalchemy import String, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 
 
 class SimpleTestModel(BaseModel):

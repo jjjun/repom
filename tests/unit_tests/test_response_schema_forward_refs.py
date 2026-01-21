@@ -1,4 +1,4 @@
-"""Tests for get_response_schema with forward references (前方参照のテスト)
+﻿"""Tests for get_response_schema with forward references (前方参照のテスト)
 
 このテストファイルは、FastAPIのresponse_modelでの実際の使用シナリオを想定して、
 前方参照の解決が正しく行われることを検証します。
@@ -8,7 +8,7 @@ from tests._init import *
 from sqlalchemy import String, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import List, Optional, Dict, Any
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 from pydantic import ValidationError
 import pytest
 
@@ -898,7 +898,7 @@ def test_phase1_improvement_optional_no_longer_required():
 
 def test_phase2_extract_undefined_types():
     """Phase 2: extract_undefined_types() ヘルパー関数のテスト"""
-    from repom.base_model_auto import _extract_undefined_types
+    from repom.models.base_model_auto import _extract_undefined_types
 
     # Test case 1: Single undefined type
     error_msg = "name 'BookResponse' is not defined"
@@ -923,7 +923,7 @@ def test_phase2_extract_undefined_types():
 def test_phase2_error_message_in_dev_environment(monkeypatch):
     """Phase 2: 開発環境でエラーメッセージが例外として投げられることを確認"""
     import pytest
-    from repom.base_model_auto import SchemaGenerationError
+    from repom.models.base_model_auto import SchemaGenerationError
 
     # Set EXEC_ENV to 'dev'
     monkeypatch.setenv('EXEC_ENV', 'dev')
@@ -964,7 +964,7 @@ def test_phase2_error_message_in_prod_environment(monkeypatch, caplog):
     将来的に環境依存の動作（prod では警告のみ）を実装する可能性があります。
     """
     import pytest
-    from repom.base_model_auto import SchemaGenerationError
+    from repom.models.base_model_auto import SchemaGenerationError
 
     # Set EXEC_ENV to 'prod'
     monkeypatch.setenv('EXEC_ENV', 'prod')
@@ -999,7 +999,7 @@ def test_phase2_error_message_in_prod_environment(monkeypatch, caplog):
 def test_phase2_helpful_error_suggestions():
     """Phase 2: エラーメッセージに具体的な解決策が含まれることを確認"""
     import pytest
-    from repom.base_model_auto import SchemaGenerationError
+    from repom.models.base_model_auto import SchemaGenerationError
     import os
 
     # Temporarily set to dev environment

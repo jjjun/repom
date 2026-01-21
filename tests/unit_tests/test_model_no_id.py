@@ -1,11 +1,11 @@
-"""Tests for BaseModel with use_id=False"""
+﻿"""Tests for BaseModel with use_id=False"""
 
 from tests._init import *
 from sqlalchemy import String, Date, Time, inspect
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import date as date_type, time as time_type
 from typing import Optional
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 
 
 class ModelWithoutId(BaseModel):

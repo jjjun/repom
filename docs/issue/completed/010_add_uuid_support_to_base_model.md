@@ -1,4 +1,4 @@
-# Issue #010: BaseModel への UUID サポート追加
+﻿# Issue #010: BaseModel への UUID サポート追加
 
 **ステータス**: ✅ 完了
 
@@ -200,7 +200,7 @@ poetry run pytest tests/unit_tests tests/behavior_tests -v
 ### 基本的な使い方
 
 ```python
-from repom.base_model import BaseModel
+from repom.models import BaseModel
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 

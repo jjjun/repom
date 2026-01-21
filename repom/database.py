@@ -1,4 +1,4 @@
-"""
+﻿"""
 Database lifecycle management for both sync and async engines/sessions.
 
 This module provides unified database management through the DatabaseManager class,

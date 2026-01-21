@@ -1,4 +1,4 @@
-# Ideas Directory
+﻿# Ideas Directory
 
 ## Overview
 

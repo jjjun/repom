@@ -1,10 +1,10 @@
-"""
+﻿"""
 Test different repository initialization patterns
 """
 import pytest
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom import BaseRepository, AsyncBaseRepository
 
 

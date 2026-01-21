@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test for TYPE_CHECKING import order issue with auto_import_models
 
 This test reproduces the issue described in:
@@ -58,7 +58,7 @@ def test_type_checking_with_alphabetical_import_order(isolated_mapper_registry):
 from typing import TYPE_CHECKING, List
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 
 if TYPE_CHECKING:
     from .ani_video_user_status import AniVideoUserStatusModel
@@ -81,7 +81,7 @@ class AniVideoItemModel(BaseModelAuto):
 from typing import TYPE_CHECKING
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 
 if TYPE_CHECKING:
     from .ani_video_item import AniVideoItemModel
@@ -124,7 +124,7 @@ class AniVideoUserStatusModel(BaseModelAuto):
             engine = create_engine("sqlite:///:memory:", echo=False)
 
             # メタデータから全テーブルを作成
-            from repom.base_model import BaseModel
+            from repom.models.base_model import BaseModel
             BaseModel.metadata.create_all(engine)
 
             # セッションを作成してオブジェクトを作成できるか確認
@@ -203,7 +203,7 @@ def test_type_checking_with_manual_import_order(isolated_mapper_registry):
 from typing import List
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 
 # TYPE_CHECKING の外でインポート（実行時にも利用可能）
 from .ani_video_user_status import AniVideoUserStatusModel
@@ -225,7 +225,7 @@ class AniVideoItemModel(BaseModelAuto):
         user_status_file.write_text("""
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 
 # 前方参照を使うので循環インポートは発生しない
 from typing import TYPE_CHECKING
@@ -269,7 +269,7 @@ class AniVideoUserStatusModel(BaseModelAuto):
             engine = create_engine("sqlite:///:memory:", echo=False)
 
             # メタデータから全テーブルを作成
-            from repom.base_model import BaseModel
+            from repom.models.base_model import BaseModel
             BaseModel.metadata.create_all(engine)
 
             # セッションを作成してオブジェクトを作成できるか確認

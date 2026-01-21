@@ -1,4 +1,4 @@
-# GitHub Copilot Instructions for repom
+﻿# GitHub Copilot Instructions for repom
 
 ## Project Context
 
@@ -7,7 +7,7 @@ This is **repom** - a shared SQLAlchemy foundation package for Python projects.
 ## Code Style Guidelines
 
 ### Imports
-- Always use absolute imports: `from repom.base_model import BaseModel`
+- Always use absolute imports: `from repom.models import BaseModel`
 - Never use old package name `mine_db`
 
 ### Database Operations
@@ -75,7 +75,7 @@ version_locations = %(here)s/alembic/versions
 
 ### Creating a Model
 ```python
-from repom.base_model import BaseModel
+from repom.models import BaseModel
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 

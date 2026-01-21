@@ -1,4 +1,4 @@
-"""Integration test: Alembic with external project (simulates mine-py scenario)
+﻿"""Integration test: Alembic with external project (simulates mine-py scenario)
 
 This test simulates the scenario where an external project relies on its own
 alembic.ini configuration (script_location/version_locations) and no longer

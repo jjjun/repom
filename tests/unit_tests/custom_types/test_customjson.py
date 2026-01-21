@@ -1,11 +1,11 @@
-from typing import Any
+﻿from typing import Any
 
 from sqlalchemy import Integer, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tests._init import *
 
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom.custom_types.CustomJSON import CustomJSON
 
 

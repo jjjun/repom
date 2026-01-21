@@ -1,4 +1,4 @@
-# Testing Guides
+﻿# Testing Guides
 
 repom を使ったテストの書き方とベストプラクティスです。
 

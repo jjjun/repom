@@ -1,4 +1,4 @@
-# FastAPI/Flask での API 型解決
+﻿# FastAPI/Flask での API 型解決
 
 ## ステータス
 - **段階**: アイディア
@@ -99,7 +99,7 @@ def list_samples() -> list[Sample]:
 ```python
 # repom/integrations/fastapi.py
 from fastapi import FastAPI
-from repom.base_model import BaseModel
+from repom.models import BaseModel
 
 def use_repom_models(app: FastAPI):
     original_add_api_route = app.add_api_route

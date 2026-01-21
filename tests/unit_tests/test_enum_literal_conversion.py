@@ -1,4 +1,4 @@
-from enum import Enum as PyEnum
+﻿from enum import Enum as PyEnum
 from typing import Literal
 
 import pytest
@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy import Enum as SQLAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 
 
 class Status(str, PyEnum):

@@ -1,4 +1,4 @@
-"""論理削除機能のテスト
+﻿"""論理削除機能のテスト
 
 SoftDeletableMixin と BaseRepository の論理削除機能をテストします。
 
@@ -15,7 +15,7 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 from repom.repositories import BaseRepository
 from repom.mixins import SoftDeletableMixin
 

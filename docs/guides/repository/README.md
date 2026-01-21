@@ -1,4 +1,4 @@
-# Repository Guides
+﻿# Repository Guides
 
 リポジトリパターンとセッション管理に関するガイドです。
 

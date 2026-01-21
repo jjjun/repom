@@ -1,4 +1,4 @@
-# Issue #3: response_field 機能を BaseModelAuto に移行
+﻿# Issue #3: response_field 機能を BaseModelAuto に移行
 
 ## Status
 - **Created**: 2025-11-14
@@ -453,7 +453,7 @@ def test_composite_foreign_key_detection():
 1. **`@response_field` デコレータの廃止**:
    ```python
    # ❌ 動かなくなるコード
-   from repom.base_model import BaseModel
+   from repom.models import BaseModel
    
    class MyModel(BaseModel):
        @BaseModel.response_field(extra=str)
@@ -477,7 +477,7 @@ def test_composite_foreign_key_detection():
 
 ```python
 # ✅ 移行後
-from repom.base_model_auto import BaseModelAuto
+from repom.models import BaseModelAuto
 from repom.custom_types.AutoDateTime import AutoDateTime
 
 class MyModel(BaseModelAuto):

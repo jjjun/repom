@@ -1,4 +1,4 @@
-"""Integration tests for Alembic migration generation with use_id=False models
+﻿"""Integration tests for Alembic migration generation with use_id=False models
 
 このテストはAlembicのマイグレーションファイル生成を実際に行い、
 use_id=Falseのモデルに対してidカラムが生成されないことを確認します。
@@ -17,7 +17,7 @@ from alembic.config import Config as AlembicConfig
 from alembic import command
 from alembic.script import ScriptDirectory
 
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom.database import Base
 
 

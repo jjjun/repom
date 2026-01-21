@@ -1,11 +1,11 @@
-"""Tests for BaseModelAuto with use_id フラグ"""
+﻿"""Tests for BaseModelAuto with use_id フラグ"""
 
 from tests._init import *
 from sqlalchemy import String, Integer, Date, Time, inspect
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import Optional
 from datetime import date as date_type, time as time_type
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 
 
 class AutoModelWithId(BaseModelAuto):

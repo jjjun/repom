@@ -1,4 +1,4 @@
-"""
+﻿"""
 BaseRepository の options パラメータ（eager loading）のテスト
 
 N+1 問題を解決するための joinedload, selectinload などの
@@ -8,7 +8,7 @@ from tests._init import *
 from sqlalchemy import Integer, String, ForeignKey, select
 from sqlalchemy.orm import Mapped, mapped_column, relationship, joinedload, selectinload
 import pytest
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom import BaseRepository
 
 

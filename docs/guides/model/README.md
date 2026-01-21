@@ -1,4 +1,4 @@
-# Model Guides
+﻿# Model Guides
 
 このディレクトリには、repom のモデル（BaseModel）に関するガイドとカラム定義系のドキュメントが含まれています。
 

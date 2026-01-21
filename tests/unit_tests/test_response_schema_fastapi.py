@@ -1,4 +1,4 @@
-"""FastAPI integration tests for get_response_schema
+﻿"""FastAPI integration tests for get_response_schema
 
 このテストファイルは実際のFastAPIアプリケーションを起動し、
 get_response_schema()で生成されたスキーマがresponse_modelとして
@@ -36,7 +36,7 @@ if FASTAPI_AVAILABLE:
     from tests._init import *
     from sqlalchemy import String, Integer
     from sqlalchemy.orm import Mapped, mapped_column
-    from repom.base_model_auto import BaseModelAuto
+    from repom.models.base_model_auto import BaseModelAuto
     from typing import List, Generic, TypeVar
     from pydantic import BaseModel as PydanticBaseModel
 

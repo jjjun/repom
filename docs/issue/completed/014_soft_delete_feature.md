@@ -1,4 +1,4 @@
-# Issue #014: repom への論理削除（Soft Delete）機能追加
+﻿# Issue #014: repom への論理削除（Soft Delete）機能追加
 
 **ステータス**: ✅ 完了
 

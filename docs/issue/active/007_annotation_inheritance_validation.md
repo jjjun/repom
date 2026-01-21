@@ -1,4 +1,4 @@
-# Annotation Inheritance の実装検証
+﻿# Annotation Inheritance の実装検証
 
 ## ステータス
 - **段階**: 調査待ち
@@ -103,7 +103,7 @@ print('__annotations__' in Child.__dict__)
 ```python
 # FastAPI 統合テスト
 from fastapi import FastAPI
-from repom.base_model import BaseModel
+from repom.models import BaseModel
 
 class User(BaseModel):
     __tablename__ = 'users'

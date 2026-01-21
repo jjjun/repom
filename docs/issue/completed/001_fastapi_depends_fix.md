@@ -1,4 +1,4 @@
-# Issue #001: FastAPI Depends Compatibility Fix
+﻿# Issue #001: FastAPI Depends Compatibility Fix
 
 ## Status
 - **Created**: 2025-12-25

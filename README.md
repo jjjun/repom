@@ -1,4 +1,4 @@
-# repom
+﻿# repom
 
 `repom` は SQLAlchemy を用いた最小限の DB アクセスレイヤーを提供するモジュールです。<br>
 アプリ固有のモデルやリポジトリは含めず、`BaseModel`・`BaseRepository`・共通ユーティリティのみを提供します。
@@ -134,7 +134,7 @@ poetry run python -c "from repom.config import config; print(config.db_url)"
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import Optional
-from repom.base_model import BaseModel
+from repom.models import BaseModel
 
 class Task(BaseModel):
     __tablename__ = "tasks"
@@ -271,7 +271,7 @@ def get_task(task_id: int):
 ### 論理削除（Soft Delete）
 
 ```python
-from repom.base_model_auto import BaseModelAuto, SoftDeletableMixin
+from repom.models import BaseModelAuto, SoftDeletableMixin
 from repom import BaseRepository
 
 # モデルに Mixin を追加

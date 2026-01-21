@@ -1,4 +1,4 @@
-# get_response_schema() - Technical Documentation
+﻿# get_response_schema() - Technical Documentation
 
 ## Overview
 

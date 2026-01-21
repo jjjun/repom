@@ -1,4 +1,4 @@
-"""
+﻿"""
 AsyncBaseRepository の options パラメータ（eager loading）のテスト
 
 test_repository_options.py の全テストケースを非同期版に変換したもの。
@@ -10,7 +10,7 @@ from sqlalchemy import Integer, String, ForeignKey, select
 from sqlalchemy.orm import Mapped, mapped_column, relationship, joinedload, selectinload
 import pytest
 import pytest_asyncio
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom.repositories import AsyncBaseRepository
 
 

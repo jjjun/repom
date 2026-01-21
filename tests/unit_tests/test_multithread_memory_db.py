@@ -1,4 +1,4 @@
-"""
+﻿"""
 マルチスレッド環境での :memory: DB アクセステスト
 
 FastAPI の starlette.concurrency.run_in_threadpool を模倣して、
@@ -19,7 +19,7 @@ import pytest
 from sqlalchemy import String, select
 from sqlalchemy.orm import Mapped, mapped_column
 
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom.config import RepomConfig
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

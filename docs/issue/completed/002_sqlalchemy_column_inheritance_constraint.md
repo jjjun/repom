@@ -1,4 +1,4 @@
-# Issue: SQLAlchemy カラム継承制約による use_id 設計の課題
+﻿# Issue: SQLAlchemy カラム継承制約による use_id 設計の課題
 
 ## 問題の本質
 

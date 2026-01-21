@@ -1,10 +1,10 @@
-"""Tests for BaseModelAuto.response_field decorator and get_response_schema"""
+﻿"""Tests for BaseModelAuto.response_field decorator and get_response_schema"""
 
 from tests._init import *
 from sqlalchemy import String, Integer, inspect
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import List, Optional
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 
 
 class ResponseModelWithId(BaseModelAuto):

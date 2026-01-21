@@ -1,4 +1,4 @@
-# Issue #1: get_response_schema() の前方参照改善
+﻿# Issue #1: get_response_schema() の前方参照改善
 
 **ステータス**: ✅ Phase 1 & Phase 2 実装完了
 

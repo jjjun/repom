@@ -1,4 +1,4 @@
-"""Integration test for Alembic env.py model loading
+﻿"""Integration test for Alembic env.py model loading
 
 このテストは Alembic の env.py が正しくモデルを読み込めることを確認します。
 alembic current コマンドを実行して、env.py のロード処理が成功することを検証します。

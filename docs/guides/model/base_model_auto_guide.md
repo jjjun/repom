@@ -1,4 +1,4 @@
-# BaseModelAuto 完全ガイド
+﻿# BaseModelAuto 完全ガイド
 
 **このドキュメントについて**: repom パッケージの BaseModelAuto によるスキーマ自動生成機能の完全ガイドです。SQLAlchemy モデルから Pydantic スキーマを自動生成し、FastAPI での開発を効率化します。
 
@@ -69,7 +69,7 @@ TimeActivityUpdate = TimeActivityModel.get_update_schema()
 ### 基本的な使い方
 
 ```python
-from repom.base_model_auto import BaseModelAuto
+from repom.models import BaseModelAuto
 from sqlalchemy import String, Integer, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -181,7 +181,7 @@ UserCreateCustom = UserModel.get_create_schema(
 ### 基本的な使い方
 
 ```python
-from repom.base_model import BaseModel
+from repom.models import BaseModel
 from sqlalchemy import String, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import Optional
@@ -323,7 +323,7 @@ ResponseSchema = ReviewModel.get_response_schema(
 前方参照が解決できない場合、`SchemaGenerationError` 例外が発生し、具体的な解決策を含むエラーメッセージが表示されます。
 
 ```python
-from repom.base_model_auto import SchemaGenerationError
+from repom.models import SchemaGenerationError
 
 try:
     schema = Task.get_response_schema(forward_refs={})

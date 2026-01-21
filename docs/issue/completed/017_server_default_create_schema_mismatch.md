@@ -1,4 +1,4 @@
-# Issue #017: server_default を持つカラムが create スキーマで必須扱いになる
+﻿# Issue #017: server_default を持つカラムが create スキーマで必須扱いになる
 
 **ステータス**: ✅ 解決済み（レビュー完了・テスト追加・バグ修正）
 

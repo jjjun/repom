@@ -1,4 +1,4 @@
-"""
+﻿"""
 Direct test: Does config.set_main_option('version_locations') affect 'alembic revision'?
 
 This simulates what happens in our env.py (commit 70003dc)

@@ -1,4 +1,4 @@
-"""Example models and repositories for repom
+﻿"""Example models and repositories for repom
 
 このパッケージは、repom の使用例を示すサンプルコードを含みます。
 

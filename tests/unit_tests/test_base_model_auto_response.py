@@ -1,9 +1,9 @@
-"""BaseModelAuto の Response スキーマ生成機能をテスト"""
+﻿"""BaseModelAuto の Response スキーマ生成機能をテスト"""
 import pytest
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import Optional
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 
 
 class ResponseTestModel(BaseModelAuto):

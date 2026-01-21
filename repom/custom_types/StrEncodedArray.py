@@ -1,4 +1,4 @@
-from sqlalchemy.types import TypeDecorator, TEXT
+﻿from sqlalchemy.types import TypeDecorator, TEXT
 
 
 class StrEncodedArray(TypeDecorator):

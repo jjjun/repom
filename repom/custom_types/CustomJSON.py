@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional
+﻿from typing import Any, Callable, Optional
 
 from sqlalchemy.types import JSON, TypeDecorator
 

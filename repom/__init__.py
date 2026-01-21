@@ -1,4 +1,4 @@
-"""repom - SQLAlchemy foundation package
+﻿"""repom - SQLAlchemy foundation package
 
 このパッケージは、SQLAlchemy を使ったデータアクセス層の基盤を提供します。
 
@@ -17,8 +17,7 @@ Recommended Import Style (推奨):
 """
 
 # Core models
-from repom.base_model import BaseModel
-from repom.base_model_auto import BaseModelAuto
+from repom.models import BaseModel, BaseModelAuto
 
 # Repositories
 from repom.repositories import BaseRepository, AsyncBaseRepository, FilterParams

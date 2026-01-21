@@ -1,4 +1,4 @@
-"""
+﻿"""
 AsyncBaseRepository の default_order_by のテスト
 
 order_by=None および空文字が渡された場合に default_order_by が
@@ -9,7 +9,7 @@ from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 import pytest_asyncio
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom.repositories import AsyncBaseRepository
 
 

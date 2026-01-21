@@ -1,4 +1,4 @@
-"""
+﻿"""
 外部セッション使用時の commit 動作テスト
 
 Repository が外部セッションと内部セッションを正しく区別し、
@@ -8,7 +8,7 @@ Repository が外部セッションと内部セッションを正しく区別し
 import pytest
 from sqlalchemy import String, select
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom.repositories import BaseRepository
 from repom.database import _db_manager
 

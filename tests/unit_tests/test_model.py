@@ -1,8 +1,8 @@
-from tests._init import *
+﻿from tests._init import *
 from sqlalchemy import Column, Integer, inspect
 from datetime import datetime
 
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 
 
 class CreatedAtModel(BaseModel):

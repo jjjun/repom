@@ -1,4 +1,4 @@
-# fmt: off
+﻿# fmt: off
 import os
 import pytest
 import logging
@@ -43,7 +43,7 @@ def setup_repom_db_tables():
 
     autouse=True により、全テスト実行前に自動的に実行される。
     """
-    from repom.base_model import Base
+    from repom.models.base_model import Base
     from repom.database import get_sync_engine, get_async_engine
     import asyncio
 
@@ -92,7 +92,7 @@ def isolated_mapper_registry(db_test):
 
     使用例:
         def test_temporary_model(isolated_mapper_registry, db_test):
-            from repom.base_model import BaseModel
+            from repom.models.base_model import BaseModel
             from sqlalchemy import String
             from sqlalchemy.orm import Mapped, mapped_column
 
@@ -116,7 +116,7 @@ def isolated_mapper_registry(db_test):
     詳細: docs/guides/testing/isolated_mapper_fixture.md
     """
     from sqlalchemy.orm import clear_mappers, configure_mappers
-    from repom.base_model import BaseModel
+    from repom.models.base_model import BaseModel
     from repom.database import Base
     import importlib
     import sys

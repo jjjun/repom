@@ -1,4 +1,4 @@
-"""Tests for :mod:`repom.config`."""
+﻿"""Tests for :mod:`repom.config`."""
 
 from __future__ import annotations
 from repom.config import RepomConfig

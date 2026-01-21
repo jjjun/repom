@@ -1,4 +1,4 @@
-"""
+﻿"""
 Testing utilities for repom-based projects.
 
 このモジュールは、repom を使用する外部プロジェクト（mine-py など）が

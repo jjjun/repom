@@ -1,4 +1,4 @@
-# BaseRepository ガイド（基礎編）
+﻿# BaseRepository ガイド（基礎編）
 
 **目的**: repom の `BaseRepository` によるデータアクセスの基本を理解する
 

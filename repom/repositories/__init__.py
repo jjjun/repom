@@ -1,4 +1,4 @@
-"""Repository package
+﻿"""Repository package
 
 このパッケージは、SQLAlchemy を使ったデータアクセス層を提供します。
 

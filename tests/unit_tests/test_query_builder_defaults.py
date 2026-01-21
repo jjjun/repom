@@ -1,10 +1,10 @@
-from tests._init import *
+﻿from tests._init import *
 from typing import List, Optional
 
 from sqlalchemy import Integer, String, desc, inspect
 from sqlalchemy.orm import Mapped, mapped_column, load_only
 
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom import BaseRepository
 from repom.repositories import FilterParams
 

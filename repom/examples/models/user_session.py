@@ -1,4 +1,4 @@
-"""
+﻿"""
 User session model without id column.
 Uses composite primary key (user_id, session_token) instead.
 
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 from typing import Optional
 
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 from repom.utility import get_plural_tablename
 
 

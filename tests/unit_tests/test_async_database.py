@@ -1,4 +1,4 @@
-"""
+﻿"""
 database.py のユニットテスト（非同期 API）
 
 DatabaseManager の非同期セッション管理機能を検証します。

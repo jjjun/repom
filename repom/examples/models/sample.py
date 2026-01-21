@@ -1,9 +1,9 @@
-from sqlalchemy import String, Date
+﻿from sqlalchemy import String, Date
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime, date
 from typing import Optional
 
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 from repom.utility import get_plural_tablename
 
 

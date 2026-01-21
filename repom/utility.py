@@ -1,4 +1,4 @@
-import os
+﻿import os
 import inflect
 import unicodedata
 import importlib
@@ -287,7 +287,7 @@ def load_models(context: Optional[str] = None) -> None:
             logger.warning(f"{context_prefix}No model locations configured and repom.examples.models not found.")
 
     # Log loaded models
-    from repom.base_model import Base
+    from repom.models.base_model import Base
     try:
         # Get table names from metadata (most reliable method)
         table_names = sorted(Base.metadata.tables.keys())

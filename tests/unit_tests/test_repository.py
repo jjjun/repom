@@ -1,12 +1,12 @@
-from tests._init import *
+﻿from tests._init import *
 from sqlalchemy import Integer, String, inspect, select, desc, and_
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from datetime import datetime
 from typing import Optional, List
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom import BaseRepository
-from repom.base_model_auto import BaseModelAuto
+from repom.models.base_model_auto import BaseModelAuto
 from repom.mixins import SoftDeletableMixin
 from repom.repositories import FilterParams
 

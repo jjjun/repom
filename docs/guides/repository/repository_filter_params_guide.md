@@ -1,4 +1,4 @@
-# FilterParams ガイド（FastAPI 統合編）
+﻿# FilterParams ガイド（FastAPI 統合編）
 
 **目的**: FastAPI で型安全な検索パラメータを実装する
 

@@ -1,4 +1,4 @@
-"""Runtime configuration helpers for :mod:`repom`."""
+﻿"""Runtime configuration helpers for :mod:`repom`."""
 
 from __future__ import annotations
 

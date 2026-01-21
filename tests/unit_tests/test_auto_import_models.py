@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for auto_import_models functions and configuration integration.
 
 This test suite verifies:

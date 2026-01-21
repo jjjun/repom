@@ -1,4 +1,4 @@
-"""
+﻿"""
 create_test_fixtures を使ったマルチスレッドアクセステスト
 
 このテストは、実際のテストで使用される create_test_fixtures が
@@ -20,7 +20,7 @@ import pytest
 from sqlalchemy import String, select
 from sqlalchemy.orm import Mapped, mapped_column
 
-from repom.base_model import BaseModel
+from repom.models.base_model import BaseModel
 from repom.testing import create_test_fixtures
 
 # CRITICAL: モジュールレベルで create_test_fixtures を呼び出す前に

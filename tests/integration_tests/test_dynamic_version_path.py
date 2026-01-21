@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test if we can control migration file location dynamically in env.py
 without requiring version_locations in alembic.ini
 """
