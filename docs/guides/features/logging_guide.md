@@ -5,6 +5,7 @@ repom は Python 標準の logging モジュールを使ったロギング機能
 ## 目次
 
 - [基本的な使い方](#基本的な使い方)
+- [SQLAlchemy クエリログ](#sqlalchemy-クエリログ)
 - [CLI ツール実行時](#cli-ツール実行時)
 - [アプリケーション使用時](#アプリケーション使用時)
 - [config_hook でカスタマイズ](#config_hook-でカスタマイズ)
@@ -36,6 +37,185 @@ logger.critical("致命的エラー")
 ```
 
 **注意**: `__name__` を渡すと、`repom.{__name__}` という名前のロガーが返されます。
+
+---
+
+## SQLAlchemy クエリログ
+
+repom は SQLAlchemy のクエリログ機能を統合しており、N+1 問題の調査やデータベースクエリの最適化に役立ちます。
+
+### 基本的な使い方
+
+```python
+from repom.config import config
+
+# クエリログを有効化
+config.enable_sqlalchemy_echo = True
+
+# この後のクエリがすべてログに出力される
+repo = MyRepository()
+items = repo.find_all()
+
+for item in items:
+    # ここで N+1 が発生していれば、大量のクエリログが出る
+    data = item.to_dict()
+```
+
+### ログレベルの設定
+
+```python
+# INFO: SQL文のみを出力（デフォルト）
+config.enable_sqlalchemy_echo = True
+config.sqlalchemy_echo_level = 'INFO'
+
+# DEBUG: SQL文 + パラメータ + 実行結果の詳細
+config.enable_sqlalchemy_echo = True
+config.sqlalchemy_echo_level = 'DEBUG'
+```
+
+### 出力例
+
+**INFO レベル**:
+```
+🔍 SQL: SELECT task.id, task.title, task.created_at FROM task
+🔍 SQL: SELECT user.id, user.name FROM user WHERE user.id = ?
+🔍 SQL: SELECT comment.id FROM comment WHERE comment.task_id = ?
+```
+
+**DEBUG レベル**:
+```
+🔍 SQL: SELECT user.id, user.name FROM user WHERE user.id = ? [1]
+🔍 SQL: Col ('id', 'name')
+🔍 SQL: Row (1, 'John Doe')
+```
+
+### 外部プロジェクトでの有効化
+
+開発環境でのみクエリログを有効にする例：
+
+```python
+# mine-py/src/mine_py/config.py
+from repom.config import RepomConfig
+
+class MinePyConfig(RepomConfig):
+    def __init__(self):
+        super().__init__()
+        
+        # 開発環境でのみクエリログを有効化
+        if self.exec_env == 'dev':
+            self._enable_sqlalchemy_echo = True
+            self._sqlalchemy_echo_level = 'INFO'
+
+def get_repom_config():
+    return MinePyConfig()
+```
+
+```bash
+# .env ファイル
+CONFIG_HOOK=mine_py.config:get_repom_config
+```
+
+### N+1 問題の調査
+
+```python
+from repom.config import config
+
+# クエリログを有効化
+config.enable_sqlalchemy_echo = True
+
+# テスト実行
+repo = ArticleRepository()
+articles = repo.find_all()
+
+print(f"初期取得完了")
+
+for article in articles:
+    # この部分で追加クエリが発生していないか確認
+    count = len([x for x in article.comments if x.is_approved])
+    print(f"記事 {article.id}: {count} 件の承認済みコメント")
+```
+
+**N+1 が発生している場合の出力**:
+```
+🔍 SQL: SELECT article.id, article.title FROM article
+初期取得完了
+🔍 SQL: SELECT comment.id, comment.is_approved FROM comment WHERE comment.article_id = ?
+記事 1: 5 件の承認済みコメント
+🔍 SQL: SELECT comment.id, comment.is_approved FROM comment WHERE comment.article_id = ?
+記事 2: 3 件の承認済みコメント
+🔍 SQL: SELECT comment.id, comment.is_approved FROM comment WHERE comment.article_id = ?
+記事 3: 7 件の承認済みコメント
+```
+
+### Eager Loading で解決
+
+```python
+from sqlalchemy.orm import selectinload
+
+class ArticleRepository(BaseRepository[Article]):
+    def __init__(self, session: Session = None):
+        super().__init__(Article, session)
+        # comments を eager loading
+        self.default_options = [
+            selectinload(Article.comments)
+        ]
+
+# これで N+1 問題が解決される
+config.enable_sqlalchemy_echo = True
+articles = repo.find_all()
+
+for article in articles:
+    # 追加のクエリは発生しない
+    count = len([x for x in article.comments if x.is_approved])
+```
+
+**Eager Loading 後の出力**:
+```
+🔍 SQL: SELECT article.id, article.title FROM article
+🔍 SQL: SELECT comment.article_id, comment.id, comment.is_approved FROM comment WHERE comment.article_id IN (?, ?, ?)
+初期取得完了
+記事 1: 5 件の承認済みコメント
+記事 2: 3 件の承認済みコメント
+記事 3: 7 件の承認済みコメント
+```
+
+### テストでの使用
+
+```python
+# tests/test_query_optimization.py
+from repom.config import config
+
+def test_no_n_plus_one(db_test):
+    """N+1 問題が発生していないことを確認"""
+    # クエリログを有効化
+    config.enable_sqlalchemy_echo = True
+    
+    repo = ArticleRepository(session=db_test)
+    articles = repo.find_all()
+    
+    # ここで大量のクエリログが出ていないか目視確認
+    for article in articles:
+        data = article.to_dict()
+```
+
+### ログファイルへの出力
+
+クエリログは以下の場所に出力されます：
+
+- **コンソール**: 🔍 SQL: プレフィックス付き
+- **ログファイル**: `config.log_file_path` が設定されている場合
+
+```python
+# ログファイルの例
+2024-01-15 10:30:45,123 - sqlalchemy.engine - INFO - SELECT user.id, user.name FROM user
+2024-01-15 10:30:45,125 - sqlalchemy.engine - INFO - SELECT task.id FROM task WHERE task.user_id = ?
+```
+
+### 注意事項
+
+- **本番環境では無効化**: `enable_sqlalchemy_echo = False`（デフォルト）
+- **パフォーマンス**: ログ出力により若干の処理時間が増加します
+- **ログサイズ**: 大量のクエリがある場合、ログファイルが肥大化する可能性があります
 
 ---
 
@@ -352,6 +532,9 @@ class MinePyConfig(RepomConfig):
 
 - **CLI ツール実行時**: repom のデフォルト設定が自動適用（`config.log_file_path`）
 - **アプリケーション使用時**: `logging.basicConfig()` を呼べば、そちらが優先
+- **SQLAlchemy クエリログ**: `config.enable_sqlalchemy_echo = True` で有効化
+  - INFO: SQL文のみ（N+1 問題調査に最適）
+  - DEBUG: SQL文 + パラメータ + 実行結果の詳細
 - **config_hook**: ログパスをプロジェクトごとにカスタマイズ可能
 - **テスト時**: `EXEC_ENV=test` で別のログファイルに分離
 - **ログレベル変更**: `logging.getLogger('repom').setLevel(logging.WARNING)`
@@ -361,3 +544,4 @@ class MinePyConfig(RepomConfig):
 - アプリケーションでは、必ず `logging.basicConfig()` を呼ぶ
 - CLI ツールでは、`config_hook` でログパスをカスタマイズ
 - テストでは、`caplog` を使ってログを検証
+- N+1 問題調査では、`config.enable_sqlalchemy_echo = True` で可視化

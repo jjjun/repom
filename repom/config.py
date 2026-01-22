@@ -31,6 +31,9 @@ class RepomConfig(Config):
     _master_data_path: Optional[str] = field(default=None, init=False, repr=False)
     # テスト時に in-memory SQLite を使用するか（デフォルト: True）
     _use_in_memory_db_for_tests: bool = field(default=True, init=False, repr=False)
+    # SQLAlchemy クエリログ設定
+    _enable_sqlalchemy_echo: bool = field(default=False, init=False, repr=False)
+    _sqlalchemy_echo_level: str = field(default='INFO', init=False, repr=False)
 
     def init(self):
         """初期化後の処理 - 必要なディレクトリを作成"""
@@ -158,6 +161,69 @@ class RepomConfig(Config):
     @use_in_memory_db_for_tests.setter
     def use_in_memory_db_for_tests(self, value: bool):
         self._use_in_memory_db_for_tests = value
+
+    @property
+    def enable_sqlalchemy_echo(self) -> bool:
+        """SQLAlchemy のクエリログを有効化するか
+
+        デフォルト: False
+
+        True の場合:
+            - すべての SQL クエリがログに出力される
+            - N+1 問題の調査に有効
+            - 開発・テスト環境での使用を推奨
+
+        False の場合:
+            - SQL クエリはログに出力されない
+            - 本番環境での推奨設定
+
+        使用例（外部プロジェクトで有効化）:
+            # mine-py/src/mine_py/config.py
+            class MinePyConfig(RepomConfig):
+                def __init__(self):
+                    super().__init__()
+                    # 開発環境でのみ有効化
+                    if self.exec_env == 'dev':
+                        self._enable_sqlalchemy_echo = True
+
+        使用例（一時的に有効化）:
+            from repom.config import config
+            config.enable_sqlalchemy_echo = True
+            # この後のクエリがログに出力される
+        """
+        return self._enable_sqlalchemy_echo
+
+    @enable_sqlalchemy_echo.setter
+    def enable_sqlalchemy_echo(self, value: bool):
+        self._enable_sqlalchemy_echo = value
+
+    @property
+    def sqlalchemy_echo_level(self) -> str:
+        """SQLAlchemy ログのレベル（INFO/DEBUG）
+
+        デフォルト: INFO
+
+        INFO:
+            - SQL文のみを出力
+            - 通常の N+1 問題調査に最適
+            - 出力例: SELECT user.id, user.name FROM user
+
+        DEBUG:
+            - SQL文 + パラメータ + 実行結果の詳細
+            - より詳細なデバッグが必要な場合に使用
+            - 出力例: SELECT user.id, user.name FROM user WHERE user.id = ? [1]
+
+        使用例:
+            config.enable_sqlalchemy_echo = True
+            config.sqlalchemy_echo_level = 'DEBUG'  # 詳細ログ
+        """
+        return self._sqlalchemy_echo_level
+
+    @sqlalchemy_echo_level.setter
+    def sqlalchemy_echo_level(self, value: str):
+        if value not in ('INFO', 'DEBUG'):
+            raise ValueError(f"Invalid log level: {value}. Must be 'INFO' or 'DEBUG'.")
+        self._sqlalchemy_echo_level = value
 
     @property
     def engine_kwargs(self) -> dict:
