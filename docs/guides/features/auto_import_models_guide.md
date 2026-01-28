@@ -110,6 +110,28 @@ auto_import_models_from_list(
 - `fail_on_error=False`: エラーをログに記録し、処理を継続
 - `fail_on_error=True`: 最初のエラーで例外を送出
 
+**循環参照の解決** (Issue #020):
+
+この関数は循環参照を持つモデルを正しく処理するため、**2段階のインポート戦略**を採用しています：
+
+```python
+# Step 1: すべてのパッケージをインポート（マッパー初期化は遅延）
+for package_name in package_names:
+    auto_import_models_by_package(...)  # モデルクラスのみ定義
+
+# Step 2: すべてのインポート完了後にマッパーを初期化
+configure_mappers()  # すべてのモデルクラスが利用可能
+```
+
+**利点**:
+- ✅ 循環参照エラーを透過的に解決（ユーザーコードの変更不要）
+- ✅ マッパー初期化時にすべてのモデルクラスが利用可能
+- ✅ `relationship()` の文字列参照が正しく解決される
+
+**例**: `ModelA` が `ModelB` を参照し、`ModelB` が `ModelA` を参照する場合でも、両方のクラスがインポートされた後にマッパー初期化されるため、エラーが発生しません。
+
+**関連ドキュメント**: [Issue #020 - 循環参照警告の解決](../../issue/completed/020_circular_import_mapper_configuration.md)
+
 ---
 
 ## 設定による自動インポート（RepomConfig）
@@ -454,7 +476,8 @@ def test_auto_import_models():
 
 - **[repository_and_utilities_guide.md](../repository/repository_and_utilities_guide.md)**: `BaseRepository` との統合
 - **[AGENTS.md](../../../AGENTS.md)**: プロジェクト構造とコマンドリファレンス
+- **[Issue #020](../../issue/completed/020_circular_import_mapper_configuration.md)**: 循環参照警告の解決（マッパー遅延初期化）
 
 ---
 
-**最終更新**: 2025-12-25 (実装との整合性チェック完了)
+**最終更新**: 2026-01-28 (Issue #020 循環参照解決の情報を追加)
