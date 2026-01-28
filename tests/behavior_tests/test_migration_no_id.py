@@ -54,25 +54,21 @@ def test_alembic_migration_without_id():
     2. 生成されたマイグレーションファイルに'id'カラムの作成コードが含まれない
     3. 定義したカラム（code, name）の作成コードは含まれる
     """
-    # Clear Base.metadata to avoid interference from other tests (Issue #021 related)
-    # Specifically, test_date_type_comparison.py creates local models that pollute Base.metadata
-    from sqlalchemy import MetaData
+    # IMPORTANT: Clear Base.metadata BEFORE creating temp directory and env.py
+    # This prevents test_date_type_comparison.py's local models from polluting the migration
     from repom.database import Base as OriginalBase
-    
-    # Save original metadata
-    original_metadata_tables = list(OriginalBase.metadata.tables.keys())
-    
+
     # Clear all tables except the ones defined in this module
     expected_tables = {'test_migration_no_id', 'test_migration_with_id'}
     tables_to_remove = []
-    for table_name in original_metadata_tables:
+    for table_name in list(OriginalBase.metadata.tables.keys()):
         if table_name not in expected_tables and not table_name.startswith('samples') and not table_name.startswith('user_sessions') and not table_name.startswith('rosters'):
             tables_to_remove.append(table_name)
-    
+
     for table_name in tables_to_remove:
         if table_name in OriginalBase.metadata.tables:
             OriginalBase.metadata.remove(OriginalBase.metadata.tables[table_name])
-    
+
     # 一時ディレクトリを作成
     with tempfile.TemporaryDirectory() as tmpdir:
         # テスト用のAlembic設定を準備
@@ -141,7 +137,16 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 from repom.database import Base
-target_metadata = Base.metadata
+
+# Filter metadata to only include expected tables (avoid test interference)
+from sqlalchemy import MetaData
+filtered_metadata = MetaData()
+expected_tables = {{'samples', 'user_sessions', 'test_migration_no_id', 'test_migration_with_id', 'rosters'}}
+for table_name, table in Base.metadata.tables.items():
+    if table_name in expected_tables:
+        table.to_metadata(filtered_metadata)
+
+target_metadata = filtered_metadata
 
 def run_migrations_online():
     connectable = engine_from_config(
