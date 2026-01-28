@@ -27,6 +27,8 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
+| #021 | テスト間のマッパークリア干渉問題 | 中 | 🔴 未着手 | [active/021_test_mapper_clear_interference.md](active/021_test_mapper_clear_interference.md) |
+| #020 | 循環参照警告の解決（マッパー遅延初期化） | 中 | 🟢 Phase 1完了 | [active/020_circular_import_mapper_configuration.md](active/020_circular_import_mapper_configuration.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください。
