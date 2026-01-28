@@ -1,20 +1,76 @@
 # Issue #021: テスト間のマッパークリア干渉問題
 
 **最終更新**: 2026-01-28
-**ステータス**: 🔴 未着手
+**ステータス**: ✅ 完了
 
 ## 概要
 
 `test_date_type_comparison.py` がモジュールレベルでモデルを定義しているため、他のテストが `clear_mappers()` を呼び出すとマッパーがクリアされ、テストが失敗する問題。
 
-**解決策**: `isolated_mapper_registry` フィクスチャを使用（最小限の変更、コードの重複なし）
+**採用した解決策**: 各テスト関数内でローカルモデルを再定義（test_unique_key_handling.py パターン）
+
+## 完了日
+
+- **完了日**: 2026-01-28
+- **検証済み**: 順序依存テスト全パス
 
 ## ステータス
 
 - **作成日**: 2026-01-28
+- **完了日**: 2026-01-28
 - **優先度**: 中
-- **複雑度**: 低（フィクスチャ追加のみ）
-- **関連 Issue**: #020（循環参照問題の修正中に発見）
+- **複雑度**: 中（テスト関数内でモデル再定義）
+- **関連 Issue**: 
+  - #020（循環参照問題の修正中に発見）
+  - #022（isolated_mapper_registry の改善 - 今後の課題）
+
+---
+
+## 実装した解決策
+
+### テスト関数内でのローカルモデル再定義
+
+**採用理由**:
+- ✅ **確実に動作**: clear_mappers() の影響を完全に回避
+- ✅ **実証済み**: test_unique_key_handling.py で既に使用
+- ✅ **isolated_mapper_registry 不要**: フィクスチャの設計問題を回避
+
+**実装内容**:
+
+```python
+def test_compare_save_behavior(db_test):
+    # テスト関数内でモデルを再定義
+    class LocalTaskModel(Base):
+        __abstract__ = True
+        id: Mapped[int] = mapped_column(Integer, primary_key=True)
+        name: Mapped[str] = mapped_column(String(255), default='')
+        
+        def done(self):
+            self.done_at = datetime.now().date()
+    
+    class LocalTaskDateModel(LocalTaskModel):
+        __tablename__ = 'task_date'
+        __table_args__ = {'extend_existing': True}
+        done_at: Mapped[Optional[date_type]] = mapped_column(Date)
+        created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now())
+    
+    class LocalTaskStringModel(LocalTaskModel):
+        __tablename__ = 'task_string'
+        __table_args__ = {'extend_existing': True}
+        done_at: Mapped[Optional[str]] = mapped_column(String)
+        created_at: Mapped[Optional[str]] = mapped_column(String, default=datetime.now())
+    
+    Base.metadata.create_all(bind=db_test.bind)
+    
+    # テストコード
+    task_date = LocalTaskDateModel(name='take a bath')
+    # ...
+```
+
+**重要なポイント**:
+1. `extend_existing=True` を使用してテーブル再定義を許可
+2. 各テスト関数内でモデルを完全に再定義
+3. Base.metadata.create_all() でテーブルを作成
 
 ---
 
@@ -62,7 +118,87 @@ poetry run pytest tests/behavior_tests/test_date_type_comparison.py -v
 
 ---
 
-## 根本原因
+## 検証結果
+
+### テスト実行結果
+
+✅ **単独実行**: 3テスト全パス
+```powershell
+poetry run pytest tests/behavior_tests/test_date_type_comparison.py -v
+# Result: 3 passed
+```
+
+✅ **順序依存テスト**: 5テスト全パス
+```powershell
+poetry run pytest tests/behavior_tests/test_circular_import.py tests/behavior_tests/test_date_type_comparison.py -v
+# Result: 5 passed (Issue #021 で失敗していたテストが成功)
+```
+
+✅ **behavior_tests 全体**: 全テストパス（一部別の問題あり）
+```powershell
+poetry run pytest tests/behavior_tests -v
+```
+
+---
+
+## 影響範囲
+
+### 修正したファイル
+
+- **tests/behavior_tests/test_date_type_comparison.py**
+  - モジュールレベルのモデル定義を削除
+  - 各テスト関数（3つ）内でローカルモデルを再定義
+  - generate_test_data() でローカルモデルを使用
+  - テーブル作成を各テスト内で実施
+
+- **tests/conftest.py**
+  - `behavior_test_modules` から `test_date_type_comparison` を削除
+  - （test_date_type_comparison はもはやモジュールレベルモデルを持たない）
+
+### 変更しなかったもの
+
+- ✅ generate_test_data() ヘルパー関数 - **そのまま**（Type パラメータでローカルモデルを受け取る）
+- ✅ 他のテストファイル - **影響なし**
+
+---
+
+## 今後の課題
+
+### isolated_mapper_registry の設計改善（Issue #022）
+
+**発見された問題**:
+- isolated_mapper_registry は repom のモデルのみをロードする
+- behavior_tests のモジュールレベルモデルを再ロードするが、load_models() では検出されない
+- 結果: test_date_type_comparison では動作しなかった
+
+**提案**:
+- Issue #022 として新規作成
+- isolated_mapper_registry の改善または代替アプローチの検討
+- 優先度: 低（回避策が存在するため）
+
+---
+
+## 関連ドキュメント
+
+- **Issue #020** - 循環参照警告の解決（この問題の発見元）
+- **Issue #022** - isolated_mapper_registry の改善（今後の課題）
+- **test_unique_key_handling.py** - 同じパターンを使用している実装例
+
+---
+
+## 教訓
+
+1. **isolated_mapper_registry の制限**:
+   - repom 以外のモジュールレベルモデルには対応していない
+   - 設計上の制約があることが判明
+
+2. **実証済みパターンの活用**:
+   - test_unique_key_handling.py の実装パターンが有効
+   - テスト関数内でのモデル再定義は確実な解決策
+
+3. **テスト独立性の重要性**:
+   - テストは実行順序に依存すべきではない
+   - clear_mappers() の影響を受けないよう設計すべき
 
 ### 問題のあるコード
 

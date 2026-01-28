@@ -54,6 +54,7 @@ class TaskDateModel(TaskModel):
      ISO8601形式では無いという部分で、過去に躓いたことがある。
     """
     __tablename__ = 'task_date'
+    __table_args__ = {'extend_existing': True}  # Allow table redefinition after clear_mappers()
     done_at: Mapped[Optional[date_type]] = mapped_column(Date)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now())
 
@@ -63,20 +64,9 @@ class TaskStringModel(TaskModel):
     done_at と created_at は String なので、日付以外の任意の文字列でも保存できる。
     """
     __tablename__ = 'task_string'
+    __table_args__ = {'extend_existing': True}  # Allow table redefinition after clear_mappers()
     done_at: Mapped[Optional[str]] = mapped_column(String)
     created_at: Mapped[Optional[str]] = mapped_column(String, default=datetime.now())
-
-
-engine = get_sync_engine()
-inspector = get_inspector()
-
-if inspector.has_table(TaskDateModel.__tablename__):
-    TaskDateModel.__table__.drop(bind=engine)
-if inspector.has_table(TaskStringModel.__tablename__):
-    TaskStringModel.__table__.drop(bind=engine)
-
-TaskDateModel.__table__.create(bind=engine)
-TaskStringModel.__table__.create(bind=engine)
 
 
 def generate_test_data(model: Type[TaskModel], start_date: datetime, end_date: datetime, num_records: int) -> List[TaskModel]:
@@ -119,14 +109,37 @@ def test_compare_save_behavior(db_test):
      created_at = DateTime
     TaskStringModel
      done_at = String
-     created_at = String 
+     created_at = String
 
     注意点.
     commit 前では TaskStringModel.done_at は `datetime.date` だけど、commit した後は `str` となる。
     """
+    # Redefine models within test to handle clear_mappers() from other tests
+    class LocalTaskModel(Base):
+        __abstract__ = True
+        id: Mapped[int] = mapped_column(Integer, primary_key=True)
+        name: Mapped[str] = mapped_column(String(255), default='')
+
+        def done(self):
+            self.done_at = datetime.now().date()
+
+    class LocalTaskDateModel(LocalTaskModel):
+        __tablename__ = 'task_date'
+        __table_args__ = {'extend_existing': True}
+        done_at: Mapped[Optional[date_type]] = mapped_column(Date)
+        created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now())
+
+    class LocalTaskStringModel(LocalTaskModel):
+        __tablename__ = 'task_string'
+        __table_args__ = {'extend_existing': True}
+        done_at: Mapped[Optional[str]] = mapped_column(String)
+        created_at: Mapped[Optional[str]] = mapped_column(String, default=datetime.now())
+
+    Base.metadata.create_all(bind=db_test.bind)
+
     task_name = 'take a bath'
-    task_date = TaskDateModel(name=task_name)
-    task_string = TaskStringModel(name=task_name)
+    task_date = LocalTaskDateModel(name=task_name)
+    task_string = LocalTaskStringModel(name=task_name)
     task_date.done()
     task_string.done()
 
@@ -166,10 +179,30 @@ def test_handle_invalid_date_save(db_test):
      エラーは発生せず、文字列を含んだ値が保存される(例.2023-12-23 ffds)
 
     """
+    # Redefine models within test to handle clear_mappers() from other tests
+    class LocalTaskModel(Base):
+        __abstract__ = True
+        id: Mapped[int] = mapped_column(Integer, primary_key=True)
+        name: Mapped[str] = mapped_column(String(255), default='')
+
+    class LocalTaskDateModel(LocalTaskModel):
+        __tablename__ = 'task_date'
+        __table_args__ = {'extend_existing': True}
+        done_at: Mapped[Optional[date_type]] = mapped_column(Date)
+        created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now())
+
+    class LocalTaskStringModel(LocalTaskModel):
+        __tablename__ = 'task_string'
+        __table_args__ = {'extend_existing': True}
+        done_at: Mapped[Optional[str]] = mapped_column(String)
+        created_at: Mapped[Optional[str]] = mapped_column(String, default=datetime.now())
+
+    Base.metadata.create_all(bind=db_test.bind)
+
     task_name = 'take a bath'
     invalid_date = '2023-12-23 ffds'
-    task_date = TaskDateModel(name=task_name, created_at=invalid_date)
-    task_string = TaskStringModel(name=task_name, created_at=invalid_date)
+    task_date = LocalTaskDateModel(name=task_name, created_at=invalid_date)
+    task_string = LocalTaskStringModel(name=task_name, created_at=invalid_date)
 
     # TaskDateModel に違反データを保存するとエラーが出る
     try:
@@ -199,30 +232,49 @@ def test_compare_search_behavior(db_test):
     """
     辞書型のデータを保存する
     """
+    # Redefine models within test to handle clear_mappers() from other tests
+    class LocalTaskModel(Base):
+        __abstract__ = True
+        id: Mapped[int] = mapped_column(Integer, primary_key=True)
+        name: Mapped[str] = mapped_column(String(255), default='')
+
+    class LocalTaskDateModel(LocalTaskModel):
+        __tablename__ = 'task_date'
+        __table_args__ = {'extend_existing': True}
+        done_at: Mapped[Optional[date_type]] = mapped_column(Date)
+        created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now())
+
+    class LocalTaskStringModel(LocalTaskModel):
+        __tablename__ = 'task_string'
+        __table_args__ = {'extend_existing': True}
+        done_at: Mapped[Optional[str]] = mapped_column(String)
+        created_at: Mapped[Optional[str]] = mapped_column(String, default=datetime.now())
+
+    Base.metadata.create_all(bind=db_test.bind)
 
     search_start = datetime(2023, 12, 1)
     search_end = datetime(2024, 2, 20, 23, 59, 59)
-    task_records = generate_test_data(TaskDateModel, search_start, search_end, 20)
-    task_str_records = generate_test_data(TaskStringModel, search_start, search_end, 20)
+    task_records = generate_test_data(LocalTaskDateModel, search_start, search_end, 20)
+    task_str_records = generate_test_data(LocalTaskStringModel, search_start, search_end, 20)
     db_test.add_all(task_records)
     db_test.add_all(task_str_records)
 
     out_range_start = datetime(2020, 12, 1)
     out_range_end = datetime(2021, 2, 20, 23, 59, 59)
-    task_records = generate_test_data(TaskDateModel, out_range_start, out_range_end, 10)
-    task_str_records = generate_test_data(TaskStringModel, out_range_start, out_range_end, 10)
+    task_records = generate_test_data(LocalTaskDateModel, out_range_start, out_range_end, 10)
+    task_str_records = generate_test_data(LocalTaskStringModel, out_range_start, out_range_end, 10)
     db_test.add_all(task_records)
     db_test.add_all(task_str_records)
 
     db_test.commit()
 
-    task_date_results = db_test.query(TaskDateModel).filter(
-        TaskDateModel.created_at >= search_start,
-        TaskDateModel.created_at <= search_end
+    task_date_results = db_test.query(LocalTaskDateModel).filter(
+        LocalTaskDateModel.created_at >= search_start,
+        LocalTaskDateModel.created_at <= search_end
     ).all()
-    task_str_results = db_test.query(TaskStringModel).filter(
-        TaskStringModel.created_at >= search_start,
-        TaskStringModel.created_at <= search_end
+    task_str_results = db_test.query(LocalTaskStringModel).filter(
+        LocalTaskStringModel.created_at >= search_start,
+        LocalTaskStringModel.created_at <= search_end
     ).all()
     print("\n\n----- search results -----")
     print('TaskDateModel: %i' % len(task_date_results))
@@ -231,11 +283,11 @@ def test_compare_search_behavior(db_test):
     print('TaskStrModel: %s' % task_str_results[0].created_at)
     print("----- search results -----")
 
-    task_date_results = db_test.query(TaskDateModel).filter(
-        TaskDateModel.created_at.between(search_start, search_end)
+    task_date_results = db_test.query(LocalTaskDateModel).filter(
+        LocalTaskDateModel.created_at.between(search_start, search_end)
     ).all()
-    task_str_results = db_test.query(TaskStringModel).filter(
-        TaskStringModel.created_at.between(search_start, search_end)
+    task_str_results = db_test.query(LocalTaskStringModel).filter(
+        LocalTaskStringModel.created_at.between(search_start, search_end)
     ).all()
     print("\n\n----- search results -----")
     print('TaskDateModel: %i' % len(task_date_results))

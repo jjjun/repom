@@ -142,11 +142,8 @@ def isolated_mapper_registry(db_test):
     clear_mappers()
 
     # 【重要】behavior_tests のモジュールを再ロード
-    # test_unique_key_handling はモジュールレベルでモデルを定義しているが、
-    # このテストはフィクスチャを使わないので再ロードは不要
-    # 代わりに、これらのモジュールは repom の load_models() で再構築される
+    # モジュールレベルでモデルを定義しているテストのみリストに含める
     behavior_test_modules = [
-        'tests.behavior_tests.test_date_type_comparison',
         'tests.behavior_tests.test_migration_no_id',
     ]
 

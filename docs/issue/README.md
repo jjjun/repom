@@ -27,7 +27,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
-| #021 | テスト間のマッパークリア干渉問題 | 中 | 🔴 未着手 | [active/021_test_mapper_clear_interference.md](active/021_test_mapper_clear_interference.md) |
+| #022 | isolated_mapper_registry の設計改善 | 低 | 📝 調査待機中 | [active/022_isolated_mapper_registry_improvement.md](active/022_isolated_mapper_registry_improvement.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください。
@@ -38,6 +38,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #021 | テスト間のマッパークリア干渉問題 | 2026-01-28 | テスト関数内ローカルモデル再定義、clear_mappers()影響回避、順序依存テスト全パス | [completed/021_test_mapper_clear_interference.md](completed/021_test_mapper_clear_interference.md) |
 | #020 | 循環参照警告の解決（マッパー遅延初期化） | 2026-01-28 | auto_import_models_from_list()にconfigure_mappers()遅延実装、循環参照解決、518テスト全パス | [completed/020_circular_import_mapper_configuration.md](completed/020_circular_import_mapper_configuration.md) |
 | #019 | テストのフィクスチャ化によるコード品質向上 | 2025-12-28 | 3ファイルリファクタリング、181行削減、31テスト全パス、0.33秒 | [completed/019_refactor_tests_to_use_fixtures.md](completed/019_refactor_tests_to_use_fixtures.md) |
 | #018 | Repository Default Eager Loading Options Support | 2025-12-28 | default_options機能実装、同期/非同期対応、N+1問題解決、包括的テスト完備 | [completed/018_repository_default_eager_loading_options.md](completed/018_repository_default_eager_loading_options.md) |
