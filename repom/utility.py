@@ -227,16 +227,16 @@ def auto_import_models_from_list(
 
     Security:
         allowed_prefixes を指定することで、信頼できるパッケージのみをインポート。
-    
+
     Note:
         循環参照を持つモデルを正しく処理するため、すべてのパッケージを
         インポートした後に configure_mappers() を呼び出します。
         これにより、マッパー初期化時にすべてのモデルクラスが利用可能になります。
-        
+
         See: Issue #020 - 循環参照警告の解決（マッパー遅延初期化）
     """
     from sqlalchemy.orm import configure_mappers
-    
+
     # Step 1: すべてのパッケージをインポート（マッパー初期化は遅延）
     for package_name in package_names:
         try:
@@ -250,7 +250,7 @@ def auto_import_models_from_list(
                 raise
             else:
                 print(f"Warning: Failed to import models from {package_name}: {e}")
-    
+
     # Step 2: すべてのインポート完了後にマッパーを初期化
     # これにより、循環参照を持つモデルも正しく解決される
     try:
