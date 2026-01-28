@@ -54,6 +54,25 @@ def test_alembic_migration_without_id():
     2. 生成されたマイグレーションファイルに'id'カラムの作成コードが含まれない
     3. 定義したカラム（code, name）の作成コードは含まれる
     """
+    # Clear Base.metadata to avoid interference from other tests (Issue #021 related)
+    # Specifically, test_date_type_comparison.py creates local models that pollute Base.metadata
+    from sqlalchemy import MetaData
+    from repom.database import Base as OriginalBase
+    
+    # Save original metadata
+    original_metadata_tables = list(OriginalBase.metadata.tables.keys())
+    
+    # Clear all tables except the ones defined in this module
+    expected_tables = {'test_migration_no_id', 'test_migration_with_id'}
+    tables_to_remove = []
+    for table_name in original_metadata_tables:
+        if table_name not in expected_tables and not table_name.startswith('samples') and not table_name.startswith('user_sessions') and not table_name.startswith('rosters'):
+            tables_to_remove.append(table_name)
+    
+    for table_name in tables_to_remove:
+        if table_name in OriginalBase.metadata.tables:
+            OriginalBase.metadata.remove(OriginalBase.metadata.tables[table_name])
+    
     # 一時ディレクトリを作成
     with tempfile.TemporaryDirectory() as tmpdir:
         # テスト用のAlembic設定を準備

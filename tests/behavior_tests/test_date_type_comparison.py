@@ -1,4 +1,5 @@
 ﻿from tests._init import *
+import pytest
 from typing import List, Type, Optional
 from datetime import datetime, timedelta, date as date_type
 from sqlalchemy.orm import Session, Mapped, mapped_column
@@ -33,43 +34,11 @@ sqlalchemy の方で型を設定すると、SQLite自体、内部ではTEXTと�
 """
 
 
-class TaskModel(Base):
-    # この定義によってTaskModel自体はテーブルとしてマッピングされない
-    __abstract__ = True  # 抽象基底クラスとして定義
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(255), default='')
-
-    def done(self):
-        """
-        done_atに今日の日付を代入する関数
-        """
-        self.done_at = datetime.now().date()
+# Module-level model definitions removed - each test function defines its own local models
+# to avoid mapper interference (see Issue #021)
 
 
-class TaskDateModel(TaskModel):
-    """
-    created_at
-     `2024-07-22 23:55:05.220346` のようなミリ秒を含む形式が保存される。
-     これは Python の datetimeオブジェクトがデフォルトで提供する表現形式(つまりはISO8601ではない)。
-     ISO8601形式では無いという部分で、過去に躓いたことがある。
-    """
-    __tablename__ = 'task_date'
-    __table_args__ = {'extend_existing': True}  # Allow table redefinition after clear_mappers()
-    done_at: Mapped[Optional[date_type]] = mapped_column(Date)
-    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.now())
-
-
-class TaskStringModel(TaskModel):
-    """
-    done_at と created_at は String なので、日付以外の任意の文字列でも保存できる。
-    """
-    __tablename__ = 'task_string'
-    __table_args__ = {'extend_existing': True}  # Allow table redefinition after clear_mappers()
-    done_at: Mapped[Optional[str]] = mapped_column(String)
-    created_at: Mapped[Optional[str]] = mapped_column(String, default=datetime.now())
-
-
-def generate_test_data(model: Type[TaskModel], start_date: datetime, end_date: datetime, num_records: int) -> List[TaskModel]:
+def generate_test_data(model: Type, start_date: datetime, end_date: datetime, num_records: int) -> List:
     """
     Generate a specified number of records with dates ranging from start_date to end_date.
 
@@ -91,11 +60,6 @@ def generate_test_data(model: Type[TaskModel], start_date: datetime, end_date: d
         record = model(name='take a bath', created_at=record_date)
         records.append(record)
     return records
-
-
-# この部分で、TaskModel を使うか、Task2Model を使うかを変更する
-use_model = TaskModel
-# use_model = Task2Model
 
 
 # poetry run pytest tests/behavior_tests/test_date_type_comparison.py::test_compare_save_behavior
