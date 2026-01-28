@@ -144,7 +144,7 @@ def isolated_mapper_registry(db_test):
     # 【重要】behavior_tests のモジュールを再ロード
     # モジュールレベルでモデルを定義しているテストのみリストに含める
     behavior_test_modules = [
-        'tests.behavior_tests.test_migration_no_id',
+        'tests.behavior_tests.test_00_migration_no_id',
     ]
 
     # モジュールの再ロード前に、そのモジュールのテーブルを metadata から削除

@@ -4,6 +4,9 @@
 use_id=Falseのモデルに対してidカラムが生成されないことを確認します。
 
 注意: このテストは時間がかかり、ファイルシステムを操作します。
+
+IMPORTANT: This file is prefixed with "test_00_" to ensure it runs BEFORE other tests
+that might pollute Base.metadata (e.g., test_date_type_comparison.py's local models).
 """
 
 import os
@@ -54,16 +57,22 @@ def test_alembic_migration_without_id():
     2. 生成されたマイグレーションファイルに'id'カラムの作成コードが含まれない
     3. 定義したカラム（code, name）の作成コードは含まれる
     """
-    # IMPORTANT: Clear Base.metadata BEFORE creating temp directory and env.py
-    # This prevents test_date_type_comparison.py's local models from polluting the migration
+    # IMPORTANT: Ensure Base.metadata contains expected models
+    # This test runs first (test_00_*) to avoid pollution, but we still check
     from repom.database import Base as OriginalBase
+    from sqlalchemy.orm import configure_mappers
 
-    # Clear all tables except the ones defined in this module
-    expected_tables = {'test_migration_no_id', 'test_migration_with_id'}
-    tables_to_remove = []
-    for table_name in list(OriginalBase.metadata.tables.keys()):
-        if table_name not in expected_tables and not table_name.startswith('samples') and not table_name.startswith('user_sessions') and not table_name.startswith('rosters'):
-            tables_to_remove.append(table_name)
+    # Check if our models are registered (they should be, since this runs first)
+    expected_models = {'test_migration_no_id', 'test_migration_with_id'}
+    current_tables = set(OriginalBase.metadata.tables.keys())
+    
+    if not expected_models.issubset(current_tables):
+        # Reconfigure mappers if needed (shouldn't happen if running first)
+        configure_mappers()
+
+    # Clear any unexpected tables (defensive programming)
+    expected_tables_full = {'test_migration_no_id', 'test_migration_with_id', 'samples', 'user_sessions', 'rosters'}
+    tables_to_remove = [t for t in list(OriginalBase.metadata.tables.keys()) if t not in expected_tables_full]
 
     for table_name in tables_to_remove:
         if table_name in OriginalBase.metadata.tables:
