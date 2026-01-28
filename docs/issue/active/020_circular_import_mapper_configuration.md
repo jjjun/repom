@@ -93,59 +93,20 @@ def auto_import_models_from_list(...):
 
 ## 実装計画
 
-### Phase 1: テストのリファクタリング ⏳
+### Phase 1: テストのリファクタリング ✅ 完了
 
 **目的**: 循環参照テストをシンプルで保守しやすい構造にする
 
-**現状の問題**:
-- `test_circular_import.py` のテストが煩雑
-- テスト間でモジュールキャッシュのクリーンアップが重複
-- テストの意図が分かりにくい
+**実装内容**:
+- `test_circular_import.py` を pytest fixture パターンにリファクタリング
+- `clean_circular_import_env` フィクスチャを作成
+- 4つのテストメソッド → 2つに集約
 
-**リファクタリング案**:
-
-```python
-# tests/behavior_tests/test_circular_import.py (改良版)
-
-class TestCircularImportIssue:
-    """循環参照問題の再現テスト（Issue #XXX 検証用）"""
-    
-    @pytest.fixture(autouse=True)
-    def cleanup(self):
-        """各テスト前後でクリーンアップ"""
-        Base.metadata.clear()
-        clear_mappers()
-        
-        # モジュールキャッシュをクリア
-        import sys
-        for key in list(sys.modules.keys()):
-            if 'tests.fixtures.circular_import' in key:
-                del sys.modules[key]
-        
-        yield  # テスト実行
-        
-        # 後処理
-        Base.metadata.clear()
-        clear_mappers()
-        for key in list(sys.modules.keys()):
-            if 'tests.fixtures.circular_import' in key:
-                del sys.modules[key]
-    
-    def test_error_when_early_mapper_configuration(self):
-        """早期マッパー初期化で循環参照エラーが発生"""
-        # シンプルで明確なテスト
-        ...
-    
-    def test_success_with_lazy_mapper_configuration(self):
-        """遅延マッパー初期化で正常動作"""
-        # シンプルで明確なテスト
-        ...
-```
-
-**成果物**:
-- ✅ テストコードの可読性向上
-- ✅ 重複コードの削減
-- ✅ テストの保守性向上
+**成果**:
+- ✅ コード削減: 315行 → 149行 (53%削減)
+- ✅ 重複コード削除: 120行のクリーンアップ処理を削除
+- ✅ テスト実行時間: 0.08秒
+- ✅ テスト結果: 2/2 テスト全パス
 
 ---
 
@@ -340,4 +301,4 @@ poetry run pytest tests/behavior_tests/test_circular_import_solutions.py -v
 ---
 
 **最終更新**: 2026-01-28
-**ステータス**: � Phase 1 完了 → Phase 2（実装）開始待ち
+**ステータス**: ✅ Phase 2 完了 → Phase 3（ドキュメント整備）開始待ち
