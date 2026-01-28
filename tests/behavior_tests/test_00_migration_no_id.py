@@ -65,7 +65,7 @@ def test_alembic_migration_without_id():
     # Check if our models are registered (they should be, since this runs first)
     expected_models = {'test_migration_no_id', 'test_migration_with_id'}
     current_tables = set(OriginalBase.metadata.tables.keys())
-    
+
     if not expected_models.issubset(current_tables):
         # Reconfigure mappers if needed (shouldn't happen if running first)
         configure_mappers()
