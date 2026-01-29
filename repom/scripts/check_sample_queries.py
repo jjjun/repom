@@ -1,8 +1,44 @@
 ﻿#!/usr/bin/env python3
 """Sample Query Checker - Demonstrates QueryAnalyzer with any model"""
+from sqlalchemy import String, Text
 from repom.diagnostics.query_analyzer import QueryAnalyzer, get_model_by_name
 from repom.database import _db_manager, Base, get_sync_engine
 from repom.utility import load_models
+
+
+def _get_sample_field(model_class) -> str | None:
+    """モデルから適切なサンプルフィールドを自動検出
+
+    Args:
+        model_class: SQLAlchemyモデルクラス
+
+    Returns:
+        str | None: 検出されたフィールド名、見つからない場合はNone
+
+    検出ロジック:
+        1. 優先順位の高いフィールド名（value, name, title等）を探す
+        2. なければ最初の文字列型フィールドを使う
+        3. id, created_at, updated_at は除外
+    """
+    # 優先順位の高いフィールド名
+    priority_names = ['value', 'name', 'title', 'label', 'text', 'description', 'content']
+
+    columns = model_class.__table__.columns
+
+    # 優先順位の高いフィールド名を探す
+    for name in priority_names:
+        if name in columns:
+            col = columns[name]
+            if isinstance(col.type, (String, Text)):
+                return name
+
+    # なければ最初の文字列型フィールドを使う
+    excluded_names = {'id', 'created_at', 'updated_at', 'deleted_at'}
+    for col in columns:
+        if col.name not in excluded_names and isinstance(col.type, (String, Text)):
+            return col.name
+
+    return None
 
 
 def run_sample_check(model_name: str = 'SampleModel'):
@@ -34,20 +70,29 @@ def run_sample_check(model_name: str = 'SampleModel'):
 
     analyzer = QueryAnalyzer()
 
+    # モデルから適切なサンプルフィールドを検出
+    sample_field = _get_sample_field(model_class)
+
     # Test: Basic operations
     print("\n[Test] Basic CRUD Operations")
     print("-" * 70)
 
     with _db_manager.get_sync_session() as session:
         with analyzer.capture(model=model_name):
-            # Create sample records
-            samples = [model_class(value=f"Sample {i}") for i in range(3)]
-            session.add_all(samples)
-            session.flush()
+            if sample_field:
+                # Create sample records with detected field
+                print(f"  Using field: '{sample_field}' for sample data")
+                samples = [model_class(**{sample_field: f"Sample {i}"}) for i in range(3)]
+                session.add_all(samples)
+                session.flush()
+                print(f"  Created {len(samples)} {model_name} records")
+            else:
+                # No suitable field found - use existing data
+                print(f"  [INFO] No suitable text field found, using existing data")
 
             # Query all
             all_samples = session.query(model_class).all()
-            print(f"  Created {len(all_samples)} {model_name} records")
+            print(f"  Total records in DB: {len(all_samples)}")
 
             session.commit()
 
