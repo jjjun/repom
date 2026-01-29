@@ -4,6 +4,7 @@ from sqlalchemy import String, Text
 from repom.diagnostics.query_analyzer import QueryAnalyzer, get_model_by_name
 from repom.database import _db_manager, Base, get_sync_engine
 from repom.utility import load_models
+from repom import BaseRepository
 
 
 def _get_sample_field(model_class) -> str | None:
@@ -73,28 +74,37 @@ def run_sample_check(model_name: str = 'SampleModel'):
     # モデルから適切なサンプルフィールドを検出
     sample_field = _get_sample_field(model_class)
 
-    # Test: Basic operations
-    print("\n[Test] Basic CRUD Operations")
+    # サンプルデータの準備（キャプチャ外で実行）
+    print("\n[Preparation] Creating sample data")
     print("-" * 70)
 
     with _db_manager.get_sync_session() as session:
-        with analyzer.capture(model=model_name):
-            if sample_field:
-                # Create sample records with detected field
-                print(f"  Using field: '{sample_field}' for sample data")
-                samples = [model_class(**{sample_field: f"Sample {i}"}) for i in range(3)]
-                session.add_all(samples)
-                session.flush()
-                print(f"  Created {len(samples)} {model_name} records")
-            else:
-                # No suitable field found - use existing data
-                print(f"  [INFO] No suitable text field found, using existing data")
+        # 既存のレコード数を確認
+        repo = BaseRepository(model_class, session)
+        existing_count = len(repo.find())
 
-            # Query all
-            all_samples = session.query(model_class).all()
-            print(f"  Total records in DB: {len(all_samples)}")
-
+        if existing_count == 0 and sample_field:
+            # データがない場合はサンプルを作成
+            print(f"  Using field: '{sample_field}' for sample data")
+            samples = [model_class(**{sample_field: f"Sample {i}"}) for i in range(3)]
+            session.add_all(samples)
             session.commit()
+            print(f"  Created {len(samples)} {model_name} records")
+        else:
+            print(f"  Using {existing_count} existing records")
+
+    # Test: API endpoint simulation (GET requests)
+    print("\n[Test] Data Retrieval (find + to_dict)")
+    print("-" * 70)
+
+    with _db_manager.get_sync_session() as session:
+        repo = BaseRepository(model_class, session)
+
+        with analyzer.capture(model=model_name):
+            # 実環境に近い取得処理：find() → to_dict()
+            items = repo.find()
+            dicts = [item.to_dict() for item in items]
+            print(f"  Retrieved {len(dicts)} {model_name} records")
 
     analyzer.print_report()
     print("\n[OK] Analysis complete!")
