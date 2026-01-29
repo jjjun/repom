@@ -1,19 +1,36 @@
 ﻿#!/usr/bin/env python3
-"""Sample Query Checker - Demonstrates QueryAnalyzer with SampleModel"""
-from datetime import date
-from repom.diagnostics.query_analyzer import QueryAnalyzer
+"""Sample Query Checker - Demonstrates QueryAnalyzer with any model"""
+from repom.diagnostics.query_analyzer import QueryAnalyzer, get_model_by_name
 from repom.database import _db_manager, Base, get_sync_engine
-from repom.examples.models.sample import SampleModel
+from repom.utility import load_models
 
-def setup_database():
-    """Create database tables if they don't exist."""
+
+def run_sample_check(model_name: str = 'SampleModel'):
+    """Run query analysis on specified model.
+    
+    Args:
+        model_name: Name of the model to analyze (e.g., 'SampleModel', 'User')
+    """
+    # Load models from configured locations first
+    load_models(context="check_sample_queries")
+    
+    # Create database tables after models are loaded
     engine = get_sync_engine()
     Base.metadata.create_all(engine)
-
-def run_sample_check():
+    
     print("\n" + "="*70)
-    print("SampleModel Query Analysis")
+    print(f"{model_name} Query Analysis")
     print("="*70)
+    
+    # Get model class dynamically
+    model_class = get_model_by_name(model_name)
+    if model_class is None:
+        print(f"\n[ERROR] Model '{model_name}' not found.")
+        print("Available models:")
+        from repom.diagnostics.query_analyzer import list_all_models
+        for name in list_all_models():
+            print(f"  - {name}")
+        return
     
     analyzer = QueryAnalyzer()
     
@@ -22,15 +39,15 @@ def run_sample_check():
     print("-" * 70)
     
     with _db_manager.get_sync_session() as session:
-        with analyzer.capture(model='SampleModel'):
-            # Create samples
-            samples = [SampleModel(value=f"Sample {i}") for i in range(3)]
+        with analyzer.capture(model=model_name):
+            # Create sample records
+            samples = [model_class(value=f"Sample {i}") for i in range(3)]
             session.add_all(samples)
             session.flush()
             
             # Query all
-            all_samples = session.query(SampleModel).all()
-            print(f"  Created {len(all_samples)} samples")
+            all_samples = session.query(model_class).all()
+            print(f"  Created {len(all_samples)} {model_name} records")
             
             session.commit()
     
@@ -38,10 +55,10 @@ def run_sample_check():
     print("\n[OK] Analysis complete!")
     print("="*70 + "\n")
 
+
 if __name__ == '__main__':
     try:
-        setup_database()
-        run_sample_check()
+        run_sample_check(model_name='SampleModel')  # デフォルトは SampleModel
     except Exception as e:
         print(f"\n[ERROR] {e}")
         import traceback
