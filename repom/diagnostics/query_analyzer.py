@@ -5,7 +5,7 @@ This module provides tools to capture and analyze SQLAlchemy queries
 to detect potential N+1 query problems.
 
 Usage:
-    from repom.scripts.query_analyzer import QueryAnalyzer
+    from repom.diagnostics.query_analyzer import QueryAnalyzer
     from repom.database import db_session
     from myapp.models import User
     
@@ -42,7 +42,7 @@ def get_model_by_name(model_name: str) -> Optional[Type]:
         モデルクラス、見つからない場合は None
 
     Example:
-        >>> from repom.scripts.query_analyzer import get_model_by_name
+        >>> from repom.diagnostics.query_analyzer import get_model_by_name
         >>> User = get_model_by_name('User')
         >>> if User:
         ...     print(f"Found model: {User.__tablename__}")
@@ -67,7 +67,7 @@ def list_all_models() -> List[str]:
         モデル名のリスト
 
     Example:
-        >>> from repom.scripts.query_analyzer import list_all_models
+        >>> from repom.diagnostics.query_analyzer import list_all_models
         >>> models = list_all_models()
         >>> print(f"Available models: {', '.join(models)}")
     """

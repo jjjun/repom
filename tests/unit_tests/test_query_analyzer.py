@@ -7,7 +7,7 @@ from sqlalchemy import String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from repom import BaseModel, BaseRepository
-from repom.scripts.query_analyzer import QueryAnalyzer, get_model_by_name, list_all_models
+from repom.diagnostics.query_analyzer import QueryAnalyzer, get_model_by_name, list_all_models
 from repom.database import get_db_session
 
 

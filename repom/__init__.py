@@ -26,7 +26,7 @@ from repom.repositories import BaseRepository, AsyncBaseRepository, FilterParams
 from repom.mixins import SoftDeletableMixin
 
 # Query Analysis
-from repom.scripts.query_analyzer import QueryAnalyzer
+from repom.diagnostics.query_analyzer import QueryAnalyzer
 
 __all__ = [
     # Models
