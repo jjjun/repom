@@ -25,6 +25,9 @@ from repom.repositories import BaseRepository, AsyncBaseRepository, FilterParams
 # Mixins
 from repom.mixins import SoftDeletableMixin
 
+# Query Analysis
+from repom.scripts.query_analyzer import QueryAnalyzer
+
 __all__ = [
     # Models
     'BaseModel',
@@ -35,4 +38,6 @@ __all__ = [
     'FilterParams',
     # Mixins
     'SoftDeletableMixin',
+    # Query Analysis
+    'QueryAnalyzer',
 ]
