@@ -54,8 +54,8 @@ class TestCircularImportIssue:
     2. 解決策の検証：遅延マッパー初期化で正常動作
 
     背景：
-    mine-py で発生している「警告」は、auto_import_models_from_list の
-    try-except でキャッチされた例外が print で表示されているもの。
+    mine-py で発生している「警告」は、import_from_packages の
+    fail_on_error=False でキャッチされた例外が処理されたもの。
     本質的な問題は、マッパー初期化時に参照先のモデルクラスが
     まだ定義されていない（クラスレジストリに未登録）こと。
     """
@@ -72,11 +72,11 @@ class TestCircularImportIssue:
         - ModelB はまだインポートされていない
         - マッパー初期化時に 'ModelB' という名前が解決できない
         """
-        from repom.utility import auto_import_models_by_package
+        from repom._.discovery import import_package_directory
         from sqlalchemy.orm import configure_mappers
 
         # package_a のみをインポート
-        auto_import_models_by_package(
+        import_package_directory(
             package_name='tests.fixtures.circular_import.package_a',
             excluded_dirs=set(),
             allowed_prefixes={'tests.fixtures.', 'repom.'}
@@ -109,17 +109,17 @@ class TestCircularImportIssue:
 
         これが解決策1の基礎となる動作である。
         """
-        from repom.utility import auto_import_models_by_package
+        from repom._.discovery import import_package_directory
         from sqlalchemy.orm import class_mapper
 
         # すべてのパッケージをインポート
-        auto_import_models_by_package(
+        import_package_directory(
             package_name='tests.fixtures.circular_import.package_a',
             excluded_dirs=set(),
             allowed_prefixes={'tests.fixtures.', 'repom.'}
         )
 
-        auto_import_models_by_package(
+        import_package_directory(
             package_name='tests.fixtures.circular_import.package_b',
             excluded_dirs=set(),
             allowed_prefixes={'tests.fixtures.', 'repom.'}

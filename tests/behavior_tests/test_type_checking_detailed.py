@@ -20,7 +20,7 @@ import pytest
 
 def test_inspect_import_order():
     """
-    auto_import_models のインポート順序を確認
+    import_from_directory のインポート順序を確認
     """
     # 一時ディレクトリ作成
     temp_dir = Path(tempfile.mkdtemp(prefix="test_order_"))
@@ -58,11 +58,11 @@ class {filename[:-3].title().replace('_', '')}Model(BaseModelAuto):
         sys.path.insert(0, str(temp_dir))
 
         try:
-            from repom.utility import auto_import_models
+            from repom._.discovery import import_from_directory
 
             print("\n=== Testing import order ===")
-            auto_import_models(
-                models_dir=models_dir,
+            import_from_directory(
+                directory=models_dir,
                 base_package='test_order'
             )
             print("=== Import complete ===\n")
@@ -157,14 +157,14 @@ print(">>> z_child.py: ZChildModel defined successfully")
         sys.path.insert(0, str(temp_dir))
 
         try:
-            from repom.utility import auto_import_models
+            from repom._.discovery import import_from_directory
             from sqlalchemy.orm import configure_mappers
 
             print("\n" + "=" * 80)
-            print("STEP 1: auto_import_models (インポートのみ)")
+            print("STEP 1: import_from_directory (インポートのみ)")
             print("=" * 80)
-            auto_import_models(
-                models_dir=models_dir,
+            import_from_directory(
+                directory=models_dir,
                 base_package='test_lazy'
             )
             print(">>> インポート完了: まだマッパー設定は行われていない")
@@ -268,19 +268,19 @@ class ParentModel(BaseModelAuto):
         sys.path.insert(0, str(temp_dir))
 
         try:
-            from repom.utility import auto_import_models
+            from repom._.discovery import import_from_directory
             from sqlalchemy.orm import configure_mappers
 
             print("\n" + "=" * 80)
             print("テスト: child ファイルが存在しない場合")
             print("=" * 80)
 
-            auto_import_models(
-                models_dir=models_dir,
+            import_from_directory(
+                directory=models_dir,
                 base_package='test_failure'
             )
 
-            print(">>> auto_import_models 完了")
+            print(">>> import_from_directory 完了")
 
             # マッパー設定時にエラーが発生するはず
             print(">>> configure_mappers() を呼び出し...")

@@ -14,14 +14,14 @@ class TestSolution1_DeferredMapperConfiguration:
     def test_deferred_mapper_configuration(self):
         """すべてのモデルをインポートしてから configure_mappers() を呼ぶ
 
-        改良版の auto_import_models_from_list() のシミュレーション。
+        改良版の import_from_packages() のシミュレーション。
 
         手順：
         1. すべてのパッケージをインポート（マッパー初期化なし）
         2. すべてのインポート完了後に configure_mappers() を呼ぶ
         3. エラーなく初期化できることを確認
         """
-        from repom.utility import auto_import_models_by_package
+        from repom._.discovery import import_package_directory
         from sqlalchemy.orm import configure_mappers, clear_mappers
 
         # クリーンアップ
@@ -48,7 +48,7 @@ class TestSolution1_DeferredMapperConfiguration:
 
             for package_name in packages:
                 print(f"  - Importing {package_name}")
-                auto_import_models_by_package(
+                import_package_directory(
                     package_name=package_name,
                     excluded_dirs=set(),
                     allowed_prefixes={'tests.fixtures.', 'repom.'}
@@ -89,7 +89,7 @@ class TestSolution1_DeferredMapperConfiguration:
                     del sys.modules[key]
 
     def test_improved_auto_import_models_from_list(self):
-        """改良版 auto_import_models_from_list の実装例
+        """改良版 import_from_packages の実装例
 
         この関数は、以下の改良を加えています：
         1. すべてのパッケージをインポート
@@ -117,21 +117,19 @@ class TestSolution1_DeferredMapperConfiguration:
                 fail_on_error=False
             ):
                 """改良版：すべてインポート後にマッパー初期化"""
-                from repom.utility import auto_import_models_by_package
+                from repom._.discovery import import_package_directory
 
                 # Phase 1: すべてのパッケージをインポート
                 for package_name in package_names:
-                    try:
-                        auto_import_models_by_package(
-                            package_name=package_name,
-                            excluded_dirs=excluded_dirs,
-                            allowed_prefixes=allowed_prefixes
-                        )
-                    except Exception as e:
-                        if fail_on_error:
-                            raise
-                        else:
-                            print(f"Warning: Failed to import models from {package_name}: {e}")
+                    failures = import_package_directory(
+                        package_name=package_name,
+                        excluded_dirs=excluded_dirs,
+                        allowed_prefixes=allowed_prefixes,
+                        fail_on_error=fail_on_error
+                    )
+                    if failures and not fail_on_error:
+                        for failure in failures:
+                            print(f"Warning: Failed to import {failure.target}: {failure.message}")
 
                 # Phase 2: すべてのインポート完了後にマッパー初期化
                 try:
@@ -384,14 +382,14 @@ class TestSolution_Comparison:
         print("  ")
         print("  メリット:")
         print("    ✓ 既存のモデル定義を変更する必要がない")
-        print("    ✓ auto_import_models_from_list() の改良だけで対応可能")
+        print("    ✓ import_from_packages() の改良だけで対応可能")
         print("    ✓ すべての循環参照パターンに対応")
         print("  ")
         print("  デメリット:")
         print("    ✗ マッパー初期化のタイミングを制御する必要がある")
         print("  ")
         print("  実装方法:")
-        print("    1. auto_import_models_from_list() を改良")
+        print("    1. import_from_packages() を改良")
         print("    2. すべてのパッケージをインポート後、configure_mappers() を呼ぶ")
 
         print("\n" + "-"*80)

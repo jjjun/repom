@@ -49,7 +49,7 @@ def test_type_checking_with_alphabetical_import_order(isolated_mapper_registry):
         # __init__.py を作成
         init_file = models_dir / "__init__.py"
         init_file.write_text("""
-# Empty init file - auto_import_models will skip this
+# Empty init file - import_from_directory will skip this
 """, encoding='utf-8')
 
         # ani_video_item.py を作成（a で始まる → 先にインポート）
@@ -102,13 +102,13 @@ class AniVideoUserStatusModel(BaseModelAuto):
         sys.path.insert(0, str(temp_dir))
 
         try:
-            # auto_import_models を実行
-            from repom.utility import auto_import_models
+            # import_from_directory を実行
+            from repom._.discovery import import_from_directory
 
             # この時点で警告が発生するはず
             # "expression 'AniVideoUserStatusModel' failed to locate a name"
-            auto_import_models(
-                models_dir=models_dir,
+            import_from_directory(
+                directory=models_dir,
                 base_package='test_models'
             )
 
@@ -248,12 +248,12 @@ class AniVideoUserStatusModel(BaseModelAuto):
         sys.path.insert(0, str(temp_dir))
 
         try:
-            # auto_import_models を実行
-            from repom.utility import auto_import_models
+            # import_from_directory を実行
+            from repom._.discovery import import_from_directory
 
             # この時点では警告が発生しないはず
-            auto_import_models(
-                models_dir=models_dir,
+            import_from_directory(
+                directory=models_dir,
                 base_package='test_models_fixed'
             )
 

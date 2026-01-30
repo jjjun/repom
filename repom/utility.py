@@ -98,7 +98,7 @@ def load_models(context: Optional[str] = None) -> None:
         - Alembic migrations (alembic/env.py)
         - Database scripts (db_create.py, db_delete.py, etc.)
         - Test fixtures (tests/conftest.py)
-        
+
         Uses import_from_packages() from discovery module with SQLAlchemy's
         configure_mappers() as post_import_hook.
     """

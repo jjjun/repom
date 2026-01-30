@@ -217,39 +217,39 @@ def import_from_directory(
     fail_on_error: bool = False
 ) -> List[DiscoveryFailure]:
     """ディレクトリから Python モジュールを再帰的にインポート
-    
+
     ディレクトリ内の .py ファイルを走査し、モジュールとしてインポートします。
     ユーティリティディレクトリや __pycache__ などは自動的にスキップされます。
-    
+
     Args:
         directory: インポート元ディレクトリパス
         base_package: ベースパッケージ名（例: 'myapp.routes'）
         excluded_dirs: 除外するディレクトリ名のセット（デフォルト: {'__pycache__'}）
         fail_on_error: True の場合、失敗時に DiscoveryError を発生
-        
+
     Returns:
         失敗のリスト（空の場合はすべて成功）
-        
+
     Raises:
         DiscoveryError: fail_on_error=True かつ失敗がある場合
-        
+
     Example:
         # 基本的な使い方
         from pathlib import Path
         from repom._.discovery import import_from_directory
-        
+
         failures = import_from_directory(
             directory=Path("src/myapp/routes"),
             base_package="myapp.routes"
         )
-        
+
         # 除外ディレクトリを指定
         failures = import_from_directory(
             directory="src/myapp/models",
             base_package="myapp.models",
             excluded_dirs={'base', 'utils', '__pycache__'}
         )
-        
+
         # エラー時に例外を発生
         failures = import_from_directory(
             directory="src/myapp/tasks",
@@ -259,37 +259,37 @@ def import_from_directory(
     """
     if excluded_dirs is None:
         excluded_dirs = DEFAULT_EXCLUDED_DIRS
-    
+
     directory = Path(directory)
     failures = []
-    
+
     # Collect all Python files to import
     py_files = []
     for py_file in directory.rglob('*.py'):
         # Skip __pycache__ directories
         if '__pycache__' in py_file.parts:
             continue
-        
+
         # Skip files starting with underscore (like __init__.py)
         if py_file.stem.startswith('_'):
             continue
-        
+
         # Skip excluded directories
         relative_path = py_file.relative_to(directory)
         if any(excluded_dir in relative_path.parts for excluded_dir in excluded_dirs):
             continue
-        
+
         py_files.append((py_file, relative_path))
-    
+
     # Sort files alphabetically to ensure consistent import order
     py_files.sort(key=lambda x: str(x[1]))
-    
+
     # Import all collected files
     for py_file, relative_path in py_files:
         # Convert file path to module path (e.g., admin/user.py -> admin.user)
         module_parts = list(relative_path.parts[:-1]) + [relative_path.stem]
         module_name = '.'.join(module_parts)
-        
+
         # Import the module
         full_module_name = f'{base_package}.{module_name}' if module_name else base_package
         try:
@@ -302,11 +302,11 @@ def import_from_directory(
                 message=str(exc)
             )
             failures.append(failure)
-    
+
     # Error handling
     if failures and fail_on_error:
         raise DiscoveryError(failures)
-    
+
     return failures
 
 
@@ -321,30 +321,30 @@ def import_package_directory(
     fail_on_error: bool = False
 ) -> List[DiscoveryFailure]:
     """パッケージ名からディレクトリを取得してインポート
-    
+
     パッケージ名を指定すると、そのパッケージのディレクトリを自動検出し、
     配下のモジュールを再帰的にインポートします。
-    
+
     Args:
         package_name: Python パッケージ名（例: 'myapp.models'）
         excluded_dirs: 除外するディレクトリ名のセット
         allowed_prefixes: 許可されたパッケージプレフィックス（セキュリティ）
         fail_on_error: エラー時に例外を発生させるか
-        
+
     Returns:
         失敗のリスト（空の場合はすべて成功）
-        
+
     Raises:
         ValueError: パッケージが許可リストにない、またはパッケージではない場合
         ImportError: パッケージが見つからない場合
         DiscoveryError: fail_on_error=True かつ失敗がある場合
-        
+
     Example:
         from repom._.discovery import import_package_directory
-        
+
         # 基本的な使い方
         failures = import_package_directory('myapp.models')
-        
+
         # セキュリティ検証付き
         failures = import_package_directory(
             'myapp.routes',
@@ -354,18 +354,18 @@ def import_package_directory(
     # セキュリティチェック
     if allowed_prefixes:
         validate_package_security(package_name, allowed_prefixes, strict=True)
-    
+
     try:
         # パッケージをインポート
         package = importlib.import_module(package_name)
-        
+
         # パッケージかどうか確認（モジュールではダメ）
         if not hasattr(package, '__path__'):
             raise ValueError(f"{package_name} is not a package (it's a module)")
-        
+
         # パッケージのディレクトリを取得
         package_dir = Path(package.__path__[0])
-        
+
         # import_from_directory を使用してインポート
         return import_from_directory(
             directory=package_dir,
@@ -373,7 +373,7 @@ def import_package_directory(
             excluded_dirs=excluded_dirs,
             fail_on_error=fail_on_error
         )
-        
+
     except (ImportError, ValueError) as e:
         if fail_on_error:
             raise
@@ -395,41 +395,41 @@ def import_from_packages(
     post_import_hook: Optional[Callable[[], None]] = None
 ) -> List[DiscoveryFailure]:
     """複数のパッケージから一括インポート（フック付き）
-    
+
     複数のパッケージを一括でインポートします。
     すべてのパッケージのインポート完了後に、オプションでコールバック関数を実行できます。
-    
+
     Args:
         package_names: パッケージ名（文字列、リスト、カンマ区切り）
         excluded_dirs: 除外するディレクトリ名のセット
         allowed_prefixes: 許可されたパッケージプレフィックス（セキュリティ）
         fail_on_error: エラー時に例外を発生させるか
         post_import_hook: すべてのインポート完了後に呼ばれるコールバック
-        
+
     Returns:
         失敗のリスト（空の場合はすべて成功）
-        
+
     Raises:
         DiscoveryError: fail_on_error=True かつ失敗がある場合
         RuntimeError: post_import_hook の実行に失敗した場合
-        
+
     Example:
         from repom._.discovery import import_from_packages
-        
+
         # 基本的な使い方
         failures = import_from_packages([
             'myapp.routes',
             'myapp.tasks'
         ])
-        
+
         # フック付き（SQLAlchemy モデル用）
         from sqlalchemy.orm import configure_mappers
-        
+
         failures = import_from_packages(
             package_names=['myapp.models', 'shared.models'],
             post_import_hook=configure_mappers
         )
-        
+
         # カンマ区切り文字列でも可
         failures = import_from_packages(
             'myapp.routes,myapp.api,myapp.tasks',
@@ -439,7 +439,7 @@ def import_from_packages(
     # パスを正規化
     packages = normalize_paths(package_names)
     all_failures = []
-    
+
     # すべてのパッケージをインポート
     for package_name in packages:
         failures = import_package_directory(
@@ -449,7 +449,7 @@ def import_from_packages(
             fail_on_error=False  # 個別の失敗は集約
         )
         all_failures.extend(failures)
-    
+
     # フック実行（すべてのインポート完了後）
     if post_import_hook:
         try:
@@ -462,9 +462,9 @@ def import_from_packages(
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.warning(error_msg, exc_info=True)
-    
+
     # エラーハンドリング
     if all_failures and fail_on_error:
         raise DiscoveryError(all_failures)
-    
+
     return all_failures
