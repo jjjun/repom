@@ -27,6 +27,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
+| #024 | 汎用パッケージディスカバリーインフラの実装 | 高 | 🔴 未着手 | [active/024_generic_package_discovery_infrastructure.md](active/024_generic_package_discovery_infrastructure.md) |
 | #023 | テストの独立性と隔離性の改善 | 中 | 🟡 調査・設計段階 | [active/023_test_independence_improvements.md](active/023_test_independence_improvements.md) |
 | #022 | isolated_mapper_registry の設計改善 | 低 | 📝 調査待機中 | [active/022_isolated_mapper_registry_improvement.md](active/022_isolated_mapper_registry_improvement.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
