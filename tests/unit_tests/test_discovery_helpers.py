@@ -1,8 +1,8 @@
 """
-Tests for generic discovery helpers in repom.utility
+Tests for generic discovery helpers in repom._.discovery
 """
 import pytest
-from repom.utility import (
+from repom._.discovery import (
     normalize_paths,
     DiscoveryFailure,
     DiscoveryError,

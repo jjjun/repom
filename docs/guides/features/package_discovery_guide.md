@@ -4,6 +4,8 @@
 
 repom は汎用的なパッケージディスカバリーインフラを提供します。これにより、モデル、ルーター、タスクなど、あらゆる用途でパッケージを安全かつ簡単にインポートできます。
 
+**モジュール**: `repom._.discovery`
+
 ## 基本機能
 
 ### 1. `import_packages()` - 汎用パッケージインポート
@@ -11,7 +13,7 @@ repom は汎用的なパッケージディスカバリーインフラを提供�
 **最もシンプルな使い方:**
 
 ```python
-from repom.utility import import_packages
+from repom._.discovery import import_packages
 
 # 単一パッケージ
 failures = import_packages("myapp.routes")
@@ -41,7 +43,7 @@ failures = import_packages(
 **エラー時に例外を発生:**
 
 ```python
-from repom.utility import DiscoveryError
+from repom._.discovery import DiscoveryError
 
 try:
     import_packages(
@@ -59,7 +61,7 @@ except DiscoveryError as e:
 ### 1. ルーターローダー（fast-domain）
 
 ```python
-from repom.utility import import_packages, normalize_paths
+from repom._.discovery import import_packages, normalize_paths
 
 class FastDomainConfig:
     router_paths: str = "myapp.routes,myapp.api"
@@ -82,7 +84,7 @@ class FastDomainConfig:
 ### 2. タスクローダー
 
 ```python
-from repom.utility import import_packages, DiscoveryFailure, DiscoveryError
+from repom._.discovery import import_packages, DiscoveryFailure, DiscoveryError
 
 def load_tasks(task_paths: str | list[str]) -> list[DiscoveryFailure]:
     """タスクパッケージをインポート"""
@@ -107,7 +109,7 @@ failures = load_tasks("myapp.tasks.daily,myapp.tasks.hourly")
 ### 3. プラグインローダー
 
 ```python
-from repom.utility import import_packages, DiscoveryError
+from repom._.discovery import import_packages, DiscoveryError
 
 class PluginManager:
     def load_plugins(self, plugin_paths: list[str]):
@@ -181,7 +183,7 @@ auto_import_models_from_list(['myapp.models', 'shared.models'])
 repom の汎用ヘルパーは組み合わせて使えます：
 
 ```python
-from repom.utility import (
+from repom._.discovery import (
     normalize_paths,
     validate_package_security,
     import_packages,
