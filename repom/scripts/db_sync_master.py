@@ -19,7 +19,7 @@ from typing import Generator, Tuple, Type, List, Dict, Any
 
 from repom.utility import load_models
 from repom.config import config
-from repom.database import get_db_transaction
+from repom.database import get_standalone_sync_transaction
 from repom import BaseRepository
 
 
@@ -127,7 +127,7 @@ def main():
 
     try:
         # トランザクション内で全ファイルを処理
-        with get_db_transaction() as session:
+        with get_standalone_sync_transaction() as session:
             total_count = 0
             file_count = 0
 

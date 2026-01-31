@@ -5,7 +5,7 @@ Sample モデルのマスターデータ
 データベースに同期（Upsert）されます。
 """
 
-from repom.models.sample import SampleModel
+from repom.examples.models.sample import SampleModel
 
 # どのモデルクラスに対するマスターデータかを指定
 MODEL_CLASS = SampleModel
