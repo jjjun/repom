@@ -121,11 +121,7 @@ def load_models(context: Optional[str] = None) -> None:
             post_import_hook=configure_mappers
         )
     else:
-        # デフォルト動作（後方互換性）
-        try:
-            from repom.examples import models  # noqa: F401  # pylint: disable=unused-import
-        except ImportError:
-            logger.warning(f"{context_prefix}No model locations configured and repom.examples.models not found.")
+        logger.info(f"{context_prefix}No model locations configured. Skipping model import.")
 
     # Log loaded models
     from repom.models.base_model import Base

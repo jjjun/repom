@@ -341,15 +341,15 @@ def load_models(context: Optional[str] = None) -> None:
             post_import_hook=configure_mappers  # 循環参照対策
         )
     else:
-        # 後方互換性: デフォルト動作（repom.examples.models を直接インポート）
-        from repom.examples import models  # noqa: F401
+        # 何もインポートしない（明示的な設定が必要）
+        logger.info("No model locations configured. Skipping model import.")
 ```
 
-### 後方互換性
+### 明示的な設定が必要
 
-`config.model_locations` が設定されていない場合、従来の動作（`from repom import models`）にフォールバックします。
+`config.model_locations` の設定は**必須**です。設定されていない場合、モデルはインポートされません。
 
-**既存プロジェクトへの影響**: なし（設定を変更しない限り、従来通りの動作）
+**理由**: 暗黙的なデフォルト動作を避け、意図しないモデルのインポートを防ぐため。
 
 ---
 
@@ -474,7 +474,7 @@ config.model_import_strict = True  # fail_on_error=True に設定される
 
 1. **セキュリティ第一**: `model_locations` を設定する場合、必ず `allowed_package_prefixes` も設定する
 2. **デフォルト値を変更しない**: `allowed_package_prefixes` のデフォルトは `{'repom.'}` のまま維持
-3. **後方互換性を維持**: `config.model_locations` が `None` の場合、従来の動作を保証
+3. **明示的な設定を推奨**: `config.model_locations` は必須、デフォルト動作に依存しない
 4. **エラーメッセージの明確化**: セキュリティエラーは `ValueError` で、許可リストを表示
 
 ### テストコード生成時のポイント
