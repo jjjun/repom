@@ -27,7 +27,6 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
-| #024 | 汎用パッケージディスカバリーインフラの実装 | 高 | 🔴 未着手 | [active/024_generic_package_discovery_infrastructure.md](active/024_generic_package_discovery_infrastructure.md) |
 | #023 | テストの独立性と隔離性の改善 | 中 | 🟡 調査・設計段階 | [active/023_test_independence_improvements.md](active/023_test_independence_improvements.md) |
 | #022 | isolated_mapper_registry の設計改善 | 低 | 📝 調査待機中 | [active/022_isolated_mapper_registry_improvement.md](active/022_isolated_mapper_registry_improvement.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
@@ -40,6 +39,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #025 | 汎用パッケージディスカバリーインフラの実装 | 2026-01-31 | repom._.discovery実装、フレームワーク非依存、post_import_hookパターン、discovery_guide.md作成、573テスト全パス | [completed/025_generic_package_discovery_infrastructure.md](completed/025_generic_package_discovery_infrastructure.md) |
 | #021 | テスト間のマッパークリア干渉問題 | 2026-01-28 | テスト関数内ローカルモデル再定義、clear_mappers()影響回避、順序依存テスト全パス | [completed/021_test_mapper_clear_interference.md](completed/021_test_mapper_clear_interference.md) |
 | #020 | 循環参照警告の解決（マッパー遅延初期化） | 2026-01-28 | auto_import_models_from_list()にconfigure_mappers()遅延実装、循環参照解決、518テスト全パス | [completed/020_circular_import_mapper_configuration.md](completed/020_circular_import_mapper_configuration.md) |
 | #019 | テストのフィクスチャ化によるコード品質向上 | 2025-12-28 | 3ファイルリファクタリング、181行削減、31テスト全パス、0.33秒 | [completed/019_refactor_tests_to_use_fixtures.md](completed/019_refactor_tests_to_use_fixtures.md) |
