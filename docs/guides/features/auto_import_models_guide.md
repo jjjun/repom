@@ -1,14 +1,17 @@
-﻿# auto_import_models ガイド
+﻿# SQLAlchemy モデル自動インポートガイド
 
 ## 概要
 
-`auto_import_models` は、SQLAlchemy モデルを自動的にインポートし、Alembic マイグレーションやデータベース作成時に `Base.metadata` に登録するためのユーティリティです。
+repom は **汎用パッケージディスカバリーインフラ** ([discovery_guide.md](discovery_guide.md)) を使用して、SQLAlchemy モデルを自動的にインポートし、Alembic マイグレーションやデータベース作成時に `Base.metadata` に登録します。
 
 **主な機能**:
 - 指定ディレクトリまたはパッケージから Python ファイルを再帰的に検索
 - SQLAlchemy モデルクラスを動的にインポート
 - 除外ディレクトリの設定によるフィルタリング
 - **セキュリティ検証**: 許可されたパッケージのみインポート可能
+- **循環参照対応**: `post_import_hook` で `configure_mappers()` を実行
+
+> **Note**: このガイドは SQLAlchemy 統合に特化しています。汎用的なパッケージディスカバリーについては [discovery_guide.md](discovery_guide.md) を参照してください。
 
 ---
 
@@ -42,29 +45,35 @@ auto_import_models(
 - アンダースコアで始まるファイル（`__init__.py`、`_private.py` など）をスキップ
 - ファイルをアルファベット順にソートして一貫したインポート順序を保証
 - `importlib.import_module()` でモジュールをインポート
-- インポートエラーは警告として出力し、処理を継続
+- インポートエラーは `DiscoveryFailure` として返却（`fail_on_error=False` の場合）
 
 ---
 
-### 2. `auto_import_models_by_package(package_name, excluded_dirs=None, allowed_prefixes=None)`
+### 2. `import_package_directory(package_name, excluded_dirs=None, allowed_prefixes=None, fail_on_error=False)`
 
-**目的**: パッケージ名からモデルをインポート（セキュリティ検証付き）
+**目的**: パッケージ名からディレクトリを自動検出してインポート（セキュリティ検証付き）
 
 **パラメータ**:
 - `package_name` (str): インポートするパッケージ名（例: `myapp.models`）
 - `excluded_dirs` (Optional[Set[str]]): 除外するディレクトリ名のセット
 - `allowed_prefixes` (Optional[Set[str]]): 許可するパッケージプレフィックスのセット
+- `fail_on_error` (bool): エラー時に例外を送出するか（デフォルト: False）
+
+**戻り値**: `List[DiscoveryFailure]` - 失敗したインポートのリスト
 
 **使用例**:
 ```python
-from repom.utility import auto_import_models_by_package
+from repom.utility import import_package_directory
 
 # セキュリティ検証あり
-auto_import_models_by_package(
+failures = import_package_directory(
     'myapp.models',
-    excluded_dirs={'tests'},
+    excluded_dirs={'tests', 'base', 'mixin'},
     allowed_prefixes={'myapp.', 'repom.'}
 )
+
+if failures:
+    print(f"Failed to import {len(failures)} modules")
 ```
 
 **セキュリティ動作**:
@@ -75,7 +84,7 @@ auto_import_models_by_package(
 **エラー例**:
 ```python
 # 許可されていないパッケージをインポートしようとした場合
-auto_import_models_by_package(
+import_package_directory(
     'untrusted_package.models',
     allowed_prefixes={'myapp.', 'repom.'}
 )
@@ -84,49 +93,65 @@ auto_import_models_by_package(
 
 ---
 
-### 3. `auto_import_models_from_list(package_names, excluded_dirs=None, allowed_prefixes=None, fail_on_error=False)`
+### 3. `import_from_packages(package_names, excluded_dirs=None, allowed_prefixes=None, fail_on_error=False, post_import_hook=None)`
 
-**目的**: 複数パッケージをバッチインポート
+**目的**: 複数パッケージをバッチインポート + インポート完了後のフック実行
 
 **パラメータ**:
-- `package_names` (List[str]): インポートするパッケージ名のリスト
+- `package_names` (str | List[str]): インポートするパッケージ名（カンマ区切り文字列またはリスト）
 - `excluded_dirs` (Optional[Set[str]]): 除外するディレクトリ名
 - `allowed_prefixes` (Optional[Set[str]]): 許可するパッケージプレフィックス
 - `fail_on_error` (bool): エラー時に例外を送出するか（デフォルト: False）
+- `post_import_hook` (Optional[Callable]): すべてのインポート完了後に実行する関数
+
+**戻り値**: `List[DiscoveryFailure]` - 失敗したインポートのリスト
 
 **使用例**:
 ```python
-from repom.utility import auto_import_models_from_list
+from repom.utility import import_from_packages
+from sqlalchemy.orm import configure_mappers
 
-# 複数パッケージをインポート
-auto_import_models_from_list(
+# 複数パッケージをインポート + マッパー初期化
+failures = import_from_packages(
     package_names=['myapp.models', 'myapp.modules.user', 'repom.models'],
-    excluded_dirs={'tests', 'migrations'},
-    allowed_prefixes={'myapp.', 'repom.'}
+    excluded_dirs={'tests', 'migrations', 'base', 'mixin'},
+    allowed_prefixes={'myapp.', 'repom.'},
+    post_import_hook=configure_mappers  # 循環参照対策
 )
+
+if failures:
+    for f in failures:
+        print(f"Warning: {f.target} - {f.message}")
 ```
 
 **エラーハンドリング**:
-- `fail_on_error=False`: エラーをログに記録し、処理を継続
-- `fail_on_error=True`: 最初のエラーで例外を送出
+- `fail_on_error=False`: エラーを `DiscoveryFailure` として返却し、処理を継続
+- `fail_on_error=True`: 最初のエラーで `DiscoveryError` を送出
 
 **循環参照の解決** (Issue #020):
 
-この関数は循環参照を持つモデルを正しく処理するため、**2段階のインポート戦略**を採用しています：
+この関数は `post_import_hook` パラメータにより、循環参照を持つモデルを正しく処理します：
 
 ```python
-# Step 1: すべてのパッケージをインポート（マッパー初期化は遅延）
-for package_name in package_names:
-    auto_import_models_by_package(...)  # モデルクラスのみ定義
+from sqlalchemy.orm import configure_mappers
 
-# Step 2: すべてのインポート完了後にマッパーを初期化
-configure_mappers()  # すべてのモデルクラスが利用可能
+# すべてのパッケージをインポート後、マッパーを初期化
+import_from_packages(
+    package_names=['myapp.models', 'shared.models'],
+    post_import_hook=configure_mappers  # すべてのインポート完了後に実行
+)
 ```
+
+**動作フロー**:
+1. すべてのパッケージを順次インポート（モデルクラスのみ定義）
+2. すべてのインポート完了後に `post_import_hook()` を実行
+3. `configure_mappers()` がすべてのモデルクラスを認識した状態でマッパー初期化
 
 **利点**:
 - ✅ 循環参照エラーを透過的に解決（ユーザーコードの変更不要）
 - ✅ マッパー初期化時にすべてのモデルクラスが利用可能
 - ✅ `relationship()` の文字列参照が正しく解決される
+- ✅ フックパターンで拡張可能（他のフレームワークでも同様に使用可能）
 
 **例**: `ModelA` が `ModelB` を参照し、`ModelB` が `ModelA` を参照する場合でも、両方のクラスがインポートされた後にマッパー初期化されるため、エラーが発生しません。
 
@@ -303,19 +328,21 @@ config.model_locations = ['untrusted_package.models']  # ValueError
 def load_models(context: Optional[str] = None) -> None:
     """モデルを読み込む（RepomConfig の設定に基づく）"""
     from repom.config import config
-    from repom.utility import auto_import_models_from_list
+    from repom.utility import import_from_packages
+    from sqlalchemy.orm import configure_mappers
 
     if config.model_locations:
-        # 新機能: 複数パッケージからインポート
-        auto_import_models_from_list(
+        # 複数パッケージからインポート + マッパー初期化
+        import_from_packages(
             package_names=config.model_locations,
             excluded_dirs=config.model_excluded_dirs,
             allowed_prefixes=config.allowed_package_prefixes,
-            fail_on_error=config.model_import_strict
+            fail_on_error=config.model_import_strict,
+            post_import_hook=configure_mappers  # 循環参照対策
         )
     else:
-        # 後方互換性: 従来の動作（repom.models を直接インポート）
-        from repom import models
+        # 後方互換性: デフォルト動作（repom.examples.models を直接インポート）
+        from repom.examples import models  # noqa: F401
 ```
 
 ### 後方互換性
@@ -429,6 +456,16 @@ config.allowed_package_prefixes = {'myapp.', 'repom.', 'newpackage.'}
 3. SQLAlchemy の `Base` を継承しているか確認
 4. デバッグ: `load_models()` を直接呼び出してエラーを確認
 
+### インポート失敗が通知されない
+
+**原因**: `fail_on_error=False`（デフォルト）の場合、エラーは `DiscoveryFailure` として返却されるだけ
+
+**解決方法**:
+```python
+# 開発環境では厳格モードを有効化
+config.model_import_strict = True  # fail_on_error=True に設定される
+```
+
 ---
 
 ## AI エージェント向けノート
@@ -444,36 +481,38 @@ config.allowed_package_prefixes = {'myapp.', 'repom.', 'newpackage.'}
 
 ```python
 # テスト用の設定
-def test_auto_import_models():
-    from repom.utility import auto_import_models_by_package
+def test_import_package_directory():
+    from repom.utility import import_package_directory
     
     # セキュリティ検証のテスト
     with pytest.raises(ValueError, match="Security"):
-        auto_import_models_by_package(
+        import_package_directory(
             'untrusted.models',
             allowed_prefixes={'trusted.'}
         )
     
     # 正常なインポートのテスト
-    auto_import_models_by_package(
+    failures = import_package_directory(
         'trusted.models',
         allowed_prefixes={'trusted.'}
     )
+    assert len(failures) == 0
 ```
 
 ### ドキュメント更新のガイドライン
 
-このガイドは `auto_import_models` 関連の機能修正の度に更新します:
+このガイドは SQLAlchemy モデル自動インポート機能の修正の度に更新します:
 
-- 新しい関数が追加された場合: 「利用可能な関数」セクションに追加
+- 汎用インフラの変更: [discovery_guide.md](discovery_guide.md) を更新（このファイルは SQLAlchemy 統合の説明のみ）
+- 新しい設定オプションが追加された場合: 「設定プロパティ」セクションに追加
 - セキュリティ機能が変更された場合: 「セキュリティに関する重要事項」セクションを更新
-- 設定オプションが追加された場合: 「設定プロパティ」セクションに追加
 - バグ修正の場合: 「トラブルシューティング」セクションに事例を追加
 
 ---
 
 ## 関連ドキュメント
 
+- **[discovery_guide.md](discovery_guide.md)**: 汎用パッケージディスカバリーインフラ（詳細な実装解説）
 - **[repository_and_utilities_guide.md](../repository/repository_and_utilities_guide.md)**: `BaseRepository` との統合
 - **[AGENTS.md](../../../AGENTS.md)**: プロジェクト構造とコマンドリファレンス
 - **[Issue #020](../../issue/completed/020_circular_import_mapper_configuration.md)**: 循環参照警告の解決（マッパー遅延初期化）
