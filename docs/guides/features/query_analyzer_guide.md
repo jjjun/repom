@@ -1,43 +1,46 @@
-# QueryAnalyzer ガイチE- N+1問題検�EチE�Eル
+# QueryAnalyzer ガイド - N+1問題検出ツール
 
-## 概要E
+## 概要
 
-`QueryAnalyzer` は、SQLAlchemy クエリを監視して N+1 問題を検�EするためのチE�Eルです。実際のクエリログを収雁E��、実行されたクエリの回数と種類を刁E��します、E
+`QueryAnalyzer` は、SQLAlchemy クエリを監視して N+1 問題を検出するための診断ツールです。実際のクエリログを収集し、実行されたクエリの回数と種類を分析します。
 
-## 主な機�E
+## 主な機能
 
-- ✁E**クエリキャプチャ**: SQLAlchemy が実行する�Eてのクエリを記録
-- ✁E**N+1 問題検�E**: 繰り返し実行されるクエリパターンを検�E
-- ✁E**統計レポ�EチE*: クエリタイプごとの実行回数を集訁E
-- ✁E**詳細ログ**: verbose モードで全クエリの冁E��を表示
-- ✁E**モチE��確誁E*: 斁E���EからモチE��クラスを取得する�Eルパ�E関数
+- ✅ **クエリキャプチャ**: SQLAlchemy が実行する全てのクエリを記録
+- ✅ **N+1 問題検出**: 繰り返し実行されるクエリパターンを検出
+- ✅ **統計レポート**: クエリタイプごとの実行回数を集計
+- ✅ **詳細ログ**: verbose モードで全クエリの内容を表示
+- ✅ **モデル確認**: 文字列からモデルクラスを取得するヘルパー関数
 
-## 基本皁E��使ぁE��
+---
 
-### 1. インポ�EチE
+## 基本的な使い方
+
+### 1. インポート
 
 ```python
 from repom.diagnostics.query_analyzer import QueryAnalyzer
-from repom.database import get_db_session
+from repom.database import _db_manager
 from myapp.models import User
 ```
 
-### 2. クエリの監要E
+### 2. クエリの監視
 
 ```python
 analyzer = QueryAnalyzer()
 
 with analyzer.capture():
-    # ここで実行されるクエリが記録されめE
-    users = session.query(User).all()
-    for user in users:
-        print(user.posts)  # N+1 問題が発生する可能性
+    # ここで実行されるクエリが記録される
+    with _db_manager.get_sync_session() as session:
+        users = session.query(User).all()
+        for user in users:
+            print(user.posts)  # N+1 問題が発生する可能性
 
-# 刁E��結果を表示
+# 分析結果を表示
 analyzer.print_report()
 ```
 
-### 3. レポ�Eト�E出力侁E
+### 3. レポート出力例
 
 ```
 ======================================================================
@@ -47,55 +50,60 @@ Query Analysis Report
 Total Queries: 11
 
 Query Type Breakdown:
-  BEGIN: 1
-  SELECT: 10
+  SELECT: 11
 
-⚠�E�E Potential N+1 Problem Detected!
+⚠️  Potential N+1 Problem Detected!
    Found 1 repeated query patterns
 
 Repeated Query Patterns:
 
   Pattern (repeated 10 times):
-    SELECT test_posts.id, test_posts.user_id, test_posts.title FROM test_posts WHERE test_posts.user_id = ?
+    SELECT posts.id, posts.user_id, posts.title FROM posts WHERE posts.user_id = ?
 
 ======================================================================
 ```
 
-## 実践侁E
+---
 
-### 侁E: N+1 問題�E検�E
+## 実践例
+
+### 例1: N+1 問題の検出
 
 ```python
 from repom.diagnostics.query_analyzer import QueryAnalyzer
 from repom import BaseRepository
-from repom.database import get_db_session
+from repom.database import _db_manager
 from myapp.models import Author
 
 analyzer = QueryAnalyzer()
-repo = BaseRepository(Author)
 
 with analyzer.capture():
-    # 全著老E��取征E
-    authors = repo.get_all()
-    
-    # 吁E��老E�E本にアクセス�E�E+1 問題発生！E
-    for author in authors:
-        print(f"{author.name}: {len(author.books)} books")
+    with _db_manager.get_sync_session() as session:
+        repo = BaseRepository(Author, session)
+        
+        # 全著者を取得
+        authors = repo.find()
+        
+        # 各著者の本にアクセス（N+1 問題発生！）
+        for author in authors:
+            print(f"{author.name}: {len(author.books)} books")
 
 analyzer.print_report()
 ```
 
-**出劁E**
+**出力:**
 ```
 Total Queries: 11
 Query Type Breakdown:
   SELECT: 11
 
-⚠�E�E Potential N+1 Problem Detected!
+⚠️  Potential N+1 Problem Detected!
    Found 1 repeated query patterns
 ```
 
-### 侁E: Eager Loading で解決
+---
+
+### 例2: Eager Loading で解決
 
 ```python
 from sqlalchemy.orm import joinedload
@@ -103,25 +111,28 @@ from sqlalchemy.orm import joinedload
 analyzer = QueryAnalyzer()
 
 with analyzer.capture():
-    # joinedload で本も一緒に取征E
-    authors = session.query(Author).options(joinedload(Author.books)).all()
-    
-    for author in authors:
-        print(f"{author.name}: {len(author.books)} books")
+    with _db_manager.get_sync_session() as session:
+        # joinedload で本も一緒に取得
+        authors = session.query(Author).options(joinedload(Author.books)).all()
+        
+        for author in authors:
+            print(f"{author.name}: {len(author.books)} books")
 
 analyzer.print_report()
 ```
 
-**出劁E**
+**出力:**
 ```
 Total Queries: 1
 Query Type Breakdown:
   SELECT: 1
 
-✁ENo obvious N+1 problems detected
+✅ No obvious N+1 problems detected
 ```
 
-### 侁E: BaseRepository の default_options を使ぁE
+---
+
+### 例3: BaseRepository の default_options を使う
 
 ```python
 from repom import BaseRepository
@@ -130,33 +141,38 @@ from sqlalchemy.orm import joinedload
 class AuthorRepository(BaseRepository[Author]):
     def __init__(self, session=None):
         super().__init__(Author, session)
-        # チE��ォルトで books めEeager load
+        # デフォルトで books を eager load
         self.default_options = [joinedload(Author.books)]
 
 analyzer = QueryAnalyzer()
-repo = AuthorRepository()
 
 with analyzer.capture():
-    authors = repo.get_all()
-    for author in authors:
-        print(f"{author.name}: {len(author.books)} books")
+    with _db_manager.get_sync_session() as session:
+        repo = AuthorRepository(session)
+        authors = repo.find()
+        
+        for author in authors:
+            print(f"{author.name}: {len(author.books)} books")
 
-analyzer.print_report()  # N+1 問題なぁE
+analyzer.print_report()  # N+1 問題なし
 ```
 
-### 侁E: 詳細ログの表示
+---
+
+### 例4: 詳細ログの表示
 
 ```python
 analyzer = QueryAnalyzer()
 
 with analyzer.capture():
-    users = session.query(User).limit(3).all()
+    with _db_manager.get_sync_session() as session:
+        users = session.query(User).limit(3).all()
 
-# verbose=True で全クエリの冁E��を表示
+# verbose=True で全クエリの内容を表示
 analyzer.print_report(verbose=True)
 ```
 
-**出劁E**
+**出力:**
 ```
 ======================================================================
 Query Analysis Report
@@ -167,17 +183,70 @@ Total Queries: 1
 Query Type Breakdown:
   SELECT: 1
 
-✁ENo obvious N+1 problems detected
+✅ No obvious N+1 problems detected
 
 ----------------------------------------------------------------------
 All Captured Queries:
 ----------------------------------------------------------------------
 
 1. [SELECT]
-   SELECT users.id, users.name, users.email FROM users  LIMIT ? OFFSET ?
+   SELECT users.id, users.name, users.email FROM users LIMIT ? OFFSET ?
 
 ======================================================================
 ```
+
+---
+
+## ヘルパー関数
+
+### get_model_by_name()
+
+指定した文字列からモデルクラスを取得します。
+
+```python
+from repom.diagnostics.query_analyzer import get_model_by_name
+
+# 文字列からモデルクラスを取得
+User = get_model_by_name('User')
+
+if User:
+    print(f"Found model: {User.__tablename__}")
+else:
+    print("Model not found")
+```
+
+**パラメータ:**
+- `model_name` (str): モデル名（例: 'User', 'Author'）
+
+**戻り値:**
+- モデルクラス、見つからない場合は None
+
+---
+
+### list_all_models()
+
+登録されている全てのモデル名を取得します。
+
+```python
+from repom.diagnostics.query_analyzer import list_all_models
+
+models = list_all_models()
+print(f"Available models: {', '.join(models)}")
+```
+
+**戻り値:**
+- モデル名のリスト（ソート済み）
+
+**使用例:**
+```python
+# 利用可能なモデル一覧を表示
+models = list_all_models()
+print(f"Available models ({len(models)}):")
+for model in models:
+    print(f"  - {model}")
+```
+
+---
 
 ## API リファレンス
 
@@ -189,151 +258,90 @@ class QueryAnalyzer:
 ```
 
 **パラメータ:**
-- `engine` (Optional[Engine]): 監視すめESQLAlchemy エンジン。省略時�EチE��ォルトエンジンを使用
+- `engine` (Optional[Engine]): 監視する SQLAlchemy エンジン。省略時はデフォルトエンジンを使用
 
-### ヘルパ�E関数
+**主要メソッド:**
 
-#### get_model_by_name()
-
-```python
-def get_model_by_name(model_name: str) -> Optional[Type]
-```
-
-持E��した文字�EからモチE��クラスを取得、E
-
-**パラメータ:**
-- `model_name` (str): モチE��名（侁E 'User', 'Author'�E�E
-
-**戻り値:**
-- モチE��クラス、見つからなぁE��合�E None
-
-**使用侁E**
-```python
-from repom.diagnostics.query_analyzer import get_model_by_name
-
-User = get_model_by_name('User')
-if User:
-    print(f"Found model: {User.__tablename__}")
-```
-
-#### list_all_models()
-
-```python
-def list_all_models() -> List[str]
-```
-
-登録されてぁE��全てのモチE��名を取得、E
-
-**戻り値:**
-- モチE��名�Eリスト（ソート済み�E�E
-
-**使用侁E**
-```python
-from repom.diagnostics.query_analyzer import list_all_models
-
-models = list_all_models()
-print(f"Available models: {', '.join(models)}")
-```
-
-#### set_target_model()
-
-```python
-def set_target_model(self, model: Union[str, Type]) -> None
-```
-
-特定�EモチE��をターゲチE��として設定（封E��皁E��機�E拡張用�E�、E
-
-**パラメータ:**
-- `model`: モチE��名（文字�E�E�また�EモチE��クラス
-
-**使用侁E**
-```python
-analyzer = QueryAnalyzer()
-analyzer.set_target_model('User')
-# また�E
-analyzer.set_target_model(User)
-```
-
-### capture() メソチE��
+#### capture()
 
 ```python
 @contextmanager
 def capture(self, model: Optional[Union[str, Type]] = None)
 ```
 
-クエリをキャプチャするコンチE��スト�Eネ�Eジャー、E
+クエリをキャプチャするコンテキストマネージャー。
 
 **パラメータ:**
-- `model` (Optional): ターゲチE��モチE���E�文字�Eまた�Eクラス�E�を持E��可能
+- `model` (Optional): ターゲットモデル（文字列またはクラス）を指定可能（将来の拡張用）
 
-**使用侁E**
+**使用例:**
 ```python
-# モチE��を指定してキャプチャ
-with analyzer.capture(model='User'):
+# 基本的な使い方
+with analyzer.capture():
     users = session.query(User).all()
 
-# また�E
-with analyzer.capture():
+# モデルを指定してキャプチャ（将来の機能拡張用）
+with analyzer.capture(model='User'):
     users = session.query(User).all()
 ```
 
-### print_report() メソチE��
+#### print_report()
 
 ```python
 def print_report(self, verbose: bool = False) -> None
 ```
 
-刁E��結果をコンソールに表示、E
+分析結果をコンソールに表示します。
 
 **パラメータ:**
-- `verbose` (bool): True の場合、�Eクエリの冁E��を表示
+- `verbose` (bool): True の場合、全クエリの内容を表示
 
-### analyze_n_plus_1() メソチE��
+#### analyze_n_plus_1()
 
 ```python
 def analyze_n_plus_1(self) -> dict
 ```
 
-N+1 問題を刁E��して結果を辞書で返す、E
+N+1 問題を分析して結果を辞書で返します。
 
 **戻り値:**
 ```python
 {
     'total_queries': int,        # 総クエリ数
     'select_queries': int,       # SELECT クエリ数
-    'potential_n_plus_1': bool,  # N+1 問題�E可能性
+    'potential_n_plus_1': bool,  # N+1 問題の可能性
     'repeated_queries': dict,    # 繰り返されたクエリパターン
-    'query_stats': dict          # クエリタイプごとの統訁E
+    'query_stats': dict          # クエリタイプごとの統計
 }
 ```
 
-### get_queries() メソチE��
+#### get_queries()
 
 ```python
 def get_queries(self) -> List[dict]
 ```
 
-キャプチャした全クエリを取得、E
+キャプチャした全クエリを取得します。
 
 **戻り値:**
 ```python
 [
     {
-        'statement': str,   # SQL 斁E
-        'type': str,        # クエリタイチE(SELECT, INSERT, など)
+        'statement': str,   # SQL 文
+        'type': str,        # クエリタイプ（SELECT, INSERT, など）
         'parameters': Any   # クエリパラメータ
     },
     ...
 ]
 ```
 
-### get_stats() メソチE��
+#### get_stats()
 
 ```python
 def get_stats(self) -> dict
 ```
 
-クエリ統計を取得、E
+クエリ統計を取得します。
 
 **戻り値:**
 ```python
@@ -345,44 +353,37 @@ def get_stats(self) -> dict
 }
 ```
 
+---
+
 ## 使用シナリオ
 
-### モチE��名から動皁E��刁E��
+### モデル名から動的に分析
 
 ```python
 from repom.diagnostics.query_analyzer import QueryAnalyzer, get_model_by_name
 
-# モチE��名が斁E���Eで与えられた場吁E
+# モデル名が文字列で与えられた場合
 model_name = 'User'
 UserModel = get_model_by_name(model_name)
 
 if UserModel:
     analyzer = QueryAnalyzer()
-    with analyzer.capture(model=model_name):
-        # UserModel を使ったクエリ
-        users = session.query(UserModel).all()
+    
+    with analyzer.capture():
+        with _db_manager.get_sync_session() as session:
+            users = session.query(UserModel).all()
     
     analyzer.print_report()
 else:
     print(f"Model '{model_name}' not found")
 ```
 
-### 利用可能なモチE��一覧を確誁E
+---
+
+### 開発中の確認
 
 ```python
-from repom.diagnostics.query_analyzer import list_all_models
-
-# 全モチE��を表示
-models = list_all_models()
-print(f"Available models ({len(models)}):")
-for model in models:
-    print(f"  - {model}")
-```
-
-### 開発中の確誁E
-
-```python
-# 開発中にコード�E特定部刁E��刁E��
+# 開発中にコードの特定部分を分析
 analyzer = QueryAnalyzer()
 
 with analyzer.capture():
@@ -391,11 +392,13 @@ with analyzer.capture():
 analyzer.print_report()
 ```
 
-### チE��トでの使用
+---
+
+### テストでの使用
 
 ```python
 def test_no_n_plus_1_in_user_list(db_test):
-    """ユーザー一覧取得で N+1 問題が発生しなぁE��とを確誁E""
+    """ユーザー一覧取得で N+1 問題が発生しないことを確認"""
     analyzer = QueryAnalyzer(engine=db_test.bind.engine)
     
     with analyzer.capture():
@@ -403,29 +406,34 @@ def test_no_n_plus_1_in_user_list(db_test):
     
     analysis = analyzer.analyze_n_plus_1()
     
-    # N+1 問題がなぁE��とをアサーチE
+    # N+1 問題がないことをアサート
     assert analysis['potential_n_plus_1'] is False
-    # クエリ数が期征E��以下であることを確誁E
+    # クエリ数が期待値以下であることを確認
     assert analysis['total_queries'] <= 3
 ```
 
+---
+
 ### プロジェクトでの使用
 
-外部プロジェクト（侁E mine-py�E�から利用する場吁E
+外部プロジェクト（例: mine-py）から利用する場合:
 
 ```python
 # mine-py/src/mine_py/debug.py
 from repom.diagnostics.query_analyzer import QueryAnalyzer
+from repom.database import _db_manager
 from mine_py.repositories import UserRepository
 
 def analyze_user_query():
     analyzer = QueryAnalyzer()
-    repo = UserRepository()
     
     with analyzer.capture():
-        users = repo.get_all()
-        for user in users:
-            print(f"{user.name}: {len(user.posts)} posts")
+        with _db_manager.get_sync_session() as session:
+            repo = UserRepository(session)
+            users = repo.find()
+            
+            for user in users:
+                print(f"{user.name}: {len(user.posts)} posts")
     
     analyzer.print_report(verbose=True)
 
@@ -433,25 +441,56 @@ if __name__ == '__main__':
     analyze_user_query()
 ```
 
-## ベスト�EラクチE��ス
+---
 
-### 1. 開発中の継続的なチェチE��
+## 実装例: check_sample_queries.py
 
-N+1 問題�E気づかなぁE��ちに発生しめE��ぁE��め、新しい機�Eを実裁E��るたびにチェチE��することを推奨します、E
+repom には `check_sample_queries.py` というサンプルスクリプトが含まれています。
 
 ```python
-# 新機�E実裁E��E
+from repom.scripts.check_sample_queries import run_sample_check
+
+# デフォルト（SampleModel）で実行
+run_sample_check()
+
+# 別のモデルで実行
+run_sample_check(model_name='User')
+```
+
+**機能:**
+- モデルから適切なサンプルフィールドを自動検出
+- サンプルデータを自動作成（データがない場合）
+- QueryAnalyzer でクエリを分析
+- レポートを出力
+
+---
+
+## ベストプラクティス
+
+### 1. 開発中の継続的なチェック
+
+N+1 問題に気づかないうちに発生してしまうため、新しい機能を実装するたびにチェックすることを推奨します。
+
+```python
+# 新機能実装後
 analyzer = QueryAnalyzer()
+
 with analyzer.capture():
     test_new_feature()
+
 analyzer.print_report()
 ```
 
+---
+
 ### 2. BaseRepository の default_options を活用
 
-頻繁にアクセスするリレーションは、リポジトリで事前定義しておきます、E
+頻繁にアクセスするリレーションは、リポジトリで事前定義しておきます。
 
 ```python
+from repom import BaseRepository
+from sqlalchemy.orm import joinedload
+
 class UserRepository(BaseRepository[User]):
     def __init__(self, session=None):
         super().__init__(User, session)
@@ -461,9 +500,13 @@ class UserRepository(BaseRepository[User]):
         ]
 ```
 
-### 3. チE��トで N+1 を防止
+**詳細**: [Repository Advanced Guide](../repository/repository_advanced_guide.md)
 
-重要なエンド�Eイントやクエリには、N+1 問題が発生しなぁE��とを保証するチE��トを追加します、E
+---
+
+### 3. テストで N+1 を防止
+
+重要なエンドポイントやクエリには、N+1 問題が発生しないことを保証するテストを追加します。
 
 ```python
 def test_api_endpoint_performance(client, db_test):
@@ -474,41 +517,61 @@ def test_api_endpoint_performance(client, db_test):
     
     assert response.status_code == 200
     analysis = analyzer.analyze_n_plus_1()
-    assert analysis['total_queries'] <= 5  # 閾値を設宁E
+    assert analysis['total_queries'] <= 5  # 閾値を設定
 ```
 
-## 制限事頁E��注意点
+---
 
-### 1. 検�Eの限界
+## 制限事項と注意点
 
-`QueryAnalyzer` は繰り返しパターンを検�Eしますが、�Eての N+1 問題を検�Eできるわけではありません。以下�Eような場合�E人間による判断が忁E��でぁE
+### 1. 検出の限界
 
-- 意図皁E��褁E��クエリを実行してぁE��場吁E
-- パラメータが異なる正当な褁E��クエリ
-- 褁E��なクエリ最適化が忁E��な場吁E
+`QueryAnalyzer` は繰り返しパターンを検出しますが、全ての N+1 問題を検出できるわけではありません。以下のような場合は人間による判断が必要です:
+
+- 意図的に複数クエリを実行している場合
+- パラメータが異なる正当な複数クエリ
+- 複雑なクエリ最適化が必要な場合
+
+---
 
 ### 2. パフォーマンス
 
-`QueryAnalyzer` はイベントリスナ�Eを使ってクエリを記録するため、わずかなオーバ�Eヘッドがあります。本番環墁E��は使用しなぁE��ください、E
+`QueryAnalyzer` はイベントリスナーを使ってクエリを記録するため、わずかなオーバーヘッドがあります。**本番環境では使用しないでください**。
 
-### 3. チE��ト環墁E��の使用
+---
 
-チE��トで使用する場合、`db_test` フィクスチャのエンジンを�E示皁E��渡す忁E��がありまぁE
+### 3. テスト環境での使用
+
+テストで使用する場合、`db_test` フィクスチャのエンジンを明示的に渡す必要があります:
 
 ```python
-# ✁E正しい
+# ✅ 正しい
 analyzer = QueryAnalyzer(engine=db_test.bind.engine)
 
-# ❁E誤り（デフォルトエンジンを使ってしまぁE��E
+# ❌ 誤り（デフォルトエンジンを使ってしまう）
 analyzer = QueryAnalyzer()
 ```
 
-## まとめE
+---
 
-`QueryAnalyzer` は N+1 問題を早期に発見し、パフォーマンス問題を未然に防ぐため�E強力なチE�Eルです。開発プロセスに絁E��込むことで、データベ�Eスクエリの最適化を継続的に行うことができます、E
+## まとめ
 
-## 関連ドキュメンチE
+`QueryAnalyzer` は N+1 問題を早期に発見し、パフォーマンス問題を未然に防ぐための強力なツールです。開発プロセスに組み込むことで、データベースクエリの最適化を継続的に行うことができます。
 
-- [BaseRepository Guide](../repository/base_repository_guide.md) - リポジトリの基本皁E��使ぁE��
-- [Repository Advanced Guide](../repository/repository_advanced_guide.md) - Eager Loading の詳細
-- [Testing Guide](../testing/testing_guide.md) - チE��トでの使用方況E
+**推奨される使い方:**
+1. 開発中に定期的にチェック
+2. `default_options` で eager loading を設定
+3. テストで N+1 を自動検出
+4. `verbose` モードで詳細を確認
+
+---
+
+## 関連ドキュメント
+
+- **[BaseRepository Guide](../repository/base_repository_guide.md)**: リポジトリの基本的な使い方
+- **[Repository Advanced Guide](../repository/repository_advanced_guide.md)**: Eager Loading の詳細
+- **[Testing Guide](../testing/testing_guide.md)**: テストでの使用方法
+
+---
+
+**最終更新**: 2026-01-31
