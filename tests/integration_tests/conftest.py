@@ -13,11 +13,11 @@ def setup_postgres_tables():
     """
     PostgreSQL 統合テスト用のテーブルセットアップ
     
-    DB_TYPE=postgres の場合のみ実行される。
+    config.db_type='postgres' の場合のみ実行される。
     """
-    db_type = os.getenv('DB_TYPE', 'sqlite')
+    from repom.config import config
     
-    if db_type != 'postgres':
+    if config.db_type != 'postgres':
         # PostgreSQL 以外の場合は何もしない（親の conftest.py の fixture が実行される）
         return
     
@@ -36,3 +36,4 @@ def setup_postgres_tables():
     
     # テーブルをクリーンアップ（オプション）
     # Base.metadata.drop_all(bind=engine)
+

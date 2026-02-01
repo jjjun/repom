@@ -85,23 +85,25 @@ class RepomConfig(Config):
     @property
     def db_type(self) -> str:
         """データベースタイプ（sqlite/postgres）
-        
+
         デフォルト: sqlite
-        環境変数: DB_TYPE
-        
+
         使用例:
-            # 環境変数で指定
-            DB_TYPE=postgres poetry run alembic upgrade head
-            
+            # CONFIG_HOOK で指定
+            def get_repom_config():
+                config = RepomConfig()
+                config.db_type = 'postgres'
+                return config
+
             # コードで指定
+            from repom.config import config
             config.db_type = 'postgres'
         """
         if self._db_type is not None:
             return self._db_type
-        
-        import os
-        return os.getenv('DB_TYPE', 'sqlite')
-    
+
+        return 'sqlite'
+
     @db_type.setter
     def db_type(self, value: str):
         if value not in ('sqlite', 'postgres'):
@@ -111,89 +113,79 @@ class RepomConfig(Config):
     @property
     def postgres_host(self) -> str:
         """PostgreSQL ホスト名
-        
+
         デフォルト: localhost
-        環境変数: POSTGRES_HOST
         """
-        import os
-        return os.getenv('POSTGRES_HOST', self._postgres_host)
-    
+        return self._postgres_host
+
     @postgres_host.setter
     def postgres_host(self, value: str):
         self._postgres_host = value
-    
+
     @property
     def postgres_port(self) -> int:
         """PostgreSQL ポート番号
-        
+
         デフォルト: 5432
-        環境変数: POSTGRES_PORT
         """
-        import os
-        return int(os.getenv('POSTGRES_PORT', self._postgres_port))
-    
+        return self._postgres_port
+
     @postgres_port.setter
     def postgres_port(self, value: int):
         self._postgres_port = value
-    
+
     @property
     def postgres_user(self) -> str:
         """PostgreSQL ユーザー名
-        
+
         デフォルト: repom
-        環境変数: POSTGRES_USER
         """
-        import os
-        return os.getenv('POSTGRES_USER', self._postgres_user)
-    
+        return self._postgres_user
+
     @postgres_user.setter
     def postgres_user(self, value: str):
         self._postgres_user = value
-    
+
     @property
     def postgres_password(self) -> str:
         """PostgreSQL パスワード
-        
+
         デフォルト: repom_dev
-        環境変数: POSTGRES_PASSWORD
         """
-        import os
-        return os.getenv('POSTGRES_PASSWORD', self._postgres_password)
-    
+        return self._postgres_password
+
     @postgres_password.setter
     def postgres_password(self, value: str):
         self._postgres_password = value
-    
+
     @property
     def postgres_db(self) -> str:
         """PostgreSQL データベース名（環境別）
-        
+
         デフォルト: repom
-        環境変数: POSTGRES_DB（ベース名）
-        
+
         exec_env により自動的にサフィックスが追加されます:
         - dev: {base}_dev
         - test: {base}_test
         - prod: {base}
-        
+
         使用例:
-            # デフォルト（POSTGRES_DB 未設定時）
+            # デフォルト
             dev  => repom_dev
             test => repom_test
             prod => repom
-            
-            # POSTGRES_DB=mine_py の場合
-            dev  => mine_py_dev
-            test => mine_py_test
-            prod => mine_py
+
+            # CONFIG_HOOK でベース名を変更
+            config.postgres_db = 'mine_py'  # サフィックスは自動追加されない
+            # または明示的に設定
+            config._postgres_db = None  # リセット（サフィックス自動追加）
         """
         if self._postgres_db is not None:
             return self._postgres_db
-        
-        import os
-        base = os.getenv('POSTGRES_DB', 'repom')
+
+        base = 'repom'
         env = self.exec_env
-        
+
         if env == 'test':
             return f"{base}_test"
         elif env == 'dev':
@@ -202,7 +194,7 @@ class RepomConfig(Config):
             return base
         else:
             return f"{base}_dev"
-    
+
     @postgres_db.setter
     def postgres_db(self, value: str):
         self._postgres_db = value
@@ -216,12 +208,12 @@ class RepomConfig(Config):
     def db_url(self) -> Optional[str]:
         """データベースURL（SQLite/PostgreSQL 自動切り替え）
 
-        DB_TYPE 環境変数または db_type プロパティにより自動的に切り替わります:
-        
-        PostgreSQL (DB_TYPE=postgres):
+        db_type プロパティにより自動的に切り替わります:
+
+        PostgreSQL (db_type='postgres'):
             postgresql+psycopg://user:password@host:port/database
-        
-        SQLite (DB_TYPE=sqlite, デフォルト):
+
+        SQLite (db_type='sqlite', デフォルト):
             sqlite:///path/to/db.sqlite3
             または
             sqlite:///:memory: （テスト環境）
@@ -234,24 +226,27 @@ class RepomConfig(Config):
         - No "database is locked" errors
         - Automatic cleanup after tests
         - Better for sync/async mixed environments
-        
+
         使用例:
-            # PostgreSQL を使用
-            DB_TYPE=postgres poetry run alembic upgrade head
-            
+            # CONFIG_HOOK で PostgreSQL を使用
+            def get_repom_config():
+                config = RepomConfig()
+                config.db_type = 'postgres'
+                return config
+
             # SQLite を使用（デフォルト）
-            poetry run alembic upgrade head
+            # 何も設定しない場合は自動的に SQLite
         """
         if self._db_url is not None:
             return self._db_url
-        
+
         # PostgreSQL
         if self.db_type == 'postgres':
             return (
                 f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
                 f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
             )
-        
+
         # SQLite: テスト環境では in-memory をデフォルトに
         if self.exec_env == 'test' and self.use_in_memory_db_for_tests:
             return 'sqlite:///:memory:'
@@ -450,7 +445,7 @@ class RepomConfig(Config):
                 'pool_recycle': 3600,
                 'pool_pre_ping': True,
             }
-        
+
         # SQLite :memory: DB の場合は、StaticPool を使用して単一接続を全スレッドで共有
         is_memory_db = self.db_url and ':memory:' in self.db_url
 

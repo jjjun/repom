@@ -4,14 +4,10 @@ PostgreSQL config support tests
 このテストファイルは RepomConfig のプロパティのみをテストし、
 実際のデータベース接続は行いません。
 
-DB_TYPE 環境変数をクリアして、SQLite として動作させます。
+config.db_type をデフォルトの 'sqlite' のままにして実行します。
 """
 import pytest
 import os
-
-#  DB_TYPE 環境変数をクリア（conftest.py の setup 前に実行）
-if 'DB_TYPE' in os.environ:
-    del os.environ['DB_TYPE']
 
 
 class TestPostgresDBType:

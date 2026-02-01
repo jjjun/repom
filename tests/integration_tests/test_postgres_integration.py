@@ -6,10 +6,14 @@ from sqlalchemy import text
 # conftest.py が EXEC_ENV='test' を設定するため、PostgreSQL 統合テスト用に 'dev' に変更
 os.environ['EXEC_ENV'] = 'dev'
 
+# PostgreSQL 統合テスト用に db_type を設定
+from repom.config import config
+config.db_type = 'postgres'
+
 
 @pytest.mark.skipif(
-    os.getenv('DB_TYPE') != 'postgres',
-    reason="PostgreSQL integration tests require DB_TYPE=postgres and running PostgreSQL container"
+    config.db_type != 'postgres',
+    reason="PostgreSQL integration tests require config.db_type='postgres' and running PostgreSQL container"
 )
 class TestPostgreSQLIntegration:
     """PostgreSQL への実際の接続テスト"""
@@ -176,7 +180,6 @@ def print_test_info():
     print("\n" + "="*60)
     print("PostgreSQL Integration Test Information")
     print("="*60)
-    print(f"DB_TYPE: {os.getenv('DB_TYPE', 'not set')}")
     print(f"EXEC_ENV: {os.getenv('EXEC_ENV', 'not set')}")
     print(f"Config DB Type: {config.db_type}")
     print(f"Config DB URL: {config.db_url}")
@@ -185,5 +188,5 @@ def print_test_info():
 
 
 # テスト実行前に情報表示
-if os.getenv('DB_TYPE') == 'postgres':
+if config.db_type == 'postgres':
     print_test_info()
