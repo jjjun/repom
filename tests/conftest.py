@@ -31,7 +31,7 @@ def pytest_configure(config):
 
 
 @pytest.fixture(scope='session', autouse=True)
-def setup_repom_db_tables():
+def setup_repom_db_tables(request):
     """
     repom.db.engine と repom.async_session.async_engine にテーブルを作成
 
@@ -42,7 +42,17 @@ def setup_repom_db_tables():
     create_test_fixtures() が作成する db_engine と同じ :memory: DB を参照する。
 
     autouse=True により、全テスト実行前に自動的に実行される。
+    
+    PostgreSQL 統合テスト時（DB_TYPE=postgres かつ EXEC_ENV!='test'）は、
+    async engine の作成をスキップ（パスワード認証問題を回避）
+    
+    pytest.mark.no_db_setup マーカーがある場合は、このfixtureをスキップ
     """
+    # no_db_setup マーカーがある場合はスキップ
+    if request.node.get_closest_marker('no_db_setup'):
+        yield
+        return
+    
     from repom.models.base_model import Base
     from repom.database import get_sync_engine, get_async_engine
     import asyncio
@@ -59,12 +69,17 @@ def setup_repom_db_tables():
     Base.metadata.create_all(bind=engine)
 
     # 非同期 engine にテーブル作成
-    async def create_async_tables():
-        async_engine = await get_async_engine()
-        async with async_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    # ただし、PostgreSQL 統合テスト時（DB_TYPE=postgres かつ EXEC_ENV='dev'）はスキップ
+    db_type = os.getenv('DB_TYPE', 'sqlite')
+    exec_env = os.getenv('EXEC_ENV', 'test')
+    
+    if not (db_type == 'postgres' and exec_env == 'dev'):
+        async def create_async_tables():
+            async_engine = await get_async_engine()
+            async with async_engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
 
-    asyncio.run(create_async_tables())
+        asyncio.run(create_async_tables())
 
     yield
 
