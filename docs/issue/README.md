@@ -27,7 +27,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
-| #027 | PostgreSQL 設定切り替え対応 | 高 | 📝 計画中 | [active/027_postgresql_config_integration.md](active/027_postgresql_config_integration.md) |
+| #028 | テストアーキテクチャの複雑さ改善 | 中 | 🔄 作業中 (Part 1完了) | [active/028_test_architecture_complexity.md](active/028_test_architecture_complexity.md) |
 | #023 | テストの独立性と隔離性の改善 | 中 | 🟡 調査・設計段階 | [active/023_test_independence_improvements.md](active/023_test_independence_improvements.md) |
 | #022 | isolated_mapper_registry の設計改善 | 低 | 📝 調査待機中 | [active/022_isolated_mapper_registry_improvement.md](active/022_isolated_mapper_registry_improvement.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
@@ -40,6 +40,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #027 | PostgreSQL 設定統合 | 2026-02-01 | config.db_type による PostgreSQL/SQLite 切り替え、engine_kwargs 自動設定、Unit 25 + Integration 7 テスト全パス、環境変数削除 (Issue #028 Part 1) | [completed/027_postgresql_config_integration.md](completed/027_postgresql_config_integration.md) |
 | #026 | PostgreSQL Docker セットアップスクリプト | 2026-02-01 | Docker Compose構成、postgres_start/stop コマンド、環境別DB自動作成、セットアップガイド作成、全テスト成功 | [completed/026_postgresql_docker_setup.md](completed/026_postgresql_docker_setup.md) |
 | #025 | 汎用パッケージディスカバリーインフラの実装 | 2026-01-31 | repom._.discovery実装、フレームワーク非依存、post_import_hookパターン、discovery_guide.md作成、573テスト全パス | [completed/025_generic_package_discovery_infrastructure.md](completed/025_generic_package_discovery_infrastructure.md) |
 | #021 | テスト間のマッパークリア干渉問題 | 2026-01-28 | テスト関数内ローカルモデル再定義、clear_mappers()影響回避、順序依存テスト全パス | [completed/021_test_mapper_clear_interference.md](completed/021_test_mapper_clear_interference.md) |
