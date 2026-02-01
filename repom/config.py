@@ -35,6 +35,14 @@ class RepomConfig(Config):
     _enable_sqlalchemy_echo: bool = field(default=False, init=False, repr=False)
     _sqlalchemy_echo_level: str = field(default='INFO', init=False, repr=False)
 
+    # PostgreSQL サポート
+    _db_type: Optional[str] = field(default=None, init=False, repr=False)
+    _postgres_host: str = field(default='localhost', init=False, repr=False)
+    _postgres_port: int = field(default=5432, init=False, repr=False)
+    _postgres_user: str = field(default='repom', init=False, repr=False)
+    _postgres_password: str = field(default='repom_dev', init=False, repr=False)
+    _postgres_db: Optional[str] = field(default=None, init=False, repr=False)
+
     def init(self):
         """初期化後の処理 - 必要なディレクトリを作成"""
         super().init()  # 親クラスのinitを呼び出し
@@ -75,31 +83,180 @@ class RepomConfig(Config):
         self._db_file = value
 
     @property
+    def db_type(self) -> str:
+        """データベースタイプ（sqlite/postgres）
+        
+        デフォルト: sqlite
+        環境変数: DB_TYPE
+        
+        使用例:
+            # 環境変数で指定
+            DB_TYPE=postgres poetry run alembic upgrade head
+            
+            # コードで指定
+            config.db_type = 'postgres'
+        """
+        if self._db_type is not None:
+            return self._db_type
+        
+        import os
+        return os.getenv('DB_TYPE', 'sqlite')
+    
+    @db_type.setter
+    def db_type(self, value: str):
+        if value not in ('sqlite', 'postgres'):
+            raise ValueError(f"Invalid DB_TYPE: {value}. Must be 'sqlite' or 'postgres'.")
+        self._db_type = value
+
+    @property
+    def postgres_host(self) -> str:
+        """PostgreSQL ホスト名
+        
+        デフォルト: localhost
+        環境変数: POSTGRES_HOST
+        """
+        import os
+        return os.getenv('POSTGRES_HOST', self._postgres_host)
+    
+    @postgres_host.setter
+    def postgres_host(self, value: str):
+        self._postgres_host = value
+    
+    @property
+    def postgres_port(self) -> int:
+        """PostgreSQL ポート番号
+        
+        デフォルト: 5432
+        環境変数: POSTGRES_PORT
+        """
+        import os
+        return int(os.getenv('POSTGRES_PORT', self._postgres_port))
+    
+    @postgres_port.setter
+    def postgres_port(self, value: int):
+        self._postgres_port = value
+    
+    @property
+    def postgres_user(self) -> str:
+        """PostgreSQL ユーザー名
+        
+        デフォルト: repom
+        環境変数: POSTGRES_USER
+        """
+        import os
+        return os.getenv('POSTGRES_USER', self._postgres_user)
+    
+    @postgres_user.setter
+    def postgres_user(self, value: str):
+        self._postgres_user = value
+    
+    @property
+    def postgres_password(self) -> str:
+        """PostgreSQL パスワード
+        
+        デフォルト: repom_dev
+        環境変数: POSTGRES_PASSWORD
+        """
+        import os
+        return os.getenv('POSTGRES_PASSWORD', self._postgres_password)
+    
+    @postgres_password.setter
+    def postgres_password(self, value: str):
+        self._postgres_password = value
+    
+    @property
+    def postgres_db(self) -> str:
+        """PostgreSQL データベース名（環境別）
+        
+        デフォルト: repom
+        環境変数: POSTGRES_DB（ベース名）
+        
+        exec_env により自動的にサフィックスが追加されます:
+        - dev: {base}_dev
+        - test: {base}_test
+        - prod: {base}
+        
+        使用例:
+            # デフォルト（POSTGRES_DB 未設定時）
+            dev  => repom_dev
+            test => repom_test
+            prod => repom
+            
+            # POSTGRES_DB=mine_py の場合
+            dev  => mine_py_dev
+            test => mine_py_test
+            prod => mine_py
+        """
+        if self._postgres_db is not None:
+            return self._postgres_db
+        
+        import os
+        base = os.getenv('POSTGRES_DB', 'repom')
+        env = self.exec_env
+        
+        if env == 'test':
+            return f"{base}_test"
+        elif env == 'dev':
+            return f"{base}_dev"
+        elif env == 'prod':
+            return base
+        else:
+            return f"{base}_dev"
+    
+    @postgres_db.setter
+    def postgres_db(self, value: str):
+        self._postgres_db = value
+
+    @property
     def db_file_path(self) -> Optional[Path]:
         """dbファイルのフルパス(ファイル名含む)"""
         return str(Path(self.db_path) / self.db_file)
 
     @property
     def db_url(self) -> Optional[str]:
-        """データベースURL - 'sqlite:///%s/%s' % db_path, db_file の形式
+        """データベースURL（SQLite/PostgreSQL 自動切り替え）
+
+        DB_TYPE 環境変数または db_type プロパティにより自動的に切り替わります:
+        
+        PostgreSQL (DB_TYPE=postgres):
+            postgresql+psycopg://user:password@host:port/database
+        
+        SQLite (DB_TYPE=sqlite, デフォルト):
+            sqlite:///path/to/db.sqlite3
+            または
+            sqlite:///:memory: （テスト環境）
 
         テスト環境 (exec_env == 'test') かつ use_in_memory_db_for_tests == True の場合、
-        自動的に in-memory SQLite を使用します。
+        SQLite は自動的に in-memory を使用します。
 
         Benefits of in-memory SQLite for tests:
         - 35x faster (no file I/O)
         - No "database is locked" errors
         - Automatic cleanup after tests
         - Better for sync/async mixed environments
+        
+        使用例:
+            # PostgreSQL を使用
+            DB_TYPE=postgres poetry run alembic upgrade head
+            
+            # SQLite を使用（デフォルト）
+            poetry run alembic upgrade head
         """
         if self._db_url is not None:
             return self._db_url
-
-        # テスト環境では in-memory SQLite をデフォルトに
+        
+        # PostgreSQL
+        if self.db_type == 'postgres':
+            return (
+                f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
+                f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+            )
+        
+        # SQLite: テスト環境では in-memory をデフォルトに
         if self.exec_env == 'test' and self.use_in_memory_db_for_tests:
             return 'sqlite:///:memory:'
 
-        # 通常環境ではファイルベース
+        # SQLite: 通常環境ではファイルベース
         if self.db_file:
             return f'sqlite:///{self.db_path}/{self.db_file}'
         return None
@@ -227,7 +384,7 @@ class RepomConfig(Config):
 
     @property
     def engine_kwargs(self) -> dict:
-        """create_engine に渡す追加パラメータ
+        """create_engine に渡す追加パラメータ（DB種別対応）
 
         SQLite/PostgreSQL/MySQL などすべてのデータベースで有効なパラメータを設定。
         外部プロジェクトでオーバーライド可能。
@@ -236,15 +393,15 @@ class RepomConfig(Config):
         - pool_size: 接続プールに保持する接続数（デフォルト: 10）
           * SQLite ファイルDB: 有効（SQLAlchemy 2.0+ は QueuePool 使用）
           * SQLite :memory: DB: 除外（StaticPool は pool_size 未サポート）
-          * PostgreSQL/MySQL: 有効
+          * PostgreSQL: 有効
         - max_overflow: pool_size を超えて作成可能な追加接続数（デフォルト: 20）
           * SQLite ファイルDB: 有効（QueuePool）
           * SQLite :memory: DB: 除外（StaticPool は max_overflow 未サポート）
-          * PostgreSQL/MySQL: 有効
+          * PostgreSQL: 有効
         - pool_timeout: 接続待機タイムアウト秒数（デフォルト: 30）
           * SQLite ファイルDB: 有効（QueuePool）
           * SQLite :memory: DB: 除外（StaticPool は pool_timeout 未サポート）
-          * PostgreSQL/MySQL: 有効
+          * PostgreSQL: 有効
         - pool_recycle: 接続の再利用時間秒数（デフォルト: 3600）
           * すべてのDBで有効
         - pool_pre_ping: 接続前のpingチェック（デフォルト: True）
@@ -259,6 +416,10 @@ class RepomConfig(Config):
         - 別の connection からは :memory: DB のデータが見えない
         - StaticPool により単一 connection を全スレッドで共有することで解決
 
+        PostgreSQL 特有の設定:
+        - connect_args は不要（PostgreSQL は自動的にスレッドセーフ）
+        - pool_pre_ping=True により、切断された接続を自動検知
+
         Returns:
             dict: create_engine に渡すキーワード引数
 
@@ -267,17 +428,29 @@ class RepomConfig(Config):
                 @property
                 def engine_kwargs(self) -> dict:
                     base = super().engine_kwargs
-                    base.update({
-                        'pool_size': 20,      # 接続数を増やす
-                        'max_overflow': 40,
-                    })
+                    if self.db_type == 'postgres':
+                        base.update({
+                            'pool_size': 20,      # 接続数を増やす
+                            'max_overflow': 40,
+                        })
                     return base
 
         参考:
         - SQLite と QueuePool: https://docs.sqlalchemy.org/en/20/dialects/sqlite.html#threading-pooling-behavior
         - Connection Pooling: https://docs.sqlalchemy.org/en/20/core/pooling.html
         - StaticPool: https://docs.sqlalchemy.org/en/20/core/pooling.html#sqlalchemy.pool.StaticPool
+        - PostgreSQL: https://docs.sqlalchemy.org/en/20/dialects/postgresql.html
         """
+        # PostgreSQL
+        if self.db_type == 'postgres':
+            return {
+                'pool_size': 10,
+                'max_overflow': 20,
+                'pool_timeout': 30,
+                'pool_recycle': 3600,
+                'pool_pre_ping': True,
+            }
+        
         # SQLite :memory: DB の場合は、StaticPool を使用して単一接続を全スレッドで共有
         is_memory_db = self.db_url and ':memory:' in self.db_url
 
@@ -290,7 +463,7 @@ class RepomConfig(Config):
                 'connect_args': {'check_same_thread': False},  # スレッド安全性チェックを無効化
             }
         else:
-            # ファイルベースDB または PostgreSQL/MySQL 用の完全な設定
+            # ファイルベース SQLite 用の完全な設定
             kwargs = {
                 'pool_size': 10,          # 接続プール数
                 'max_overflow': 20,       # 最大オーバーフロー接続数

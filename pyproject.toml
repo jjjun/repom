@@ -14,13 +14,17 @@ python-dotenv = "^1.0.1"
 inflect = "^7.5.0"
 pydantic = "^2.11.3"
 
+# PostgreSQL support (optional)
+psycopg = { version = "^3.1", extras = ["binary"], optional = true }
+
 # Async support (optional)
 aiosqlite = { version = "^0.20.0", optional = true }
 asyncpg = { version = "^0.30.0", optional = true }
 
 [tool.poetry.extras]
-async = ["aiosqlite"]
+postgres = ["psycopg"]
 postgres-async = ["asyncpg"]
+async = ["aiosqlite"]
 async-all = ["aiosqlite", "asyncpg"]
 
 [tool.poetry.group.dev.dependencies]
