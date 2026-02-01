@@ -17,7 +17,7 @@ COMPOSE_FILE = SCRIPT_DIR / "docker-compose.yml"
 def start():
     """PostgreSQL を起動"""
     print("🐳 Starting PostgreSQL container...")
-    
+
     try:
         subprocess.run(
             ["docker-compose", "-f", str(COMPOSE_FILE), "up", "-d"],
@@ -31,9 +31,9 @@ def start():
         print("❌ docker-compose command not found.")
         print("Please install Docker Desktop: https://www.docker.com/products/docker-desktop")
         sys.exit(1)
-    
+
     print("⏳ Waiting for PostgreSQL to be ready...")
-    
+
     try:
         wait_for_postgres()
         print("✅ PostgreSQL is ready")
@@ -53,7 +53,7 @@ def start():
 def stop():
     """PostgreSQL を停止"""
     print("🛑 Stopping PostgreSQL container...")
-    
+
     try:
         subprocess.run(
             ["docker-compose", "-f", str(COMPOSE_FILE), "down"],
@@ -81,16 +81,16 @@ def wait_for_postgres(max_retries=30):
             capture_output=True,
             text=True
         )
-        
+
         if result.returncode == 0:
             return True
-        
+
         # 進捗を表示
         if (i + 1) % 5 == 0:
             print(f"  Still waiting... ({i + 1}/{max_retries}s)")
-        
+
         time.sleep(1)
-    
+
     raise TimeoutError(f"PostgreSQL did not start within {max_retries} seconds")
 
 
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python manage.py [start|stop]")
         sys.exit(1)
-    
+
     command = sys.argv[1]
     if command == "start":
         start()

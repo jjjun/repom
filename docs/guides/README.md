@@ -20,6 +20,11 @@ repom の使い方を機能別に整理したガイド集です。
 - マスターデータ同期
 - ロギング
 
+### 🐘 [postgresql/](postgresql/) - PostgreSQL
+- Docker による PostgreSQL セットアップ
+- 環境別データベース構成
+- 接続情報とトラブルシューティング
+
 ### 🧪 [testing/](testing/) - テスト
 - Transaction Rollback パターン
 - テストフィクスチャの使い方
