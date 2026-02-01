@@ -1,4 +1,5 @@
 """PostgreSQL integration tests - requires running PostgreSQL Docker container"""
+from repom.config import config
 import pytest
 import os
 from sqlalchemy import text
@@ -7,7 +8,6 @@ from sqlalchemy import text
 os.environ['EXEC_ENV'] = 'dev'
 
 # PostgreSQL 統合テスト用に db_type を設定
-from repom.config import config
 config.db_type = 'postgres'
 
 

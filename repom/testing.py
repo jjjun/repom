@@ -111,7 +111,7 @@ def create_test_fixtures(
             }
         else:
             kwargs = config.engine_kwargs
-        
+
         engine = create_engine(_db_url, **kwargs)
 
         # テーブル作成（1回のみ）
@@ -323,7 +323,7 @@ def create_async_test_fixtures(
             }
         else:
             kwargs = config.engine_kwargs
-        
+
         engine = create_async_engine(_async_db_url, echo=False, **kwargs)
 
         # テーブル作成（async での create_all）
