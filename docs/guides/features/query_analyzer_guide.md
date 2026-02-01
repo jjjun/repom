@@ -443,28 +443,6 @@ if __name__ == '__main__':
 
 ---
 
-## 実装例: check_sample_queries.py
-
-repom には `check_sample_queries.py` というサンプルスクリプトが含まれています。
-
-```python
-from repom.scripts.check_sample_queries import run_sample_check
-
-# デフォルト（SampleModel）で実行
-run_sample_check()
-
-# 別のモデルで実行
-run_sample_check(model_name='User')
-```
-
-**機能:**
-- モデルから適切なサンプルフィールドを自動検出
-- サンプルデータを自動作成（データがない場合）
-- QueryAnalyzer でクエリを分析
-- レポートを出力
-
----
-
 ## ベストプラクティス
 
 ### 1. 開発中の継続的なチェック
