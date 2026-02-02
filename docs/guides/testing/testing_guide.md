@@ -167,7 +167,7 @@ poetry run pytest -v
 テストを書く
     ↓
 動的なモデル定義が必要か？
-    ├─ YES → isolated_mapper_registry を使用
+    ├─ YES → テスト内で直接モデルを定義 + clear_mappers()/configure_mappers()
     │          (TYPE_CHECKING テスト、前方参照テストなど)
     │
     └─ NO → tests/fixtures/models/ を使用
@@ -225,7 +225,7 @@ def test_user_post_relationship(db_test):
 - ✅ テーブル作成が自動 (`setup_test_models` fixture)
 - ✅ マッパークリーンアップ不要
 
-### ⚠️ 特殊ケース: isolated_mapper_registry
+### ⚠️ 特殊ケース: マッパークリーンアップが必要なテスト
 
 **用途**: 動的モデル定義が必要な特殊なテストのみ
 - TYPE_CHECKING ブロックの動作検証
@@ -235,41 +235,52 @@ def test_user_post_relationship(db_test):
 
 **例**:
 ```python
-def test_type_checking_forward_ref(isolated_mapper_registry, db_test):
-    """TYPE_CHECKING ブロックの前方参照をテスト"""
+def test_type_checking_forward_ref(db_test):
+    """
+    TYPE_CHECKING ブロックの前方参照をテスト
+    
+    注意: テスト内でモデルを動的に定義するため、
+           マッパーのクリーンアップが必要
+    """
+    from sqlalchemy.orm import clear_mappers, configure_mappers
     from repom.models.base_model import BaseModel
     from sqlalchemy import String, ForeignKey
     from sqlalchemy.orm import Mapped, mapped_column, relationship
     from typing import TYPE_CHECKING
     
-    if TYPE_CHECKING:
-        from __future__ import annotations
-    
-    class Author(BaseModel):
-        __tablename__ = 'author'
-        name: Mapped[str] = mapped_column(String(100))
-        books: Mapped[list["Book"]] = relationship(back_populates='author')
-    
-    class Book(BaseModel):
-        __tablename__ = 'book'
-        title: Mapped[str] = mapped_column(String(100))
-        author_id: Mapped[int] = mapped_column(ForeignKey('author.id'))
-        author: Mapped["Author"] = relationship(back_populates='books')
-    
-    # テーブル作成（isolated_mapper_registry 使用時は手動）
-    BaseModel.metadata.create_all(bind=db_test.bind)
-    
-    # テスト実行
-    author = Author(name="John")
-    db_test.add(author)
-    db_test.commit()
-    assert author.id is not None
+    try:
+        if TYPE_CHECKING:
+            from __future__ import annotations
+        
+        class Author(BaseModel):
+            __tablename__ = 'author'
+            name: Mapped[str] = mapped_column(String(100))
+            books: Mapped[list["Book"]] = relationship(back_populates='author')
+        
+        class Book(BaseModel):
+            __tablename__ = 'book'
+            title: Mapped[str] = mapped_column(String(100))
+            author_id: Mapped[int] = mapped_column(ForeignKey('author.id'))
+            author: Mapped["Author"] = relationship(back_populates='books')
+        
+        # テーブル作成（動的定義時は手動）
+        BaseModel.metadata.create_all(bind=db_test.bind)
+        
+        # テスト実行
+        author = Author(name="John")
+        db_test.add(author)
+        db_test.commit()
+        assert author.id is not None
+    finally:
+        # クリーンアップは必須
+        clear_mappers()
+        configure_mappers()
 ```
 
 **注意点**:
 - ❌ 通常のテストでは使用しない
 - ⚠️ `BaseModel.metadata.create_all()` を手動で呼ぶ必要がある
-- ⚠️ マッパークリーンアップが自動で行われる（パフォーマンス影響あり）
+- ⚠️ finally ブロックで `clear_mappers()` + `configure_mappers()` が必須
 
 ### 📋 決定表
 
@@ -278,10 +289,10 @@ def test_type_checking_forward_ref(isolated_mapper_registry, db_test):
 | CRUD テスト | `tests/fixtures/models/` | シンプル、再利用可能 |
 | リレーションシップテスト | `tests/fixtures/models/` | 事前定義済み（User-Post, Parent-Child） |
 | Repository テスト | `tests/fixtures/models/` | BaseRepository と相性良い |
-| TYPE_CHECKING テスト | `isolated_mapper_registry` | 動的定義が必須 |
-| 前方参照テスト | `isolated_mapper_registry` | 動的定義が必須 |
-| インポート順序テスト | `isolated_mapper_registry` | 動的定義が必須 |
-| マッパー動作テスト | `isolated_mapper_registry` | 動的定義が必須 |
+| TYPE_CHECKING テスト | テスト内で直接定義 + finally クリーンアップ | 動的定義が必須 |
+| 前方参照テスト | テスト内で直接定義 + finally クリーンアップ | 動的定義が必須 |
+| インポート順序テスト | テスト内で直接定義 + finally クリーンアップ | 動的定義が必須 |
+| マッパー動作テスト | テスト内で直接定義 + finally クリーンアップ | 動的定義が必須 |
 
 ---
 

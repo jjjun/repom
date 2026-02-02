@@ -11,7 +11,7 @@ repom を使ったテストの書き方とベストプラクティスです。
 
 - Transaction Rollback パターン
 - テストフィクスチャの使い方
-- テストモデルの使い分け (`tests/fixtures/models/` vs `isolated_mapper_registry`)
+- テストモデルの使い分け (`tests/fixtures/models/` vs 動的定義 + cleanup)
 - pytest 設定
 - テストのベストプラクティス
 
@@ -33,18 +33,30 @@ def test_user_crud(db_test):
     assert fetched_user.name == "Alice"
 ```
 
-### 特殊ケース: isolated_mapper_registry
+### 特殊ケース: マッパークリーンアップが必要なテスト
 
-TYPE_CHECKING ブロックのテストや動的モデル定義が必要な場合のみ使用：
+TYPE_CHECKING ブロックのテストや動的モデル定義が必要な場合:
 
 ```python
-def test_type_checking(isolated_mapper_registry, db_test):
-    class TempModel(BaseModel):
-        __tablename__ = 'temp'
-        name: Mapped[str]
+def test_type_checking(db_test):
+    """
+    TYPE_CHECKING ブロックの動作検証
     
-    BaseModel.metadata.create_all(bind=db_test.bind)
-    # ...
+    注意: テスト内でモデルを動的に定義するため、
+           マッパーのクリーンアップが必要
+    """
+    from sqlalchemy.orm import clear_mappers, configure_mappers
+    
+    try:
+        class TempModel(BaseModel):
+            __tablename__ = 'temp'
+            name: Mapped[str]
+        
+        BaseModel.metadata.create_all(bind=db_test.bind)
+        # ...
+    finally:
+        clear_mappers()
+        configure_mappers()
 ```
 
 詳細は [testing_guide.md](testing_guide.md) を参照してください。

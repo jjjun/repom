@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 import pytest
 
 
-def test_type_checking_with_alphabetical_import_order(isolated_mapper_registry):
+def test_type_checking_with_alphabetical_import_order():
     """
     再現テスト: TYPE_CHECKING + アルファベット順インポートで名前解決エラー
 
@@ -34,10 +34,8 @@ def test_type_checking_with_alphabetical_import_order(isolated_mapper_registry):
     - relationship で "AniVideoUserStatusModel" を参照
     - しかし実行時には AniVideoUserStatusModel がまだインポートされていない
     - SQLAlchemy の名前解決が失敗
-
-    Note:
-    - isolated_mapper_registry フィクスチャにより、テスト終了後に自動クリーンアップ
     """
+    from sqlalchemy.orm import clear_mappers, configure_mappers
     # 一時ディレクトリ作成
     temp_dir = Path(tempfile.mkdtemp(prefix="test_models_"))
 
@@ -139,7 +137,7 @@ class AniVideoUserStatusModel(BaseModelAuto):
                 assert hasattr(video_item, 'user_statuses'), "user_statuses relationship should exist"
                 assert video_item.user_statuses == [], "user_statuses should be empty list"
 
-            print("✅ Test passed: Relationships work despite TYPE_CHECKING blocks")
+            print("Test passed: Relationships work despite TYPE_CHECKING blocks")
             print("   (This means SQLAlchemy resolved the string references successfully)")
 
         except Exception as e:
@@ -169,20 +167,19 @@ class AniVideoUserStatusModel(BaseModelAuto):
 
         # 一時ディレクトリを削除
         shutil.rmtree(temp_dir, ignore_errors=True)
+        # マッパークリーンアップ
+        clear_mappers()
+        configure_mappers()
 
-        # Note: マッパーとメタデータのクリーンアップは isolated_mapper_registry が自動的に行う
 
-
-def test_type_checking_with_manual_import_order(isolated_mapper_registry):
+def test_type_checking_with_manual_import_order():
     """
     解決策のテスト: TYPE_CHECKING を外して実際にインポート
 
     このテストでは、TYPE_CHECKING を使わずに直接インポートすることで
     問題が解決することを確認する
-
-    Note:
-    - isolated_mapper_registry フィクスチャにより、テスト終了後に自動クリーンアップ
     """
+    from sqlalchemy.orm import clear_mappers, configure_mappers
     # 一時ディレクトリ作成
     temp_dir = Path(tempfile.mkdtemp(prefix="test_models_fixed_"))
 
@@ -283,7 +280,7 @@ class AniVideoUserStatusModel(BaseModelAuto):
                 assert hasattr(video_item, 'user_statuses'), "user_statuses relationship should exist"
                 assert video_item.user_statuses == [], "user_statuses should be empty list"
 
-            print("✅ Test passed: Relationships work correctly when imports are outside TYPE_CHECKING")
+            print("Test passed: Relationships work correctly when imports are outside TYPE_CHECKING")
 
         finally:
             # クリーンアップ
@@ -298,8 +295,6 @@ class AniVideoUserStatusModel(BaseModelAuto):
     finally:
         # 一時ディレクトリを削除
         shutil.rmtree(temp_dir, ignore_errors=True)
-
-        # Note: マッパーとメタデータのクリーンアップは isolated_mapper_registry が自動的に行う
 
 
 if __name__ == '__main__':

@@ -83,7 +83,7 @@ class {filename[:-3].title().replace('_', '')}Model(BaseModelAuto):
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def test_sqlalchemy_relationship_lazy_resolution(isolated_mapper_registry):
+def test_sqlalchemy_relationship_lazy_resolution():
     """
     SQLAlchemy の relationship がいつ名前解決を行うかを確認
 
@@ -94,10 +94,8 @@ def test_sqlalchemy_relationship_lazy_resolution(isolated_mapper_registry):
       1. 最初のクエリ実行時
       2. metadata.create_all() 実行時
       3. 明示的に configure_mappers() を呼び出した時
-
-    Note:
-    - isolated_mapper_registry フィクスチャにより、テスト終了後に自動クリーンアップ
     """
+    from sqlalchemy.orm import clear_mappers, configure_mappers
     temp_dir = Path(tempfile.mkdtemp(prefix="test_lazy_"))
 
     try:
@@ -183,7 +181,7 @@ print(">>> z_child.py: ZChildModel defined successfully")
                     for warning in w:
                         print(f"   {warning.category.__name__}: {warning.message}")
                 else:
-                    print("✅ 警告なし: 名前解決に成功")
+                    print("警告なし: 名前解決に成功")
 
             print("\n" + "=" * 80)
             print("STEP 3: データベース操作")
@@ -203,9 +201,9 @@ print(">>> z_child.py: ZChildModel defined successfully")
                 session.add(parent)
                 session.flush()
 
-                print(f"✅ Parent created: {parent.name}")
-                print(f"✅ children relationship exists: {hasattr(parent, 'children')}")
-                print(f"✅ children value: {parent.children}")
+                print(f"Parent created: {parent.name}")
+                print(f"children relationship exists: {hasattr(parent, 'children')}")
+                print(f"children value: {parent.children}")
 
         finally:
             if str(temp_dir) in sys.path:
@@ -218,9 +216,12 @@ print(">>> z_child.py: ZChildModel defined successfully")
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+        # マッパークリーンアップ
+        clear_mappers()
+        configure_mappers()
 
 
-def test_actual_failure_scenario(isolated_mapper_registry):
+def test_actual_failure_scenario():
     """
     実際にエラーが発生するシナリオを特定する
 
@@ -233,10 +234,8 @@ def test_actual_failure_scenario(isolated_mapper_registry):
     エラーが発生する条件:
     - 一方のモデルファイルが auto_import_models() でインポートされない
     - または、インポートに失敗する
-
-    Note:
-    - isolated_mapper_registry フィクスチャにより、テスト終了後に自動クリーンアップ
     """
+    from sqlalchemy.orm import clear_mappers, configure_mappers
     temp_dir = Path(tempfile.mkdtemp(prefix="test_failure_"))
 
     try:
@@ -290,7 +289,7 @@ class ParentModel(BaseModelAuto):
 
                 try:
                     configure_mappers()
-                    print("✅ configure_mappers() 成功（予想外）")
+                    print("configure_mappers() 成功（予想外）")
                 except Exception as e:
                     print(f"❌ エラー発生（予想通り）: {type(e).__name__}: {e}")
 
@@ -310,6 +309,9 @@ class ParentModel(BaseModelAuto):
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+        # マッパークリーンアップ
+        clear_mappers()
+        configure_mappers()
 
 
 if __name__ == '__main__':

@@ -123,118 +123,13 @@ db_engine, db_test = create_test_fixtures()
 async_db_engine, async_db_test = create_async_test_fixtures()
 
 
-# ==================== Isolated Mapper Registry Fixture ====================
+# ==================== Test Cleanup ====================
+# Tests that need mapper cleanup should use clear_mappers() and configure_mappers() directly.
+# Example:
+#   from sqlalchemy.orm import clear_mappers, configure_mappers
+#   try:
+#       # test code
+#   finally:
+#       clear_mappers()
+#       configure_mappers()
 
-@pytest.fixture
-def isolated_mapper_registry(db_test):
-    """TYPE_CHECKING テスト専用フィクスチャ
-
-    ⚠️ 注意: このフィクスチャは TYPE_CHECKING ブロックのテストや、
-    動的にモデルを定義する必要がある特殊なケースでのみ使用してください。
-
-    通常のテストでは tests/fixtures/models/ のモデルを使用してください。
-
-    【用途】
-    - TYPE_CHECKING ブロックの動作検証
-    - SQLAlchemy マッパーの動作検証
-    - インポート順序の検証
-    - 前方参照の解決テスト
-
-    【推奨しない用途】
-    - 通常の CRUD テスト → tests/fixtures/models/ を使用
-    - リレーションシップのテスト → tests/fixtures/models/ を使用
-
-    使用例:
-        def test_type_checking(isolated_mapper_registry, db_test):
-            from repom.models.base_model import BaseModel
-            from sqlalchemy import String
-            from sqlalchemy.orm import Mapped, mapped_column
-
-            class TempModel(BaseModel):
-                __tablename__ = 'temp_table'
-                name: Mapped[str] = mapped_column(String(100))
-
-            # テーブル作成
-            BaseModel.metadata.create_all(bind=db_test.bind)
-
-            # テスト実行
-            # ...
-
-    注意:
-    - テスト終了後、自動的にマッパーをクリーンアップし再構築します
-    - clear_mappers() と再構築を自動的に行います
-    - 一時的なモデルは BaseModel.metadata に登録されます
-    - behavior_tests のモジュールレベルモデルも自動的に再ロードされます
-
-    詳細: docs/guides/testing/testing_guide.md
-    """
-    from sqlalchemy.orm import clear_mappers, configure_mappers
-    from repom.models.base_model import BaseModel
-    from repom.database import Base
-    import importlib
-    import sys
-
-    # テスト実行前の状態を保存（metadata のテーブル一覧）
-    original_tables_base = set(Base.metadata.tables.keys())
-    original_tables_repom = set(BaseModel.metadata.tables.keys())
-
-    yield
-
-    # クリーンアップ: 一時的なテーブルを削除
-    temp_tables_base = set(Base.metadata.tables.keys()) - original_tables_base
-    for table_name in list(temp_tables_base):  # list() でコピーを作成
-        if table_name in Base.metadata.tables:
-            Base.metadata.remove(Base.metadata.tables[table_name])
-
-    temp_tables_repom = set(BaseModel.metadata.tables.keys()) - original_tables_repom
-    for table_name in list(temp_tables_repom):  # list() でコピーを作成
-        if table_name in BaseModel.metadata.tables:
-            BaseModel.metadata.remove(BaseModel.metadata.tables[table_name])
-
-    # マッパーをクリア（全マッパーがクリアされる）
-    clear_mappers()
-
-    # 【重要】behavior_tests のモジュールを再ロード
-    # モジュールレベルでモデルを定義しているテストのみリストに含める
-    behavior_test_modules = [
-        'tests.behavior_tests.test_00_migration_no_id',
-    ]
-
-    # モジュールの再ロード前に、そのモジュールのテーブルを metadata から削除
-    # これにより Table の再定義エラーを回避できる
-    for module_name in behavior_test_modules:
-        if module_name in sys.modules:
-            try:
-                # モジュール内のすべてのテーブルを削除
-                module = sys.modules[module_name]
-                for attr_name in dir(module):
-                    try:
-                        attr = getattr(module, attr_name)
-                        if hasattr(attr, '__table__') and hasattr(attr.__table__, 'name'):
-                            # このテーブルを metadata から削除
-                            table_name = attr.__table__.name
-                            if table_name in Base.metadata.tables:
-                                Base.metadata.remove(Base.metadata.tables[table_name])
-                            if table_name in BaseModel.metadata.tables:
-                                BaseModel.metadata.remove(BaseModel.metadata.tables[table_name])
-                    except Exception:
-                        # 属性取得に失敗しても続行
-                        pass
-
-                # モジュールを再ロード
-                importlib.reload(module)
-            except Exception as e:
-                # リロードに失敗しても続行（デバッグ用に警告を出力）
-                import warnings
-                warnings.warn(f"Failed to reload {module_name}: {e}")
-
-    # repom の標準モデルを再ロード
-    from repom.utility import load_models
-    load_models()
-
-    # マッパーを明示的に構築
-    configure_mappers()
-
-    # テーブルを再作成（db_test の engine に）
-    Base.metadata.create_all(bind=db_test.bind)
-    BaseModel.metadata.create_all(bind=db_test.bind)

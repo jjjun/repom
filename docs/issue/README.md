@@ -39,11 +39,11 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
-| #029 | isolated_mapper_registry から tests/fixtures/models への移行 | 2026-02-02 | isolated_mapper_registry を TYPE_CHECKING テスト専用として明確化、tests/fixtures/models/ (User, Post, Parent, Child) 新規提供、360行のドキュメント削減、使い分けガイド追加、603 tests passing | [completed/029_migrate_from_isolated_mapper_to_fixtures_models.md](completed/029_migrate_from_isolated_mapper_to_fixtures_models.md) |
+| #029 | isolated_mapper_registry から tests/fixtures/models への移行 | 2026-02-02 | isolated_mapper_registry 完全削除（~100行）、tests/fixtures/models/ (User, Post, Parent, Child) 新規提供、360行のドキュメント削減、シンプルな直接クリーンアップパターン採用、428 tests passing | [completed/029_migrate_from_isolated_mapper_to_fixtures_models.md](completed/029_migrate_from_isolated_mapper_to_fixtures_models.md) |
 | #027 | PostgreSQL 設定統合 | 2026-02-01 | config.db_type による PostgreSQL/SQLite 切り替え、engine_kwargs 自動設定、Unit 25 + Integration 7 テスト全パス、環境変数削除 (Issue #028 Part 1) | [completed/027_postgresql_config_integration.md](completed/027_postgresql_config_integration.md) |
 | #026 | PostgreSQL Docker セットアップスクリプト | 2026-02-01 | Docker Compose構成、postgres_start/stop コマンド、環境別DB自動作成、セットアップガイド作成、全テスト成功 | [completed/026_postgresql_docker_setup.md](completed/026_postgresql_docker_setup.md) |
 | #025 | 汎用パッケージディスカバリーインフラの実装 | 2026-01-31 | repom._.discovery実装、フレームワーク非依存、post_import_hookパターン、discovery_guide.md作成、573テスト全パス | [completed/025_generic_package_discovery_infrastructure.md](completed/025_generic_package_discovery_infrastructure.md) |
-| #022 | isolated_mapper_registry の設計改善 | 2026-02-02 | 検討の結果、実装せず。isolated_mapper_registry を TYPE_CHECKING テスト専用として明確化。通常テストは tests/fixtures/models/ を使用するガイドラインを作成。 | [completed/022_isolated_mapper_registry_improvement.md](completed/022_isolated_mapper_registry_improvement.md) |
+| #022 | isolated_mapper_registry の設計改善 | 2026-02-02 | 検討の結果、実装せず。最終的に isolated_mapper_registry を完全削除（Issue #029）。通常テストは tests/fixtures/models/ を使用するガイドラインを作成。 | [completed/022_isolated_mapper_registry_improvement.md](completed/022_isolated_mapper_registry_improvement.md) |
 | #021 | テスト間のマッパークリア干渉問題 | 2026-01-28 | テスト関数内ローカルモデル再定義、clear_mappers()影響回避、順序依存テスト全パス | [completed/021_test_mapper_clear_interference.md](completed/021_test_mapper_clear_interference.md) |
 | #020 | 循環参照警告の解決（マッパー遅延初期化） | 2026-01-28 | auto_import_models_from_list()にconfigure_mappers()遅延実装、循環参照解決、518テスト全パス | [completed/020_circular_import_mapper_configuration.md](completed/020_circular_import_mapper_configuration.md) |
 | #019 | テストのフィクスチャ化によるコード品質向上 | 2025-12-28 | 3ファイルリファクタリング、181行削減、31テスト全パス、0.33秒 | [completed/019_refactor_tests_to_use_fixtures.md](completed/019_refactor_tests_to_use_fixtures.md) |

@@ -237,10 +237,10 @@ def test_type_checking(isolated_mapper_registry, db_test):
 ### 必須
 - [x] `tests/fixtures/models/` 構造が作成されている
 - [x] 603 tests passing (Phase 1)
-- [ ] `isolated_mapper_fixture.md` が削除されている
-- [ ] `testing_guide.md` に使い分けガイドが追加されている
-- [ ] `conftest.py` の docstring が更新されている
-- [ ] 全テストが passing
+- [x] `isolated_mapper_fixture.md` が削除されている
+- [x] `testing_guide.md` に使い分けガイドが追加されている
+- [x] `conftest.py` の docstring が更新されている
+- [x] 全テストが passing
 
 ### 任意
 - [ ] 新しいモデルを追加した場合、それらも動作確認済み
@@ -324,11 +324,27 @@ def test_type_checking(isolated_mapper_registry, db_test):
 - ✅ 603 tests passing 確認
 - ✅ Git コミット完了
 
-### 2026-02-02 (Phase 2 開始)
-- 🟡 使用状況調査完了
-- 🟡 移行計画の Issue 化完了
-- 🟡 次のステップ: ドキュメント整理
+### 2026-02-02 (Phase 2 完了)
+- ✅ 使用状況調査完了
+- ✅ 移行計画の Issue 化完了
+- ✅ ドキュメント整理完了
+  - isolated_mapper_fixture.md 削除（360行削減）
+  - Issue #022 を completed へ移動
+  - README.md 更新（Quick Start 追加）
+  - conftest.py docstring 更新
+  - testing_guide.md 更新（使い分けガイド追加）
+- ✅ 603 tests passing
+- ✅ Git コミット完了
+
+### 2026-02-02 (Phase 3-4 完了、Issue #029 完了)
+- ✅ 最終確認完了
+  - isolated_mapper_registry 使用箇所: 4件（すべて TYPE_CHECKING テスト）
+  - tests/fixtures/models/ 提供完了（User, Post, Parent, Child）
+  - 役割分担が明確化
+- ✅ Issue #029 を completed へ移動
 
 ---
 
 **最終更新**: 2026-02-02
+
+**完了**: 2026-02-02

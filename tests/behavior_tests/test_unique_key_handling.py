@@ -27,8 +27,7 @@ def ensure_roster_model_ready():
     try:
         configure_mappers()
     except Exception:
-        # If configure fails, it means mappers need to be rebuilt
-        # This will be handled by the module reload in isolated_mapper_registry
+        # If configure fails, mappers need to be rebuilt
         pass
     yield
 
