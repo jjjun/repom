@@ -27,9 +27,9 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
+| #029 | isolated_mapper_registry から tests/fixtures/models への移行 | 中 | 🔄 作業中 (Phase 2) | [active/029_migrate_from_isolated_mapper_to_fixtures_models.md](active/029_migrate_from_isolated_mapper_to_fixtures_models.md) |
 | #028 | テストアーキテクチャの複雑さ改善 | 中 | 🔄 作業中 (Part 1完了) | [active/028_test_architecture_complexity.md](active/028_test_architecture_complexity.md) |
 | #023 | テストの独立性と隔離性の改善 | 中 | 🟡 調査・設計段階 | [active/023_test_independence_improvements.md](active/023_test_independence_improvements.md) |
-| #022 | isolated_mapper_registry の設計改善 | 低 | 📝 調査待機中 | [active/022_isolated_mapper_registry_improvement.md](active/022_isolated_mapper_registry_improvement.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください。
