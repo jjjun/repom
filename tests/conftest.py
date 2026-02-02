@@ -7,6 +7,9 @@ os.environ['EXEC_ENV'] = 'test'
 
 from repom.testing import create_test_fixtures, create_async_test_fixtures
 
+# テストモデルをインポート（自動登録される）
+from tests.fixtures.models import User, Post, Parent, Child
+
 
 def pytest_configure(config):
     # -vv オプション時のみデバッグログを有効化
@@ -85,6 +88,31 @@ def setup_repom_db_tables(request):
 
     # クリーンアップ（オプション）
     Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture(scope='session', autouse=True)
+def setup_test_models(db_engine):
+    """テストモデルのテーブルを作成
+    
+    このフィクスチャは session スコープで自動実行され、
+    tests/fixtures/models/ で定義されたモデルのテーブルを作成します。
+    
+    Transaction Rollback パターンと組み合わせることで:
+    - テーブル作成は1回のみ（高速）
+    - 各テストはトランザクションで分離
+    - データは自動ロールバック
+    
+    Note: db_engine フィクスチャに依存しているため、
+    db_engine の作成後に実行されます。
+    """
+    from repom.models.base_model import BaseModel
+    
+    # BaseModel.metadata には repom のモデル + テストモデルが含まれる
+    BaseModel.metadata.create_all(bind=db_engine)
+    yield
+    # テスト終了後のクリーンアップ（セッション終了時）
+    # Transaction Rollback パターンでは通常不要だが、念のため実行
+    BaseModel.metadata.drop_all(bind=db_engine)
 
 
 # repom/testing.py のヘルパー関数を使用してフィクスチャを作成
