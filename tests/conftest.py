@@ -93,20 +93,20 @@ def setup_repom_db_tables(request):
 @pytest.fixture(scope='session', autouse=True)
 def setup_test_models(db_engine):
     """テストモデルのテーブルを作成
-    
+
     このフィクスチャは session スコープで自動実行され、
     tests/fixtures/models/ で定義されたモデルのテーブルを作成します。
-    
+
     Transaction Rollback パターンと組み合わせることで:
     - テーブル作成は1回のみ（高速）
     - 各テストはトランザクションで分離
     - データは自動ロールバック
-    
+
     Note: db_engine フィクスチャに依存しているため、
     db_engine の作成後に実行されます。
     """
     from repom.models.base_model import BaseModel
-    
+
     # BaseModel.metadata には repom のモデル + テストモデルが含まれる
     BaseModel.metadata.create_all(bind=db_engine)
     yield
@@ -127,14 +127,25 @@ async_db_engine, async_db_test = create_async_test_fixtures()
 
 @pytest.fixture
 def isolated_mapper_registry(db_test):
-    """一時的なモデル定義用のフィクスチャ（改善版）
+    """TYPE_CHECKING テスト専用フィクスチャ
 
-    一時的なモデルクラスを定義するテストで使用します。
-    テスト終了後、自動的にマッパーをクリーンアップし、
-    repom と behavior_tests の標準モデルを再構築します。
+    ⚠️ 注意: このフィクスチャは TYPE_CHECKING ブロックのテストや、
+    動的にモデルを定義する必要がある特殊なケースでのみ使用してください。
+
+    通常のテストでは tests/fixtures/models/ のモデルを使用してください。
+
+    【用途】
+    - TYPE_CHECKING ブロックの動作検証
+    - SQLAlchemy マッパーの動作検証
+    - インポート順序の検証
+    - 前方参照の解決テスト
+
+    【推奨しない用途】
+    - 通常の CRUD テスト → tests/fixtures/models/ を使用
+    - リレーションシップのテスト → tests/fixtures/models/ を使用
 
     使用例:
-        def test_temporary_model(isolated_mapper_registry, db_test):
+        def test_type_checking(isolated_mapper_registry, db_test):
             from repom.models.base_model import BaseModel
             from sqlalchemy import String
             from sqlalchemy.orm import Mapped, mapped_column
@@ -150,13 +161,12 @@ def isolated_mapper_registry(db_test):
             # ...
 
     注意:
-    - このフィクスチャを使うテストは他のテストに影響を与えません
+    - テスト終了後、自動的にマッパーをクリーンアップし再構築します
     - clear_mappers() と再構築を自動的に行います
-    - 一時的なモデルは BaseModel.metadata に登録されるため、
-      テーブル作成には BaseModel.metadata.create_all() を使用してください
+    - 一時的なモデルは BaseModel.metadata に登録されます
     - behavior_tests のモジュールレベルモデルも自動的に再ロードされます
 
-    詳細: docs/guides/testing/isolated_mapper_fixture.md
+    詳細: docs/guides/testing/testing_guide.md
     """
     from sqlalchemy.orm import clear_mappers, configure_mappers
     from repom.models.base_model import BaseModel

@@ -19,6 +19,7 @@ repom は **Transaction Rollback パターン** と **インメモリDB** を採
 ## 目次
 
 - [基本的な使い方](#基本的な使い方)
+- [テストモデルの使い分け](#テストモデルの使い分け)
 - [インメモリDB設定](#インメモリdb設定)
 - [外部プロジェクトでの使用](#外部プロジェクトでの使用)
 - [テスト用DBの作成](#テスト用dbの作成)
@@ -155,6 +156,132 @@ poetry run pytest tests/unit_tests
 # 詳細表示
 poetry run pytest -v
 ```
+
+---
+
+## テストモデルの使い分け
+
+### 🎯 使い分けフローチャート
+
+```
+テストを書く
+    ↓
+動的なモデル定義が必要か？
+    ├─ YES → isolated_mapper_registry を使用
+    │          (TYPE_CHECKING テスト、前方参照テストなど)
+    │
+    └─ NO → tests/fixtures/models/ を使用
+               (通常の CRUD、リレーションシップテスト)
+```
+
+### ✅ 推奨: tests/fixtures/models/ のモデルを使用
+
+**用途**: 通常のテスト（99%のケース）
+- CRUD 操作のテスト
+- リレーションシップのテスト
+- Repository パターンのテスト
+- 再利用可能なモデル定義
+
+**利用可能なモデル**:
+- `User` - 基本的な CRUD テスト用（name, email）
+- `Post` - リレーションシップテスト用（title, content, user_id）
+- `Parent`, `Child` - cascade delete テスト用（一対多リレーション）
+
+**例**:
+```python
+from tests.fixtures.models import User, Post, Parent, Child
+from repom import BaseRepository
+
+def test_user_crud(db_test):
+    """ユーザーの基本的な CRUD 操作をテスト"""
+    user = User(name="Alice", email="alice@example.com")
+    repo = BaseRepository(User, session=db_test)
+    repo.save(user)
+    
+    # 取得
+    fetched_user = repo.get_by_id(user.id)
+    assert fetched_user.name == "Alice"
+    
+    # 削除
+    repo.permanent_delete(user)
+    assert repo.get_by_id(user.id) is None
+
+def test_user_post_relationship(db_test):
+    """User-Post のリレーションシップをテスト"""
+    user = User(name="Bob", email="bob@example.com")
+    post = Post(title="My Post", content="Hello", user=user)
+    
+    user_repo = BaseRepository(User, session=db_test)
+    user_repo.save(user)
+    
+    # リレーションシップ確認
+    assert len(user.posts) == 1
+    assert user.posts[0].title == "My Post"
+```
+
+**メリット**:
+- ✅ シンプルで読みやすい
+- ✅ モデル定義を再利用できる
+- ✅ テーブル作成が自動 (`setup_test_models` fixture)
+- ✅ マッパークリーンアップ不要
+
+### ⚠️ 特殊ケース: isolated_mapper_registry
+
+**用途**: 動的モデル定義が必要な特殊なテストのみ
+- TYPE_CHECKING ブロックの動作検証
+- SQLAlchemy マッパーの動作検証
+- インポート順序の検証
+- 前方参照の解決テスト
+
+**例**:
+```python
+def test_type_checking_forward_ref(isolated_mapper_registry, db_test):
+    """TYPE_CHECKING ブロックの前方参照をテスト"""
+    from repom.models.base_model import BaseModel
+    from sqlalchemy import String, ForeignKey
+    from sqlalchemy.orm import Mapped, mapped_column, relationship
+    from typing import TYPE_CHECKING
+    
+    if TYPE_CHECKING:
+        from __future__ import annotations
+    
+    class Author(BaseModel):
+        __tablename__ = 'author'
+        name: Mapped[str] = mapped_column(String(100))
+        books: Mapped[list["Book"]] = relationship(back_populates='author')
+    
+    class Book(BaseModel):
+        __tablename__ = 'book'
+        title: Mapped[str] = mapped_column(String(100))
+        author_id: Mapped[int] = mapped_column(ForeignKey('author.id'))
+        author: Mapped["Author"] = relationship(back_populates='books')
+    
+    # テーブル作成（isolated_mapper_registry 使用時は手動）
+    BaseModel.metadata.create_all(bind=db_test.bind)
+    
+    # テスト実行
+    author = Author(name="John")
+    db_test.add(author)
+    db_test.commit()
+    assert author.id is not None
+```
+
+**注意点**:
+- ❌ 通常のテストでは使用しない
+- ⚠️ `BaseModel.metadata.create_all()` を手動で呼ぶ必要がある
+- ⚠️ マッパークリーンアップが自動で行われる（パフォーマンス影響あり）
+
+### 📋 決定表
+
+| テストの種類 | 推奨方法 | 理由 |
+|------------|---------|------|
+| CRUD テスト | `tests/fixtures/models/` | シンプル、再利用可能 |
+| リレーションシップテスト | `tests/fixtures/models/` | 事前定義済み（User-Post, Parent-Child） |
+| Repository テスト | `tests/fixtures/models/` | BaseRepository と相性良い |
+| TYPE_CHECKING テスト | `isolated_mapper_registry` | 動的定義が必須 |
+| 前方参照テスト | `isolated_mapper_registry` | 動的定義が必須 |
+| インポート順序テスト | `isolated_mapper_registry` | 動的定義が必須 |
+| マッパー動作テスト | `isolated_mapper_registry` | 動的定義が必須 |
 
 ---
 
