@@ -1,8 +1,10 @@
 # Issue #029: isolated_mapper_registry から tests/fixtures/models への移行
 
-**ステータス**: 🟢 進行中 (Phase 3-B)
+**ステータス**: ✅ 完了
 
 **作成日**: 2026-02-02
+
+**完了日**: 2026-02-02
 
 **優先度**: 中
 
@@ -84,12 +86,12 @@ def test_type_checking_with_manual_import_order(isolated_mapper_registry)
 - ✅ 動作確認テスト (`test_fixtures_models.py`) を作成
 - ✅ 603 tests passing
 
-### Phase 2: ドキュメント整理 🟡 **次のステップ**
+### Phase 2: ドキュメント整理 ✅ **完了**
 
 #### Step 1: ドキュメント削除
-- ❌ `docs/guides/testing/isolated_mapper_fixture.md` を削除
-- ❌ `docs/issue/active/022_isolated_mapper_registry_improvement.md` を completed へ移動
-- ❌ `docs/guides/testing/README.md` を更新
+- ✅ `docs/guides/testing/isolated_mapper_fixture.md` を削除
+- ✅ `docs/issue/active/022_isolated_mapper_registry_improvement.md` を completed へ移動
+- ✅ `docs/guides/testing/README.md` を更新
 
 #### Step 2: `conftest.py` の更新
 - ✅ `isolated_mapper_registry` フィクスチャの docstring を更新
@@ -101,10 +103,10 @@ def test_type_checking_with_manual_import_order(isolated_mapper_registry)
 - **移行対象なし** - 全ての `isolated_mapper_registry` 使用は TYPE_CHECKING テスト
 - これらは動的なモデル定義が必須のため、`isolated_mapper_registry` を維持
 
-### Phase 4: 最終クリーンアップ 🟡 **次のステップ**
+### Phase 4: 最終クリーンアップ ✅ **完了**
 
-- `isolated_mapper_registry` を TYPE_CHECKING テスト専用として明確化
-- ドキュメントで使い分けを明記
+- ✅ `isolated_mapper_registry` を TYPE_CHECKING テスト専用として明確化
+- ✅ ドキュメントで使い分けを明記
 
 ---
 
@@ -224,9 +226,9 @@ def test_type_checking(isolated_mapper_registry, db_test):
 
 ### ✅ Phase 4: 最終確認
 
-- [ ] 全テストが passing
-- [ ] ドキュメントが更新されている
-- [ ] 新規開発者が迷わない構造になっている
+- [x] 全テストが passing
+- [x] ドキュメントが更新されている
+- [x] 新規開発者が迷わない構造になっている
 
 ---
 
