@@ -10,27 +10,26 @@ def test_user_model_basic_crud(db_test):
     
     # Create
     user = User(name="Alice", email="alice@example.com")
-    repo.add(user)
-    repo.commit()
+    saved_user = repo.save(user)
     
-    assert user.id is not None
-    assert user.name == "Alice"
-    assert user.email == "alice@example.com"
+    assert saved_user.id is not None
+    assert saved_user.name == "Alice"
+    assert saved_user.email == "alice@example.com"
     
     # Read
-    found = repo.get_by_id(user.id)
+    found = repo.get_by_id(saved_user.id)
     assert found is not None
     assert found.name == "Alice"
     
     # Update
     found.name = "Alice Updated"
-    repo.commit()
-    assert repo.get_by_id(user.id).name == "Alice Updated"
+    repo.save(found)
+    updated = repo.get_by_id(saved_user.id)
+    assert updated.name == "Alice Updated"
     
     # Delete
-    repo.delete(found)
-    repo.commit()
-    assert repo.get_by_id(user.id) is None
+    repo.permanent_delete(saved_user.id)
+    assert repo.get_by_id(saved_user.id) is None
 
 
 def test_post_model_with_foreign_key(db_test):
@@ -39,14 +38,10 @@ def test_post_model_with_foreign_key(db_test):
     post_repo = BaseRepository(Post, session=db_test)
     
     # User を作成
-    user = User(name="Bob", email="bob@example.com")
-    user_repo.add(user)
-    user_repo.commit()
+    user = user_repo.save(User(name="Bob", email="bob@example.com"))
     
     # Post を作成（外部キー）
-    post = Post(title="First Post", content="Hello World", user_id=user.id)
-    post_repo.add(post)
-    post_repo.commit()
+    post = post_repo.save(Post(title="First Post", content="Hello World", user_id=user.id))
     
     assert post.id is not None
     assert post.user_id == user.id
@@ -58,19 +53,14 @@ def test_user_post_relationship(db_test):
     post_repo = BaseRepository(Post, session=db_test)
     
     # User を作成
-    user = User(name="Charlie", email="charlie@example.com")
-    user_repo.add(user)
-    user_repo.commit()
+    user = user_repo.save(User(name="Charlie", email="charlie@example.com"))
     
     # 複数の Post を作成
-    post1 = Post(title="Post 1", content="Content 1", user_id=user.id)
-    post2 = Post(title="Post 2", content="Content 2", user_id=user.id)
-    post_repo.add(post1)
-    post_repo.add(post2)
-    post_repo.commit()
+    post1 = post_repo.save(Post(title="Post 1", content="Content 1", user_id=user.id))
+    post2 = post_repo.save(Post(title="Post 2", content="Content 2", user_id=user.id))
     
-    # リレーションシップを検証
-    db_test.refresh(user)  # リレーションシップをロード
+    # リレーションシップを検証（db_test.refresh でリレーションをロード）
+    db_test.refresh(user)
     assert len(user.posts) == 2
     assert user.posts[0].title in ["Post 1", "Post 2"]
     assert post1.user.name == "Charlie"
@@ -82,16 +72,11 @@ def test_parent_child_relationship(db_test):
     child_repo = BaseRepository(Child, session=db_test)
     
     # Parent を作成
-    parent = Parent(name="Parent A")
-    parent_repo.add(parent)
-    parent_repo.commit()
+    parent = parent_repo.save(Parent(name="Parent A"))
     
     # 複数の Child を作成
-    child1 = Child(name="Child 1", parent_id=parent.id)
-    child2 = Child(name="Child 2", parent_id=parent.id)
-    child_repo.add(child1)
-    child_repo.add(child2)
-    child_repo.commit()
+    child1 = child_repo.save(Child(name="Child 1", parent_id=parent.id))
+    child2 = child_repo.save(Child(name="Child 2", parent_id=parent.id))
     
     # リレーションシップを検証
     db_test.refresh(parent)
@@ -108,15 +93,13 @@ def test_cascade_delete(db_test):
     # Parent と Child を作成
     parent = Parent(name="Parent B")
     child = Child(name="Child B", parent=parent)
-    parent_repo.add(parent)
-    parent_repo.commit()
+    parent_repo.save(parent)
     
     parent_id = parent.id
     child_id = child.id
     
     # Parent を削除
-    parent_repo.delete(parent)
-    parent_repo.commit()
+    parent_repo.permanent_delete(parent_id)
     
     # Child も削除されているか確認
     assert parent_repo.get_by_id(parent_id) is None
