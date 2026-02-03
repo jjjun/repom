@@ -24,6 +24,123 @@ from repom.models.base_model import BaseModel
 from repom.database import Base
 
 
+def _get_alembic_ini_content(alembic_dir, db_url):
+    """Generate alembic.ini content for testing"""
+    return f"""
+[alembic]
+script_location = {alembic_dir}
+file_template = %%(rev)s_%%(slug)s
+sqlalchemy.url = {db_url}
+
+[loggers]
+keys = root,sqlalchemy,alembic
+
+[handlers]
+keys = console
+
+[formatters]
+keys = generic
+
+[logger_root]
+level = WARN
+handlers = console
+qualname =
+
+[logger_sqlalchemy]
+level = WARN
+handlers =
+qualname = sqlalchemy.engine
+
+[logger_alembic]
+level = INFO
+handlers =
+qualname = alembic
+
+[handler_console]
+class = StreamHandler
+args = (sys.stderr,)
+level = NOTSET
+formatter = generic
+
+[formatter_generic]
+format = %(levelname)-5.5s [%(name)s] %(message)s
+datefmt = %H:%M:%S
+"""
+
+
+def _get_env_py_content():
+    """Generate env.py content for testing"""
+    return """
+from logging.config import fileConfig
+from sqlalchemy import engine_from_config
+from sqlalchemy import pool
+from alembic import context
+
+config = context.config
+
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+from repom.database import Base
+
+# Filter metadata to only include expected tables (avoid test interference)
+from sqlalchemy import MetaData
+filtered_metadata = MetaData()
+expected_tables = {'samples', 'user_sessions', 'test_migration_no_id', 'test_migration_with_id', 'rosters'}
+for table_name, table in Base.metadata.tables.items():
+    if table_name in expected_tables:
+        table.to_metadata(filtered_metadata)
+
+target_metadata = filtered_metadata
+
+def run_migrations_online():
+    connectable = engine_from_config(
+        config.get_section(config.config_ini_section),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+
+    with connectable.connect() as connection:
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata
+        )
+
+        with context.begin_transaction():
+            context.run_migrations()
+
+run_migrations_online()
+"""
+
+
+def _get_mako_content():
+    """Generate script.py.mako content for testing"""
+    return """\"\"\"${message}
+
+Revision ID: ${up_revision}
+Revises: ${down_revision | comma,n}
+Create Date: ${create_date}
+
+\"\"\"
+from alembic import op
+import sqlalchemy as sa
+${imports if imports else ""}
+
+revision = ${repr(up_revision)}
+down_revision = ${repr(down_revision)}
+branch_labels = ${repr(branch_labels)}
+depends_on = ${repr(depends_on)}
+
+
+def upgrade():
+    ${upgrades if upgrades else "pass"}
+
+
+def downgrade():
+    ${downgrades if downgrades else "pass"}
+"""
+
+
 class MigrationTestModelNoId(BaseModel):
     """マイグレーションテスト用: use_id=Falseのモデル
 
@@ -90,119 +207,17 @@ def test_alembic_migration_without_id():
         db_path = Path(tmpdir) / 'test.db'
         db_url = f'sqlite:///{db_path}'
 
-        alembic_ini_content = f"""
-[alembic]
-script_location = {alembic_dir}
-file_template = %%(rev)s_%%(slug)s
-sqlalchemy.url = {db_url}
-
-[loggers]
-keys = root,sqlalchemy,alembic
-
-[handlers]
-keys = console
-
-[formatters]
-keys = generic
-
-[logger_root]
-level = WARN
-handlers = console
-qualname =
-
-[logger_sqlalchemy]
-level = WARN
-handlers =
-qualname = sqlalchemy.engine
-
-[logger_alembic]
-level = INFO
-handlers =
-qualname = alembic
-
-[handler_console]
-class = StreamHandler
-args = (sys.stderr,)
-level = NOTSET
-formatter = generic
-
-[formatter_generic]
-format = %(levelname)-5.5s [%(name)s] %(message)s
-datefmt = %H:%M:%S
-"""
+        alembic_ini_content = _get_alembic_ini_content(alembic_dir, db_url)
         alembic_ini_path.write_text(alembic_ini_content)
 
         # env.pyを作成
         env_py_path = alembic_dir / 'env.py'
-        env_py_content = f"""
-from logging.config import fileConfig
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-from alembic import context
-
-config = context.config
-
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
-
-from repom.database import Base
-
-# Filter metadata to only include expected tables (avoid test interference)
-from sqlalchemy import MetaData
-filtered_metadata = MetaData()
-expected_tables = {{'samples', 'user_sessions', 'test_migration_no_id', 'test_migration_with_id', 'rosters'}}
-for table_name, table in Base.metadata.tables.items():
-    if table_name in expected_tables:
-        table.to_metadata(filtered_metadata)
-
-target_metadata = filtered_metadata
-
-def run_migrations_online():
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata
-        )
-
-        with context.begin_transaction():
-            context.run_migrations()
-
-run_migrations_online()
-"""
+        env_py_content = _get_env_py_content()
         env_py_path.write_text(env_py_content)
 
         # script.py.makoを作成（最小限）
         mako_path = alembic_dir / 'script.py.mako'
-        mako_content = """\"\"\"${message}
-
-Revision ID: ${up_revision}
-Revises: ${down_revision | comma,n}
-Create Date: ${create_date}
-
-\"\"\"
-from alembic import op
-import sqlalchemy as sa
-${imports if imports else ""}
-
-revision = ${repr(up_revision)}
-down_revision = ${repr(down_revision)}
-branch_labels = ${repr(branch_labels)}
-depends_on = ${repr(depends_on)}
-
-
-def upgrade():
-    ${upgrades if upgrades else "pass"}
-
-
-def downgrade():
-    ${downgrades if downgrades else "pass"}
-"""
+        mako_content = _get_mako_content()
         mako_path.write_text(mako_content)
 
         # Alembic設定を読み込み
