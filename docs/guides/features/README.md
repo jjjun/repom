@@ -4,9 +4,12 @@ repom の個別機能に関するガイドです。
 
 ## 📋 ガイド一覧
 
+- **[config_hook_guide.md](config_hook_guide.md)** ⭐ NEW - CONFIG_HOOK による設定カスタマイズ
 - **[auto_import_models_guide.md](auto_import_models_guide.md)** - モデルの自動インポート機能
+- **[discovery_guide.md](discovery_guide.md)** - 汎用パッケージディスカバリー機能
 - **[master_data_sync_guide.md](master_data_sync_guide.md)** - マスターデータ同期機能
 - **[logging_guide.md](logging_guide.md)** - ログ機能の設定と使い方
+- **[query_analyzer_guide.md](query_analyzer_guide.md)** - クエリアナライザー機能
 
 ## 🎯 このディレクトリの対象
 
