@@ -1,10 +1,10 @@
-# Issue #023: Test Independence and Isolation Improvements
+# Issue #030 (formerly #023): Test Independence and Isolation Improvements
 
-**ステータス**: ✅ 部分的に解決（isolated_mapper_registry 削除により Phase 1 完了）
+**ステータス**: ✅ 完了
 
 **作成日**: 2026-01-29
 
-**更新日**: 2026-02-02
+**完了日**: 2026-02-03
 
 **優先度**: 中
 
@@ -12,18 +12,20 @@
 
 ---
 
-## ⚠️ 更新情報（2026-02-02）
+## ✅ 完了概要（2026-02-03）
 
-**Phase 1 は Issue #029 で完全に解決されました:**
+**Phase 1**: Issue #029 で完全に解決（isolated_mapper_registry 削除）
 - `isolated_mapper_registry` フィクスチャを完全削除（~100行）
 - 4つのテストを直接クリーンアップパターンに移行
 - グローバルステートへの影響を排除
 
-**残りの課題:**
-- Phase 2: Transaction Rollback の改善（必要に応じて）
-- Phase 3: テスト実行順序の完全独立性（低優先度）
+**Phase 3**: test_migration_no_id.py の順序依存解消（commit 1b855ae）
+- モデル定義を関数スコープ化
+- try-finally クリーンアップパターン適用
+- `test_00_migration_no_id.py` → `test_migration_no_id.py` リネーム
+- 任意の順序でテスト実行可能
 
-このドキュメントは歴史的記録として保持。
+**結果**: 全テストが完全に独立し、順序非依存を達成しました。
 
 ---
 

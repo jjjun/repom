@@ -28,7 +28,6 @@ completed/     → 実装完了・コミット済み
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
 | #028 | テストアーキテクチャの複雑さ改善 | 中 | 🔄 作業中 (Part 1完了) | [active/028_test_architecture_complexity.md](active/028_test_architecture_complexity.md) |
-| #023 | テストの独立性と隔離性の改善 | 中 | 🟡 調査・設計段階 | [active/023_test_independence_improvements.md](active/023_test_independence_improvements.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください。
@@ -39,6 +38,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #030 | テストの独立性と隔離性の改善 | 2026-02-03 | Phase 1: isolated_mapper_registry 削除（Issue #029）、Phase 3: test_migration_no_id.py 順序依存解消、モデル関数スコープ化、try-finally クリーンアップ、全テスト順序非依存達成 | [completed/030_test_independence_improvements.md](completed/030_test_independence_improvements.md) |
 | #029 | isolated_mapper_registry から tests/fixtures/models への移行 | 2026-02-02 | isolated_mapper_registry 完全削除（~100行）、tests/fixtures/models/ (User, Post, Parent, Child) 新規提供、360行のドキュメント削減、シンプルな直接クリーンアップパターン採用、428 tests passing | [completed/029_migrate_from_isolated_mapper_to_fixtures_models.md](completed/029_migrate_from_isolated_mapper_to_fixtures_models.md) |
 | #027 | PostgreSQL 設定統合 | 2026-02-01 | config.db_type による PostgreSQL/SQLite 切り替え、engine_kwargs 自動設定、Unit 25 + Integration 7 テスト全パス、環境変数削除 (Issue #028 Part 1) | [completed/027_postgresql_config_integration.md](completed/027_postgresql_config_integration.md) |
 | #026 | PostgreSQL Docker セットアップスクリプト | 2026-02-01 | Docker Compose構成、postgres_start/stop コマンド、環境別DB自動作成、セットアップガイド作成、全テスト成功 | [completed/026_postgresql_docker_setup.md](completed/026_postgresql_docker_setup.md) |
