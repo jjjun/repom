@@ -8,12 +8,13 @@ import os
 # PostgreSQL 統合テストは repom_test データベースに接続する
 
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='session')
 def setup_postgres_tables():
     """
     PostgreSQL 統合テスト用のテーブルセットアップ
 
     config.db_type='postgres' の場合のみ実行される。
+    必要なテストでのみ明示的に使用してください。
     """
     from repom.config import config
 

@@ -138,6 +138,11 @@ class TestGetAsyncDbTransaction:
 class TestDatabaseManager:
     """DatabaseManager クラスの非同期機能テスト"""
 
+    @pytest.fixture(autouse=True)
+    def setup_tables(self, setup_repom_db_tables):
+        """このクラスのテストでは setup_repom_db_tables を使用"""
+        pass
+
     @pytest.mark.asyncio
     async def test_lazy_initialization_async(self):
         """Async Engine は lazy initialization される"""

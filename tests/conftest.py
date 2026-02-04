@@ -33,7 +33,7 @@ def pytest_configure(config):
     logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
 
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='session')
 def setup_repom_db_tables(request):
     """
     repom.db.engine と repom.async_session.async_engine にテーブルを作成
@@ -44,17 +44,11 @@ def setup_repom_db_tables(request):
     Note: EXEC_ENV='test' が設定されているため、両engineは :memory: + StaticPool
     create_test_fixtures() が作成する db_engine と同じ :memory: DB を参照する。
 
-    autouse=True により、全テスト実行前に自動的に実行される。
+    必要なテストでのみ明示的に使用してください。
 
     PostgreSQL 統合テスト時（DB_TYPE=postgres かつ EXEC_ENV!='test'）は、
     async engine の作成をスキップ（パスワード認証問題を回避）
-
-    pytest.mark.no_db_setup マーカーがある場合は、このfixtureをスキップ
     """
-    # no_db_setup マーカーがある場合はスキップ
-    if request.node.get_closest_marker('no_db_setup'):
-        yield
-        return
 
     from repom.models.base_model import Base
     from repom.database import get_sync_engine, get_async_engine
