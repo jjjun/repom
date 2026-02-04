@@ -37,6 +37,10 @@ script_location = {script_location}
 # %(here)s refers to the directory containing this alembic.ini (project root)
 version_locations = {version_locations}
 
+# Path separator for version_locations (when multiple paths are specified)
+# Using 'os' allows OS-specific path separators
+path_separator = os
+
 # Logging configuration
 [loggers]
 keys = root,sqlalchemy,alembic
