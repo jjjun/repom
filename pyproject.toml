@@ -46,6 +46,8 @@ db_remove = "repom.scripts.db_delete:main"
 db_backup = "repom.scripts.db_backup:main"
 db_sync_master = "repom.scripts.db_sync_master:main"
 list_models = "repom.scripts.list_models:list_models"
+alembic_init = "repom.scripts.alembic_init:main"
+alembic_reset = "repom.scripts.alembic_reset:main"
 postgres_start = "repom.scripts.postgresql.manage:start"
 postgres_stop = "repom.scripts.postgresql.manage:stop"
 
