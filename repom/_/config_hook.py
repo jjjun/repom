@@ -88,6 +88,9 @@ class Config:
             paths = [paths]
 
         for p in paths:
+            # None や空文字列をスキップ
+            if not p:
+                continue
             try:
                 Path(p).mkdir(parents=True, exist_ok=True)
             except Exception as e:

@@ -72,11 +72,11 @@ def setup_repom_db_tables(request):
     Base.metadata.create_all(bind=engine)
 
     # 非同期 engine にテーブル作成
-    # ただし、PostgreSQL 統合テスト時（config.db_type='postgres' かつ EXEC_ENV='dev'）はスキップ
+    # ただし、PostgreSQL 統合テスト時（config.db_type='postgres' かつ EXEC_ENV='test'）はスキップ
     from repom.config import config
     exec_env = os.getenv('EXEC_ENV', 'test')
 
-    if not (config.db_type == 'postgres' and exec_env == 'dev'):
+    if not (config.db_type == 'postgres' and exec_env == 'test'):
         async def create_async_tables():
             async_engine = await get_async_engine()
             async with async_engine.begin() as conn:

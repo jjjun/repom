@@ -4,10 +4,8 @@ import pytest
 import os
 from sqlalchemy import text
 
-# conftest.py が EXEC_ENV='test' を設定するため、PostgreSQL 統合テスト用に 'dev' に変更
-os.environ['EXEC_ENV'] = 'dev'
-
 # PostgreSQL 統合テスト用に db_type を設定
+# EXEC_ENV='test' のまま（repom_test データベースに接続）
 config.db_type = 'postgres'
 
 
@@ -101,9 +99,9 @@ class TestPostgreSQLIntegration:
         # engine が正しく作成されているか
         engine = get_sync_engine()
         assert engine.url.drivername == 'postgresql+psycopg'
-        assert str(engine.url.host) == config.postgres_host
-        assert engine.url.port == config.postgres_port
-        assert str(engine.url.username) == config.postgres_user
+        assert str(engine.url.host) == config.postgres.host
+        assert engine.url.port == config.postgres.port
+        assert str(engine.url.username) == config.postgres.user
         assert str(engine.url.database) == config.postgres_db
 
     def test_connection_pool_settings(self):

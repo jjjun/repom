@@ -4,8 +4,8 @@ import os
 
 
 # 統合テスト用の設定
-# conftest.py が EXEC_ENV='test' を設定するため、PostgreSQL 統合テスト用に 'dev' に変更
-os.environ['EXEC_ENV'] = 'dev'
+# 親の conftest.py が EXEC_ENV='test' を設定しているため、そのまま使用
+# PostgreSQL 統合テストは repom_test データベースに接続する
 
 
 @pytest.fixture(scope='session', autouse=True)
