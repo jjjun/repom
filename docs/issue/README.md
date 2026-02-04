@@ -27,7 +27,6 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
-| #031 | Alembic セットアップとリセットユーティリティの実装 | 中 | 🟡 提案中 | [active/031_alembic_setup_and_reset_utilities.md](active/031_alembic_setup_and_reset_utilities.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください。
@@ -37,7 +36,9 @@ completed/     → 実装完了・コミット済み
 ## 📋 完了済み Issue
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
-|----|---------|--------|------|---------|| #035 | テストアーキテクチャの複雑性（親Issue） | 2026-02-04 | 全サブIssue完了：Issue #034 (autouse削除)、Issue #035 (fixture分離)、Issue #036 (scope見直し・見送り)、Phase 1-2完了、複雑な条件分岐削除、601 tests passing、可読性・メンテナンス性・拡張性向上達成 | [completed/035_test_architecture_complexity.md](completed/035_test_architecture_complexity.md) |
+|----|---------|--------|------|---------|
+| #036 | Alembic セットアップとリセットユーティリティの実装 | 2026-02-04 | AlembicSetup/AlembicReset/AlembicTemplates実装、alembic_init/alembic_reset CLIスクリプト、path_separator設定追加、test_migration_no_id.pyリファクタリング（139行削減）、13単体テスト全パス、ドキュメント整備完了、deprecation warning解消 | [completed/036_alembic_setup_and_reset_utilities.md](completed/036_alembic_setup_and_reset_utilities.md) |
+| #035 | テストアーキテクチャの複雑性（親Issue） | 2026-02-04 | 全サブIssue完了：Issue #034 (autouse削除)、Issue #035 (fixture分離)、Issue #036 (scope見直し・見送り)、Phase 1-2完了、複雑な条件分岐削除、601 tests passing、可読性・メンテナンス性・拡張性向上達成 | [completed/035_test_architecture_complexity.md](completed/035_test_architecture_complexity.md) |
 | #034 | SQLite/PostgreSQL Fixture 分離 | 2026-02-04 | setup_repom_db_tables を setup_sqlite_tables + setup_postgres_tables に分離、複雑な条件分岐削除、重複 fixture 削除（40行→11行）、3ファイル更新、66個の Unicode 絵文字を ASCII 置換、601 tests passing | [completed/034_separate_sqlite_postgres_fixtures.md](completed/034_separate_sqlite_postgres_fixtures.md) |
 | #033 | autouse=True の削除 | 2026-02-04 | setup_repom_db_tables/setup_postgres_tables から autouse=True を削除、明示的フィクスチャ依存、test_skip_on_exception セッション修正、574 unit tests passing、603 total tests passing、パフォーマンス向上 | [completed/033_remove_autouse_from_fixtures.md](completed/033_remove_autouse_from_fixtures.md) || #032 | PostgreSQL 統合テストの EXEC_ENV 修正 | 2026-02-04 | EXEC_ENV='test' へ修正、repom_test 接続、config_hook.py 警告修正、PostgreSQL 6/6 tests passing、603 tests passing | [completed/032_postgresql_test_env_correction.md](completed/032_postgresql_test_env_correction.md) |
 | #030 | テストの独立性と隔離性の改善 | 2026-02-03 | Phase 1: isolated_mapper_registry 削除（Issue #029）、Phase 3: test_migration_no_id.py 順序依存解消、モデル関数スコープ化、try-finally クリーンアップ、全テスト順序非依存達成 | [completed/030_test_independence_improvements.md](completed/030_test_independence_improvements.md) |
