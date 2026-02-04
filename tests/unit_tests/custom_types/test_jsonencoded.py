@@ -14,6 +14,12 @@ class MyModel(BaseModel):
     option_json: Mapped[Any] = mapped_column(JSONEncoded)
 
 
+@pytest.fixture(scope='function', autouse=True)
+def setup_tables(setup_sqlite_tables):
+    """setup_sqlite_tables に依存して、テーブルが作成されることを保証"""
+    pass
+
+
 def test_json_encoded_value_is_json_format(db_test):
     option_data = {"key": "value"}
     log = MyModel(option_json=option_data)

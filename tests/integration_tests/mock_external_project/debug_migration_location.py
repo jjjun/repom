@@ -24,7 +24,7 @@ os.environ['EXEC_ENV'] = 'test'
 # Now import repom config
 
 print("=" * 80)
-print("🔍 Debugging Alembic Version Locations")
+print("[SEARCH] Debugging Alembic Version Locations")
 print("=" * 80)
 print()
 
@@ -41,11 +41,11 @@ print("📍 CONFIG_HOOK result:")
 print(f"   config.alembic_versions_path = {config.alembic_versions_path}")
 print()
 
-print("✅ CONFIG_HOOK is working correctly" if str(expected_path) == config.alembic_versions_path else "❌ CONFIG_HOOK failed")
+print("[OK] CONFIG_HOOK is working correctly" if str(expected_path) == config.alembic_versions_path else "[NG] CONFIG_HOOK failed")
 print()
 
 print("=" * 80)
-print("📝 Next Steps:")
+print("[NOTE] Next Steps:")
 print("=" * 80)
 print()
 print("1. Run from mock_external_project directory:")
@@ -62,8 +62,8 @@ print("4. Run alembic revision command:")
 print("   poetry run alembic revision --autogenerate -m 'test migration'")
 print()
 print("5. Check which directory contains the new migration file:")
-print("   - ✅ Expected: mock_external_project/alembic/versions/")
-print("   - ❌ Bug: repom/alembic/versions/")
+print("   - [OK] Expected: mock_external_project/alembic/versions/")
+print("   - [NG] Bug: repom/alembic/versions/")
 print()
 
 # List current migration files in both locations

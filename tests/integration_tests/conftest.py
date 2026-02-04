@@ -7,33 +7,6 @@ import os
 # 親の conftest.py が EXEC_ENV='test' を設定しているため、そのまま使用
 # PostgreSQL 統合テストは repom_test データベースに接続する
 
+# Note: setup_postgres_tables fixture は親の conftest.py で定義されています。
+# このファイルでは PostgreSQL 固有の設定のみを記述します。
 
-@pytest.fixture(scope='session')
-def setup_postgres_tables():
-    """
-    PostgreSQL 統合テスト用のテーブルセットアップ
-
-    config.db_type='postgres' の場合のみ実行される。
-    必要なテストでのみ明示的に使用してください。
-    """
-    from repom.config import config
-
-    if config.db_type != 'postgres':
-        # PostgreSQL 以外の場合は何もしない（親の conftest.py の fixture が実行される）
-        return
-
-    from repom.models.base_model import Base
-    from repom.database import get_sync_engine
-    from repom.utility import load_models
-
-    # モデルをロード
-    load_models()
-
-    # 同期 engine にテーブル作成（PostgreSQL では非同期エンジンは不要）
-    engine = get_sync_engine()
-    Base.metadata.create_all(bind=engine)
-
-    yield
-
-    # テーブルをクリーンアップ（オプション）
-    # Base.metadata.drop_all(bind=engine)

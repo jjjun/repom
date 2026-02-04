@@ -139,8 +139,8 @@ class TestDatabaseManager:
     """DatabaseManager クラスの非同期機能テスト"""
 
     @pytest.fixture(autouse=True)
-    def setup_tables(self, setup_repom_db_tables):
-        """このクラスのテストでは setup_repom_db_tables を使用"""
+    def setup_tables(self, setup_sqlite_tables):
+        """このクラスのテストでは setup_sqlite_tables を使用"""
         pass
 
     @pytest.mark.asyncio

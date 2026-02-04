@@ -38,19 +38,19 @@ script_location = alembic
             autogenerate=False,
             version_path=str(versions_dir)
         )
-        print("✅ SUCCESS: version_path parameter works!")
+        print("[OK] SUCCESS: version_path parameter works!")
 
         # Check if file was created in the right location
         files = list(versions_dir.glob("*.py"))
         if files:
-            print(f"✅ File created at: {files[0]}")
+            print(f"[OK] File created at: {files[0]}")
             return True
         else:
-            print("❌ No file created")
+            print("[NG] No file created")
             return False
 
     except Exception as e:
-        print(f"❌ FAILED: {e}")
+        print(f"[NG] FAILED: {e}")
         return False
 
 

@@ -13,6 +13,12 @@ class CreatedAtModel(BaseModel):
     created_at: Mapped[Optional[datetime]] = mapped_column(AutoDateTime, default=datetime.now)
 
 
+@pytest.fixture(scope='function', autouse=True)
+def setup_tables(setup_sqlite_tables):
+    """setup_sqlite_tables に依存して、テーブルが作成されることを保証"""
+    pass
+
+
 def test_created_at_default_now(db_test):
     log = CreatedAtModel()
     db_test.add(log)

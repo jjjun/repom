@@ -781,7 +781,7 @@ def test_production_pattern_exact_match():
     assert len(validated.logs) == 2
 
     # 警告やエラーが出ないことを確認（テスト成功 = エラーなし）
-    print("[Production Pattern] ✅ No errors - validation successful")
+    print("[Production Pattern] [OK] No errors - validation successful")
 
 
 # =============================================================================
@@ -831,7 +831,7 @@ def test_phase1_improvement_list_no_longer_required():
 
     validated = VoiceScriptLineResponse(**data)
     assert len(validated.logs) == 2
-    print("[Phase 1] ✅ List を forward_refs に含めずに動作成功！")
+    print("[Phase 1] [OK] List を forward_refs に含めずに動作成功！")
 
 
 def test_phase1_improvement_dict_no_longer_required():
@@ -860,7 +860,7 @@ def test_phase1_improvement_dict_no_longer_required():
     # Dict が正しく解決されていることを確認
     assert 'Dict' in annotation_str or 'dict[' in annotation_str
 
-    print("[Phase 1] ✅ Dict を forward_refs に含めずに動作成功！")
+    print("[Phase 1] [OK] Dict を forward_refs に含めずに動作成功！")
 
 
 def test_phase1_improvement_optional_no_longer_required():
@@ -889,7 +889,7 @@ def test_phase1_improvement_optional_no_longer_required():
     # Optional が正しく解決されていることを確認
     assert 'Optional' in annotation_str or 'None' in annotation_str
 
-    print("[Phase 1] ✅ Optional を forward_refs に含めずに動作成功！")
+    print("[Phase 1] [OK] Optional を forward_refs に含めずに動作成功！")
 
 
 # ====================================================================================
@@ -904,20 +904,20 @@ def test_phase2_extract_undefined_types():
     error_msg = "name 'BookResponse' is not defined"
     result = _extract_undefined_types(error_msg)
     assert result == {'BookResponse'}
-    print(f"[Phase 2] ✅ 単一の未定義型を検出: {result}")
+    print(f"[Phase 2] [OK] 単一の未定義型を検出: {result}")
 
     # Test case 2: Multiple undefined types
     error_msg = "name 'AssetItemResponse' is not defined, name 'LogResponse' is not defined"
     result = _extract_undefined_types(error_msg)
     assert 'AssetItemResponse' in result
     assert 'LogResponse' in result
-    print(f"[Phase 2] ✅ 複数の未定義型を検出: {result}")
+    print(f"[Phase 2] [OK] 複数の未定義型を検出: {result}")
 
     # Test case 3: No undefined types
     error_msg = "Some other error"
     result = _extract_undefined_types(error_msg)
     assert result == set()
-    print(f"[Phase 2] ✅ 未定義型なしを正しく処理: {result}")
+    print(f"[Phase 2] [OK] 未定義型なしを正しく処理: {result}")
 
 
 def test_phase2_error_message_in_dev_environment(monkeypatch):
@@ -953,7 +953,7 @@ def test_phase2_error_message_in_dev_environment(monkeypatch):
     assert "forward_refs" in error_msg
     assert "Solution:" in error_msg
 
-    print("[Phase 2] ✅ 開発環境で詳細なエラーメッセージと例外発生を確認")
+    print("[Phase 2] [OK] 開発環境で詳細なエラーメッセージと例外発生を確認")
     print(f"Error message preview:\n{error_msg[:300]}...")
 
 
@@ -992,7 +992,7 @@ def test_phase2_error_message_in_prod_environment(monkeypatch, caplog):
     assert "AssetResponse" in error_msg
     assert "Solution:" in error_msg
 
-    print("[Phase 2] ✅ 本番環境でも例外が発生することを確認（環境依存動作は未実装）")
+    print("[Phase 2] [OK] 本番環境でも例外が発生することを確認（環境依存動作は未実装）")
     print(f"Error message preview:\n{error_msg[:300]}...")
 
 
@@ -1031,7 +1031,7 @@ def test_phase2_helpful_error_suggestions():
         assert "forward_refs={" in error_msg
         assert "'ItemResponseUnique': ItemResponseUnique," in error_msg
 
-        print("[Phase 2] ✅ エラーメッセージに具体的なコード例が含まれることを確認")
+        print("[Phase 2] [OK] エラーメッセージに具体的なコード例が含まれることを確認")
         print(f"\nGenerated solution:\n{error_msg}")
 
     finally:

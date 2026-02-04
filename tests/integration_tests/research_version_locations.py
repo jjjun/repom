@@ -77,13 +77,13 @@ def test_approach_3_alembic_ini_comment():
     print("=" * 70)
 
     print("Pros:")
-    print("  ✅ Works reliably for both file creation and execution")
-    print("  ✅ Standard Alembic approach")
+    print("  [OK] Works reliably for both file creation and execution")
+    print("  [OK] Standard Alembic approach")
     print()
     print("Cons:")
-    print("  ❌ External projects need custom alembic.ini (not minimal)")
-    print("  ❌ Duplicates path configuration (alembic.ini + RepomConfig)")
-    print("  ❌ Confusing: file creation uses .ini, execution uses env.py")
+    print("  [NG] External projects need custom alembic.ini (not minimal)")
+    print("  [NG] Duplicates path configuration (alembic.ini + RepomConfig)")
+    print("  [NG] Confusing: file creation uses .ini, execution uses env.py")
     print()
 
 
@@ -96,12 +96,12 @@ if __name__ == "__main__":
     try:
         test_approach_1_set_main_option()
     except Exception as e:
-        print(f"❌ Approach 1 failed: {e}\n")
+        print(f"[NG] Approach 1 failed: {e}\n")
 
     try:
         test_approach_2_script_directory_constructor()
     except Exception as e:
-        print(f"❌ Approach 2 failed: {e}\n")
+        print(f"[NG] Approach 2 failed: {e}\n")
 
     test_approach_3_alembic_ini_comment()
 

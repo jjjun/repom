@@ -85,12 +85,12 @@ def test_repom_has_no_migration_files():
 
         # Assert that repom has NO migration files
         assert len(migration_files) == 0, (
-            f"❌ repom should not have migration files, but found {len(migration_files)}:\n" +
+            f"[NG] repom should not have migration files, but found {len(migration_files)}:\n" +
             "\n".join(f"  - {f.name}" for f in migration_files) +
             "\n\nrepom is a library and should not contain its own migrations."
         )
 
-        print(f"\n✅ repom/alembic/versions/ is empty (correct)")
+        print(f"\n[OK] repom/alembic/versions/ is empty (correct)")
 
         # .gitkeep should exist to preserve the directory
         gitkeep = repom_versions_dir / '.gitkeep'

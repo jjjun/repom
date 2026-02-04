@@ -37,9 +37,9 @@ print()
 
 # Check if it picked up the new path
 if custom_path in script_after.version_locations:
-    print("✅ SUCCESS: set_main_option() DOES affect ScriptDirectory!")
+    print("[OK] SUCCESS: set_main_option() DOES affect ScriptDirectory!")
     print(f"   Custom path is in version_locations: {custom_path}")
 else:
-    print("❌ FAILED: set_main_option() does NOT affect ScriptDirectory")
+    print("[NG] FAILED: set_main_option() does NOT affect ScriptDirectory")
     print(f"   Expected: {custom_path}")
     print(f"   Actual: {script_after.version_locations}")

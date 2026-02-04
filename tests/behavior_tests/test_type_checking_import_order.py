@@ -147,7 +147,7 @@ class AniVideoUserStatusModel(BaseModelAuto):
             # 予想されるエラーメッセージ
             if "failed to locate a name" in error_msg.lower():
                 pytest.fail(
-                    f"❌ Name resolution failed as expected:\n{error_msg}\n\n"
+                    f"[NG] Name resolution failed as expected:\n{error_msg}\n\n"
                     "This confirms the issue: TYPE_CHECKING blocks + alphabetical import order "
                     "causes SQLAlchemy relationship string references to fail."
                 )

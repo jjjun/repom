@@ -34,9 +34,9 @@ def pytest_configure(config):
 
 
 @pytest.fixture(scope='session')
-def setup_repom_db_tables(request):
+def setup_sqlite_tables():
     """
-    repom.db.engine と repom.async_session.async_engine にテーブルを作成
+    SQLite専用: repom.db.engine と repom.async_session.async_engine にテーブルを作成
 
     test_session.py などが get_db_session() を使用する際、
     これらのengineを使用するため、テーブルが必要。
@@ -44,12 +44,8 @@ def setup_repom_db_tables(request):
     Note: EXEC_ENV='test' が設定されているため、両engineは :memory: + StaticPool
     create_test_fixtures() が作成する db_engine と同じ :memory: DB を参照する。
 
-    必要なテストでのみ明示的に使用してください。
-
-    PostgreSQL 統合テスト時（DB_TYPE=postgres かつ EXEC_ENV!='test'）は、
-    async engine の作成をスキップ（パスワード認証問題を回避）
+    SQLiteの場合、同期・非同期両方のengineにテーブルを作成します。
     """
-
     from repom.models.base_model import Base
     from repom.database import get_sync_engine, get_async_engine
     import asyncio
@@ -58,30 +54,49 @@ def setup_repom_db_tables(request):
     from repom.utility import load_models
     load_models()
 
-    # Note: load_models() が既にテストモデルも含めてロードしているため、
-    # 明示的なインポートは不要（重複定義エラーを避ける）
-
     # 同期 engine にテーブル作成
     engine = get_sync_engine()
     Base.metadata.create_all(bind=engine)
 
-    # 非同期 engine にテーブル作成
-    # ただし、PostgreSQL 統合テスト時（config.db_type='postgres' かつ EXEC_ENV='test'）はスキップ
-    from repom.config import config
-    exec_env = os.getenv('EXEC_ENV', 'test')
+    # 非同期 engine にテーブル作成（SQLiteは必要）
+    async def create_async_tables():
+        async_engine = await get_async_engine()
+        async with async_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
-    if not (config.db_type == 'postgres' and exec_env == 'test'):
-        async def create_async_tables():
-            async_engine = await get_async_engine()
-            async with async_engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-
-        asyncio.run(create_async_tables())
+    asyncio.run(create_async_tables())
 
     yield
 
-    # クリーンアップ（オプション）
+    # クリーンアップ
     Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture(scope='session')
+def setup_postgres_tables():
+    """
+    PostgreSQL専用: repom.db.engine にテーブルを作成
+
+    PostgreSQL統合テスト用のテーブルセットアップ。
+    非同期engineはパスワード認証問題のため作成しません。
+
+    同期engineのみにテーブルを作成します。
+    """
+    from repom.models.base_model import Base
+    from repom.database import get_sync_engine
+    from repom.utility import load_models
+
+    # モデルをロード
+    load_models()
+
+    # 同期 engine にテーブル作成（PostgreSQLは非同期不要）
+    engine = get_sync_engine()
+    Base.metadata.create_all(bind=engine)
+
+    yield
+
+    # PostgreSQLはクリーンアップしない（データ永続化）
+    # Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture(scope='session', autouse=True)

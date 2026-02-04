@@ -54,12 +54,12 @@ class TestSolution1_DeferredMapperConfiguration:
                     allowed_prefixes={'tests.fixtures.', 'repom.'}
                 )
 
-            print("✅ All packages imported")
+            print("[OK] All packages imported")
 
             # Step 2: すべてのインポートが完了してから、マッパーを初期化
             print("\nStep 2: Configure all mappers at once")
             configure_mappers()
-            print("✅ Mappers configured successfully")
+            print("[OK] Mappers configured successfully")
 
             # Step 3: モデルが使えることを確認
             print("\nStep 3: Verify models are usable")
@@ -70,13 +70,13 @@ class TestSolution1_DeferredMapperConfiguration:
             mapper_a = class_mapper(ModelA)
             mapper_b = class_mapper(ModelB)
 
-            print(f"✅ ModelA mapper: {mapper_a}")
-            print(f"✅ ModelB mapper: {mapper_b}")
+            print(f"[OK] ModelA mapper: {mapper_a}")
+            print(f"[OK] ModelB mapper: {mapper_b}")
 
             assert mapper_a is not None
             assert mapper_b is not None
 
-            print("\n🎉 解決策1は有効：すべてインポート後のマッパー初期化で成功！")
+            print("\n[SUCCESS] 解決策1は有効：すべてインポート後のマッパー初期化で成功！")
 
         finally:
             # クリーンアップ
@@ -163,7 +163,7 @@ class TestSolution1_DeferredMapperConfiguration:
             assert mapper_a is not None
             assert mapper_b is not None
 
-            print("✅ 改良版関数は正常に動作")
+            print("[OK] 改良版関数は正常に動作")
             print(f"   ModelA: {mapper_a}")
             print(f"   ModelB: {mapper_b}")
 
@@ -217,10 +217,10 @@ class TestSolution2_DesignPatterns:
         print("効果：SQLAlchemy の標準的な方法")
         print("実装例：")
         print("""
-        # ✅ 良い例：クラス名のみ
+        # [OK] 良い例：クラス名のみ
         children: Mapped[List["ModelB"]] = relationship(...)
         
-        # ❌ 避けるべき：完全修飾名
+        # [NG] 避けるべき：完全修飾名
         children: Mapped[List["package_b.model_b.ModelB"]] = relationship(...)
         """)
         print("現在のコードは既にこのパターンを使用しています。")
@@ -262,7 +262,7 @@ class TestSolution2_DesignPatterns:
                     index=True
                 )
 
-            print("✅ Models defined without relationships")
+            print("[OK] Models defined without relationships")
 
             # Step 2: すべてのクラスが定義された後で relationship を追加
             print("\nStep 2: Add relationships after all classes are defined")
@@ -279,7 +279,7 @@ class TestSolution2_DesignPatterns:
                 back_populates="children"
             )
 
-            print("✅ Relationships added")
+            print("[OK] Relationships added")
 
             # Step 3: マッパーを初期化
             from sqlalchemy.orm import configure_mappers, class_mapper
@@ -288,13 +288,13 @@ class TestSolution2_DesignPatterns:
             mapper_c = class_mapper(ModelC)
             mapper_d = class_mapper(ModelD)
 
-            print(f"\n✅ ModelC mapper: {mapper_c}")
-            print(f"✅ ModelD mapper: {mapper_d}")
+            print(f"\n[OK] ModelC mapper: {mapper_c}")
+            print(f"[OK] ModelD mapper: {mapper_d}")
 
             assert mapper_c is not None
             assert mapper_d is not None
 
-            print("\n🎉 パターン3は有効だが、コードが分散するため推奨しない")
+            print("\n[SUCCESS] パターン3は有効だが、コードが分散するため推奨しない")
 
         finally:
             # クリーンアップ
@@ -345,8 +345,8 @@ class TestSolution2_DesignPatterns:
             mapper_parent = class_mapper(ParentModel)
             mapper_child = class_mapper(ChildModel)
 
-            print(f"✅ ParentModel mapper: {mapper_parent}")
-            print(f"✅ ChildModel mapper: {mapper_child}")
+            print(f"[OK] ParentModel mapper: {mapper_parent}")
+            print(f"[OK] ChildModel mapper: {mapper_child}")
 
             print("\nメリット：")
             print("  - 循環参照がないので初期化エラーなし")
@@ -381,12 +381,12 @@ class TestSolution_Comparison:
         print("  推奨度:     ★★★★★")
         print("  ")
         print("  メリット:")
-        print("    ✓ 既存のモデル定義を変更する必要がない")
-        print("    ✓ import_from_packages() の改良だけで対応可能")
-        print("    ✓ すべての循環参照パターンに対応")
+        print("    o 既存のモデル定義を変更する必要がない")
+        print("    o import_from_packages() の改良だけで対応可能")
+        print("    o すべての循環参照パターンに対応")
         print("  ")
         print("  デメリット:")
-        print("    ✗ マッパー初期化のタイミングを制御する必要がある")
+        print("    x マッパー初期化のタイミングを制御する必要がある")
         print("  ")
         print("  実装方法:")
         print("    1. import_from_packages() を改良")
@@ -401,11 +401,11 @@ class TestSolution_Comparison:
         print("  推奨度:     ★★☆☆☆")
         print("  ")
         print("  メリット:")
-        print("    ✓ 確実に循環参照を回避")
+        print("    o 確実に循環参照を回避")
         print("  ")
         print("  デメリット:")
-        print("    ✗ コードが分散して保守しにくい")
-        print("    ✗ すべてのモデルで同じパターンを適用する必要がある")
+        print("    x コードが分散して保守しにくい")
+        print("    x すべてのモデルで同じパターンを適用する必要がある")
 
         print("\n" + "-"*80)
 
@@ -416,19 +416,19 @@ class TestSolution_Comparison:
         print("  推奨度:     ★★★★☆ (ケースによる)")
         print("  ")
         print("  メリット:")
-        print("    ✓ 循環参照が発生しない")
-        print("    ✓ シンプルで理解しやすい")
+        print("    o 循環参照が発生しない")
+        print("    o シンプルで理解しやすい")
         print("  ")
         print("  デメリット:")
-        print("    ✗ 双方向のナビゲーションが必要な場合には不向き")
-        print("    ✗ ORM の利便性が減少")
+        print("    x 双方向のナビゲーションが必要な場合には不向き")
+        print("    x ORM の利便性が減少")
         print("  ")
         print("  推奨シナリオ:")
         print("    - 親→子のアクセスが不要")
         print("    - クエリで十分な場合")
 
         print("\n" + "="*80)
-        print("💡 総合推奨：解決策1（すべてインポート後のマッパー初期化）")
+        print("[INFO] 総合推奨：解決策1（すべてインポート後のマッパー初期化）")
         print("="*80)
         print("理由：")
         print("  1. 既存コードの変更が最小限")

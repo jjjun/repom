@@ -177,7 +177,7 @@ print(">>> z_child.py: ZChildModel defined successfully")
                 configure_mappers()
 
                 if w:
-                    print(f"⚠️  警告が発生しました:")
+                    print(f"[WARN]️  警告が発生しました:")
                     for warning in w:
                         print(f"   {warning.category.__name__}: {warning.message}")
                 else:
@@ -291,10 +291,10 @@ class ParentModel(BaseModelAuto):
                     configure_mappers()
                     print("configure_mappers() 成功（予想外）")
                 except Exception as e:
-                    print(f"❌ エラー発生（予想通り）: {type(e).__name__}: {e}")
+                    print(f"[NG] エラー発生（予想通り）: {type(e).__name__}: {e}")
 
                 if w:
-                    print(f"⚠️  警告:")
+                    print(f"[WARN]️  警告:")
                     for warning in w:
                         print(f"   {warning.message}")
 

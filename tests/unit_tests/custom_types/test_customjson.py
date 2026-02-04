@@ -16,6 +16,12 @@ class CustomJsonModel(BaseModel):
     payload: Mapped[Any] = mapped_column(CustomJSON, nullable=True)
 
 
+@pytest.fixture(scope='function', autouse=True)
+def setup_tables(setup_sqlite_tables):
+    """setup_sqlite_tables に依存して、テーブルが作成されることを保証"""
+    pass
+
+
 def test_custom_json_none_saved_as_null(db_test):
     """CustomJSON カラムに None を保存すると DB では NULL が保存されることを確認する。"""
     record = CustomJsonModel(payload=None)

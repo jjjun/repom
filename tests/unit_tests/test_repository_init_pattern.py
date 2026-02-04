@@ -41,7 +41,7 @@ class TestRepositoryInitPatterns:
         saved = repo.save(item)
         assert saved.name == "Test 1"
 
-        print(f"  ✅ Works! Can create without passing model")
+        print(f"  [OK] Works! Can create without passing model")
 
     def test_pattern2_without_custom_init(self, db_test):
         """Pattern 2: No custom __init__ (新しい書き方?)"""
@@ -51,14 +51,14 @@ class TestRepositoryInitPatterns:
 
         # この場合、モデルを渡す必要がある
         try:
-            # ❌ これはエラーになる
+            # [NG] これはエラーになる
             repo = NoInitRepository(session=db_test)
             print(f"\n[Pattern 2] No __init__ (session only):")
-            print(f"  ❌ This should fail but didn't?")
+            print(f"  [NG] This should fail but didn't?")
             assert False, "Expected TypeError"
         except TypeError as e:
             print(f"\n[Pattern 2] No __init__ (session only):")
-            print(f"  ❌ Error (expected): {e}")
+            print(f"  [NG] Error (expected): {e}")
             assert "missing 1 required positional argument: 'model'" in str(e)
 
     def test_pattern3_without_custom_init_but_pass_model(self, db_test):
@@ -67,7 +67,7 @@ class TestRepositoryInitPatterns:
         class NoInitRepository(BaseRepository[InitTestModel]):
             pass  # __init__ を省略
 
-        # ✅ モデルを明示的に渡せば動作する
+        # [OK] モデルを明示的に渡せば動作する
         repo = NoInitRepository(InitTestModel, session=db_test)
 
         print(f"\n[Pattern 3] No __init__ (pass model explicitly):")
@@ -82,12 +82,12 @@ class TestRepositoryInitPatterns:
         saved = repo.save(item)
         assert saved.name == "Test 3"
 
-        print(f"  ✅ Works! But need to pass model")
+        print(f"  [OK] Works! But need to pass model")
 
     def test_pattern4_direct_base_repository(self, db_test):
         """Pattern 4: Use BaseRepository directly (no subclass)"""
 
-        # ✅ 直接 BaseRepository を使う
+        # [OK] 直接 BaseRepository を使う
         repo = BaseRepository(InitTestModel, session=db_test)
 
         print(f"\n[Pattern 4] Direct BaseRepository:")
@@ -102,7 +102,7 @@ class TestRepositoryInitPatterns:
         saved = repo.save(item)
         assert saved.name == "Test 4"
 
-        print(f"  ✅ Works! Simplest way")
+        print(f"  [OK] Works! Simplest way")
 
 
 @pytest.mark.asyncio
@@ -131,7 +131,7 @@ class TestAsyncRepositoryInitPatterns:
         saved = await repo.save(item)
         assert saved.name == "Async Test 1"
 
-        print(f"  ✅ Works! Can create without passing model")
+        print(f"  [OK] Works! Can create without passing model")
 
     async def test_async_pattern2_without_custom_init(self, async_db_test):
         """Pattern 2: No custom __init__ (新しい書き方?) - ASYNC"""
@@ -141,14 +141,14 @@ class TestAsyncRepositoryInitPatterns:
 
         # この場合、モデルを渡す必要がある
         try:
-            # ❌ これはエラーになる
+            # [NG] これはエラーになる
             repo = NoInitAsyncRepository(session=async_db_test)
             print(f"\n[Async Pattern 2] No __init__ (session only):")
-            print(f"  ❌ This should fail but didn't?")
+            print(f"  [NG] This should fail but didn't?")
             assert False, "Expected TypeError"
         except TypeError as e:
             print(f"\n[Async Pattern 2] No __init__ (session only):")
-            print(f"  ❌ Error (expected): {e}")
+            print(f"  [NG] Error (expected): {e}")
             assert "missing 1 required positional argument: 'model'" in str(e)
 
     async def test_async_pattern3_without_custom_init_but_pass_model(self, async_db_test):
@@ -157,7 +157,7 @@ class TestAsyncRepositoryInitPatterns:
         class NoInitAsyncRepository(AsyncBaseRepository[InitTestModel]):
             pass  # __init__ を省略
 
-        # ✅ モデルを明示的に渡せば動作する
+        # [OK] モデルを明示的に渡せば動作する
         repo = NoInitAsyncRepository(InitTestModel, session=async_db_test)
 
         print(f"\n[Async Pattern 3] No __init__ (pass model explicitly):")
@@ -172,7 +172,7 @@ class TestAsyncRepositoryInitPatterns:
         saved = await repo.save(item)
         assert saved.name == "Async Test 3"
 
-        print(f"  ✅ Works! But need to pass model")
+        print(f"  [OK] Works! But need to pass model")
 
 
 class TestBestPracticeRecommendation:
@@ -217,7 +217,7 @@ class TestBestPracticeRecommendation:
         print(f"  デメリット: カスタムメソッドを追加できない")
 
         print(f"\n{'='*60}")
-        print(f"✅ 推奨パターン:")
+        print(f"[OK] 推奨パターン:")
         print(f"  - カスタムメソッドが必要 → Pattern 1")
         print(f"  - カスタムメソッド不要 → Pattern 3")
         print(f"{'='*60}")
