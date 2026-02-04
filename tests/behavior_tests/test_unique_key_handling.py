@@ -118,22 +118,22 @@ def test_skip_on_exception(db_test):
 
     # save_model_instancesにより、既にデータは保存されている
     # この先の処理では事前にキーをチェックして、既に存在している為、保存はスキップされる
-    with _db_manager.get_sync_session() as session:
-        try:
-            for item in sample_data:
-                try:
-                    instance = LocalRosterModel1(**item)
-                    session.add(instance)
-                    session.commit()
-                except IntegrityError as e:
-                    # トランザクションをロールバックし、データベースの一貫性を保たないといけないみたい
-                    # この処理をしないと `sqlalchemy.exc.PendingRollbackError` が起こる。
-                    session.rollback()
-                    pass
+    # Note: db_testセッションを使用する必要がある（_db_manager.get_sync_session()は別接続のため、テーブルが見えない）
+    try:
+        for item in sample_data:
+            try:
+                instance = LocalRosterModel1(**item)
+                db_test.add(instance)
+                db_test.commit()
+            except IntegrityError as e:
+                # トランザクションをロールバックし、データベースの一貫性を保たないといけないみたい
+                # この処理をしないと `sqlalchemy.exc.PendingRollbackError` が起こる。
+                db_test.rollback()
+                pass
 
-        except Exception as e:
-            session.rollback()
-            raise e
+    except Exception as e:
+        db_test.rollback()
+        raise e
 
 
 def test_check_duplicate_key_and_skip(db_test):
