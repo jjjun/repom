@@ -9,4 +9,3 @@ import os
 
 # Note: setup_postgres_tables fixture は親の conftest.py で定義されています。
 # このファイルでは PostgreSQL 固有の設定のみを記述します。
-
