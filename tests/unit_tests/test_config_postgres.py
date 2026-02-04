@@ -55,56 +55,56 @@ class TestPostgresProperties:
         from repom.config import RepomConfig
         config = RepomConfig()
         os.environ.pop('POSTGRES_HOST', None)
-        assert config.postgres_host == 'localhost'
+        assert config.postgres.host == 'localhost'
 
     def test_postgres_host_setter(self):
         """Setter で設定"""
         from repom.config import RepomConfig
         config = RepomConfig()
-        config.postgres_host = 'my-server'
-        assert config.postgres_host == 'my-server'
+        config.postgres.host = 'my-server'
+        assert config.postgres.host == 'my-server'
 
     def test_postgres_port_default(self):
         """デフォルトは 5432"""
         from repom.config import RepomConfig
         config = RepomConfig()
         os.environ.pop('POSTGRES_PORT', None)
-        assert config.postgres_port == 5432
+        assert config.postgres.port == 5432
 
     def test_postgres_port_setter(self):
         """Setter で設定"""
         from repom.config import RepomConfig
         config = RepomConfig()
-        config.postgres_port = 5433
-        assert config.postgres_port == 5433
+        config.postgres.port = 5433
+        assert config.postgres.port == 5433
 
     def test_postgres_user_default(self):
         """デフォルトは repom"""
         from repom.config import RepomConfig
         config = RepomConfig()
         os.environ.pop('POSTGRES_USER', None)
-        assert config.postgres_user == 'repom'
+        assert config.postgres.user == 'repom'
 
     def test_postgres_user_setter(self):
         """Setter で設定"""
         from repom.config import RepomConfig
         config = RepomConfig()
-        config.postgres_user = 'myuser'
-        assert config.postgres_user == 'myuser'
+        config.postgres.user = 'myuser'
+        assert config.postgres.user == 'myuser'
 
     def test_postgres_password_default(self):
         """デフォルトは repom_dev"""
         from repom.config import RepomConfig
         config = RepomConfig()
         os.environ.pop('POSTGRES_PASSWORD', None)
-        assert config.postgres_password == 'repom_dev'
+        assert config.postgres.password == 'repom_dev'
 
     def test_postgres_password_setter(self):
         """Setter で設定"""
         from repom.config import RepomConfig
         config = RepomConfig()
-        config.postgres_password = 'mypass'
-        assert config.postgres_password == 'mypass'
+        config.postgres.password = 'mypass'
+        assert config.postgres.password == 'mypass'
 
 
 class TestPostgresDBName:
@@ -114,14 +114,14 @@ class TestPostgresDBName:
         """Setter で直接設定"""
         from repom.config import RepomConfig
         config = RepomConfig()
-        config.postgres_db = 'custom_db'
+        config.postgres.database = 'custom_db'
         assert config.postgres_db == 'custom_db'
 
     def test_postgres_db_property_returns_set_value(self):
         """設定値が優先される"""
         from repom.config import RepomConfig
         config = RepomConfig()
-        config._postgres_db = 'my_custom_db'
+        config.postgres.database = 'my_custom_db'
         # exec_env に関係なく設定値が返される
         assert config.postgres_db == 'my_custom_db'
 
@@ -146,11 +146,11 @@ class TestPostgresURL:
         from repom.config import RepomConfig
         config = RepomConfig()
         config.db_type = 'postgres'
-        config.postgres_host = 'my-server'
-        config.postgres_port = 5433
-        config.postgres_user = 'myuser'
-        config.postgres_password = 'mypass'
-        config.postgres_db = 'mydb'
+        config.postgres.host = 'my-server'
+        config.postgres.port = 5433
+        config.postgres.user = 'myuser'
+        config.postgres.password = 'mypass'
+        config.postgres.database = 'mydb'
 
         expected = 'postgresql+psycopg://myuser:mypass@my-server:5433/mydb'
         assert config.db_url == expected
@@ -195,7 +195,7 @@ class TestEngineKwargs:
         config = RepomConfig()
         config.db_type = 'sqlite'
         config.root_path = '/tmp/repom'
-        config.use_in_memory_db_for_tests = False
+        config.sqlite.use_in_memory_for_tests = False
         config.init()
 
         kwargs = config.engine_kwargs
@@ -259,7 +259,7 @@ class TestBackwardCompatibility:
         config = RepomConfig()
         config.root_path = '/tmp/repom'
         config._exec_env = 'test'
-        config.use_in_memory_db_for_tests = True
+        config.sqlite.use_in_memory_for_tests = True
 
         assert config.db_url == 'sqlite:///:memory:'
 

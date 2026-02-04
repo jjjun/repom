@@ -12,24 +12,29 @@
 
 ## 問題の説明
 
-現在、Alembic のセットアップやマイグレーションのリセット（初期化）を行うための統一的なユーティリティが存在しません。
+現在、repom を使う外部プロジェクト（mine-py など）で Alembic のセットアップやマイグレーションのリセット（初期化）を行うための統一的なユーティリティが存在しません。
+
+**repom の方針**:
+- repom 内部で alembic の処理を統合
+- **env.py, script.py.mako は repom が提供**（`repom/alembic/` 配下に既存）
+- 外部プロジェクトは alembic.ini とマイグレーションファイル保存ディレクトリのみ用意すれば使える
 
 **現状の課題**:
 
-1. **テストでのマイグレーション管理が煩雑**
-   - `test_migration_no_id.py` などで、テストごとに alembic.ini、env.py、script.py.mako を手動で生成している
-   - 約150行の重複コードが複数のテストファイルに散在
+1. **外部プロジェクトでの初回セットアップが手作業**
+   - alembic.ini の作成が手動（設定ミスが起きやすい）
+   - version_locations ディレクトリの作成が手動
+   - 既存ファイルの有無を確認せずに上書きするリスク
+
+2. **テストでのマイグレーション管理が煩雑**
+   - `test_migration_no_id.py` などで、テストごとに alembic.ini を手動で生成している
+   - 約60行の重複コードが複数のテストファイルに散在
    - テスト用の一時ディレクトリ、DB URL、version_locations の設定が毎回必要
 
-2. **開発時のマイグレーションリセットが手作業**
+3. **開発時のマイグレーションリセットが手作業**
    - マイグレーションファイルを手動で削除
    - alembic_version テーブルを手動で削除
    - 初期セットアップを手動でやり直す
-
-3. **外部プロジェクトでの初回セットアップが複雑**
-   - alembic.ini の作成が手動
-   - version_locations ディレクトリの作成が手動
-   - 設定の誤りが発生しやすい
 
 **具体的な重複コード例**:
 
@@ -45,15 +50,10 @@ sqlalchemy.url = {db_url}
 # ... 60行のテンプレート
 """
 
-def _get_env_py_content():
-    """Generate env.py content for testing"""
-    return """
-from logging.config import fileConfig
-# ... 40行のテンプレート
-"""
-
 # 同様のコードが test_alembic_env_loads_models.py にも存在
 ```
+
+**注意**: env.py と script.py.mako は repom が既に提供しているため、外部プロジェクトやテストで生成する必要はありません。
 
 ---
 
@@ -65,17 +65,21 @@ Alembic のセットアップとリセットを行う統一的なユーティリ
 
 1. **alembic.ini ファイル生成**
    - パラメータベースで alembic.ini を生成
+   - 既存ファイルがある場合は上書きしない（安全）
    - テンプレート方式で柔軟な設定を可能に
 
-2. **マイグレーション管理テーブルの削除**
-   - `alembic_version` テーブルを安全に削除
+2. **version_locations ディレクトリの作成**
+   - 必要なディレクトリ構造を自動作成
+   - 既存ディレクトリがある場合は何もしない
 
 3. **マイグレーションファイルの一括削除**
    - version_locations 内の全 .py ファイルを削除
    - `__init__.py` や `__pycache__` は保護
 
-4. **version_locations ディレクトリの作成**
-   - 必要なディレクトリ構造を自動作成
+4. **マイグレーション管理テーブルの削除**
+   - `alembic_version` テーブルを安全に削除
+
+**注意**: env.py と script.py.mako は repom が提供するため、このユーティリティでは生成しません。
 
 **使用例（テスト）**:
 
@@ -90,8 +94,8 @@ def test_alembic_migration_without_id():
             db_url=f'sqlite:///{tmpdir}/test.db'
         )
         
-        # alembic.ini と env.py を自動生成
-        setup.create_config_files()
+        # alembic.ini を自動生成（env.py は repom が提供）
+        setup.create_alembic_ini()
         
         # マイグレーション実行
         alembic_cfg = setup.get_alembic_config()
@@ -121,12 +125,14 @@ poetry run alembic_init --project-root . --version-locations ./alembic/versions
 repom/
 ├── alembic/
 │   ├── __init__.py
-│   ├── setup.py           # AlembicSetup クラス（メイン）
-│   ├── templates.py       # alembic.ini, env.py のテンプレート
-│   └── reset.py           # リセット機能（テーブル削除、ファイル削除）
+│   ├── env.py             # repom が提供（既存）
+│   ├── script.py.mako     # repom が提供（既存）
+│   ├── setup.py           # AlembicSetup クラス（新規）
+│   ├── templates.py       # alembic.ini テンプレート（新規）
+│   └── reset.py           # リセット機能（新規）
 └── scripts/
-    ├── alembic_init.py    # 初回セットアップスクリプト
-    └── alembic_reset.py   # リセットスクリプト
+    ├── alembic_init.py    # 初回セットアップスクリプト（新規）
+    └── alembic_reset.py   # リセットスクリプト（新規）
 ```
 
 ### 1. AlembicSetup クラス（コア）
@@ -169,43 +175,42 @@ class AlembicSetup:
         self.alembic_dir = self.project_root / self.script_location
         self.versions_dir = self.project_root / self.version_locations
         
-    def create_config_files(self, overwrite: bool = False) -> None:
-        """alembic.ini と env.py を生成
+    def create_alembic_ini(self, overwrite: bool = False) -> None:
+        """alembic.ini を生成
         
         Args:
-            overwrite: 既存ファイルを上書きするか
+            overwrite: 既存ファイルを上書きするか（デフォルト: False）
+        
+        Note:
+            env.py と script.py.mako は repom が提供するため、生成しません。
         """
-        # alembic.ini を生成
         ini_path = self.project_root / "alembic.ini"
-        if not ini_path.exists() or overwrite:
-            content = AlembicTemplates.generate_alembic_ini(
-                script_location=self.script_location,
-                version_locations=self.version_locations,
-                db_url=self.db_url
-            )
-            ini_path.write_text(content, encoding='utf-8')
         
-        # env.py を生成（必要に応じて）
-        env_path = self.alembic_dir / "env.py"
-        if not env_path.exists() or overwrite:
-            content = AlembicTemplates.generate_env_py()
-            self.alembic_dir.mkdir(parents=True, exist_ok=True)
-            env_path.write_text(content, encoding='utf-8')
+        # 既存ファイルがある場合は上書きしない（安全）
+        if ini_path.exists() and not overwrite:
+            print(f"✓ alembic.ini already exists: {ini_path}")
+            return
         
-        # script.py.mako を生成（必要に応じて）
-        mako_path = self.alembic_dir / "script.py.mako"
-        if not mako_path.exists() or overwrite:
-            content = AlembicTemplates.generate_script_mako()
-            mako_path.write_text(content, encoding='utf-8')
+        content = AlembicTemplates.generate_alembic_ini(
+            script_location=self.script_location,
+            version_locations=self.version_locations,
+            db_url=self.db_url
+        )
+        ini_path.write_text(content, encoding='utf-8')
+        print(f"✓ Created alembic.ini: {ini_path}")
     
     def create_version_directory(self) -> None:
         """version_locations ディレクトリを作成"""
+        if self.versions_dir.exists():
+            print(f"✓ Version directory already exists: {self.versions_dir}")
+            return
+        
         self.versions_dir.mkdir(parents=True, exist_ok=True)
         
         # __init__.py を作成（Python パッケージとして認識させる）
         init_file = self.versions_dir / "__init__.py"
-        if not init_file.exists():
-            init_file.touch()
+        init_file.touch()
+        print(f"✓ Created version directory: {self.versions_dir}")
     
     def reset_migrations(
         self,
@@ -250,7 +255,9 @@ class AlembicSetup:
 
 ### 2. テンプレート管理
 
-**責務**: alembic.ini、env.py、script.py.mako のテンプレート提供
+**責務**: alembic.ini のテンプレート提供
+
+**注意**: env.py と script.py.mako は repom が既に提供しているため、このモジュールでは alembic.ini のみ生成します。
 
 ```python
 # repom/alembic/templates.py
@@ -306,90 +313,6 @@ formatter = generic
 format = %(levelname)-5.5s [%(name)s] %(message)s
 datefmt = %H:%M:%S
 """
-    
-    @staticmethod
-    def generate_env_py() -> str:
-        """env.py を生成（repom 用）"""
-        # 既存の alembic/env.py をベースにしたテンプレート
-        return """# Alembic environment configuration
-from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
-from alembic import context
-
-from repom.database import Base
-from repom.config import config as db_config
-from repom.utility import load_models
-
-config = context.config
-config.set_main_option("sqlalchemy.url", db_config.db_url)
-
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
-
-load_models(context="alembic_migration")
-target_metadata = Base.metadata
-
-def run_migrations_offline() -> None:
-    url = config.get_main_option("sqlalchemy.url")
-    context.configure(
-        url=url,
-        target_metadata=target_metadata,
-        literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
-    )
-    with context.begin_transaction():
-        context.run_migrations()
-
-def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            render_as_batch=True,
-        )
-        with context.begin_transaction():
-            context.run_migrations()
-
-if context.is_offline_mode():
-    run_migrations_offline()
-else:
-    run_migrations_online()
-"""
-    
-    @staticmethod
-    def generate_script_mako() -> str:
-        """script.py.mako を生成"""
-        # Alembic のデフォルトテンプレートを使用
-        return '''"""${message}
-
-Revision ID: ${up_revision}
-Revises: ${down_revision | comma,n}
-Create Date: ${create_date}
-
-"""
-from alembic import op
-import sqlalchemy as sa
-${imports if imports else ""}
-
-# revision identifiers, used by Alembic.
-revision = ${repr(up_revision)}
-down_revision = ${repr(down_revision)}
-branch_labels = ${repr(branch_labels)}
-depends_on = ${repr(depends_on)}
-
-
-def upgrade() -> None:
-    ${upgrades if upgrades else "pass"}
-
-
-def downgrade() -> None:
-    ${downgrades if downgrades else "pass"}
-'''
 ```
 
 ### 3. リセット機能
@@ -498,11 +421,12 @@ def main():
     )
     
     print("Initializing Alembic...")
-    setup.create_config_files(overwrite=args.overwrite)
+    setup.create_alembic_ini(overwrite=args.overwrite)
     setup.create_version_directory()
-    print("✓ Alembic initialized successfully")
+    print("\n✓ Alembic initialized successfully")
     print(f"  - alembic.ini: {Path(args.project_root) / 'alembic.ini'}")
     print(f"  - versions dir: {setup.versions_dir}")
+    print(f"\nNote: env.py and script.py.mako are provided by repom.")
 
 if __name__ == "__main__":
     main()
@@ -581,11 +505,11 @@ alembic_reset = "repom.scripts.alembic_reset:main"
 ### 削除可能なコード
 
 - `test_migration_no_id.py` 内の `_get_alembic_ini_content()` (約60行)
-- `test_migration_no_id.py` 内の `_get_env_py_content()` (約40行)
-- `test_migration_no_id.py` 内の `_get_mako_content()` (約30行)
+- `test_migration_no_id.py` 内の `_get_env_py_content()` (約40行) - **repom が提供するため不要に**
+- `test_migration_no_id.py` 内の `_get_mako_content()` (約30行) - **repom が提供するため不要に**
 - 同様のコードが他のテストにも存在する場合は削除
 
-**削減見込み**: 約200-300行
+**削減見込み**: 約150-200行（env.py と script.py.mako の生成コードが不要になるため）
 
 ---
 
@@ -594,9 +518,8 @@ alembic_reset = "repom.scripts.alembic_reset:main"
 ### Phase 1: コア実装（3-4時間）
 
 1. **repom/alembic/templates.py を作成**
-   - `generate_alembic_ini()` 実装
-   - `generate_env_py()` 実装
-   - `generate_script_mako()` 実装
+   - `generate_alembic_ini()` 実装のみ
+   - **注意**: env.py と script.py.mako は repom が既に提供
 
 2. **repom/alembic/reset.py を作成**
    - `drop_alembic_version_table()` 実装
@@ -655,14 +578,27 @@ alembic_reset = "repom.scripts.alembic_reset:main"
 
 ```python
 # tests/unit_tests/test_alembic_setup.py
-def test_alembic_setup_creates_config_files(tmp_path):
-    """AlembicSetup が設定ファイルを正しく作成する"""
+def test_alembic_setup_creates_alembic_ini(tmp_path):
+    """AlembicSetup が alembic.ini を正しく作成する"""
     setup = AlembicSetup(project_root=tmp_path)
-    setup.create_config_files()
+    setup.create_alembic_ini()
     
     assert (tmp_path / "alembic.ini").exists()
-    assert (tmp_path / "alembic" / "env.py").exists()
-    assert (tmp_path / "alembic" / "script.py.mako").exists()
+    
+    # env.py と script.py.mako は repom が提供するため生成しない
+    # 外部プロジェクトでは script_location で repom の alembic を参照
+
+def test_alembic_setup_does_not_overwrite_existing_ini(tmp_path):
+    """既存の alembic.ini を上書きしない（安全性）"""
+    setup = AlembicSetup(project_root=tmp_path)
+    
+    # 最初に作成
+    setup.create_alembic_ini()
+    original_content = (tmp_path / "alembic.ini").read_text()
+    
+    # 再実行（overwrite=False）
+    setup.create_alembic_ini(overwrite=False)
+    assert (tmp_path / "alembic.ini").read_text() == original_content
 
 def test_alembic_setup_creates_version_directory(tmp_path):
     """version_locations ディレクトリが正しく作成される"""
@@ -706,8 +642,8 @@ def test_full_alembic_workflow_with_setup(tmp_path):
         db_url=f"sqlite:///{tmp_path}/test.db"
     )
     
-    # 初期化
-    setup.create_config_files()
+    # 初期化（alembic.ini と version_locations のみ）
+    setup.create_alembic_ini()
     setup.create_version_directory()
     
     # マイグレーション生成
@@ -737,14 +673,15 @@ def test_full_alembic_workflow_with_setup(tmp_path):
 
 - ✅ `repom/alembic/` 以下に setup.py, templates.py, reset.py が実装されている
 - ✅ `repom/scripts/` 以下に alembic_init.py, alembic_reset.py が実装されている
-- ✅ `poetry run alembic_init` コマンドが動作する
+- ✅ `poetry run alembic_init` コマンドが動作する（alembic.ini と version_locations のみ作成）
 - ✅ `poetry run alembic_reset` コマンドが動作する
-- ✅ test_migration_no_id.py が AlembicSetup を使用してリファクタされている
+- ✅ test_migration_no_id.py が AlembicSetup を使用してリファクタされている（env.py, script.py.mako の生成コードが削除されている）
 - ✅ test_alembic_env_loads_models.py が AlembicSetup を使用してリファクタされている
 - ✅ 新規ユニットテストが10個以上追加され、全てパスする
 - ✅ 既存の全テストがパスする（回帰テスト）
 - ✅ alembic_migration_guide.md に新機能のセクションが追加されている
-- ✅ 重複コードが200-300行削減されている
+- ✅ 重複コードが150-200行削減されている（alembic.ini 生成のみに簡素化）
+- ✅ 既存ファイルの上書き防止機能が動作する（overwrite=False がデフォルト）
 
 ---
 

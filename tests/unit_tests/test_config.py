@@ -29,11 +29,11 @@ def test_db_path_defaults_to_data_path(config_factory, tmp_path):
     config = config_factory()
 
     expected_default = Path(tmp_path) / "data" / "repom"
-    assert config.db_path == str(expected_default)
+    assert config.sqlite.db_path == str(expected_default)
 
     override = tmp_path / "custom_db"
-    config.db_path = str(override)
-    assert config.db_path == str(override)
+    config.sqlite.db_path = str(override)
+    assert config.sqlite.db_path == str(override)
 
 
 @pytest.mark.parametrize(
@@ -49,7 +49,7 @@ def test_db_file_defaults_follow_exec_env(config_factory, exec_env, expected):
 
     config = config_factory(exec_env=exec_env)
 
-    assert config.db_file == expected
+    assert config.sqlite.db_file == expected
 
 
 def test_db_file_is_overridable(config_factory):
@@ -57,21 +57,21 @@ def test_db_file_is_overridable(config_factory):
 
     config = config_factory()
 
-    config.db_file = "custom.sqlite3"
-    assert config.db_file == "custom.sqlite3"
+    config.sqlite.db_file = "custom.sqlite3"
+    assert config.sqlite.db_file == "custom.sqlite3"
 
 
 def test_db_file_path_combines_path_and_file(config_factory, tmp_path):
     """``db_file_path`` joins the resolved ``db_path`` and ``db_file``."""
 
     config = config_factory()
-    default_expected = Path(config.db_path) / config.db_file
+    default_expected = Path(config.sqlite.db_path) / config.sqlite.db_file
     assert config.db_file_path == str(default_expected)
 
     override_path = tmp_path / "overridden"
     override_file = "custom.sqlite3"
-    config.db_path = str(override_path)
-    config.db_file = override_file
+    config.sqlite.db_path = str(override_path)
+    config.sqlite.db_file = override_file
     assert config.db_file_path == str(override_path / override_file)
 
 
@@ -80,7 +80,7 @@ def test_db_url_defaults_to_sqlite_uri(config_factory):
 
     config = config_factory()
 
-    expected = f"sqlite:///{config.db_path}/{config.db_file}"
+    expected = f"sqlite:///{config.sqlite.db_path}/{config.sqlite.db_file}"
     assert config.db_url == expected
 
     override = "sqlite:////tmp/custom.sqlite3"
@@ -104,18 +104,18 @@ def test_db_backup_path_defaults_to_backups_dir(config_factory, tmp_path):
 def test_use_in_memory_db_for_tests_defaults_to_true(config_factory):
     """``use_in_memory_db_for_tests`` defaults to True."""
     config = config_factory(exec_env="test")
-    assert config.use_in_memory_db_for_tests is True
+    assert config.sqlite.use_in_memory_for_tests is True
 
 
 def test_use_in_memory_db_for_tests_is_settable(config_factory):
     """``use_in_memory_db_for_tests`` can be explicitly set."""
     config = config_factory(exec_env="test")
 
-    config.use_in_memory_db_for_tests = False
-    assert config.use_in_memory_db_for_tests is False
+    config.sqlite.use_in_memory_for_tests = False
+    assert config.sqlite.use_in_memory_for_tests is False
 
-    config.use_in_memory_db_for_tests = True
-    assert config.use_in_memory_db_for_tests is True
+    config.sqlite.use_in_memory_for_tests = True
+    assert config.sqlite.use_in_memory_for_tests is True
 
 
 def test_db_url_returns_in_memory_for_test_env(config_factory):
@@ -130,8 +130,8 @@ def test_db_url_returns_file_based_when_in_memory_disabled(config_factory):
     """``db_url`` returns file-based URL when use_in_memory_db_for_tests=False."""
     config = config_factory(exec_env="test")
 
-    config.use_in_memory_db_for_tests = False
-    expected = f"sqlite:///{config.db_path}/{config.db_file}"
+    config.sqlite.use_in_memory_for_tests = False
+    expected = f"sqlite:///{config.sqlite.db_path}/{config.sqlite.db_file}"
     assert config.db_url == expected
 
 
@@ -139,11 +139,11 @@ def test_db_url_returns_file_based_for_non_test_env(config_factory):
     """``db_url`` returns file-based URL for non-test environments regardless of use_in_memory_db_for_tests."""
     # dev 環境
     config_dev = config_factory(exec_env="dev")
-    assert config_dev.db_url == f"sqlite:///{config_dev.db_path}/{config_dev.db_file}"
+    assert config_dev.db_url == f"sqlite:///{config_dev.sqlite.db_path}/{config_dev.sqlite.db_file}"
 
     # prod 環境
     config_prod = config_factory(exec_env="prod")
-    assert config_prod.db_url == f"sqlite:///{config_prod.db_path}/{config_prod.db_file}"
+    assert config_prod.db_url == f"sqlite:///{config_prod.sqlite.db_path}/{config_prod.sqlite.db_file}"
 
 
 def test_db_url_override_takes_precedence(config_factory):

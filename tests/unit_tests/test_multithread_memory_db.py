@@ -57,7 +57,7 @@ class TestMultithreadMemoryDbAccess:
             config = RepomConfig()
             config.exec_env = "test"  # 明示的に test 環境に設定
             # use_in_memory_db_for_tests が True であることを確認
-            assert config.use_in_memory_db_for_tests is True
+            assert config.sqlite.use_in_memory_for_tests is True
             assert ":memory:" in config.db_url
 
             # エンジンを作成

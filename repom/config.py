@@ -10,6 +10,38 @@ from repom._.config_hook import Config, get_config_from_hook
 
 
 @dataclass
+class PostgresConfig:
+    """PostgreSQL データベース設定
+
+    Attributes:
+        host: PostgreSQL ホスト名
+        port: PostgreSQL ポート番号
+        user: PostgreSQL ユーザー名
+        password: PostgreSQL パスワード
+        database: PostgreSQL データベース名 (None の場合は自動生成)
+    """
+    host: str = field(default='localhost')
+    port: int = field(default=5432)
+    user: str = field(default='repom')
+    password: str = field(default='repom_dev')
+    database: Optional[str] = field(default=None)
+
+
+@dataclass
+class SqliteConfig:
+    """SQLite データベース設定
+
+    Attributes:
+        db_path: データベース格納ディレクトリ (None の場合は data_path を使用)
+        db_file: データベースファイル名 (None の場合は環境別に自動生成)
+        use_in_memory_for_tests: テスト時に in-memory DB を使用するか
+    """
+    db_path: Optional[str] = field(default=None)
+    db_file: Optional[str] = field(default=None)
+    use_in_memory_for_tests: bool = field(default=True)
+
+
+@dataclass
 class RepomConfig(Config):
     package_name: str = field(default="repom", init=False)
 
@@ -19,68 +51,44 @@ class RepomConfig(Config):
     allowed_package_prefixes: Set[str] = field(default_factory=lambda: {'repom.'}, init=False, repr=False)
     model_import_strict: bool = field(default=False, init=False, repr=False)
 
-    # DBの格納ディレクトリ (デフォルトで data_path に入る)
-    _db_path: Optional[str] = field(default=None, init=False, repr=False)
-    # DBファイル名 デフォルトで exec_env の値により'db.<exec_env>.sqlite' となる
-    _db_file: Optional[str] = field(default=None, init=False, repr=False)
-    # db接続用の文字列: 'sqlite:///%s/%s' % db_path, db_file の形式
+    # データベース設定 (機能別に分離)
+    postgres: PostgresConfig = field(default_factory=PostgresConfig)
+    sqlite: SqliteConfig = field(default_factory=SqliteConfig)
+
+    # データベースタイプ選択
+    _db_type: Optional[str] = field(default=None, init=False, repr=False)
+
+    # db接続用の文字列 (カスタマイズ用)
     _db_url: Optional[str] = field(default=None, init=False, repr=False)
+
     # バックアップ先 - デフォルトで data_path/backups に入る
     _db_backup_path: Optional[str] = field(default=None, init=False, repr=False)
     # マスターデータパス - デフォルトで root_path/data_master
     _master_data_path: Optional[str] = field(default=None, init=False, repr=False)
-    # テスト時に in-memory SQLite を使用するか（デフォルト: True）
-    _use_in_memory_db_for_tests: bool = field(default=True, init=False, repr=False)
+
     # SQLAlchemy クエリログ設定
     _enable_sqlalchemy_echo: bool = field(default=False, init=False, repr=False)
     _sqlalchemy_echo_level: str = field(default='INFO', init=False, repr=False)
 
-    # PostgreSQL サポート
-    _db_type: Optional[str] = field(default=None, init=False, repr=False)
-    _postgres_host: str = field(default='localhost', init=False, repr=False)
-    _postgres_port: int = field(default=5432, init=False, repr=False)
-    _postgres_user: str = field(default='repom', init=False, repr=False)
-    _postgres_password: str = field(default='repom_dev', init=False, repr=False)
-    _postgres_db: Optional[str] = field(default=None, init=False, repr=False)
+    def __post_init__(self):
+        """dataclassの初期化後に実行"""
+        self.init()
 
     def init(self):
         """初期化後の処理 - 必要なディレクトリを作成"""
         super().init()  # 親クラスのinitを呼び出し
+
+        # SqliteConfig のデフォルト値を設定（data_path が存在する場合のみ）
+        if self.data_path and self.sqlite.db_path is None:
+            self.sqlite.db_path = self.data_path
+        if self.sqlite.db_file is None:
+            self.sqlite.db_file = self._get_default_db_file()
 
         if self.auto_create_dirs:
             self._ensure_path_exists([
                 self.db_backup_path,
                 self.master_data_path
             ])
-
-    @property
-    def db_path(self) -> Optional[str]:
-        """データベース格納ディレクトリ - デフォルトで data_path"""
-        if self._db_path is not None:
-            return self._db_path
-
-        return self.data_path
-
-    @db_path.setter
-    def db_path(self, value: Optional[str]):
-        self._db_path = value
-
-    @property
-    def db_file(self) -> Optional[Path]:
-        """DBファイル名 - デフォルトで exec_env により 'db.<exec_env>.sqlite' となる"""
-        if self._db_file is not None:
-            return self._db_file
-
-        if self.exec_env == 'test' or self.exec_env == 'dev':
-            filename = 'db.%s.sqlite3' % self.exec_env
-        else:
-            filename = 'db.sqlite3'
-
-        return filename
-
-    @db_file.setter
-    def db_file(self, value: Optional[str]):
-        self._db_file = value
 
     @property
     def db_type(self) -> str:
@@ -111,54 +119,6 @@ class RepomConfig(Config):
         self._db_type = value
 
     @property
-    def postgres_host(self) -> str:
-        """PostgreSQL ホスト名
-
-        デフォルト: localhost
-        """
-        return self._postgres_host
-
-    @postgres_host.setter
-    def postgres_host(self, value: str):
-        self._postgres_host = value
-
-    @property
-    def postgres_port(self) -> int:
-        """PostgreSQL ポート番号
-
-        デフォルト: 5432
-        """
-        return self._postgres_port
-
-    @postgres_port.setter
-    def postgres_port(self, value: int):
-        self._postgres_port = value
-
-    @property
-    def postgres_user(self) -> str:
-        """PostgreSQL ユーザー名
-
-        デフォルト: repom
-        """
-        return self._postgres_user
-
-    @postgres_user.setter
-    def postgres_user(self, value: str):
-        self._postgres_user = value
-
-    @property
-    def postgres_password(self) -> str:
-        """PostgreSQL パスワード
-
-        デフォルト: repom_dev
-        """
-        return self._postgres_password
-
-    @postgres_password.setter
-    def postgres_password(self, value: str):
-        self._postgres_password = value
-
-    @property
     def postgres_db(self) -> str:
         """PostgreSQL データベース名（環境別）
 
@@ -176,12 +136,10 @@ class RepomConfig(Config):
             prod => repom
 
             # CONFIG_HOOK でベース名を変更
-            config.postgres_db = 'mine_py'  # サフィックスは自動追加されない
-            # または明示的に設定
-            config._postgres_db = None  # リセット（サフィックス自動追加）
+            config.postgres.database = 'mine_py'
         """
-        if self._postgres_db is not None:
-            return self._postgres_db
+        if self.postgres.database is not None:
+            return self.postgres.database
 
         base = 'repom'
         env = self.exec_env
@@ -195,14 +153,19 @@ class RepomConfig(Config):
         else:
             return f"{base}_dev"
 
-    @postgres_db.setter
-    def postgres_db(self, value: str):
-        self._postgres_db = value
-
     @property
     def db_file_path(self) -> Optional[Path]:
         """dbファイルのフルパス(ファイル名含む)"""
-        return str(Path(self.db_path) / self.db_file)
+        db_path = self.sqlite.db_path if self.sqlite.db_path else self.data_path
+        db_file = self.sqlite.db_file if self.sqlite.db_file else self._get_default_db_file()
+        return str(Path(db_path) / db_file)
+
+    def _get_default_db_file(self) -> str:
+        """デフォルトのDBファイル名を取得"""
+        if self.exec_env == 'test' or self.exec_env == 'dev':
+            return f'db.{self.exec_env}.sqlite3'
+        else:
+            return 'db.sqlite3'
 
     @property
     def db_url(self) -> Optional[str]:
@@ -243,17 +206,19 @@ class RepomConfig(Config):
         # PostgreSQL
         if self.db_type == 'postgres':
             return (
-                f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
-                f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+                f"postgresql+psycopg://{self.postgres.user}:{self.postgres.password}"
+                f"@{self.postgres.host}:{self.postgres.port}/{self.postgres_db}"
             )
 
         # SQLite: テスト環境では in-memory をデフォルトに
-        if self.exec_env == 'test' and self.use_in_memory_db_for_tests:
+        if self.exec_env == 'test' and self.sqlite.use_in_memory_for_tests:
             return 'sqlite:///:memory:'
 
         # SQLite: 通常環境ではファイルベース
-        if self.db_file:
-            return f'sqlite:///{self.db_path}/{self.db_file}'
+        db_path = self.sqlite.db_path if self.sqlite.db_path else self.data_path
+        db_file = self.sqlite.db_file if self.sqlite.db_file else self._get_default_db_file()
+        if db_file:
+            return f'sqlite:///{db_path}/{db_file}'
         return None
 
     @db_url.setter
@@ -287,34 +252,6 @@ class RepomConfig(Config):
         self._master_data_path = value
 
     @property
-    def use_in_memory_db_for_tests(self) -> bool:
-        """テスト時に in-memory SQLite を使用するか
-
-        デフォルト: True
-
-        True の場合:
-            - exec_env == 'test' 時に自動的に sqlite:///:memory: を使用
-            - テストが高速（35倍速）
-            - "database is locked" エラーを回避
-
-        False の場合:
-            - ファイルベース SQLite を使用（db.test.sqlite3）
-            - ファイルベース特有の動作をテストしたい場合に使用
-
-        使用例:
-            # config_hook.py でファイルベースに変更
-            def get_repom_config():
-                config = RepomConfig()
-                config.use_in_memory_db_for_tests = False
-                return config
-        """
-        return self._use_in_memory_db_for_tests
-
-    @use_in_memory_db_for_tests.setter
-    def use_in_memory_db_for_tests(self, value: bool):
-        self._use_in_memory_db_for_tests = value
-
-    @property
     def enable_sqlalchemy_echo(self) -> bool:
         """SQLAlchemy のクエリログを有効化するか
 
@@ -329,14 +266,12 @@ class RepomConfig(Config):
             - SQL クエリはログに出力されない
             - 本番環境での推奨設定
 
-        使用例（外部プロジェクトで有効化）:
-            # mine-py/src/mine_py/config.py
-            class MinePyConfig(RepomConfig):
-                def __init__(self):
-                    super().__init__()
-                    # 開発環境でのみ有効化
-                    if self.exec_env == 'dev':
-                        self._enable_sqlalchemy_echo = True
+        使用例（CONFIG_HOOK で有効化）:
+            # mine-py/config.py
+            def hook_config(config):
+                if config.exec_env == 'dev':
+                    config.enable_sqlalchemy_echo = True
+                return config
 
         使用例（一時的に有効化）:
             from repom.config import config
