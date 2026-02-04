@@ -27,7 +27,6 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
-| #034 | autouse=True の削除 | 高 | 🔴 未着手 | [active/034_remove_autouse_from_fixtures.md](active/034_remove_autouse_from_fixtures.md) |
 | #035 | SQLite/PostgreSQL Fixture 分離 | 中 | 🔴 未着手 | [active/035_separate_sqlite_postgres_fixtures.md](active/035_separate_sqlite_postgres_fixtures.md) |
 | #036 | Fixture Scope 見直し | 低 | 🟡 提案中 | [active/036_fixture_scope_review.md](active/036_fixture_scope_review.md) |
 | #031 | Alembic セットアップとリセットユーティリティの実装 | 中 | 🟡 提案中 | [active/031_alembic_setup_and_reset_utilities.md](active/031_alembic_setup_and_reset_utilities.md) |
@@ -41,8 +40,7 @@ completed/     → 実装完了・コミット済み
 ## 📋 完了済み Issue
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
-|----|---------|--------|------|---------|
-| #032 | PostgreSQL 統合テストの EXEC_ENV 修正 | 2026-02-04 | EXEC_ENV='test' へ修正、repom_test 接続、config_hook.py 警告修正、PostgreSQL 6/6 tests passing、603 tests passing | [completed/032_postgresql_test_env_correction.md](completed/032_postgresql_test_env_correction.md) |
+|----|---------|--------|------|---------|| #033 | autouse=True の削除 | 2026-02-04 | setup_repom_db_tables/setup_postgres_tables から autouse=True を削除、明示的フィクスチャ依存、test_skip_on_exception セッション修正、574 unit tests passing、603 total tests passing、パフォーマンス向上 | [completed/033_remove_autouse_from_fixtures.md](completed/033_remove_autouse_from_fixtures.md) || #032 | PostgreSQL 統合テストの EXEC_ENV 修正 | 2026-02-04 | EXEC_ENV='test' へ修正、repom_test 接続、config_hook.py 警告修正、PostgreSQL 6/6 tests passing、603 tests passing | [completed/032_postgresql_test_env_correction.md](completed/032_postgresql_test_env_correction.md) |
 | #030 | テストの独立性と隔離性の改善 | 2026-02-03 | Phase 1: isolated_mapper_registry 削除（Issue #029）、Phase 3: test_migration_no_id.py 順序依存解消、モデル関数スコープ化、try-finally クリーンアップ、全テスト順序非依存達成 | [completed/030_test_independence_improvements.md](completed/030_test_independence_improvements.md) |
 | #029 | isolated_mapper_registry から tests/fixtures/models への移行 | 2026-02-02 | isolated_mapper_registry 完全削除（~100行）、tests/fixtures/models/ (User, Post, Parent, Child) 新規提供、360行のドキュメント削減、シンプルな直接クリーンアップパターン採用、428 tests passing | [completed/029_migrate_from_isolated_mapper_to_fixtures_models.md](completed/029_migrate_from_isolated_mapper_to_fixtures_models.md) |
 | #027 | PostgreSQL 設定統合 | 2026-02-01 | config.db_type による PostgreSQL/SQLite 切り替え、engine_kwargs 自動設定、Unit 25 + Integration 7 テスト全パス、環境変数削除 (Issue #028 Part 1) | [completed/027_postgresql_config_integration.md](completed/027_postgresql_config_integration.md) |
