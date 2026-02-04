@@ -27,9 +27,11 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
-| #033 | config 直接設定の削除（バグ修正） | 高 | 🔴 未着手 | [active/033_remove_direct_config_assignments.md](active/033_remove_direct_config_assignments.md) |
+| #034 | autouse=True の削除 | 高 | 🔴 未着手 | [active/034_remove_autouse_from_fixtures.md](active/034_remove_autouse_from_fixtures.md) |
+| #035 | SQLite/PostgreSQL Fixture 分離 | 中 | 🔴 未着手 | [active/035_separate_sqlite_postgres_fixtures.md](active/035_separate_sqlite_postgres_fixtures.md) |
+| #036 | Fixture Scope 見直し | 低 | 🟡 提案中 | [active/036_fixture_scope_review.md](active/036_fixture_scope_review.md) |
 | #031 | Alembic セットアップとリセットユーティリティの実装 | 中 | 🟡 提案中 | [active/031_alembic_setup_and_reset_utilities.md](active/031_alembic_setup_and_reset_utilities.md) |
-| #028 | テストアーキテクチャの複雑さ改善 | 中 | 🔄 作業中 (Part 1完了) | [active/028_test_architecture_complexity.md](active/028_test_architecture_complexity.md) |
+| #028 | テストアーキテクチャの複雑性（親Issue） | 中 | 🔄 作業中 (Phase 1完了) | [active/028_test_architecture_complexity.md](active/028_test_architecture_complexity.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください。

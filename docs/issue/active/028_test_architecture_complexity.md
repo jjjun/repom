@@ -1,4 +1,57 @@
-　# Issue #028: テストアーキテクチャの複雑性
+　# Issue #028: テストアーキテクチャの複雑性（親Issue）
+
+**ステータス**: 🔄 作業中
+
+**作成日**: 2026-02-01
+
+**最終更新**: 2026-02-04
+
+**優先度**: 中
+
+---
+
+## 概要
+
+テストアーキテクチャに関する複数の問題を統合的に管理する親Issue。
+各問題は独立したサブIssueとして分離し、段階的に改善する。
+
+---
+
+## サブIssue
+
+| ID | タイトル | 優先度 | 複雑度 | ステータス | 推奨順序 |
+|----|---------|--------|--------|-----------|----------|
+| [#034](034_remove_autouse_from_fixtures.md) | autouse=True の削除 | 高 | 低 | 🔴 未着手 | **1. 最優先** |
+| [#035](035_separate_sqlite_postgres_fixtures.md) | SQLite/PostgreSQL Fixture 分離 | 中 | 中 | 🔴 未着手 | 2. 次のステップ |
+| [#036](036_fixture_scope_review.md) | Fixture Scope 見直し | 低 | 高 | 🟡 提案中 | 3. 要検討 |
+
+---
+
+## Phase 構成
+
+### Phase 1: PostgreSQL設定統合 ✅ **完了**
+- **Issue #027** (完了): PostgreSQL設定統合
+- config.db_type による PostgreSQL/SQLite 切り替え
+- 環境変数削除、統合テストの安定化
+
+### Phase 2: Fixture の改善 🔴 **次のフェーズ**
+- **Issue #034** (未着手): autouse=True 削除
+  - 不要なsetup実行を削減
+  - パフォーマンス向上
+  - テストの意図を明確化
+
+- **Issue #035** (未着手): SQLite/PostgreSQL fixture 分離
+  - 条件分岐の削減
+  - 可読性・メンテナンス性向上
+  - DB固有の要件を分離
+
+### Phase 3: Scope の見直し 🟡 **要検討**
+- **Issue #036** (提案中): Fixture scope 見直し
+  - 調査フェーズから開始
+  - パフォーマンス影響を評価
+  - 必要性を精査
+
+---
 
 ## 問題の概要
 
@@ -84,153 +137,108 @@ def setup_postgres_tables():
 - PostgreSQL 統合テスト時に親の fixture が先に実行される
 - 子の fixture が実質的に意味をなさない
 
-## 根本原因
+## 根本原因と分離理由
 
-1. **単一の conftest.py で全てを制御しようとしている**
-   - SQLite と PostgreSQL で異なる要件があるのに同じ fixture
-   
-2. **EXEC_ENV のハードコード**
-   - `os.environ['EXEC_ENV'] = 'test'` が最初に固定される
-   
-3. **autouse=True の濫用**
-   - 全テストで不要な setup が実行される
-   
-4. **DB接続を必要としないテストでも DB setup が実行される**
-   - config プロパティのみのテストでも engine 作成
+### 1. **autouse=True の濫用** → **Issue #034**
+- 全テストで不要な setup が実行される
+- DB接続を必要としないテストでも DB setup が実行される
+- テストごとに制御不可
 
-## 影響範囲
+**独立性**: ✅ 他の問題と無関係に解決可能
+**リスク**: 低（fixture内容は変更しない）
+**効果**: パフォーマンス向上、意図の明確化
 
-### 正常動作しているもの
-- ✅ SQLite 単体テスト (db_test fixture 使用)
-- ✅ PostgreSQL 統合テスト (回避策で動作)
-- ✅ PostgreSQL config 単体テスト (環境変数削除で動作)
+### 2. **SQLite/PostgreSQLの混在** → **Issue #035**
+- 単一の conftest.py で全てを制御しようとしている
+- SQLite と PostgreSQL で異なる要件があるのに同じ fixture
+- 条件分岐が複雑化
 
-### 問題が顕在化しているもの
-- ⚠️ テスト実行時の複雑な条件分岐
-- ⚠️ 環境変数の管理が煩雑
-- ⚠️ 新しいテストを追加する際の学習コスト
+**独立性**: ✅ Issue #034後に実装推奨
+**リスク**: 中（fixture構造変更）
+**効果**: 可読性・メンテナンス性向上
 
-## 改善案
+### 3. **session scope の制約** → **Issue #036**
+- 一度初期化したら変更できない
+- 環境切り替え不可
+- テストごとの柔軟性なし
 
-### 案1: fixture を autouse=False にする
+**独立性**: ✅ 独立して実装可能だが要調査
+**リ実装推奨順序
 
-```python
-# tests/conftest.py
-@pytest.fixture(scope='session')  # autouse 削除
-def setup_db_tables():
-    # 必要なテストでのみ明示的に使用
-    pass
+### ステップ1: Issue #034（最優先）
 
-# 使用例
-def test_something(setup_db_tables, db_test):
-    pass
-```
+**autouse=True の削除**
 
-**メリット**:
-- 不要な setup 実行を削減
-- テストごとに制御可能
+理由:
+- 低リスク・高効果
+- 他のIssueの前提となる改善
+- パフォーマンス向上が期待できる
 
-**デメリット**:
-- 全テストに fixture を追加する必要
+実装内容:
+- `setup_repom_db_tables` から autouse=True を削除
+- 必要なテストに明示的にfixture指定
+- 不要な `@pytest.mark.no_db_setup` マーカー削除
 
-### 案2: DB type 別に conftest.py を分離
+見積もり: 55分
 
-```
-tests/
-├── conftest.py                    # 共通設定のみ
-├── unit_tests/
-│   ├── conftest.py               # SQLite 専用
-│   └── test_*.py
-├── integration_tests/
-│   ├── sqlite/
-│   │   ├── conftest.py          # SQLite 統合テスト用
-│   │   └── test_*.py
-│   └── postgres/
-│       ├── conftest.py          # PostgreSQL 統合テスト用
-│       └── test_*.py
-```
+### ステップ2: Issue #035（次のステップ）
 
-**メリット**:
-- 明確な責任分離
-- 環境変数の衝突なし
+**SQLite/PostgreSQL Fixture 分離**
 
-**デメリット**:
-- ディレクトリ構造の大幅変更
+理由:
+- Issue #034完了後に実装するとスムーズ
+- 条件分岐を大幅に削減
+- 可読性・メンテナンス性が向上
 
-### 案3: pytest の ini オプションで DB type を制御
+実装内容:
+- `setup_sqlite_tables` 作成
+- `setup_postgres_tables` 作成
+- 後方互換性のための `setup_db_tables` エイリアス
+- 複雑な条件分岐を削除
 
-```ini
-# pytest.ini または pyproject.toml
-[tool.pytest.ini_options]
-markers = [
-    "sqlite: SQLite database tests",
-    "postgres: PostgreSQL database tests",
-    "no_db: No database connection required"
-]
-```
+見積もり: 90分
 
-```python
-# 実行方法
-pytest -m sqlite          # SQLite テストのみ
-pytest -m postgres        # PostgreSQL テストのみ
-pytest -m "not postgres"  # PostgreSQL 以外
-```
+### ステップ3: Issue #036（要検討）
 
-**メリット**:
-- pytest 標準機能
-- 条件分岐を marker で整理
+**Fixture Scope 見直し**
 
-**デメリット**:
-- 全テストに marker 追加必要
+理由:
+- 調査が必要（パフォーマンス影響の評価）
+- 現状で大きな問題がない
+- 必要性を精査してから実装判断
 
-### 案4: 環境変数を pytest 起動時に設定
+実装内容:
+- 調査フェーズ（60分）
+- 必要に応じて実装（60分+）
 
-```python
-# tests/conftest.py
-import os
-import pytest
+見積もり: 120分+（調査含む）
 
-def pytest_configure(config):
-    # コマンドライン引数から DB type を取得
-    db_type = config.getoption("--db-type", default="sqlite")
-    os.environ['DB_TYPE'] = db_type
-    
-    # EXEC_ENV もオプション化
-    exec_env = config.getoption("--exec-env", default="test")
-    os.environ['EXEC_ENV'] = exec_env
+---
 
-def pytest_addoption(parser):
-    parser.addoption(
-        "--db-type",
-        action="store",
-        default="sqlite",
-        help="Database type: sqlite or postgres"
-    )
-    parser.addoption(
-        "--exec-env",
-        action="store",
-        default="test",
-        help="Execution environment: dev, test, or prod"
-    )
-```
+## 推奨実装プラン
 
-```bash
-# 使用例
-pytest --db-type=postgres --exec-env=dev tests/integration_tests/
-pytest --db-type=sqlite tests/unit_tests/
-```
+### Phase 2-A: Issue #034 実装
+1. autouse=True 削除
+2. テストにfixture追加
+3. 全テスト検証
 
-**メリット**:
-- 環境変数のハードコード削除
-- 明示的な制御
-- ファイル内での環境変数上書き不要
+### Phase 2-B: Issue #035 実装
+1. fixture分離
+2. 条件分岐削除
+3. 全テスト検証
 
-**デメリット**:
-- 既存のテスト実行方法が変わる
+### Phase 3: Issue #036 調査・検討
+1. パフォーマンス測定
+2. 必要性評価
+3. 実装判断
 
-## 推奨案
+---
 
-**案4 (pytest オプション) + 案1 (autouse=False) の組み合わせ**
+## 次のアクション
+
+1. **Issue #034 の実装開始**（承認後）
+2. 完了後、Issue #035 の実装
+3. Issue #036 は調査フェーズから開始autouse=False) の組み合わせ**
 
 理由:
 1. 環境変数のハードコードを排除
