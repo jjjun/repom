@@ -11,7 +11,7 @@ def main():
         project_root=config.root_path,
         db_url=config.db_url
     )
-    
+
     print("Initializing Alembic...")
     setup.create_alembic_ini()
     setup.create_version_directory()

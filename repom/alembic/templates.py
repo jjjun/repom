@@ -3,14 +3,14 @@
 
 class AlembicTemplates:
     """Alembic 設定ファイルのテンプレート提供"""
-    
+
     @staticmethod
     def generate_alembic_ini(
         script_location: str,
         version_locations: str
     ) -> str:
         """alembic.ini を生成
-        
+
         Args:
             script_location: repom が提供する alembic への相対パス（プロジェクトルートから）
                            repom standalone: 'alembic'
@@ -19,7 +19,7 @@ class AlembicTemplates:
                              %(here)s は alembic.ini の場所（プロジェクトルート）を指す
                              例: '%(here)s/alembic/versions'
                                 'alembic/versions' の部分を変数で埋め込む
-        
+
         Note:
             - script_location: env.py と script.py.mako を含む repom の alembic ディレクトリ
             - version_locations: %(here)s + マイグレーションディレクトリのパス

@@ -11,7 +11,7 @@ def main():
         project_root=config.root_path,
         db_url=config.db_url
     )
-    
+
     print("Resetting Alembic migrations...")
     setup.reset_migrations()
     print("✓ Alembic migrations reset successfully")

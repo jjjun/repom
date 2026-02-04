@@ -66,26 +66,26 @@ def test_alembic_migration_without_id():
             import repom
             repom_root = Path(repom.__file__).parent.parent  # Go up one level to project root
             script_location = str((repom_root / 'alembic').resolve())
-            
+
             # AlembicSetup to generate alembic.ini and version directory
             db_path = Path(tmpdir) / 'test.db'
             db_url = f'sqlite:///{db_path}'
-            
+
             # Use Windows path format for version_locations
             tmpdir_path = Path(tmpdir).resolve()
             version_locations = str(tmpdir_path / 'alembic' / 'versions')
-            
+
             setup = AlembicSetup(
                 project_root=tmpdir,
                 db_url=db_url,
                 script_location=script_location,
                 version_locations=version_locations
             )
-            
+
             # Create alembic.ini and version directory
             setup.create_alembic_ini(overwrite=True)
             setup.create_version_directory()
-            
+
             # Get AlembicConfig
             alembic_cfg = setup.get_alembic_config()
 
