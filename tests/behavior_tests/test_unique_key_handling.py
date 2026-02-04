@@ -21,7 +21,7 @@ def ensure_roster_model_ready(setup_repom_db_tables):
     This fixture runs automatically before each test in this module.
     It ensures that RosterModel's mapper is valid, even if other tests
     have called clear_mappers().
-    
+
     Depends on setup_repom_db_tables to ensure database tables are created.
     """
     from sqlalchemy.orm import configure_mappers
