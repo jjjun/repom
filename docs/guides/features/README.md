@@ -4,6 +4,7 @@ repom の個別機能に関するガイドです。
 
 ## 📋 ガイド一覧
 
+- **[alembic_migration_guide.md](alembic_migration_guide.md)** ⭐ NEW - Alembic マイグレーション管理
 - **[config_hook_guide.md](config_hook_guide.md)** ⭐ NEW - CONFIG_HOOK による設定カスタマイズ
 - **[auto_import_models_guide.md](auto_import_models_guide.md)** - モデルの自動インポート機能
 - **[discovery_guide.md](discovery_guide.md)** - 汎用パッケージディスカバリー機能
