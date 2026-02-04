@@ -4,11 +4,109 @@ repom における Alembic を使ったデータベースマイグレーショ�
 
 ## 目次
 
+- [セットアップユーティリティ](#セットアップユーティリティ)
+  - [AlembicSetup を使った初期化](#alembicsetup-を使った初期化)
+  - [CLI コマンドで初期化](#cli-コマンドで初期化)
+  - [マイグレーションのリセット](#マイグレーションのリセット)
 - [repom 単独での使用](#repom-単独での使用)
 - [外部プロジェクトでの使用](#外部プロジェクトでの使用)
 - [よく使うコマンド](#よく使うコマンド)
 - [実践的な例](#実践的な例)
 - [トラブルシューティング](#トラブルシューティング)
+
+---
+
+## セットアップユーティリティ
+
+repom 0.x から `AlembicSetup` ユーティリティと CLI コマンドが追加され、Alembic の初期化とリセットが簡単になりました。
+
+### AlembicSetup を使った初期化
+
+プログラムから Alembic 環境を初期化する場合（テストやスクリプトで便利）：
+
+```python
+from repom.alembic import AlembicSetup
+
+# 基本的な使い方（repom standalone）
+setup = AlembicSetup(
+    project_root='/path/to/project',
+    db_url='sqlite:///data/db.sqlite3'
+)
+
+# alembic.ini と versions/ ディレクトリを作成
+setup.create_alembic_ini()
+setup.create_version_directory()
+
+# AlembicConfig オブジェクトを取得
+alembic_cfg = setup.get_alembic_config()
+```
+
+**外部プロジェクトでの使用**:
+```python
+# mine-py のような外部プロジェクトの場合
+setup = AlembicSetup(
+    project_root='/path/to/mine-py',
+    db_url='sqlite:///data/mine_py/db.sqlite3',
+    script_location='/path/to/mine-py/submod/repom/alembic',  # repom の alembic ディレクトリ
+    version_locations='%(here)s/alembic/versions'  # プロジェクト内の versions
+)
+
+setup.create_alembic_ini()
+setup.create_version_directory()
+```
+
+**オプション**:
+- `script_location`: env.py と script.py.mako の場所（デフォルト: `alembic`）
+- `version_locations`: マイグレーションファイルの保存場所（デフォルト: `%(here)s/alembic/versions`）
+- `overwrite`: 既存の alembic.ini を上書きするか（デフォルト: `False`）
+
+### CLI コマンドで初期化
+
+`alembic_init` コマンドで Alembic 環境を簡単に初期化できます。
+
+```bash
+# repom プロジェクトで実行
+poetry run alembic_init
+
+# 出力例:
+# ✓ Created alembic.ini: /path/to/project/alembic.ini
+# ✓ Created version directory: /path/to/project/alembic/versions
+```
+
+**動作**:
+- `config.root_path` と `config.db_url` を使用
+- alembic.ini を自動生成
+- alembic/versions/ ディレクトリを作成
+- 上書き保護付き（既存の alembic.ini がある場合はエラー）
+
+### マイグレーションのリセット
+
+開発中にマイグレーション履歴をリセットしたい場合：
+
+```bash
+# CLI コマンドで実行
+poetry run alembic_reset
+
+# 動作:
+# 1. alembic_version テーブルを削除（履歴をクリア）
+# 2. alembic/versions/*.py を削除（__init__.py は保持）
+```
+
+**プログラムから実行**:
+```python
+setup = AlembicSetup(project_root, db_url)
+
+# マイグレーション履歴とファイルをリセット
+setup.reset_migrations(drop_table=True, delete_files=True)
+
+# テーブルのみ削除
+setup.reset_migrations(drop_table=True, delete_files=False)
+
+# ファイルのみ削除
+setup.reset_migrations(drop_table=False, delete_files=True)
+```
+
+**注意**: リセットは**開発環境のみ**で実行してください。本番環境では使用しないでください。
 
 ---
 
@@ -149,6 +247,18 @@ mine-py/
 ---
 
 ## よく使うコマンド
+
+### Alembic 環境の管理
+
+```bash
+# Alembic 環境を初期化（alembic.ini + versions/ 作成）
+poetry run alembic_init
+
+# マイグレーション履歴をリセット（開発時のみ）
+poetry run alembic_reset
+```
+
+### マイグレーション操作
 
 ```bash
 # マイグレーションファイル作成（自動生成）
@@ -322,4 +432,5 @@ cat alembic.ini | grep version_locations
 ---
 
 **作成日**: 2026-02-03  
-**最終更新**: 2026-02-03
+**最終更新**: 2026-02-04  
+**更新内容**: AlembicSetup、alembic_init、alembic_reset コマンドの追加
