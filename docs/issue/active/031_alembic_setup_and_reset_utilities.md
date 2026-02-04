@@ -19,6 +19,16 @@
 - **env.py, script.py.mako は repom が提供**（`repom/alembic/` 配下に既存）
 - 外部プロジェクトは alembic.ini とマイグレーションファイル保存ディレクトリのみ用意すれば使える
 
+**alembic の制約（Python から変更不可）**:
+- `alembic.ini` の配置場所: alembic コマンド実行時のカレントディレクトリ（通常はプロジェクトルート）
+- `script_location`: repom の alembic ディレクトリ（env.py を含む）への相対パス
+  * repom standalone: `alembic`
+  * 外部プロジェクト: `submod/fast-domain/submod/repom/alembic`
+- `version_locations`: マイグレーションファイルの保存場所
+  * `%(here)s` は alembic.ini の場所（プロジェクトルート）を指す alembic の設定値
+  * 例: `%(here)s/alembic/versions`（`alembic/versions` の部分を Python 変数で埋め込む）
+- これらの設定により、将来的に config 側で疑似的な設定変更が可能
+
 **現状の課題**:
 
 1. **外部プロジェクトでの初回セットアップが手作業**
@@ -61,16 +71,21 @@ sqlalchemy.url = {db_url}
 
 Alembic のセットアップとリセットを行う統一的なユーティリティを提供し、テストとスクリプトの両方で使用可能にする。
 
-**提供する機能**:
+**提供する機能（同等に重要）**:
+
+### セットアップ機能
 
 1. **alembic.ini ファイル生成**
    - パラメータベースで alembic.ini を生成
+   - `%(here)s` を使用した相対パス指定をサポート
    - 既存ファイルがある場合は上書きしない（安全）
    - テンプレート方式で柔軟な設定を可能に
 
 2. **version_locations ディレクトリの作成**
    - 必要なディレクトリ構造を自動作成
    - 既存ディレクトリがある場合は何もしない
+
+### リセット機能
 
 3. **マイグレーションファイルの一括削除**
    - version_locations 内の全 .py ファイルを削除
@@ -92,9 +107,12 @@ def test_alembic_migration_without_id():
         setup = AlembicSetup(
             project_root=tmpdir,
             db_url=f'sqlite:///{tmpdir}/test.db'
+            # script_location と version_locations はデフォルト値を使用
         )
         
-        # alembic.ini を自動生成（env.py は repom が提供）
+        # alembic.ini を自動生成
+        # script_location: repom の alembic へのパス（env.py を含む）
+        # version_locations: マイグレーションファイルの保存場所
         setup.create_alembic_ini()
         
         # マイグレーション実行
@@ -108,12 +126,14 @@ def test_alembic_migration_without_id():
 **使用例（スクリプト）**:
 
 ```bash
-# マイグレーションを完全リセット
-poetry run alembic_reset
+# 初回セットアップ（config から設定を取得）
+poetry run alembic_init
 
-# 外部プロジェクトの初回セットアップ
-poetry run alembic_init --project-root . --version-locations ./alembic/versions
+# マイグレーションを完全リセット（config から設定を取得）
+poetry run alembic_reset
 ```
+
+**Note**: スクリプトは config の設定を使用します。外部プロジェクトでカスタマイズが必要な場合は、`AlembicSetup` クラスを直接使用してください。
 
 ---
 
@@ -151,29 +171,43 @@ class AlembicSetup:
     """Alembic セットアップと管理のための統合ユーティリティ
     
     テストとスクリプトの両方で使用可能。
+    config に依存せず、引数でパスを受け取る設計。
     """
     
     def __init__(
         self,
         project_root: str | Path,
-        db_url: Optional[str] = None,
-        script_location: Optional[str] = None,
-        version_locations: Optional[str] = None
+        db_url: str,
+        script_location: str = "alembic",
+        version_locations: str = "%(here)s/alembic/versions"
     ):
         """
         Args:
-            project_root: プロジェクトルートディレクトリ
-            db_url: データベース URL（省略時は RepomConfig から取得）
-            script_location: alembic スクリプトの場所（省略時: 'alembic'）
+            project_root: プロジェクトルートディレクトリ（alembic.ini を配置する場所）
+            db_url: データベース URL（必須）
+            script_location: repom の alembic への相対パス（プロジェクトルートから）
+                           repom standalone: 'alembic'
+                           外部プロジェクト: 'submod/fast-domain/submod/repom/alembic'
+                           （デフォルト: 'alembic'）
             version_locations: マイグレーションファイルの保存場所
+                             %(here)s は alembic.ini の場所（プロジェクトルート）を指す
+                             例: '%(here)s/alembic/versions'
+                             （デフォルト: '%(here)s/alembic/versions'）
+        
+        Note:
+            - db_url や各パスのデフォルト値は scripts/ 側で config から取得して渡す
+            - %(here)s により、alembic.ini の配置場所に依存しない相対パス指定が可能
+            - script_location: env.py を含む repom の alembic ディレクトリへのパス
         """
         self.project_root = Path(project_root)
-        self.db_url = db_url or self._get_default_db_url()
-        self.script_location = script_location or "alembic"
-        self.version_locations = version_locations or "alembic/versions"
+        self.db_url = db_url
+        self.script_location = script_location
+        self.version_locations = version_locations
         
         self.alembic_dir = self.project_root / self.script_location
-        self.versions_dir = self.project_root / self.version_locations
+        # %(here)s が含まれている場合は実際のパスに展開
+        versions_path = version_locations.replace('%(here)s', str(self.project_root))
+        self.versions_dir = Path(versions_path)
         
     def create_alembic_ini(self, overwrite: bool = False) -> None:
         """alembic.ini を生成
@@ -240,17 +274,12 @@ class AlembicSetup:
         if not ini_path.exists():
             raise FileNotFoundError(
                 f"alembic.ini not found at {ini_path}. "
-                f"Run create_config_files() first."
+                f"Run create_alembic_ini() first."
             )
         
         config = AlembicConfig(str(ini_path))
         config.set_main_option("sqlalchemy.url", self.db_url)
         return config
-    
-    def _get_default_db_url(self) -> str:
-        """デフォルトの DB URL を取得"""
-        from repom.config import config
-        return config.db_url
 ```
 
 ### 2. テンプレート管理
@@ -267,18 +296,37 @@ class AlembicTemplates:
     @staticmethod
     def generate_alembic_ini(
         script_location: str,
-        version_locations: str,
-        db_url: str
+        version_locations: str
     ) -> str:
-        """alembic.ini を生成"""
-        return f"""# A generic, single database configuration.
+        """alembic.ini を生成
+        
+        Args:
+            script_location: repom が提供する alembic への相対パス（プロジェクトルートから）
+                           repom standalone: 'alembic'
+                           外部プロジェクト: 'submod/fast-domain/submod/repom/alembic'
+            version_locations: マイグレーションファイルの保存場所
+                             %(here)s は alembic.ini の場所（プロジェクトルート）を指す
+                             例: '%(here)s/alembic/versions'
+                                'alembic/versions' の部分を変数で埋め込む
+        
+        Note:
+            - script_location: env.py と script.py.mako を含む repom の alembic ディレクトリ
+            - version_locations: %(here)s + マイグレーションディレクトリのパス
+            - %(here)s により、alembic.ini の配置場所に依存しない相対パス指定が可能
+        """
+        return f"""# Alembic configuration
+# Uses repom's env.py for migration execution
 
 [alembic]
+# Path to migration scripts (uses repom's env.py)
+# This should point to repom's alembic directory from project root
 script_location = {script_location}
-version_locations = {version_locations}
-file_template = %%(rev)s_%%(slug)s
-prepend_sys_path = .
 
+# Location where migration files are stored
+# %(here)s refers to the directory containing this alembic.ini (project root)
+version_locations = {version_locations}
+
+# Logging configuration
 [loggers]
 keys = root,sqlalchemy,alembic
 
@@ -389,44 +437,26 @@ class AlembicReset:
 
 ```python
 # repom/scripts/alembic_init.py
-"""Alembic の初回セットアップスクリプト"""
-import argparse
-from pathlib import Path
+"""Alembic の初回セットアップスクリプト
+
+config から設定を取得して AlembicSetup を実行。
+"""
 from repom.alembic.setup import AlembicSetup
+from repom.config import config
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Initialize Alembic for a repom project"
-    )
-    parser.add_argument(
-        "--project-root",
-        default=".",
-        help="Project root directory (default: current directory)"
-    )
-    parser.add_argument(
-        "--version-locations",
-        help="Version locations (default: alembic/versions)"
-    )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Overwrite existing files"
-    )
-    
-    args = parser.parse_args()
-    
     setup = AlembicSetup(
-        project_root=args.project_root,
-        version_locations=args.version_locations
+        project_root=config.root_path,
+        db_url=config.db_url
     )
     
     print("Initializing Alembic...")
-    setup.create_alembic_ini(overwrite=args.overwrite)
+    setup.create_alembic_ini()
     setup.create_version_directory()
     print("\n✓ Alembic initialized successfully")
-    print(f"  - alembic.ini: {Path(args.project_root) / 'alembic.ini'}")
+    print(f"  - alembic.ini: {config.root_path}/alembic.ini")
     print(f"  - versions dir: {setup.versions_dir}")
-    print(f"\nNote: env.py and script.py.mako are provided by repom.")
+    print("\nNote: env.py and script.py.mako are provided by repom.")
 
 if __name__ == "__main__":
     main()
@@ -434,39 +464,21 @@ if __name__ == "__main__":
 
 ```python
 # repom/scripts/alembic_reset.py
-"""Alembic マイグレーションのリセットスクリプト"""
-import argparse
+"""Alembic マイグレーションのリセットスクリプト
+
+config から設定を取得して AlembicSetup を実行。
+"""
 from repom.alembic.setup import AlembicSetup
+from repom.config import config
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Reset Alembic migrations (drop table and delete files)"
+    setup = AlembicSetup(
+        project_root=config.root_path,
+        db_url=config.db_url
     )
-    parser.add_argument(
-        "--project-root",
-        default=".",
-        help="Project root directory (default: current directory)"
-    )
-    parser.add_argument(
-        "--no-drop-table",
-        action="store_true",
-        help="Do not drop alembic_version table"
-    )
-    parser.add_argument(
-        "--no-delete-files",
-        action="store_true",
-        help="Do not delete migration files"
-    )
-    
-    args = parser.parse_args()
-    
-    setup = AlembicSetup(project_root=args.project_root)
     
     print("Resetting Alembic migrations...")
-    setup.reset_migrations(
-        drop_table=not args.no_drop_table,
-        delete_files=not args.no_delete_files
-    )
+    setup.reset_migrations()
     print("✓ Alembic migrations reset successfully")
 
 if __name__ == "__main__":
@@ -519,6 +531,7 @@ alembic_reset = "repom.scripts.alembic_reset:main"
 
 1. **repom/alembic/templates.py を作成**
    - `generate_alembic_ini()` 実装のみ
+   - `%(here)s` を使用した相対パス指定をサポート
    - **注意**: env.py と script.py.mako は repom が既に提供
 
 2. **repom/alembic/reset.py を作成**
@@ -526,18 +539,18 @@ alembic_reset = "repom.scripts.alembic_reset:main"
    - `delete_migration_files()` 実装
 
 3. **repom/alembic/setup.py を作成**
-   - `AlembicSetup` クラス実装
-   - 各メソッドの実装
+   - `AlembicSetup` クラス実装（config 非依存）
+   - 各メソッドの実装（引数でパスを受け取る設計）
 
 ### Phase 2: CLI スクリプト（1-2時間）
 
 4. **repom/scripts/alembic_init.py を作成**
-   - argparse でコマンドライン引数を処理
-   - AlembicSetup を使用
+   - config から db_url や root_path を取得
+   - AlembicSetup を実行（シンプルな実装）
 
 5. **repom/scripts/alembic_reset.py を作成**
-   - argparse でコマンドライン引数を処理
-   - AlembicSetup を使用
+   - config から db_url や root_path を取得
+   - AlembicSetup を実行（シンプルな実装）
 
 6. **pyproject.toml を更新**
    - スクリプトエントリを追加
@@ -580,17 +593,27 @@ alembic_reset = "repom.scripts.alembic_reset:main"
 # tests/unit_tests/test_alembic_setup.py
 def test_alembic_setup_creates_alembic_ini(tmp_path):
     """AlembicSetup が alembic.ini を正しく作成する"""
-    setup = AlembicSetup(project_root=tmp_path)
+    setup = AlembicSetup(
+        project_root=tmp_path,
+        db_url=f"sqlite:///{tmp_path}/test.db"
+    )
     setup.create_alembic_ini()
     
     assert (tmp_path / "alembic.ini").exists()
+    
+    # %(here)s が使用されていることを確認
+    ini_content = (tmp_path / "alembic.ini").read_text()
+    assert "%(here)s" in ini_content
     
     # env.py と script.py.mako は repom が提供するため生成しない
     # 外部プロジェクトでは script_location で repom の alembic を参照
 
 def test_alembic_setup_does_not_overwrite_existing_ini(tmp_path):
     """既存の alembic.ini を上書きしない（安全性）"""
-    setup = AlembicSetup(project_root=tmp_path)
+    setup = AlembicSetup(
+        project_root=tmp_path,
+        db_url=f"sqlite:///{tmp_path}/test.db"
+    )
     
     # 最初に作成
     setup.create_alembic_ini()
@@ -602,7 +625,10 @@ def test_alembic_setup_does_not_overwrite_existing_ini(tmp_path):
 
 def test_alembic_setup_creates_version_directory(tmp_path):
     """version_locations ディレクトリが正しく作成される"""
-    setup = AlembicSetup(project_root=tmp_path)
+    setup = AlembicSetup(
+        project_root=tmp_path,
+        db_url=f"sqlite:///{tmp_path}/test.db"
+    )
     setup.create_version_directory()
     
     assert setup.versions_dir.exists()
@@ -716,10 +742,13 @@ def test_full_alembic_workflow_with_setup(tmp_path):
 
 - **repom/alembic/ に配置**: Alembic 関連の機能をまとめる
 - **3つのモジュールに分割**: 責務を明確にし、テスト容易性を向上
-  - `setup.py`: 統合インターフェース
-  - `templates.py`: テンプレート管理
+  - `setup.py`: 統合インターフェース（config 非依存、引数でパスを受け取る）
+  - `templates.py`: テンプレート管理（`%(here)s` 使用で相対パス指定可能）
   - `reset.py`: リセット機能
 - **CLI スクリプト提供**: スクリプトとしても使えるようにする
+- **責務分離**: `AlembicSetup` は config に依存せず、`scripts/` が config から値を取得して渡す
+  - テスト容易性が向上（任意のパスでテスト可能）
+  - 外部プロジェクトでも柔軟に使用可能
 
 ### 今後の拡張可能性
 
