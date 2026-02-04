@@ -27,6 +27,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
+| #031 | Alembic セットアップとリセットユーティリティの実装 | 中 | 🟡 提案中 | [active/031_alembic_setup_and_reset_utilities.md](active/031_alembic_setup_and_reset_utilities.md) |
 | #028 | テストアーキテクチャの複雑さ改善 | 中 | 🔄 作業中 (Part 1完了) | [active/028_test_architecture_complexity.md](active/028_test_architecture_complexity.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
