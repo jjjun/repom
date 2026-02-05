@@ -305,6 +305,24 @@ all_articles = repo.find(include_deleted=True)
 
 ## コマンドリファレンス
 
+### 設定情報表示
+
+```bash
+# 現在の repom 設定を表示
+poetry run repom_info
+```
+
+repom の現在の設定（データベース接続、パス設定、モデル読み込み状況など）を表示します。
+
+**表示内容**:
+- 基本パス（root_path, backup_path, master_data_path）
+- データベース設定（db_type, db_url）
+- SQLite詳細情報（ファイルパス、存在確認、サイズ）
+- PostgreSQL詳細情報（host, port, database, user）
+- PostgreSQL接続テスト結果
+- モデル読み込み設定（読み込まれたモデル一覧）
+- 環境変数（EXEC_ENV, CONFIG_HOOK）
+
 ### データベース操作
 
 ```bash
