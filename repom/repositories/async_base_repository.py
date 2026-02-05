@@ -22,9 +22,9 @@ Example:
 """
 
 from contextlib import asynccontextmanager
-from typing import Any, Callable, Type, TypeVar, Generic, Optional, List, Dict, Union
+from typing import Any, Callable, Type, TypeVar, Generic, Optional, List, Dict, Union, get_args
 from sqlalchemy import ColumnElement, and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 from repom.database import get_async_db_session
 from repom.repositories._core import has_soft_delete, FilterParams
@@ -48,17 +48,74 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         allowed_order_columns: ソート可能なカラムのホワイトリスト（サブクラスで拡張可能、同期/非同期共通）
     """
 
-    def __init__(self, model: Type[T], session: Optional[AsyncSession] = None):
+    def __init__(self, model: Optional[Type[T]] = None, session: Optional[AsyncSession] = None):
         """AsyncBaseRepository の初期化
 
         Args:
-            model (Type[T]): モデルクラス
+            model (Type[T], optional): モデルクラス. 省略時は型パラメータから自動推論される.
             session (AsyncSession, optional): 非同期データベースセッション. Defaults to None (get_async_db_session() を使用).
+
+        Raises:
+            TypeError: model が推論できない場合、または Session が model に渡された場合
+
+        Example:
+            # 明示的な model 指定（従来の方法）
+            repo = AsyncBaseRepository(User, session=async_session)
+
+            # __init__ を省略した子クラスで自動推論
+            class UserRepository(AsyncBaseRepository[User]):
+                pass
+
+            repo = UserRepository(session=async_session)  # User が自動推論される
         """
+        # AsyncSession が model 引数に渡された場合の検出（位置引数で渡された場合）
+        # async_scoped_session も含めてチェック
+        if isinstance(model, (AsyncSession, async_scoped_session)):
+            raise TypeError(
+                f"AsyncSession object was passed as 'model' parameter. "
+                f"This usually happens when __init__ is omitted and repo_class(session) is called. "
+                f"Please use 'session' parameter: repo_class(session=session) or define __init__ explicitly."
+            )
+
+        # model が明示的に指定されていない場合、型パラメータから推論
+        if model is None:
+            model = self._infer_model_from_type_params()
+
         self.model = model
         self._session_override = session
         self._scoped_session: Optional[AsyncSession] = None
         self.default_options: List = []  # デフォルトの eager loading options
+
+    @classmethod
+    def _infer_model_from_type_params(cls) -> Type[T]:
+        """型パラメータからモデルクラスを推論
+
+        Returns:
+            Type[T]: 推論されたモデルクラス
+
+        Raises:
+            TypeError: モデルを推論できない場合
+        """
+        # __orig_bases__ から Generic[T] の型引数を取得
+        if hasattr(cls, '__orig_bases__'):
+            for base in cls.__orig_bases__:
+                # Generic の型引数を取得
+                args = get_args(base)
+                if args and len(args) > 0:
+                    # 最初の型引数をモデルとして使用
+                    potential_model = args[0]
+                    # TypeVar でない実際のクラスかチェック
+                    if not isinstance(potential_model, TypeVar):
+                        return potential_model
+
+        # 推論できない場合はエラー
+        raise TypeError(
+            f"Could not infer model type for {cls.__name__}. "
+            f"Please either:\n"
+            f"1. Specify model explicitly: {cls.__name__}(model=YourModel, session=...)\n"
+            f"2. Define class as: class {cls.__name__}(AsyncBaseRepository[YourModel])\n"
+            f"3. Override __init__ and call super().__init__(YourModel, session)"
+        )
 
     @property
     def session(self) -> Optional[AsyncSession]:

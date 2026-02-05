@@ -48,7 +48,8 @@ def debug_repository_queries(repo_class: Type[BaseRepository]) -> None:
 
     with analyzer.capture():
         with _db_manager.get_sync_session() as session:
-            repo = repo_class(session)
+            # ✅ 自動推論を活用: session=... で渡す
+            repo = repo_class(session=session)
 
             # ステップ1: find() の実行
             print("📍 Step 1: repo.find() を実行中...")
@@ -57,23 +58,23 @@ def debug_repository_queries(repo_class: Type[BaseRepository]) -> None:
             # find() メソッドのシグネチャを確認
             sig = inspect.signature(repo.find)
             params = sig.parameters
-            
+
             # 必須の位置引数があるか確認
             required_params = [
                 name for name, param in params.items()
-                if param.default == inspect.Parameter.empty 
+                if param.default == inspect.Parameter.empty
                 and param.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.POSITIONAL_ONLY)
                 and name != 'self'
             ]
-            
+
             query_count_before = len(analyzer.get_queries())
-            
+
             # 必須パラメータがある場合はデフォルトインスタンスを渡す
             if required_params:
                 # 最初のパラメータの型アノテーションを取得
                 first_param_name = required_params[0]
                 first_param = params[first_param_name]
-                
+
                 if first_param.annotation != inspect.Parameter.empty:
                     try:
                         # FilterParams などのデフォルトインスタンスを作成
@@ -97,7 +98,7 @@ def debug_repository_queries(repo_class: Type[BaseRepository]) -> None:
             else:
                 # 必須パラメータがない場合は引数なしで呼び出し
                 results = repo.find()
-            
+
             query_count_after_find = len(analyzer.get_queries())
 
             print(f"✅ find() 完了: {len(results)} 件取得")

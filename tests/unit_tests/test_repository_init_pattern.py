@@ -44,22 +44,27 @@ class TestRepositoryInitPatterns:
         print(f"  [OK] Works! Can create without passing model")
 
     def test_pattern2_without_custom_init(self, db_test):
-        """Pattern 2: No custom __init__ (新しい書き方?)"""
+        """Pattern 2: No custom __init__ (新しい書き方 - 自動推論)"""
 
         class NoInitRepository(BaseRepository[InitTestModel]):
             pass  # __init__ を省略
 
-        # この場合、モデルを渡す必要がある
-        try:
-            # [NG] これはエラーになる
-            repo = NoInitRepository(session=db_test)
-            print(f"\n[Pattern 2] No __init__ (session only):")
-            print(f"  [NG] This should fail but didn't?")
-            assert False, "Expected TypeError"
-        except TypeError as e:
-            print(f"\n[Pattern 2] No __init__ (session only):")
-            print(f"  [NG] Error (expected): {e}")
-            assert "missing 1 required positional argument: 'model'" in str(e)
+        # ✅ 修正後: session=... で渡せば自動推論される
+        repo = NoInitRepository(session=db_test)
+
+        print(f"\n[Pattern 2] No __init__ (session only, auto-inference):")
+        print(f"  repo.model: {repo.model}")
+        print(f"  repo.session: {repo.session}")
+
+        assert repo.model == InitTestModel
+        assert repo.session == db_test
+
+        # 動作確認
+        item = InitTestModel(name="Test 2")
+        saved = repo.save(item)
+        assert saved.name == "Test 2"
+
+        print(f"  [OK] Works! Model is auto-inferred from type parameter")
 
     def test_pattern3_without_custom_init_but_pass_model(self, db_test):
         """Pattern 3: No custom __init__, but pass model explicitly"""
@@ -134,22 +139,27 @@ class TestAsyncRepositoryInitPatterns:
         print(f"  [OK] Works! Can create without passing model")
 
     async def test_async_pattern2_without_custom_init(self, async_db_test):
-        """Pattern 2: No custom __init__ (新しい書き方?) - ASYNC"""
+        """Pattern 2: No custom __init__ (新しい書き方 - 自動推論) - ASYNC"""
 
         class NoInitAsyncRepository(AsyncBaseRepository[InitTestModel]):
             pass  # __init__ を省略
 
-        # この場合、モデルを渡す必要がある
-        try:
-            # [NG] これはエラーになる
-            repo = NoInitAsyncRepository(session=async_db_test)
-            print(f"\n[Async Pattern 2] No __init__ (session only):")
-            print(f"  [NG] This should fail but didn't?")
-            assert False, "Expected TypeError"
-        except TypeError as e:
-            print(f"\n[Async Pattern 2] No __init__ (session only):")
-            print(f"  [NG] Error (expected): {e}")
-            assert "missing 1 required positional argument: 'model'" in str(e)
+        # ✅ 修正後: session=... で渡せば自動推論される
+        repo = NoInitAsyncRepository(session=async_db_test)
+
+        print(f"\n[Async Pattern 2] No __init__ (session only, auto-inference):")
+        print(f"  repo.model: {repo.model}")
+        print(f"  repo.session: {repo.session}")
+
+        assert repo.model == InitTestModel
+        assert repo.session == async_db_test
+
+        # 動作確認
+        item = InitTestModel(name="Async Test 2")
+        saved = await repo.save(item)
+        assert saved.name == "Async Test 2"
+
+        print(f"  [OK] Works! Model is auto-inferred from type parameter")
 
     async def test_async_pattern3_without_custom_init_but_pass_model(self, async_db_test):
         """Pattern 3: No custom __init__, but pass model explicitly - ASYNC"""
