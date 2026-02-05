@@ -14,8 +14,8 @@ class CreatedAtModel(BaseModel):
 
 
 @pytest.fixture(scope='function', autouse=True)
-def setup_tables(setup_sqlite_tables):
-    """setup_sqlite_tables に依存して、テーブルが作成されることを保証"""
+def setup_tables(setup_database_tables):
+    """setup_database_tables に依存して、テーブルが作成されることを保証"""
     pass
 
 

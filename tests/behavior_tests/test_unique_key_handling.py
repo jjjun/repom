@@ -15,14 +15,14 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def ensure_roster_model_ready(setup_sqlite_tables):
+def ensure_roster_model_ready(setup_database_tables):
     """Ensure RosterModel is properly initialized before each test.
 
     This fixture runs automatically before each test in this module.
     It ensures that RosterModel's mapper is valid, even if other tests
     have called clear_mappers().
 
-    Depends on setup_sqlite_tables to ensure database tables are created.
+    Depends on setup_database_tables to ensure database tables are created.
     """
     from sqlalchemy.orm import configure_mappers
     # Force mapper configuration to ensure RosterModel is ready
