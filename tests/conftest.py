@@ -33,70 +33,44 @@ def pytest_configure(config):
     logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
 
 
-@pytest.fixture(scope='session')
-def setup_sqlite_tables():
+@pytest.fixture(scope='session', autouse=True)
+def setup_database_tables():
     """
-    SQLite専用: repom.db.engine と repom.async_session.async_engine にテーブルを作成
+    データベースタイプに応じてテーブルを自動作成
 
-    test_session.py などが get_db_session() を使用する際、
-    これらのengineを使用するため、テーブルが必要。
+    config.db_type に基づいて適切なセットアップを実行:
+    - SQLite: 同期・非同期両方のengineにテーブル作成
+    - PostgreSQL: 同期engineのみにテーブル作成
 
-    Note: EXEC_ENV='test' が設定されているため、両engineは :memory: + StaticPool
-    create_test_fixtures() が作成する db_engine と同じ :memory: DB を参照する。
-
-    SQLiteの場合、同期・非同期両方のengineにテーブルを作成します。
+    autouse=True により、全テストで自動実行されます。
     """
     from repom.models.base_model import Base
     from repom.database import get_sync_engine, get_async_engine
+    from repom.config import config
+    from repom.utility import load_models
     import asyncio
 
     # モデルをロード（テーブル定義を Base.metadata に登録）
-    from repom.utility import load_models
     load_models()
 
     # 同期 engine にテーブル作成
     engine = get_sync_engine()
     Base.metadata.create_all(bind=engine)
 
-    # 非同期 engine にテーブル作成（SQLiteは必要）
-    async def create_async_tables():
-        async_engine = await get_async_engine()
-        async with async_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    # SQLite の場合のみ非同期 engine にもテーブル作成
+    if config.db_type == 'sqlite':
+        async def create_async_tables():
+            async_engine = await get_async_engine()
+            async with async_engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
 
-    asyncio.run(create_async_tables())
-
-    yield
-
-    # クリーンアップ
-    Base.metadata.drop_all(bind=engine)
-
-
-@pytest.fixture(scope='session')
-def setup_postgres_tables():
-    """
-    PostgreSQL専用: repom.db.engine にテーブルを作成
-
-    PostgreSQL統合テスト用のテーブルセットアップ。
-    非同期engineはパスワード認証問題のため作成しません。
-
-    同期engineのみにテーブルを作成します。
-    """
-    from repom.models.base_model import Base
-    from repom.database import get_sync_engine
-    from repom.utility import load_models
-
-    # モデルをロード
-    load_models()
-
-    # 同期 engine にテーブル作成（PostgreSQLは非同期不要）
-    engine = get_sync_engine()
-    Base.metadata.create_all(bind=engine)
+        asyncio.run(create_async_tables())
 
     yield
 
-    # PostgreSQLはクリーンアップしない（データ永続化）
-    # Base.metadata.drop_all(bind=engine)
+    # SQLite の場合のみクリーンアップ（PostgreSQL はデータ永続化）
+    if config.db_type == 'sqlite':
+        Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture(scope='session', autouse=True)
