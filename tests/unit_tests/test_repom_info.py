@@ -145,19 +145,28 @@ class TestPostgresConnectionTest:
     """Tests for test_postgres_connection function."""
 
     @patch('repom.scripts.repom_info.config')
-    def test_connection_test_sqlite(self, mock_config):
-        """Test connection test for SQLite returns N/A."""
-        mock_config.db_type = 'sqlite'
+    def test_connection_test_not_configured(self, mock_config):
+        """Test connection test when PostgreSQL is not configured."""
+        mock_postgres = Mock()
+        mock_postgres.host = None
+        mock_config.postgres = mock_postgres
 
         result = check_postgres_connection()
 
-        assert result == '(Not applicable for SQLite)'
+        assert '✗ Not configured' in result
 
-    @patch('repom.scripts.repom_info.get_sync_engine')
+    @patch('repom.scripts.repom_info.create_engine')
     @patch('repom.scripts.repom_info.config')
-    def test_connection_test_success(self, mock_config, mock_get_engine):
+    def test_connection_test_success(self, mock_config, mock_create_engine):
         """Test successful PostgreSQL connection."""
-        mock_config.db_type = 'postgresql'
+        # Mock PostgreSQL config
+        mock_postgres = Mock()
+        mock_postgres.host = 'localhost'
+        mock_postgres.port = 5432
+        mock_postgres.user = 'test_user'
+        mock_postgres.password = 'test_pass'
+        mock_config.postgres = mock_postgres
+        mock_config.postgres_db = 'test_db'
 
         # Mock successful connection
         mock_engine = Mock()
@@ -165,20 +174,29 @@ class TestPostgresConnectionTest:
         mock_engine.connect.return_value.__enter__ = Mock(return_value=mock_conn)
         mock_engine.connect.return_value.__exit__ = Mock(return_value=False)
         mock_conn.execute = Mock()
-        mock_get_engine.return_value = mock_engine
+        mock_engine.dispose = Mock()
+        mock_create_engine.return_value = mock_engine
 
         result = check_postgres_connection()
 
         assert result == '✓ Connected'
+        mock_engine.dispose.assert_called_once()
 
-    @patch('repom.scripts.repom_info.get_sync_engine')
+    @patch('repom.scripts.repom_info.create_engine')
     @patch('repom.scripts.repom_info.config')
-    def test_connection_test_failure(self, mock_config, mock_get_engine):
+    def test_connection_test_failure(self, mock_config, mock_create_engine):
         """Test failed PostgreSQL connection."""
-        mock_config.db_type = 'postgresql'
+        # Mock PostgreSQL config
+        mock_postgres = Mock()
+        mock_postgres.host = 'localhost'
+        mock_postgres.port = 5432
+        mock_postgres.user = 'test_user'
+        mock_postgres.password = 'test_pass'
+        mock_config.postgres = mock_postgres
+        mock_config.postgres_db = 'test_db'
 
         # Mock connection failure
-        mock_get_engine.side_effect = OperationalError("Connection failed", None, None)
+        mock_create_engine.side_effect = OperationalError("Connection failed", None, None)
 
         result = check_postgres_connection()
 

@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from sqlalchemy import text
+from sqlalchemy import text, create_engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from repom.config import config
@@ -114,16 +114,33 @@ def test_postgres_connection() -> str:
     Returns:
         Connection test result string
     """
-    if config.db_type != 'postgresql':
-        return '(Not applicable for SQLite)'
+    # Check if PostgreSQL settings are configured
+    if not config.postgres.host:
+        return '✗ Not configured (host missing)'
 
+    # Get database name (may be auto-generated)
+    database = config.postgres_db
+    if not database:
+        return '✗ Not configured (database missing)'
+
+    # Build PostgreSQL connection URL
     try:
-        engine = get_sync_engine()
-        with engine.connect() as conn:
+        pg_url = (
+            f"postgresql://{config.postgres.user}:{config.postgres.password}"
+            f"@{config.postgres.host}:{config.postgres.port}/{database}"
+        )
+
+        # Create a temporary engine for testing
+        test_engine = create_engine(pg_url, pool_pre_ping=True)
+
+        with test_engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+
+        test_engine.dispose()
         return '✓ Connected'
     except SQLAlchemyError as e:
-        return f'✗ Failed: {str(e)[:50]}'
+        error_msg = str(e.orig) if hasattr(e, 'orig') else str(e)
+        return f'✗ Failed: {error_msg[:50]}'
     except Exception as e:
         return f'✗ Error: {str(e)[:50]}'
 
