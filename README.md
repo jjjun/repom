@@ -102,14 +102,38 @@ cd /path/to/repom
 # 2. 依存関係をインストール
 poetry install
 
-# 3. データベースを作成
+# 3. （オプション）PostgreSQL サポートを追加
+poetry install --extras postgres
+
+# 4. データベースを作成
 poetry run db_create
 
-# 4. マイグレーションを適用（必要な場合）
+# 5. マイグレーションを適用（必要な場合）
 poetry run alembic upgrade head
 
-# 5. テストを実行して動作確認
+# 6. テストを実行して動作確認
 poetry run pytest tests/unit_tests
+```
+
+### Optional Dependencies
+
+repom は以下のオプション機能を提供しています：
+
+```bash
+# PostgreSQL サポート (psycopg3)
+poetry install --extras postgres
+
+# 非同期 PostgreSQL サポート (asyncpg)
+poetry install --extras postgres-async
+
+# 非同期 SQLite サポート (aiosqlite)
+poetry install --extras async
+
+# 全ての非同期サポート
+poetry install --extras async-all
+
+# 複数のオプションを同時に有効化
+poetry install --extras "postgres async"
 ```
 
 ### 環境変数の設定（オプション）

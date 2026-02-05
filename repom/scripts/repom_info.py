@@ -123,10 +123,10 @@ def test_postgres_connection() -> str:
     if not database:
         return '✗ Not configured (database missing)'
 
-    # Build PostgreSQL connection URL
+    # Build PostgreSQL connection URL (psycopg3)
     try:
         pg_url = (
-            f"postgresql://{config.postgres.user}:{config.postgres.password}"
+            f"postgresql+psycopg://{config.postgres.user}:{config.postgres.password}"
             f"@{config.postgres.host}:{config.postgres.port}/{database}"
         )
 
