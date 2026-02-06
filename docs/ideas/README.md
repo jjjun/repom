@@ -4,6 +4,18 @@
 
 This directory contains **feature ideas** and **enhancement proposals** for the repom project. Ideas documented here are in the conceptual or planning stage.
 
+## 概要
+
+**目的**: アイデア段階の提案を記録（実装前）
+
+**特徴**:
+- ✅ 問題提起と動機
+- ✅ ユースケース
+- ✅ **厳格な文書長制限（250-350行）**
+- ❌ 完全な実装コードは含めない
+
+**命名規則**: `<feature_name>.md`
+
 ## 📏 Document Guidelines
 
 ### STRICT LIMITS
