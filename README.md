@@ -297,7 +297,7 @@ def get_task(task_id: int):
     return task.to_dict()
 ```
 
-**詳細**: [BaseModelAuto & スキーマ自動生成ガイド](docs/guides/core/base_model_auto_guide.md)
+**詳細**: [BaseModelAuto & スキーマ自動生成ガイド](docs/guides/model/base_model_auto_guide.md)
 
 ### 論理削除（Soft Delete）
 
@@ -323,7 +323,7 @@ active_articles = repo.find()
 all_articles = repo.find(include_deleted=True)
 ```
 
-**詳細**: [論理削除（Soft Delete）ガイド](docs/guides/features/soft_delete_guide.md)
+**詳細**: [論理削除（Soft Delete）ガイド](docs/guides/model/soft_delete_guide.md)
 
 ---
 
@@ -777,27 +777,19 @@ def get_repom_config():
 
 ```
 docs/
-├── guides/             # 📖 機能別詳細ガイド
-│   ├── base_model_auto_guide.md         # BaseModelAuto & スキーマ自動生成
-│   └── repository_and_utilities_guide.md # BaseRepository & Utilities
-│
-├── issue/              # 🔧 問題追跡と解決記録
-│   ├── README.md      # Issue 管理インデックス
-│   ├── completed/     # ✅ 解決済み Issue
-│   ├── in_progress/   # 🚧 作業中の Issue
-│   └── backlog/       # 📝 計画中の Issue
-│
-├── research/           # 🔬 技術調査
+├── README.md           # ドキュメント構造
+├── guides/             # 📖 使い方ガイド
 ├── ideas/              # 💡 機能提案
-└── technical/          # � 技術詳細とAPIリファレンス
+├── technical/          # 🔧 実装判断記録
+└── issue/              # 📋 問題管理（active/completed）
+  ├── README.md      # Issue インデックス
+  ├── active/        # 作業中・未着手
+  └── completed/     # 完了済み
 ```
 
 ### 🎯 主要ガイド
 
-| ガイド | 内容 | 対象 |
-|-------|------|------|
-| **base_model_auto_guide.md** | BaseModelAuto、スキーマ自動生成、@response_field、FastAPI 統合 | モデル実装・FastAPI 開発者 |
-| **repository_and_utilities_guide.md** | BaseRepository、FilterParams、as_query_depends()、auto_import_models | リポジトリ実装・検索機能開発者 |
+主要ガイドは [docs/guides/README.md](docs/guides/README.md) を参照してください。
 
 ### 🤖 AI エージェント協働
 
