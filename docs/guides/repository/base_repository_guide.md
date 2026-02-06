@@ -23,7 +23,7 @@
 
 ### リポジトリの作成
 
-#### 推奨パターン: カスタム __init__ を定義
+#### 推奨パターン: __init__ を省略（型推論）
 
 ```python
 from repom import BaseRepository
@@ -32,15 +32,14 @@ from sqlalchemy.orm import Session
 
 # カスタムリポジトリを定義（推奨）
 class TaskRepository(BaseRepository[Task]):
-    def __init__(self, session: Session = None):
-        super().__init__(Task, session)
+    pass
 
 # インスタンス化（モデル名の指定が不要）
 repo = TaskRepository(session=db_session)
 ```
 
 **メリット**:
-- インスタンス化時にモデル名を省略できる
+- モデル指定が不要（型パラメータから自動推論）
 - カスタムメソッドを追加しやすい
 - コードが読みやすい
 
@@ -152,8 +151,7 @@ repo.remove(task)  # 物理削除（完全削除）
 ```python
 # リポジトリ定義
 class UserRepository(BaseRepository[User]):
-    def __init__(self, session: Session = None):
-        super().__init__(User, session)
+    pass
 
 # 使用例
 repo = UserRepository(session=db_session)

@@ -133,8 +133,7 @@ from mine_py.models import User
 from sqlalchemy.orm import Session
 
 class UserRepository(BaseRepository[User]):
-    def __init__(self, session: Session = None):
-        super().__init__(User, session)
+    pass
 
 # Usage
 from repom.database import db_session

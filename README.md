@@ -162,21 +162,29 @@ poetry run python -c "from repom.config import config; print(config.db_url)"
 ### モデルの定義
 
 ```python
-from sqlalchemy import String
+from sqlalchemy import String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import Optional
-from repom.models import BaseModel
+from repom.models import BaseModelAuto
 
-class Task(BaseModel):
+class Task(BaseModelAuto, use_id=True, use_created_at=True, use_updated_at=True):
     __tablename__ = "tasks"
 
-    # フラグでカラムを制御
-    use_id = True
-    use_created_at = True
-    use_updated_at = True
-
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(String)
+    title: Mapped[str] = mapped_column(
+      String(255),
+      nullable=False,
+      info={"description": "タスク名"}
+    )
+    description: Mapped[Optional[str]] = mapped_column(
+      String,
+      info={"description": "詳細"}
+    )
+    is_done: Mapped[bool] = mapped_column(
+      Boolean,
+      default=False,
+      nullable=False,
+      info={"description": "完了フラグ"}
+    )
 ```
 
 ### リポジトリの実装
@@ -184,11 +192,9 @@ class Task(BaseModel):
 ```python
 from repom import BaseRepository
 from your_project.models import Task
-from sqlalchemy.orm import Session
 
 class TaskRepository(BaseRepository[Task]):
-    def __init__(self, session: Session = None):
-        super().__init__(Task, session)
+  pass
 
 # 使用例
 repo = TaskRepository(session=db_session)
@@ -853,6 +859,3 @@ poetry run python -c "from repom.config import config; print(config)"
 - **[.github/copilot-instructions.md](.github/copilot-instructions.md)**: GitHub Copilot 専用の指示
 
 ---
-
-**最終更新**: 2025-12-25  
-**バージョン**: 簡略版 v2.1 (ガイド再構成版)

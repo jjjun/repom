@@ -73,12 +73,8 @@ from repom.models import BaseModelAuto
 from sqlalchemy import String, Integer, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
-class TimeActivityModel(BaseModelAuto):
+class TimeActivityModel(BaseModelAuto, use_id=True, use_created_at=True, use_updated_at=True):
     __tablename__ = "time_activities"
-    
-    use_id = True  # id カラムを使用
-    use_created_at = True
-    use_updated_at = True
 
     name: Mapped[str] = mapped_column(
         String(100), 
@@ -427,20 +423,16 @@ assert ArticleResponse.model_fields['status'].annotation == Literal["draft", "pu
 
 ## 複合主キー対応
 
-### use_composite_pk フラグ
+### use_id=False（複合主キー）
 
-複合主キーを使用する場合は `use_composite_pk=True` を設定します。
+複合主キーを使用する場合は `use_id=False` を指定します。
 
 ```python
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import date, time
 
-class TimeBlockModel(BaseModelAuto):
+class TimeBlockModel(BaseModelAuto, use_id=False, use_created_at=True, use_updated_at=True):
     __tablename__ = "time_blocks"
-    
-    use_composite_pk = True  # id カラムを使用しない
-    use_created_at = True
-    use_updated_at = True
     
     date: Mapped[date] = mapped_column(Date, primary_key=True, info={'description': '日付'})
     start_time: Mapped[time] = mapped_column(Time, primary_key=True, info={'description': '開始時刻'})
