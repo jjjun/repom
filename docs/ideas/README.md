@@ -1,10 +1,8 @@
-﻿# Ideas Directory
-
-## Overview
-
-This directory contains **feature ideas** and **enhancement proposals** for the repom project. Ideas documented here are in the conceptual or planning stage.
+﻿# アイデアディレクトリ
 
 ## 概要
+
+このディレクトリには **機能アイデア**と**改善提案**を保存します。ここに記載されるアイデアは、構想段階または計画段階です。
 
 **目的**: アイデア段階の提案を記録（実装前）
 
@@ -16,30 +14,30 @@ This directory contains **feature ideas** and **enhancement proposals** for the 
 
 **命名規則**: `<feature_name>.md`
 
-## 📏 Document Guidelines
+## 📏 ドキュメント作成ガイドライン
 
-### STRICT LIMITS
-- **Total length**: 250-350 lines maximum
-- **Code examples**: 5-10 lines maximum per example
-- **Approaches**: Present ONE recommended approach only
+### 厳格な制限
+- **総行数**: 250-350行まで
+- **コード例**: 1例につき5-10行まで
+- **アプローチ**: ONE recommended approach のみ
 
-### What to EXCLUDE
-❌ Complete code implementations (will become outdated)  
-❌ Multiple detailed approach comparisons (choose one)  
-❌ Deep technical implementation details (belongs in code/comments)  
-❌ Redundant code examples (one per concept maximum)  
-❌ "Additional Ideas" sections (create separate docs)
+### 含めないもの
+❌ 完全な実装コード（すぐ古くなる）  
+❌ 複数アプローチの詳細比較（1つに絞る）  
+❌ 深い技術実装の詳細（コードや technical/ に移す）  
+❌ 冗長なコード例（1概念につき1例まで）  
+❌ 「Additional Ideas」セクション（別ファイルに分割）
 
-### What to INCLUDE
-✅ Problem definition and scope  
-✅ Impact on existing commands/features  
-✅ Constraints (backward compatibility, etc.)  
-✅ Validation criteria  
-✅ Conceptual explanations with minimal code
+### 含めるもの
+✅ 問題定義とスコープ  
+✅ 既存コマンド/機能への影響  
+✅ 制約（後方互換性など）  
+✅ 検証基準  
+✅ コード最小限の概念説明
 
-## 📋 Required Template
+## 📋 必須テンプレート
 
-**Copy this template when creating new idea documents**:
+**新しい idea ドキュメントを作るときは以下をコピーして使用**:
 
 ```markdown
 # [Feature Name]
@@ -52,34 +50,34 @@ This directory contains **feature ideas** and **enhancement proposals** for the 
 - **最終更新**: YYYY-MM-DD
 
 ## 概要 (2-3 sentences)
-Brief description of what this idea proposes.
+このアイデアの概要を簡潔に説明。
 
 ## モチベーション
 
 ### 現在の問題 (50-80 lines)
-- What is broken or missing?
-- Which commands/features are affected?
-- Example error cases (brief, no full code)
+- 何が壊れているか／欠けているか
+- 影響するコマンドや機能
+- 代表的なエラー例（短く、完全なコードは避ける）
 
 ### 理想の動作 (30-50 lines)
-- What should happen instead?
-- Key benefits (bullet points)
-- ONE simple usage example (5 lines max)
+- どうあるべきか
+- 主要なメリット（箇条書き）
+- シンプルな利用例（5行以内）
 
 ## ユースケース (60-80 lines)
 
-[3-5 use cases, each with]:
-- Brief description (2-3 sentences)
-- Minimal code example (3-5 lines)
-- Why it matters
+[3-5 件のユースケース。それぞれに以下を含める]:
+- 簡潔な説明（2-3文）
+- 最小限のコード例（3-5行）
+- 重要な理由
 
 ## 推奨アプローチ (50-70 lines)
 
-**ONE approach only**. Include:
-- Why this approach?
-- Key concepts (explain, don't code)
-- Trade-offs
-- Integration points
+**ONE approach only**. 以下を含める:
+- なぜこのアプローチか
+- 主要コンセプト（説明重視、実装コードは避ける）
+- トレードオフ
+- 統合ポイント
 
 ❌ DO NOT include:
 - Complete implementations
@@ -124,114 +122,105 @@ Brief description of what this idea proposes.
 
 **TOTAL TARGET**: 250-350 lines
 
-## 💡 Usage Tips for AI Agents
+## 💡 AI エージェント向け Tips
 
-When creating an idea document:
+idea ドキュメント作成時の注意点:
 
-1. **Start with outline** → Present structure first, get user approval
-2. **Confirm scope** → Ask if full detail needed or concise version
-3. **Write in phases** → Get feedback per section (avoid 800-line dumps)
-4. **Check length** → Report line count at end
-5. **Be concise** → Prefer explanation over code
+1. **まずアウトライン** → 構成を先に提示して承認を得る
+2. **スコープ確認** → 詳細版か簡潔版かを確認
+3. **段階的に作成** → セクションごとにフィードバックを得る
+4. **行数チェック** → 最後に行数を報告
+5. **簡潔に** → 実装コードより説明を優先
 
 ### Red Flags 🚩
-If you're writing:
-- Complete implementations → **STOP**, ask user
-- 3+ approaches in detail → **Choose ONE**
-- Code examples > 10 lines → **Simplify or remove**
-- Similar code blocks → **Consolidate**
+次の場合は停止して確認:
+- 完全な実装コードを書いている
+- 3つ以上のアプローチを詳細比較している
+- 10行以上のコード例がある
+- 類似コードが繰り返されている
 
-## Idea Lifecycle
+## アイデアのライフサイクル
 
 ```
 docs/ideas/         → Initial concept and exploration
-    ↓
-docs/research/      → Technical investigation and feasibility study
     ↓
 docs/issue/active/  → Concrete implementation plan
     ↓
 docs/issue/completed/ → Implementation complete
 ```
 
-## 🎯 User Instruction Template
+## 🎯 ユーザー向け指示テンプレート
 
-When requesting an idea document from AI, use:
+AI にアイデアドキュメントを依頼する場合:
 
 ```
-Please create an idea document following the template in docs/ideas/README.md.
+docs/ideas/README.md のテンプレートに従ってアイデアドキュメントを作成してください。
 
-Requirements:
-- Follow the template structure exactly
-- Keep total length under 350 lines
-- Use conceptual explanations, not code implementations
-- Present ONE recommended approach only
+要件:
+- テンプレート構造を厳密に遵守
+- 総行数は 350 行以内
+- 実装コードではなく概念説明を重視
+- ONE recommended approach のみ
 
 [Attach: docs/ideas/README.md]
 ```
 
-## Current Ideas
+## 現在のアイデア
 
 ### 1. Schema Validation Command
 **File**: `schema_validation_command.md`
-**Purpose**: CLI command to validate all model schemas before deployment
-**Priority**: Medium
-**Status**: Idea stage
+**目的**: デプロイ前に全モデルのスキーマを検証する CLI コマンド
+**優先度**: 中
+**ステータス**: アイデア段階
 
 ### 2. Schema File Generation
 **File**: `schema_file_generation.md`
-**Purpose**: Export Pydantic schemas to JSON Schema files for API documentation
-**Priority**: Low
-**Status**: Idea stage
+**目的**: Pydantic スキーマを JSON Schema に出力して API ドキュメント化
+**優先度**: 低
+**ステータス**: アイデア段階
 
 ### 3. API Type Resolution
 **File**: `api_type_resolution.md`
-**Purpose**: Automatic type resolution in FastAPI/Flask response models
-**Priority**: Low
-**Status**: Idea stage
+**目的**: FastAPI/Flask の response_model 型解決を自動化
+**優先度**: 低
+**ステータス**: アイデア段階
 
-## Contributing Ideas
+## アイデア投稿
 
-### For Project Contributors
-1. Create a new markdown file in `docs/ideas/` using the template
-2. Use a descriptive filename (e.g., `caching_layer_implementation.md`)
-3. Fill out all sections with as much detail as possible
-4. Link to related research or issues if applicable
-5. Commit with message: `docs(ideas): Add [idea title]`
+### プロジェクト参加者向け
+1. `docs/ideas/` に新規 markdown を作成（テンプレート使用）
+2. 分かりやすいファイル名にする（例: `caching_layer_implementation.md`）
+3. 各セクションを可能な限り埋める
+4. 関連 Issue があればリンクする
+5. コミットメッセージ: `docs(ideas): Add [idea title]`
 
-### For External Contributors
-1. Open a GitHub Discussion in the "Ideas" category
-2. Use the idea template in your discussion post
-3. Maintainers will create a corresponding file in `docs/ideas/` if appropriate
+### 外部コントリビューター向け
+1. GitHub Discussions の「Ideas」カテゴリで提案
+2. 投稿にテンプレートを使用
+3. 適切と判断された場合、管理者が `docs/ideas/` に反映
 
-## Idea Evaluation Criteria
+## アイデア評価基準
 
-When evaluating ideas, consider:
-- **Value**: Does it solve a real problem for users?
-- **Scope**: Is it aligned with repom's purpose as a shared foundation?
-- **Complexity**: Is the implementation effort justified?
-- **Compatibility**: Does it maintain backward compatibility?
-- **Maintenance**: Can it be maintained long-term?
+評価時の観点:
+- **価値**: ユーザーの実問題を解決するか
+- **スコープ**: このプロジェクトの目的（共通基盤）と整合するか
+- **複雑度**: 実装コストに見合うか
+- **互換性**: 後方互換性を保てるか
+- **保守性**: 長期運用可能か
 
-## Moving Ideas Forward
+## 次のステップ
 
-### To Research Phase
-When an idea requires technical investigation:
-1. Create detailed analysis in `docs/research/[idea_name].md`
-2. Update idea status to "Research"
-3. Link research document in the idea file
+### 実装フェーズへ
+実装に進められる段階になったら:
+1. `docs/issue/active/XXX_[idea_name].md` を作成
+2. ステータスを「Planning」または「Ready for Implementation」に更新
 
-### To Implementation Phase
-When an idea is ready for implementation:
-1. Create issue file in `docs/issue/active/XXX_[idea_name].md`
-2. Update status to "Planning" or "Ready for Implementation"
+## アーカイブ
 
-## Archived Ideas
+不要になったアイデアや代替済みのアイデアは、ドキュメント内のステータス更新でアーカイブ扱いとする。
 
-Ideas that are no longer relevant or have been superseded can be archived by updating their status in the document itself.
+## 質問
 
-## Questions?
-
-For questions about the ideas process, refer to:
-- `docs/issue/README.md` - Issue management workflow
-- `docs/research/README.md` - Research documentation guidelines
-- Project maintainers via GitHub Discussions
+アイデア運用に関する質問は以下を参照:
+- `docs/issue/README.md` - Issue 管理フロー
+- GitHub Discussions のプロジェクト管理者
