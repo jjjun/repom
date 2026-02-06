@@ -40,7 +40,7 @@ db_engine, db_test = create_test_fixtures()
 
 ### Configuration
 - Use environment variable: `EXEC_ENV` (dev/test/prod)
-- Config class: `MineDbConfig` from `repom.config`
+- Config class: `RepomConfig` from `repom.config`
 - Database files: `db.dev.sqlite3`, `db.test.sqlite3`, `db.sqlite3`
 
 ### Commands
@@ -240,7 +240,7 @@ docs/
 └── issue/              # 📋 Problem tracking and resolution
     ├── README.md      # Issue index (MUST update when moving files)
     ├── active/        # 🚧 Planned and active work (backlog + in_progress merged)
-    └── completed/     # ✅ Resolved issues (XXX_name.md with sequential numbering)
+    └── completed/     # ✅ Resolved issues (NNN_name.md with sequential numbering)
 ```
 
 ### 🤖 AI Agent Collaborative Workflow
@@ -288,7 +288,7 @@ docs/
 
 3. **Discuss Feasibility**
    - Evaluate complexity, value, and alignment with project goals
-   - Recommend next steps: research, prototype, or implement
+    - Recommend next steps: technical investigation, prototype, or implement
 
 4. **Lifecycle Progression**
    ```
@@ -390,7 +390,7 @@ When user says any of these phrases, **AUTOMATICALLY** complete the issue:
 [Test outcomes and validation]
 
 ## Related Documents
-[Links to technical docs, research, etc.]
+[Links to technical docs, related issues, etc.]
 ```
 
 **Idea Template**: Use template from `docs/ideas/README.md`

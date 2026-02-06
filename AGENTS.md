@@ -10,7 +10,7 @@
 - **Package Manager**: Poetry
 - **Database ORM**: SQLAlchemy 2.0+
 - **Migration Tool**: Alembic
-- **Testing Framework**: pytest (unit and behaviour tests)
+- **Testing Framework**: pytest (unit and behavior tests)
 - **Configuration**: python-dotenv for environment management
 
 ## Project Structure
