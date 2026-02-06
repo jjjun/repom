@@ -187,6 +187,12 @@ class Task(BaseModelAuto, use_id=True, use_created_at=True, use_updated_at=True)
     )
 ```
 
+**モデル定義のポイント**:
+- `BaseModelAuto` では `info` を付けるとスキーマ説明が自動生成されます
+- `use_id` / `use_created_at` / `use_updated_at` は**クラス定義パラメータ**で指定
+- 複合主キーの場合は `use_id=False` を指定
+- テーブル名をファイル名に揃えたい場合は `get_plural_tablename()` の利用を検討
+
 ### リポジトリの実装
 
 ```python
@@ -202,87 +208,27 @@ task = repo.save(Task(title="新しいタスク"))
 all_tasks = repo.find()
 ```
 
+**Repository 定義のポイント**:
+- `BaseRepository[Model]` の型引数からモデルが自動推論されます
+- `__init__` は不要（必要な場合のみカスタムメソッドを追加）
+- `default_options` を使うと eager loading の既定を設定できます
+- クエリ条件が複雑なら FilterParams を利用してください
+
 ### エンティティの作成・更新
 
-`save()` メソッドは**新規作成でも更新でも使えます**：
-
-```python
-# セッションなし（内部セッション）: 自動 commit
-repo = TaskRepository()
-task = Task(title="新しいタスク")
-task = repo.save(task)
-# → add() + commit() + refresh() を自動実行
-# → created_at, updated_at が正しく設定される
-
-# 外部セッション使用時: flush のみ、commit は呼び出し側
-from repom.database import _db_manager
-
-with _db_manager.get_sync_transaction() as session:
-    repo = TaskRepository(session)
-    task = Task(title="トランザクション内")
-    task = repo.save(task)
-    # → add() + flush() のみ実行
-    # → commit は with ブロック終了時に自動実行
-
-# 更新
-task.title = "更新されたタスク"
-task = repo.save(task)
-# → 同じメソッドで更新も可能
-
-# 非同期版
-from repom import AsyncBaseRepository
-async_repo = AsyncBaseRepository(Task, session=async_session)
-task = await async_repo.save(task)
-```
-
-⚠️ **重要**: 直接 `session.add()` + `session.flush()` を使う場合は、必ず `session.refresh()` を呼んでください。
-ただし、**通常は `save()` メソッドを使うことを強く推奨します**（refresh 忘れによるバグを防げます）。
-
-**トランザクション管理**:
-
-repom の Repository は**内部セッションと外部セッションを自動判定**します：
-
-- **内部セッション**（`session=None`で初期化）: 
-  * `save()` が自動的に `commit()` と `refresh()` を実行
-  * `created_at` / `updated_at` などの DB 自動設定値が即座に取得可能
-
-- **外部セッション**（明示的に渡す）: 
-  * `save()` は `flush()` のみ実行、`commit()` は呼び出し側の責任
-  * `refresh()` は実行されないため、DB 自動設定値の取得には明示的な `refresh()` が必要
-  * トランザクション境界を呼び出し側で制御可能
+`save()` は**新規作成・更新の両方**に使えます。
 
 ```python
 # 内部セッション: 自動 commit + refresh
 repo = TaskRepository()
-task = repo.save(Task(title="タスク"))
-assert task.created_at is not None  # 自動的に設定される
+task = repo.save(Task(title="新しいタスク"))
 
-# 外部セッション: flush のみ、refresh は手動
+# 外部セッション: flush のみ（commit は呼び出し側）
 from repom.database import _db_manager
 
 with _db_manager.get_sync_transaction() as session:
     repo = TaskRepository(session)
-    task = repo.save(Task(title="タスク"))
-    
-    # created_at はまだ None（flush のみ実行）
-    assert task.created_at is None
-    
-    # 明示的に refresh すれば取得可能
-    session.refresh(task)
-    assert task.created_at is not None
-    
-    # commit は with ブロック終了時に自動実行
-```
-
-```python
-# ❌ 非推奨: 手動で flush() を使うパターン（refresh を忘れるとバグになる）
-session.add(task)
-await session.flush()
-await session.refresh(task)  # これを忘れると created_at が None
-await session.commit()
-
-# ✅ 推奨: save() を使うパターン（シンプルで安全）
-task = await repo.save(task)
+    task = repo.save(Task(title="トランザクション内"))
 ```
 
 **詳細**: [セッション管理パターンガイド](docs/guides/repository/repository_session_patterns.md)
@@ -343,6 +289,11 @@ poetry run repom_info
 ```
 
 repom の現在の設定（データベース接続、パス設定、モデル読み込み状況など）を表示します。
+
+**用途**:
+- 現在読み込まれているモデル一覧の確認
+- DB 種別/URL、パス設定、環境変数の確認
+- 設定のトラブルシューティング
 
 **表示内容**:
 - 基本パス（root_path, backup_path, master_data_path）
@@ -491,6 +442,11 @@ class MinePyConfig(RepomConfig):
 CONFIG_HOOK=mine_py.config:get_repom_config
 ```
 
+**用途例**:
+- モデル自動インポート対象の追加
+- 許可パッケージ prefix の制御
+- テスト用 DB の切り替え
+
 ---
 
 ## テスト実行
@@ -517,261 +473,45 @@ poetry run pytest tests/unit_tests/test_config.py
 # - 🧪Pytest/all
 ```
 
-### テスト戦略：Transaction Rollback パターン
+### テスト戦略（概要）
 
-repom は **Transaction Rollback** 方式を採用し、高速かつ分離されたテスト環境を提供します。
+repom は **Transaction Rollback** 方式で高速かつ分離されたテストを提供します。
+詳細・フィクスチャ例は [Testing Guide](docs/guides/testing/testing_guide.md) を参照してください。
 
-**特徴**:
-- ✅ **高速**: DB作成は1回のみ（session scope）、各テストはロールバックのみ
-- ✅ **分離**: 各テストは独立したトランザクション内で実行
-- ✅ **クリーン**: 自動ロールバックで確実にリセット
+**要点**:
+- セッションスコープで DB を 1 回だけ作成
+- 各テストはトランザクション内で実行し自動ロールバック
+- `db_test`（function scope）を使うだけでクリーンな状態を維持
 
-**パフォーマンス**:
-- 従来方式（DB再作成）: ~30秒
-- Transaction Rollback: ~3秒
-- **約9倍の高速化を実現**
-
-### テストフィクスチャ
-
-#### 同期テスト（標準）
-
+**最小フィクスチャ例**:
 ```python
 # tests/conftest.py
 from repom.testing import create_test_fixtures
 
 db_engine, db_test = create_test_fixtures()
-
-# テストでの使用
-def test_create_user(db_test):
-    user = User(name="test")
-    db_test.add(user)
-    db_test.flush()
 ```
-
-#### 非同期テスト（FastAPI Users など）
-
-FastAPI Users のような async ライブラリのテストには `async_db_test` を使用：
-
-```python
-# tests/conftest.py
-from repom.testing import create_async_test_fixtures
-
-async_db_engine, async_db_test = create_async_test_fixtures()
-
-# テストでの使用
-@pytest.mark.asyncio
-async def test_create_user_async(async_db_test):
-    from sqlalchemy import select
-    
-    user = User(name="test")
-    async_db_test.add(user)
-    await async_db_test.flush()
-    
-    stmt = select(User).where(User.name == "test")
-    result = await async_db_test.execute(stmt)
-    found = result.scalar_one_or_none()
-    
-    assert found is not None
-```
-
-**async サポートの依存関係**:
-
-```bash
-# SQLite async サポート
-poetry add repom[async]
-
-# PostgreSQL async サポート
-poetry add repom[postgres-async]
-
-# 両方サポート
-poetry add repom[async-all]
-
-# pytest-asyncio も必要
-poetry add --group dev pytest-asyncio
-```
-
-**注意事項**:
-- async では lazy loading が使えません（eager loading を使用）
-- Transaction Rollback パターンは async でも同様に動作します
-- テストで `repom.session`, `repom.db` などをインポートする場合は、**インポート前に `os.environ['EXEC_ENV'] = 'test'` を設定**（詳細は [Testing Guide](docs/guides/testing/testing_guide.md#no-such-tableエラーrepomsession-や-repomdb-を使用する場合) 参照）
-
-- **`db_engine`**: session スコープ（全テストで1回だけDB作成）
-- **`db_test`**: function スコープ（各テストで独立したトランザクション）
-- **`EXEC_ENV=test`**: 自動的に `data/repom/db.test.sqlite3` を使用
-
-### 外部プロジェクトでの使用
-
-mine-py などの外部プロジェクトでも同じヘルパーを使用できます：
-
-```python
-# external_project/tests/conftest.py
-import pytest
-from repom.testing import create_test_fixtures
-
-db_engine, db_test = create_test_fixtures()
-
-# カスタム設定も可能
-db_engine, db_test = create_test_fixtures(
-    db_url="sqlite:///:memory:",
-    model_loader=my_custom_loader
-)
-```
-
-詳細: `repom/testing.py`
 
 ---
 
 ## Alembic マイグレーション
 
-### ⚠️ 重要：環境変数の扱い（PowerShell）
+主要コマンドのみを記載します。詳細は [Alembic マイグレーション管理ガイド](docs/guides/features/alembic_migration_guide.md) を参照してください。
 
-PowerShell では `$env:EXEC_ENV` を一度設定すると、**セッション内で保持され続けます**。
-
-#### ✅ 正しい使い方
-
-**本番環境（デフォルト）:**
-```powershell
-# 環境変数をクリア
-Remove-Item Env:\EXEC_ENV -ErrorAction SilentlyContinue
-poetry run alembic upgrade head
-```
-
-**開発環境:**
-```powershell
-# 毎回明示的に指定
-$env:EXEC_ENV='dev'; poetry run alembic upgrade head
-```
-
-### マイグレーションコマンド
-
-#### ファイル作成
+**注意（PowerShell）**:
+- `$env:EXEC_ENV` はセッション内に残るため、環境切替は明示的に行う
+- 本番相当で実行する場合は `EXEC_ENV` をクリアしてから実行する
 
 ```powershell
-# 自動生成（モデル変更を検出）
+# マイグレーションファイル自動生成
 poetry run alembic revision --autogenerate -m "description"
-```
 
-#### 適用とダウングレード
-
-```powershell
-# 本番環境
-Remove-Item Env:\EXEC_ENV -ErrorAction SilentlyContinue
+# マイグレーション適用（最新まで）
 poetry run alembic upgrade head
 
-# 開発環境
-$env:EXEC_ENV='dev'; poetry run alembic upgrade head
-
-# 1つ前のバージョンに戻す
-poetry run alembic downgrade -1
-```
-
-#### 状態確認
-
-```powershell
-# 現在のバージョンを確認
+# 状態確認
 poetry run alembic current
-
-# マイグレーション履歴を確認
 poetry run alembic history
 ```
-
-### Alembic 設定のカスタマイズ
-
-#### repom 単体で使用する場合
-
-デフォルトでは `alembic/versions/` ディレクトリにマイグレーションファイルが保存されます。
-設定は `alembic.ini` に記述されています。
-
-```ini
-# repom/alembic.ini
-[alembic]
-script_location = alembic
-version_locations = alembic/versions
-```
-
-#### 外部プロジェクトで使用する場合
-
-外部プロジェクト（例: `mine-py`）で repom を使用する場合、独自の `alembic.ini` を作成します。
-
-**1. alembic.ini を作成:**
-
-```ini
-# mine-py/alembic.ini
-[alembic]
-# repom の env.py を使用
-script_location = submod/repom/alembic
-
-# マイグレーションファイルの保存場所と読み込み場所
-# %(here)s は alembic.ini があるディレクトリを指します
-# ファイル作成（alembic revision）と実行（alembic upgrade）の両方で使用されます
-version_locations = %(here)s/alembic/versions
-```
-
-**2. 環境変数で CONFIG_HOOK を設定（オプション）:**
-
-モデルの自動インポートなど、repom の他の機能を使う場合のみ必要です。
-
-```powershell
-# .env ファイル または環境変数
-CONFIG_HOOK=mine_py.config:get_repom_config
-```
-
-```python
-# mine-py/src/mine_py/config.py
-from repom.config import RepomConfig  # Note: MineDbConfig is still available as an alias
-
-class MinePyConfig(RepomConfig):
-    def __init__(self):
-        super().__init__()
-        
-        # モデル自動インポート設定
-        self.model_locations = ['mine_py.models']
-        self.allowed_package_prefixes = {'mine_py.', 'repom.'}
-        self.model_excluded_dirs = {'base', 'mixin', '__pycache__'}
-
-def get_repom_config():
-    return MinePyConfig()
-```
-
-**動作の仕組み:**
-
-1. `alembic revision -m "message"` を実行
-   - `alembic.ini` の `version_locations` で**ファイル作成場所**を決定
-   - `mine-py/alembic/versions/` にファイルが作成される
-
-2. `alembic upgrade head` を実行
-   - `alembic.ini` の `script_location` から `env.py` を読み込み
-   - `alembic.ini` の `version_locations` で**マイグレーションファイルの読み込み場所**を決定
-   - 指定されたディレクトリのマイグレーションを実行
-
-**重要なポイント:**
-
-- ✅ **`alembic.ini` の `version_locations` が唯一の設定源**
-  - ファイル作成と実行の両方で同じ場所を使用
-  - 設定が1箇所だけなので混乱がない
-
-- ✅ **repom の `alembic/versions/` は空です**
-  - repom はライブラリであり、独自のマイグレーションを持つべきではありません
-  - マイグレーションファイルは消費アプリケーション側（mine-py など）で管理してください
-
-### ベストプラクティス
-
-1. **マイグレーション前に必ずバックアップ**
-   ```powershell
-   poetry run db_backup
-   ```
-
-2. **開発環境で先にテスト**
-   ```powershell
-   $env:EXEC_ENV='dev'; poetry run alembic upgrade head
-   # 問題なければ本番環境へ
-   Remove-Item Env:\EXEC_ENV
-   poetry run alembic upgrade head
-   ```
-
-3. **コマンド実行前に環境変数を明示的に設定**
-   - 本番環境: `Remove-Item Env:\EXEC_ENV`
-   - 開発環境: `$env:EXEC_ENV='dev'`
 
 ---
 

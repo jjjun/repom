@@ -62,6 +62,9 @@ poetry run db_create          # Create database
 poetry run db_delete          # Delete database
 poetry run db_backup          # Backup database
 
+# Configuration / diagnostics
+poetry run repom_info          # Show config and loaded models
+
 # Migration commands
 poetry run alembic revision --autogenerate -m "description"  # Generate migration
 poetry run alembic upgrade head                              # Apply migrations
@@ -236,3 +239,4 @@ db_engine, db_test = create_test_fixtures(
 - This project uses **Poetry** for dependency management — always use `poetry run` when executing scripts/tests.
 - Tests focus on verifying the shared building blocks; avoid introducing app-specific fixtures here.
 - Ensure new shared utilities remain decoupled from any single application domain.
+- For model definitions, `get_plural_tablename()` can be used to derive table names from file names to keep them aligned.

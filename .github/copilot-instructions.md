@@ -104,6 +104,7 @@ items = repo.get_by(name="example")
 - App-specific models should be in consuming projects
 - Always test changes with `poetry run pytest`
 - Keep dependencies minimal
+- For model definitions, `get_plural_tablename()` can be used to derive table names from file names to keep them aligned
 
 ## � Documentation Guidelines
 
