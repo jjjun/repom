@@ -66,13 +66,13 @@ def test_db_file_path_combines_path_and_file(config_factory, tmp_path):
 
     config = config_factory()
     default_expected = Path(config.sqlite.db_path) / config.sqlite.db_file
-    assert config.db_file_path == str(default_expected)
+    assert config.sqlite.db_file_path == str(default_expected)
 
     override_path = tmp_path / "overridden"
     override_file = "custom.sqlite3"
     config.sqlite.db_path = str(override_path)
     config.sqlite.db_file = override_file
-    assert config.db_file_path == str(override_path / override_file)
+    assert config.sqlite.db_file_path == str(override_path / override_file)
 
 
 def test_db_url_defaults_to_sqlite_uri(config_factory):

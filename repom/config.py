@@ -39,6 +39,26 @@ class SqliteConfig:
     db_path: Optional[str] = field(default=None)
     db_file: Optional[str] = field(default=None)
     use_in_memory_for_tests: bool = field(default=True)
+    _config: Optional["RepomConfig"] = field(default=None, init=False, repr=False)
+
+    def bind(self, config: "RepomConfig"):
+        """Bind parent config for computed properties."""
+        self._config = config
+
+    def get_default_db_file(self, exec_env: str) -> str:
+        """Get default SQLite DB file name by environment."""
+        if exec_env in ("test", "dev"):
+            return f"db.{exec_env}.sqlite3"
+        return "db.sqlite3"
+
+    @property
+    def db_file_path(self) -> Optional[str]:
+        """db file full path (including file name)."""
+        if not self._config:
+            return None
+        db_path = self.db_path if self.db_path else self._config.data_path
+        db_file = self.db_file if self.db_file else self.get_default_db_file(self._config.exec_env)
+        return str(Path(db_path) / db_file)
 
 
 @dataclass
@@ -78,11 +98,13 @@ class RepomConfig(Config):
         """初期化後の処理 - 必要なディレクトリを作成"""
         super().init()  # 親クラスのinitを呼び出し
 
+        self.sqlite.bind(self)
+
         # SqliteConfig のデフォルト値を設定（data_path が存在する場合のみ）
         if self.data_path and self.sqlite.db_path is None:
             self.sqlite.db_path = self.data_path
         if self.sqlite.db_file is None:
-            self.sqlite.db_file = self._get_default_db_file()
+            self.sqlite.db_file = self.sqlite.get_default_db_file(self.exec_env)
 
         if self.auto_create_dirs:
             self._ensure_path_exists([
@@ -154,20 +176,6 @@ class RepomConfig(Config):
             return f"{base}_dev"
 
     @property
-    def db_file_path(self) -> Optional[Path]:
-        """dbファイルのフルパス(ファイル名含む)"""
-        db_path = self.sqlite.db_path if self.sqlite.db_path else self.data_path
-        db_file = self.sqlite.db_file if self.sqlite.db_file else self._get_default_db_file()
-        return str(Path(db_path) / db_file)
-
-    def _get_default_db_file(self) -> str:
-        """デフォルトのDBファイル名を取得"""
-        if self.exec_env == 'test' or self.exec_env == 'dev':
-            return f'db.{self.exec_env}.sqlite3'
-        else:
-            return 'db.sqlite3'
-
-    @property
     def db_url(self) -> Optional[str]:
         """データベースURL（SQLite/PostgreSQL 自動切り替え）
 
@@ -216,7 +224,7 @@ class RepomConfig(Config):
 
         # SQLite: 通常環境ではファイルベース
         db_path = self.sqlite.db_path if self.sqlite.db_path else self.data_path
-        db_file = self.sqlite.db_file if self.sqlite.db_file else self._get_default_db_file()
+        db_file = self.sqlite.db_file if self.sqlite.db_file else self.sqlite.get_default_db_file(self.exec_env)
         if db_file:
             return f'sqlite:///{db_path}/{db_file}'
         return None

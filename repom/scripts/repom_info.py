@@ -130,8 +130,12 @@ def test_postgres_connection() -> str:
             f"@{config.postgres.host}:{config.postgres.port}/{database}"
         )
 
-        # Create a temporary engine for testing
-        test_engine = create_engine(pg_url, pool_pre_ping=True)
+        # Create a temporary engine for testing with a short connect timeout.
+        test_engine = create_engine(
+            pg_url,
+            pool_pre_ping=True,
+            connect_args={"connect_timeout": 3}
+        )
 
         with test_engine.connect() as conn:
             conn.execute(text("SELECT 1"))
