@@ -345,6 +345,25 @@ poetry run alembic history
 
 ## 環境変数
 
+### RepomConfig（概要）
+
+RepomConfig は repom の設定オブジェクトです。`CONFIG_HOOK` で起動時に差し替えできます。
+主なカテゴリ: DB / モデル自動インポート / ログ / パス / その他
+
+```python
+# myapp/config.py
+from repom.config import RepomConfig
+
+def hook_config(config: RepomConfig) -> RepomConfig:
+  config.db_type = "postgres"
+  config.postgres_db = "myapp"
+  return config
+```
+
+```bash
+CONFIG_HOOK=myapp.config:hook_config
+```
+
 ### データベース接続設定
 
 デフォルトで以下の接続プール設定が適用されます：

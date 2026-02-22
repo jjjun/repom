@@ -27,6 +27,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
+| #038 | PostgreSQL コンテナ設定のカスタマイズ対応 | 中 | 📝 設計検討中 | [active/038_postgresql_container_customization.md](active/038_postgresql_container_customization.md) |
 | #037 | Config Display Command (repom_info) | 中 | 🟡 レビュー待ち | [active/037_config_display_command.md](active/037_config_display_command.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 

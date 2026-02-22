@@ -356,6 +356,48 @@ docker exec repom_postgres pg_dump -U repom repom_dev > backup.sql
 docker exec -i repom_postgres psql -U repom -d repom_dev < backup.sql
 ```
 
+### ポートが既に使われている
+
+```
+Error: Bind for 0.0.0.0:5432 failed: port is already allocated
+```
+
+**原因**: 別の PostgreSQL プロセスまたは他のプロジェクトのコンテナが 5432 ポートを使用している
+
+**解決策 1**: CONFIG_HOOK でポートを変更
+
+```python
+# config.py
+def hook_config(config: RepomConfig) -> RepomConfig:
+    config.postgres.container.host_port = 5433  # 別のポートを使用
+    return config
+```
+
+**解決策 2**: 競合しているプロジェクトを停止
+
+```powershell
+# 他のプロジェクトの PostgreSQL を停止
+cd other-project
+poetry run postgres_stop
+```
+
+### コンテナ名が既に使われている
+
+```
+Error: Container name "repom_postgres" is already in use
+```
+
+**原因**: 別のプロジェクトが同じコンテナ名を使用している
+
+**解決策**: CONFIG_HOOK でプロジェクト名を設定
+
+```python
+# config.py
+def hook_config(config: RepomConfig) -> RepomConfig:
+    config.postgres.container.project_name = "your_project"
+    return config
+```
+
 ### コンテナを完全にリセットしたい
 
 ```powershell
@@ -363,7 +405,7 @@ docker exec -i repom_postgres psql -U repom -d repom_dev < backup.sql
 poetry run postgres_stop
 
 # 2. Volume を削除（データも削除される）
-docker volume rm postgresql_postgres_data
+docker volume rm repom_postgres_data
 
 # 3. イメージも削除（完全クリーン）
 docker rmi postgres:16-alpine
@@ -376,36 +418,110 @@ poetry run postgres_start
 
 ## 高度な使い方
 
+### 複数プロジェクトでの並行開発（CONFIG_HOOK）
+
+repom をベースとする複数のプロジェクト（mine-py, fast-domain など）を同時に開発する場合、CONFIG_HOOK を使ってプロジェクトごとに独立した PostgreSQL 環境を構築できます。
+
+#### 設定例: mine-py プロジェクト
+
+```python
+# mine_py/config.py
+from repom.config import RepomConfig
+
+def hook_config(config: RepomConfig) -> RepomConfig:
+    # プロジェクト名を設定
+    config.postgres.container.project_name = "mine_py"
+    
+    # ポートをずらす（repom: 5432, mine_py: 5433）
+    config.postgres.container.host_port = 5433
+    
+    # DB 設定もプロジェクト名に合わせる
+    config.postgres.user = "mine_py"
+    config.postgres.password = "mine_py_dev"
+    
+    return config
+```
+
+```bash
+# mine_py/.env
+CONFIG_HOOK=mine_py.config:hook_config
+```
+
+#### 起動
+
+```powershell
+# repom プロジェクト
+cd repom
+poetry run postgres_start
+# → Container: repom_postgres, Port: 5432
+
+# mine-py プロジェクト（同時起動可能）
+cd mine-py
+poetry run postgres_start
+# → Container: mine_py_postgres, Port: 5433
+```
+
+#### 生成されるファイル
+
+```
+data/
+├── repom/                                 # repom プロジェクト用
+│   ├── docker-compose.generated.yml
+│   └── postgresql_init/
+│       └── 01_init_databases.sql
+│
+└── mine_py/                              # mine-py プロジェクト用
+    ├── docker-compose.generated.yml
+    └── postgresql_init/
+        └── 01_init_databases.sql
+```
+
+### docker-compose.yml の事前確認
+
+```powershell
+# 設定ファイルを生成（起動せずに確認）
+poetry run postgres_generate
+
+# 生成されたファイルを確認
+cat data/repom/docker-compose.generated.yml
+cat data/repom/postgresql_init/01_init_databases.sql
+```
+
 ### カスタマイズ
 
-`repom/scripts/postgresql/docker-compose.yml` を編集してカスタマイズできます：
+CONFIG_HOOK を使ってカスタマイズする方法（推奨）：
 
-```yaml
-# ポート変更
-ports:
-  - "5433:5432"
+```python
+# your_project/config.py
+from repom.config import RepomConfig
 
-# パスワード変更
-environment:
-  POSTGRES_PASSWORD: my_secure_password
-
-# メモリ制限
-deploy:
-  resources:
-    limits:
-      memory: 1G
+def hook_config(config: RepomConfig) -> RepomConfig:
+    # ポート変更
+    config.postgres.container.host_port = 5433
+    
+    # イメージ変更
+    config.postgres.container.image = "postgres:15-alpine"
+    
+    # コンテナ名を明示的に指定
+    config.postgres.container.container_name = "my_custom_postgres"
+    
+    # Volume 名を明示的に指定
+    config.postgres.container.volume_name = "my_custom_data"
+    
+    return config
 ```
 
 ### 複数バージョンの PostgreSQL
 
-```yaml
-# docker-compose.yml でバージョンを変更
-services:
-  postgres:
-    image: postgres:15-alpine  # PostgreSQL 15 を使用
-```
+```yaml38](../../issue/active/038_postgresql_container_customization.md)**: PostgreSQL コンテナ設定のカスタマイズ対応
+- **[Docker Compose 基盤ガイド](../features/docker_compose_guide.md)**: 汎用 Docker Compose 基盤の使い方
+- **[CONFIG_HOOK ガイド](../features/config_hook_guide.md)**: 設定のカスタマイズ方法
+- **[README.md](../../../README.md)**: repom 全体のドキュメント
 
-### CI/CD での使用
+---
+
+**作成日**: 2026-02-01  
+**最終更新**: 2026-02-22
 
 ```yaml
 # .github/workflows/test.yml

@@ -66,6 +66,10 @@ data/*
 *.drawio.*
 *.txt
 
+# PostgreSQL Docker 動的生成ファイル
+data/*/docker-compose.generated.yml
+data/*/postgresql_init/
+
 # ==========
 # local
 .env

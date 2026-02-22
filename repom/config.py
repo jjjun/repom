@@ -10,6 +10,42 @@ from repom._.config_hook import Config, get_config_from_hook
 
 
 @dataclass
+class PostgresContainerConfig:
+    """PostgreSQL Docker コンテナ設定
+
+    Attributes:
+        project_name: プロジェクト名（コンテナ名やVolume名のベースとなる）
+        container_name: コンテナ名（None の場合は {project_name}_postgres）
+        host_port: ホスト側のポート番号（デフォルト: 5432）
+        volume_name: Volume名（None の場合は {project_name}_postgres_data）
+        image: PostgreSQL イメージ（デフォルト: postgres:16-alpine）
+
+    Example:
+        >>> container = PostgresContainerConfig(
+        ...     project_name="mine_py",
+        ...     host_port=5433
+        ... )
+        >>> container.get_container_name()
+        'mine_py_postgres'
+        >>> container.get_volume_name()
+        'mine_py_postgres_data'
+    """
+    project_name: str = field(default="repom")
+    container_name: Optional[str] = field(default=None)
+    host_port: int = field(default=5432)
+    volume_name: Optional[str] = field(default=None)
+    image: str = field(default="postgres:16-alpine")
+
+    def get_container_name(self) -> str:
+        """コンテナ名を取得（デフォルト: {project_name}_postgres）"""
+        return self.container_name or f"{self.project_name}_postgres"
+
+    def get_volume_name(self) -> str:
+        """Volume名を取得（デフォルト: {project_name}_postgres_data）"""
+        return self.volume_name or f"{self.project_name}_postgres_data"
+
+
+@dataclass
 class PostgresConfig:
     """PostgreSQL データベース設定
 
@@ -19,12 +55,16 @@ class PostgresConfig:
         user: PostgreSQL ユーザー名
         password: PostgreSQL パスワード
         database: PostgreSQL データベース名 (None の場合は自動生成)
+        container: Docker コンテナ設定
     """
     host: str = field(default='localhost')
     port: int = field(default=5432)
     user: str = field(default='repom')
     password: str = field(default='repom_dev')
     database: Optional[str] = field(default=None)
+
+    # Docker コンテナ設定
+    container: PostgresContainerConfig = field(default_factory=PostgresContainerConfig)
 
 
 @dataclass
