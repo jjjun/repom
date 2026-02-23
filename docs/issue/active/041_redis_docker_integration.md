@@ -1,6 +1,6 @@
 # Issue #041: Redis Docker 統合（repom）
 
-**ステータス**: 実装中（Phase 1/3）
+**ステータス**: 🔵 実装中（Phase 2/3 完了）
 
 **作成日**: 2026-02-23
 
@@ -440,14 +440,64 @@ repom/
 - ✅ docker-compose.generated.yml 生成確認
 - ✅ redis.conf 生成確認
 
-### 📋 Phase 2: テスト実装（予定）
+### ✅ Phase 2: テスト実装完了（2026-02-23）
 
-**計画内容**:
-- 12-15 個の unit test 実装
+**完成ファイル**:
+- `tests/unit_tests/test_redis_manager.py` - 22個のテスト
+
+**実装内容**: 9つのテストクラス、22個のテストケース
+1. TestRedisManagerInitialization（2個）
+   - test_redis_manager_instantiation - インスタンス化テスト
+   - test_get_container_name - コンテナ名テスト
+
+2. TestRedisManagerComposePath（2個）
+   - test_get_compose_file_path_not_found - ファイルなしエラー
+   - test_get_compose_file_path_exists - ファイル存在テスト
+
+3. TestRedisManagerWaitForService（3個）
+   - test_wait_for_service_immediate_success - 即座成功テスト
+   - test_wait_for_service_timeout - タイムアウトテスト
+   - test_wait_for_service_retries - リトライテスト
+
+4. TestRedisManagerConnectionInfo（2個）
+   - test_print_connection_info - 接続情報表示テスト
+   - test_print_connection_info_contains_cli_command - CLI コマンド確認テスト
+
+5. TestRedisManagerGenerate（2個）
+   - test_generate_redis_conf_content - redis.conf 内容テスト
+   - test_generate_redis_conf_contains_comments - コメント確認テスト
+
+6. TestRedisManagerInheritance（2個）
+   - test_redis_manager_inherits_from_docker_manager - 継承テスト
+   - test_redis_manager_has_required_methods - メソッド実装確認テスト
+
+7. TestRedisManagerCLI（4個）
+   - test_generate_function_exists - generate 関数確認
+   - test_start_function_exists - start 関数確認
+   - test_stop_function_exists - stop 関数確認
+   - test_remove_function_exists - remove 関数確認
+
+8. TestRedisManagerInitDir（1個）
+   - test_get_init_dir_creates_directory - init ディレクトリテスト
+
+9. TestRedisDockerCompose（2個）
+   - test_generate_docker_compose_structure - 構造テスト
+   - test_docker_compose_yaml_content - YAML コンテンツテスト
+
+10. TestRedisManagerErrorHandling（2個）
+    - test_wait_for_service_handles_exception - 例外ハンドリング
+    - test_docker_exec_missing_container - コンテナなしエラー
+
+**テスト結果**:
+- ✅ Redis Manager テスト: 22 passed
+- ✅ 既存テスト: 723 passed（regression 0）
+- ✅ 合計: 745 passed, 10 skipped
+- ⏱️ テスト実行時間: 13.31秒
+
+**テスト特性**:
 - PostgreSQL Manager テストと同じパターン
-- 実 Redis コンテナでの動作確認
-
-**ファイル**: `tests/unit_tests/test_redis_manager.py`
+- Mock ベースのユニットテスト（実際 Docker 不要）
+- 包括的なカバレッジ：初期化、パス、待機、情報表示、継承...
 
 ### 📋 Phase 3: ドキュメント作成（予定）
 
@@ -456,20 +506,9 @@ repom/
 - コード内 docstring 充実
 - CLI コマンド ヘルプ
 
-## 次のアクション
+## 次のステップ
 
-- [ ] Phase 2: テスト実装（12-15個）
-- [ ] Phase 3: ドキュメント作成
-- [ ] Redis 起動テスト（Docker 環境）
-- [ ] PR 作成 & レビュー
-
-## 次のアクション
-
-- [ ] Issue #040: Docker 管理基盤（Phase 1-2）承認
-- [ ] 実装開始
-- [ ] テスト作成
-- [ ] ドキュメント作成
-- [ ] PR 作成 & レビュー
+Phase 3: ドキュメント作成に進みます
 
 ---
 
