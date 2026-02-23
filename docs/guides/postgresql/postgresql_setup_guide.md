@@ -389,12 +389,12 @@ Error: Container name "repom_postgres" is already in use
 
 **原因**: 別のプロジェクトが同じコンテナ名を使用している
 
-**解決策**: CONFIG_HOOK でプロジェクト名を設定
+**解決策**: CONFIG_HOOK でコンテナ名をカスタマイズ
 
 ```python
 # config.py
 def hook_config(config: RepomConfig) -> RepomConfig:
-    config.postgres.container.project_name = "your_project"
+    config.postgres.container.container_name = "my_postgres"  # カスタムコンテナ名
     return config
 ```
 
@@ -429,13 +429,13 @@ repom をベースとする複数のプロジェクト（mine-py, fast-domain �
 from repom.config import RepomConfig
 
 def hook_config(config: RepomConfig) -> RepomConfig:
-    # プロジェクト名を設定
-    config.postgres.container.project_name = "mine_py"
+    # コンテナ名を明示的に指定
+    config.postgres.container.container_name = "mine_py_postgres"
     
     # ポートをずらす（repom: 5432, mine_py: 5433）
     config.postgres.container.host_port = 5433
     
-    # DB 設定もプロジェクト名に合わせる
+    # DB 設定をプロジェクト名に合わせる
     config.postgres.user = "mine_py"
     config.postgres.password = "mine_py_dev"
     

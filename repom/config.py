@@ -14,35 +14,33 @@ class PostgresContainerConfig:
     """PostgreSQL Docker コンテナ設定
 
     Attributes:
-        project_name: プロジェクト名（コンテナ名やVolume名のベースとなる）
-        container_name: コンテナ名（None の場合は {project_name}_postgres）
+        container_name: コンテナ名（None の場合は repom_postgres）
         host_port: ホスト側のポート番号（デフォルト: 5432）
-        volume_name: Volume名（None の場合は {project_name}_postgres_data）
+        volume_name: Volume名（None の場合は repom_postgres_data）
         image: PostgreSQL イメージ（デフォルト: postgres:16-alpine）
 
     Example:
         >>> container = PostgresContainerConfig(
-        ...     project_name="mine_py",
+        ...     container_name="my_postgres",
         ...     host_port=5433
         ... )
         >>> container.get_container_name()
-        'mine_py_postgres'
+        'my_postgres'
         >>> container.get_volume_name()
-        'mine_py_postgres_data'
+        'repom_postgres_data'
     """
-    project_name: str = field(default="repom")
     container_name: Optional[str] = field(default=None)
     host_port: int = field(default=5432)
     volume_name: Optional[str] = field(default=None)
     image: str = field(default="postgres:16-alpine")
 
     def get_container_name(self) -> str:
-        """コンテナ名を取得（デフォルト: {project_name}_postgres）"""
-        return self.container_name or f"{self.project_name}_postgres"
+        """コンテナ名を取得（デフォルト: repom_postgres）"""
+        return self.container_name or "repom_postgres"
 
     def get_volume_name(self) -> str:
-        """Volume名を取得（デフォルト: {project_name}_postgres_data）"""
-        return self.volume_name or f"{self.project_name}_postgres_data"
+        """Volume名を取得（デフォルト: repom_postgres_data）"""
+        return self.volume_name or "repom_postgres_data"
 
 
 @dataclass

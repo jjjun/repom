@@ -131,15 +131,15 @@ from dataclasses import dataclass, field
 @dataclass
 class RedisContainerConfig:
     """Redis Docker コンテナ設定"""
-    project_name: str = field(default="repom")
+    container_name: Optional[str] = field(default=None)
     host_port: int = field(default=6379)
     image: str = field(default="redis:7-alpine")
     
     def get_container_name(self) -> str:
-        return f"{self.project_name}_redis"
+        return self.container_name or "repom_redis"
     
     def get_volume_name(self) -> str:
-        return f"{self.project_name}_redis_data"
+        return f"{self.get_container_name()}_data"
 
 @dataclass
 class RedisConfig:
@@ -165,9 +165,7 @@ from repom._.docker_compose import DockerComposeGenerator, DockerService, Docker
 
 def get_compose_dir() -> Path:
     """docker-compose.yml の保存先"""
-    project_name = config.redis.container.project_name
-    data_root = Path(config.data_path).parent
-    compose_dir = data_root / project_name
+    compose_dir = Path(config.data_path)
     compose_dir.mkdir(parents=True, exist_ok=True)
     return compose_dir
 
@@ -259,7 +257,7 @@ redis_stop = "repom.scripts.redis.manage:stop"
 # mine_py/config.py
 def hook_config(config: RepomConfig) -> RepomConfig:
     # Redis の設定もカスタマイズ
-    config.redis.container.project_name = "mine_py"
+    config.redis.container.container_name = "mine_py_redis"
     config.redis.container.host_port = 6380  # ポートをずらす
     
     return config
@@ -376,19 +374,20 @@ yaml_content = generator.generate()
 
 ```python
 # ❌ 悪い例: ハードコード
-container_name = "my_project_postgres"
+container_name = "postgres"
 
 # ✅ 良い例: CONFIG_HOOK で動的に設定
 def hook_config(config: RepomConfig) -> RepomConfig:
-    config.postgres.container.project_name = "my_project"
+    config.postgres.container.container_name = "my_project_postgres"
+    config.postgres.container.host_port = 5433
     return config
 ```
 
-### 2. data/{project_name}/ に保存
+### 2. data/ 配下に保存
 
 ```python
-# ✅ 推奨: プロジェクトごとにディレクトリを分ける
-compose_dir = Path(config.data_path).parent / project_name
+# ✅ 推奨: data/ 配下に保存
+compose_dir = Path(config.data_path)
 
 # ❌ 非推奨: scripts/ に保存（複数プロジェクトで衝突）
 compose_dir = Path(__file__).parent

@@ -180,19 +180,18 @@ class DockerComposeGenerator:
 @dataclass
 class PostgresContainerConfig:
     """PostgreSQL Docker コンテナ設定"""
-    project_name: str = field(default="repom")
     container_name: Optional[str] = field(default=None)
     host_port: int = field(default=5432)
     volume_name: Optional[str] = field(default=None)
     image: str = field(default="postgres:16-alpine")
     
     def get_container_name(self) -> str:
-        """コンテナ名を取得（デフォルト: {project_name}_postgres）"""
-        return self.container_name or f"{self.project_name}_postgres"
+        """コンテナ名を取得（デフォルト: repom_postgres）"""
+        return self.container_name or "repom_postgres"
     
     def get_volume_name(self) -> str:
-        """Volume名を取得（デフォルト: {project_name}_postgres_data）"""
-        return self.volume_name or f"{self.project_name}_postgres_data"
+        """Volume名を取得（デフォルト: repom_postgres_data）"""
+        return self.volume_name or "repom_postgres_data"
 
 @dataclass
 class PostgresConfig:
@@ -214,8 +213,8 @@ class PostgresConfig:
 from repom.config import RepomConfig
 
 def hook_config(config: RepomConfig) -> RepomConfig:
-    # プロジェクト名を設定
-    config.postgres.container.project_name = "mine_py"
+    # コンテナ名を明示的に指定
+    config.postgres.container.container_name = "mine_py_postgres"
     
     # ポートをずらす（repom: 5432, mine_py: 5433）
     config.postgres.container.host_port = 5433
@@ -234,7 +233,7 @@ CONFIG_HOOK=mine_py.config:hook_config
 
 #### 4. manage.py が基盤を使って docker-compose.yml を動的生成
 
-**重要**: docker-compose.yml は `data/{project_name}/` 配下に保存されます。
+**重要**: docker-compose.yml は `config.data_path` 配下に保存されます。
 
 ```python
 # repom/scripts/postgresql/manage.py
@@ -246,13 +245,9 @@ def get_compose_dir() -> Path:
     """docker-compose.yml の保存先ディレクトリを取得
     
     Returns:
-        data/{project_name}/ ディレクトリ
-        - repom の場合: data/repom/
-        - mine_py の場合: data/mine_py/
-        - fast_domain の場合: data/fast_domain/
+        config.data_path のディレクトリ
     """
-    project_name = config.postgres.container.project_name
-    compose_dir = Path(config.data_path) / project_name
+    compose_dir = Path(config.data_path)
     compose_dir.mkdir(parents=True, exist_ok=True)
     return compose_dir
 
@@ -273,7 +268,7 @@ def generate_docker_compose() -> DockerComposeGenerator:
     container = pg.container
     
     # 環境別の DB 名を生成
-    base_db = container.project_name
+    base_db = "repom"
     db_dev = f"{base_db}_dev"
     
     # init スクリプトのパスを取得
@@ -314,7 +309,7 @@ def generate_docker_compose() -> DockerComposeGenerator:
 
 def generate_init_sql() -> str:
     """環境別の DB 作成スクリプトを生成"""
-    base = config.postgres.container.project_name
+    base = "repom"
     user = config.postgres.user
     
     return f"""-- {base} project databases

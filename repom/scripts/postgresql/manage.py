@@ -19,15 +19,9 @@ def get_compose_dir() -> Path:
     """docker-compose.yml の保存先ディレクトリを取得
 
     Returns:
-        data/{project_name}/ ディレクトリ
-        - repom の場合: data/repom/
-        - mine_py の場合: data/mine_py/
-        - fast_domain の場合: data/fast_domain/
+        config.data_path のディレクトリ（親の data/ ディレクトリ内）
     """
-    project_name = config.postgres.container.project_name
-    # data_path の親ディレクトリ (data/) を取得して、project_name を追加
-    data_root = Path(config.data_path).parent
-    compose_dir = data_root / project_name
+    compose_dir = Path(config.data_path)
     compose_dir.mkdir(parents=True, exist_ok=True)
     return compose_dir
 
@@ -92,7 +86,7 @@ def generate_docker_compose() -> DockerComposeGenerator:
 
 def generate_init_sql() -> str:
     """環境別の DB 作成スクリプトを生成"""
-    base = config.postgres.container.project_name
+    base = "repom"
     user = config.postgres.user
 
     return f"""-- {base} project databases
@@ -123,6 +117,7 @@ def generate():
     print(f"   Container: {config.postgres.container.get_container_name()}")
     print(f"   Port: {config.postgres.container.host_port}")
     print(f"   Volume: {config.postgres.container.get_volume_name()}")
+    print(f"   Databases: repom_dev, repom_test, repom_prod")
 
 
 def start():
@@ -161,7 +156,7 @@ def start():
         print(f"  Port: {config.postgres.container.host_port}")
         print(f"  User: {config.postgres.user}")
         print(f"  Password: {config.postgres.password}")
-        print(f"  Databases: {config.postgres.container.project_name}_dev, {config.postgres.container.project_name}_test, {config.postgres.container.project_name}_prod")
+        print(f"  Databases: repom_dev, repom_test, repom_prod")
     except TimeoutError as e:
         print(f"❌ {e}")
         print(f"Check logs: docker logs {config.postgres.container.get_container_name()}")

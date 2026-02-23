@@ -11,7 +11,6 @@ class TestPostgresContainerConfig:
         """デフォルト値を確認"""
         container = PostgresContainerConfig()
 
-        assert container.project_name == "repom"
         assert container.container_name is None
         assert container.host_port == 5432
         assert container.volume_name is None
@@ -23,16 +22,9 @@ class TestPostgresContainerConfig:
 
         assert container.get_container_name() == "repom_postgres"
 
-    def test_get_container_name_custom_project(self):
-        """カスタムプロジェクト名でコンテナ名を取得"""
-        container = PostgresContainerConfig(project_name="mine_py")
-
-        assert container.get_container_name() == "mine_py_postgres"
-
     def test_get_container_name_explicit(self):
         """明示的に指定したコンテナ名を取得"""
         container = PostgresContainerConfig(
-            project_name="mine_py",
             container_name="custom_container"
         )
 
@@ -44,16 +36,9 @@ class TestPostgresContainerConfig:
 
         assert container.get_volume_name() == "repom_postgres_data"
 
-    def test_get_volume_name_custom_project(self):
-        """カスタムプロジェクト名でVolume名を取得"""
-        container = PostgresContainerConfig(project_name="mine_py")
-
-        assert container.get_volume_name() == "mine_py_postgres_data"
-
     def test_get_volume_name_explicit(self):
         """明示的に指定したVolume名を取得"""
         container = PostgresContainerConfig(
-            project_name="mine_py",
             volume_name="custom_volume"
         )
 
@@ -90,7 +75,6 @@ class TestPostgresConfig:
         """デフォルトのコンテナ設定を確認"""
         config = PostgresConfig()
 
-        assert config.container.project_name == "repom"
         assert config.container.get_container_name() == "repom_postgres"
         assert config.container.host_port == 5432
 
@@ -126,7 +110,6 @@ class TestRepomConfigPostgres:
         """PostgreSQL コンテナ設定を確認"""
         config = RepomConfig()
 
-        assert config.postgres.container.project_name == "repom"
         assert config.postgres.container.get_container_name() == "repom_postgres"
         assert config.postgres.container.get_volume_name() == "repom_postgres_data"
         assert config.postgres.container.host_port == 5432
@@ -137,35 +120,21 @@ class TestRepomConfigPostgres:
         config = RepomConfig()
 
         # mine-py プロジェクトの設定をシミュレート
-        config.postgres.container.project_name = "mine_py"
+        config.postgres.container.container_name = "mine_py_postgres"
         config.postgres.container.host_port = 5433
         config.postgres.user = "mine_py"
         config.postgres.password = "mine_py_dev"
 
         # 検証
         assert config.postgres.container.get_container_name() == "mine_py_postgres"
-        assert config.postgres.container.get_volume_name() == "mine_py_postgres_data"
         assert config.postgres.container.host_port == 5433
         assert config.postgres.user == "mine_py"
         assert config.postgres.password == "mine_py_dev"
 
-    def test_multiple_project_patterns(self):
-        """複数プロジェクトのパターンを確認"""
-        # repom
-        config_repom = RepomConfig()
-        assert config_repom.postgres.container.get_container_name() == "repom_postgres"
-        assert config_repom.postgres.container.host_port == 5432
-
-        # mine-py
-        config_mine = RepomConfig()
-        config_mine.postgres.container.project_name = "mine_py"
-        config_mine.postgres.container.host_port = 5433
-        assert config_mine.postgres.container.get_container_name() == "mine_py_postgres"
-        assert config_mine.postgres.container.host_port == 5433
-
-        # fast-domain
-        config_fast = RepomConfig()
-        config_fast.postgres.container.project_name = "fast_domain"
-        config_fast.postgres.container.host_port = 5434
-        assert config_fast.postgres.container.get_container_name() == "fast_domain_postgres"
-        assert config_fast.postgres.container.host_port == 5434
+    def test_custom_port_and_name(self):
+        """カスタムポートと明示的なコンテナ名を設定"""
+        config = RepomConfig()
+        config.postgres.container.host_port = 5433
+        config.postgres.container.container_name = "fast_domain_postgres"
+        assert config.postgres.container.get_container_name() == "fast_domain_postgres"
+        assert config.postgres.container.host_port == 5433
