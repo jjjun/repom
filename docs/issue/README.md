@@ -32,7 +32,6 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
-| #043 | Docker Compose プロジェクト名の分離 | 中 | 📝 設計完了、待機中 | [active/043_docker_compose_project_separation.md](active/043_docker_compose_project_separation.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください.
@@ -43,6 +42,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #043 | Docker Compose プロジェクト名の分離 | 2026-02-23 | 分離プロジェクト構造実装、redis/manage.py + postgres/manage.py の get_compose_dir() 修正（各サービス用サブディレクトリ作成）、5 単体テスト追加、orphan warning 削除、Docker Desktop UI でプロジェクト分離表示、784 tests passing（779 → 784）、README.md Docker 構造ドキュメント追加 | [completed/043_docker_compose_project_separation.md](completed/043_docker_compose_project_separation.md) |
 | #042 | Redis 設定管理と repom_info 統合 | 2026-02-23 | RedisConfig + RedisContainerConfig 実装（PostgreSQL パターン適用）、redis/manage.py config 統合、repom_info.py Redis 対応、test_config_redis.py 148 行テスト、test_redis_manage.py 15 テスト追加、779 tests passing（764 → 779）、Docker config 管理統一、オプション依存対応 | [completed/042_redis_config_and_repom_info_integration.md](completed/042_redis_config_and_repom_info_integration.md) |
 | #041 | Redis Docker 統合（repom） | 2026-02-23 | RedisManager 実装（Docker 管理基盤継承）、docker-compose.yml + redis.conf 自動生成、CLI コマンド統合（redis_generate/start/stop/remove）、22 単体テスト（745 total passing）、Redis Manager ガイド作成（284行）、db 関連処理の一元管理を実現 | [completed/041_redis_docker_integration.md](completed/041_redis_docker_integration.md) |
 | #040 | Docker 管理操作の統一基盤 | 2026-02-23 | DockerManager 抽象基盤実装（300+ 行）、PostgresManager 継承、共有ユーティリティ（DockerCommandExecutor など）、52 単体テスト（40 docker_manager + 12 postgres_manager）、コード削減（repom/postgres/manage.py: 355行→276行, 22.3%削減）、将来の Redis/MongoDB/Elasticsearch 統合準備完了 | [completed/040_docker_management_base_infrastructure.md](completed/040_docker_management_base_infrastructure.md) |
