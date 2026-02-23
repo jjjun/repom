@@ -109,7 +109,7 @@ class PgAdminConfig:
         password: 管理者パスワード
         container: Docker コンテナ設定
     """
-    email: str = field(default="admin@localhost")
+    email: str = field(default="admin@example.com")
     password: str = field(default="admin")
     container: PgAdminContainerConfig = field(default_factory=PgAdminContainerConfig)
 

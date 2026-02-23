@@ -331,3 +331,59 @@ class TestDockerComposeGenerator:
 
         assert "  nfs_data:" in yaml_content
         assert "    driver: nfs" in yaml_content
+
+    def test_generate_compose_with_depends_on(self):
+        """depends_on を含む docker-compose.yml を生成"""
+        generator = DockerComposeGenerator()
+
+        # PostgreSQL サービス（healthcheck 付き）
+        postgres_service = DockerService(
+            name="postgres",
+            image="postgres:16-alpine",
+            container_name="test_postgres",
+            healthcheck={
+                "test": '["CMD-SHELL", "pg_isready -U postgres"]',
+                "interval": "5s",
+                "timeout": "5s",
+                "retries": 5
+            }
+        )
+
+        # pgAdmin サービス（PostgreSQL に依存）
+        pgadmin_service = DockerService(
+            name="pgadmin",
+            image="dpage/pgadmin4:latest",
+            container_name="test_pgadmin",
+            depends_on={"postgres": {"condition": "service_healthy"}}
+        )
+
+        generator.add_service(postgres_service).add_service(pgadmin_service)
+        yaml_content = generator.generate()
+
+        # depends_on が YAML に含まれるか確認
+        assert "    depends_on:" in yaml_content
+        assert "      postgres:" in yaml_content
+        assert "        condition: service_healthy" in yaml_content
+
+    def test_depends_on_with_multiple_conditions(self):
+        """複数の条件を持つ depends_on"""
+        generator = DockerComposeGenerator()
+
+        service = DockerService(
+            name="app",
+            image="app:latest",
+            container_name="test_app",
+            depends_on={
+                "postgres": {"condition": "service_healthy"},
+                "redis": {"condition": "service_started"}
+            }
+        )
+
+        generator.add_service(service)
+        yaml_content = generator.generate()
+
+        assert "    depends_on:" in yaml_content
+        assert "      postgres:" in yaml_content
+        assert "        condition: service_healthy" in yaml_content
+        assert "      redis:" in yaml_content
+        assert "        condition: service_started" in yaml_content

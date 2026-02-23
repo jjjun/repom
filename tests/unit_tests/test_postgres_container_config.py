@@ -142,6 +142,7 @@ class TestRepomConfigPostgres:
         assert config.postgres.container.get_container_name() == "fast_domain_postgres"
         assert config.postgres.container.host_port == 5433
 
+
 class TestPgAdminContainerConfig:
     """PgAdminContainerConfig のテスト"""
 
@@ -203,7 +204,7 @@ class TestPgAdminConfig:
         """デフォルト値を確認"""
         admin = PgAdminConfig()
 
-        assert admin.email == "admin@localhost"
+        assert admin.email == "admin@example.com"
         assert admin.password == "admin"
         assert isinstance(admin.container, PgAdminContainerConfig)
 
@@ -246,7 +247,7 @@ class TestRepomConfigPgAdmin:
         config = RepomConfig()
 
         assert isinstance(config.pgadmin, PgAdminConfig)
-        assert config.pgadmin.email == "admin@localhost"
+        assert config.pgadmin.email == "admin@example.com"
         assert config.pgadmin.password == "admin"
         assert isinstance(config.pgadmin.container, PgAdminContainerConfig)
 

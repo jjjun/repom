@@ -25,6 +25,9 @@ def hook_config(config: dataclass) -> dataclass:
     config.model_locations = ['repom.examples.models']
     config.allowed_package_prefixes = {'repom.'}
 
+    # pgAdmin 統合テスト（実装確認用）
+    config.pgadmin.container.enabled = True
+
     # データベースタイプの設定
     # テスト環境では SQLite（高速）、それ以外は PostgreSQL
     if os.getenv('EXEC_ENV') == 'test':

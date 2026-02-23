@@ -29,14 +29,14 @@ class AlembicReset:
             if result.fetchone():
                 conn.execute(text("DROP TABLE alembic_version"))
                 conn.commit()
-                print("✓ Dropped alembic_version table")
+                print("[OK] Dropped alembic_version table")
             else:
-                print("✓ alembic_version table does not exist")
+                print("[OK] alembic_version table does not exist")
 
     def delete_migration_files(self) -> None:
         """マイグレーションファイルを削除"""
         if not self.versions_dir.exists():
-            print(f"✓ Versions directory does not exist: {self.versions_dir}")
+            print(f"[OK] Versions directory does not exist: {self.versions_dir}")
             return
 
         deleted_count = 0
@@ -50,9 +50,9 @@ class AlembicReset:
             print(f"  - Deleted: {file.name}")
 
         if deleted_count > 0:
-            print(f"✓ Deleted {deleted_count} migration file(s)")
+            print(f"[OK] Deleted {deleted_count} migration file(s)")
         else:
-            print("✓ No migration files to delete")
+            print("[OK] No migration files to delete")
 
         # __pycache__ も削除
         pycache = self.versions_dir / "__pycache__"

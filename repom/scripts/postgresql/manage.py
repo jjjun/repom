@@ -9,6 +9,7 @@
 import subprocess
 import time
 import sys
+import json
 from pathlib import Path
 
 from repom.config import config
@@ -38,20 +39,44 @@ def get_init_dir() -> Path:
     return init_dir
 
 
+def generate_pgadmin_servers_json() -> dict:
+    """pgAdmin サーバー設定ファイルの内容を生成
+
+    config の値を使用して動的に生成します。
+    CONFIG_HOOK でカスタマイズされた値が反映されます。
+
+    Returns:
+        pgAdmin servers.json の内容（dict）
+    """
+    base_db = config.postgres.database or "repom"
+    db_dev = f"{base_db}_dev"
+
+    return {
+        "Servers": {
+            "1": {
+                "Name": config.postgres.container.get_container_name(),
+                "Group": "Servers",
+                "Host": "postgres",  # Docker network 内での URL
+                "Port": 5432,
+                "Username": config.postgres.user,
+                "SSLMode": "prefer",
+                "MaintenanceDB": db_dev
+            }
+        }
+    }
+
+
 def generate_docker_compose() -> DockerComposeGenerator:
     """config から docker-compose.yml 生成器を作成"""
     pg = config.postgres
     container = pg.container
 
-    # 初期化スクリプトで作成される dev 環境 DB（POSTGRES_DB として使用）
-    # ベース名は config.postgres.database でカスタマイズ可能
-    base_db = config.postgres.database or "repom"
-    db_dev = f"{base_db}_dev"
-
     # init スクリプトのパスを取得
     init_dir = get_init_dir()
 
     # PostgreSQL サービスを定義
+    # Note: POSTGRES_DB は省略（POSTGRES_USER と同名のDBが自動作成される）
+    # 実際の環境別DB (dev/test/prod) は init スクリプトで作成
     postgres_service = DockerService(
         name="postgres",
         image=container.image,
@@ -59,7 +84,6 @@ def generate_docker_compose() -> DockerComposeGenerator:
         environment={
             "POSTGRES_USER": pg.user,
             "POSTGRES_PASSWORD": pg.password,
-            "POSTGRES_DB": db_dev,
         },
         ports=[f"{container.host_port}:5432"],
         volumes=[
@@ -85,6 +109,9 @@ def generate_docker_compose() -> DockerComposeGenerator:
     # pgAdmin サービスをオプショナルに追加
     if config.pgadmin.container.enabled:
         pgadmin_container = config.pgadmin.container
+        # servers.json のパスを作成
+        servers_json_path = get_compose_dir() / "servers.json"
+
         pgadmin_service = DockerService(
             name="pgadmin",
             image=pgadmin_container.image,
@@ -96,6 +123,7 @@ def generate_docker_compose() -> DockerComposeGenerator:
             ports=[f"{pgadmin_container.host_port}:80"],
             volumes=[
                 f"{pgadmin_container.get_volume_name()}:/var/lib/pgadmin",
+                f"{servers_json_path}:/pgadmin4/servers.json",
             ],
             depends_on={
                 "postgres": {
@@ -144,13 +172,20 @@ def generate():
     output_path = compose_dir / "docker-compose.generated.yml"
     generator.write_to_file(output_path)
 
+    # pgAdmin servers.json を生成（有効な場合のみ）
+    if config.pgadmin.container.enabled:
+        servers_json_path = compose_dir / "servers.json"
+        servers_config = generate_pgadmin_servers_json()
+        servers_json_path.write_text(json.dumps(servers_config, indent=2), encoding="utf-8")
+        print(f"✅ pgAdmin servers config: {servers_json_path}")
+
     print(f"✅ Generated: {output_path}")
     print(f"   Init SQL: {init_dir / '01_init_databases.sql'}")
     print(f"\n📦 PostgreSQL Service:")
     print(f"   Container: {config.postgres.container.get_container_name()}")
     print(f"   Port: {config.postgres.container.host_port}")
     print(f"   Volume: {config.postgres.container.get_volume_name()}")
-    
+
     # pgAdmin 情報を出力（有効な場合のみ）
     if config.pgadmin.container.enabled:
         print(f"\n🎨 pgAdmin Service:")
@@ -193,12 +228,23 @@ def start():
         wait_for_postgres()
         print("✅ PostgreSQL is ready")
         print()
-        print("Connection info:")
+        print("📦 PostgreSQL Connection:")
         print(f"  Host: localhost")
         print(f"  Port: {config.postgres.container.host_port}")
         print(f"  User: {config.postgres.user}")
         print(f"  Password: {config.postgres.password}")
         print(f"  Databases: repom_dev, repom_test, repom_prod")
+
+        # pgAdmin 情報を出力（有効な場合のみ）
+        if config.pgadmin.container.enabled:
+            print()
+            print("🎨 pgAdmin Access:")
+            print(f"  URL: http://localhost:{config.pgadmin.container.host_port}")
+            print(f"  Email: {config.pgadmin.email}")
+            print(f"  Password: {config.pgadmin.password}")
+            print()
+            print("  ✅ PostgreSQL server auto-registered (servers.json)")
+            print(f"  Server: {config.postgres.container.get_container_name()}")
     except TimeoutError as e:
         print(f"❌ {e}")
         print(f"Check logs: docker logs {config.postgres.container.get_container_name()}")

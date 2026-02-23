@@ -61,7 +61,7 @@ class AlembicSetup:
 
         # 既存ファイルがある場合は上書きしない（安全）
         if ini_path.exists() and not overwrite:
-            print(f"✓ alembic.ini already exists: {ini_path}")
+            print(f"[OK] alembic.ini already exists: {ini_path}")
             return
 
         content = AlembicTemplates.generate_alembic_ini(
@@ -69,12 +69,12 @@ class AlembicSetup:
             version_locations=self.version_locations
         )
         ini_path.write_text(content, encoding='utf-8')
-        print(f"✓ Created alembic.ini: {ini_path}")
+        print(f"[OK] Created alembic.ini: {ini_path}")
 
     def create_version_directory(self) -> None:
         """version_locations ディレクトリを作成"""
         if self.versions_dir.exists():
-            print(f"✓ Version directory already exists: {self.versions_dir}")
+            print(f"[OK] Version directory already exists: {self.versions_dir}")
             return
 
         self.versions_dir.mkdir(parents=True, exist_ok=True)
@@ -82,7 +82,7 @@ class AlembicSetup:
         # __init__.py を作成（Python パッケージとして認識させる）
         init_file = self.versions_dir / "__init__.py"
         init_file.touch()
-        print(f"✓ Created version directory: {self.versions_dir}")
+        print(f"[OK] Created version directory: {self.versions_dir}")
 
     def reset_migrations(
         self,

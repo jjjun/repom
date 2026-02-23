@@ -47,6 +47,7 @@ class DockerService:
         environment: 環境変数（例: {"POSTGRES_USER": "user"}）
         volumes: ボリュームマウント（例: ["data:/var/lib/postgresql/data"]）
         healthcheck: ヘルスチェック設定（例: {"test": "...", "interval": "5s"}）
+        depends_on: 依存するサービス（例: {"postgres": {"condition": "service_healthy"}}）
 
     Example:
         >>> service = DockerService(
@@ -65,6 +66,7 @@ class DockerService:
     environment: Dict[str, str] = field(default_factory=dict)
     volumes: List[str] = field(default_factory=list)
     healthcheck: Optional[Dict] = field(default=None)
+    depends_on: Optional[Dict] = field(default=None)
 
 
 @dataclass
@@ -208,6 +210,16 @@ class DockerComposeGenerator:
                     lines.append(f"      test: {value}")
                 else:
                     lines.append(f"      {key}: {value}")
+
+        if service.depends_on:
+            lines.append("    depends_on:")
+            for service_name, config in service.depends_on.items():
+                lines.append(f"      {service_name}:")
+                if isinstance(config, dict):
+                    for key, value in config.items():
+                        lines.append(f"        {key}: {value}")
+                else:
+                    lines.append(f"        condition: {config}")
 
         return lines
 
