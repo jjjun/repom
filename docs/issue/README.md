@@ -33,10 +33,9 @@ completed/     → 実装完了・コミット済み
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
 | #040 | Docker 管理操作の統一基盤 | 中 | 🟡 提案中 | [active/040_docker_management_base_infrastructure.md](active/040_docker_management_base_infrastructure.md) |
-| #041 | Redis Docker 統合（repom） | 高 | 🟡 計画中 | [active/041_redis_docker_integration.md](active/041_redis_docker_integration.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
-詳細は各ファイルを参照してください。
+詳細は各ファイルを参照してください.
 
 ---
 
@@ -44,6 +43,8 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #041 | Redis Docker 統合（repom） | 2026-02-23 | RedisManager 実装（Docker 管理基盤継承）、docker-compose.yml + redis.conf 自動生成、CLI コマンド統合（redis_generate/start/stop/remove）、22 単体テスト（745 total passing）、Redis Manager ガイド作成（284行）、db 関連処理の一元管理を実現 | [completed/041_redis_docker_integration.md](completed/041_redis_docker_integration.md) |
+| #040 | Docker 管理操作の統一基盤 | 2026-02-23 | DockerManager 抽象基盤実装、PostgresManager 继承、共有ユーティリティ（DockerCommandExecutor など）、40 単体テスト、将来の Redis/MongoDB/Elasticsearch 統合準備完了 | [completed/040_docker_management_base_infrastructure.md](completed/040_docker_management_base_infrastructure.md) |
 | #036 | Alembic セットアップとリセットユーティリティの実装 | 2026-02-04 | AlembicSetup/AlembicReset/AlembicTemplates実装、alembic_init/alembic_reset CLIスクリプト、path_separator設定追加、test_migration_no_id.pyリファクタリング（139行削減）、13単体テスト全パス、ドキュメント整備完了、deprecation warning解消 | [completed/036_alembic_setup_and_reset_utilities.md](completed/036_alembic_setup_and_reset_utilities.md) |
 | #039 | MagicMock 生成ディレクトリの配置改善 | 2026-02-23 | mock_config.data_path を data/repom/ に固定し、MagicMock ディレクトリ生成を防止。Unit/Behavior テスト全パス | [completed/039_magicmock_artifact_path.md](completed/039_magicmock_artifact_path.md) |
 | #038 | PostgreSQL コンテナ設定のカスタマイズ対応 | 2026-02-23 | 汎用 Docker Compose 基盤実装（repom/_.docker_compose.py）、PostgreSQL コンテナ設定（PostgresContainerConfig、host_port/volume_name/container_name カスタマイズ対応）、pgAdmin オプショナル統合（Phase 6）、docker-compose.generated.yml 動的生成、環境別DB自動作成、postgres_generate/postgres_start/postgres_stop コマンド実装、Unit tests 15+追加、671 tests passing | [completed/038_postgresql_container_customization.md](completed/038_postgresql_container_customization.md) |
