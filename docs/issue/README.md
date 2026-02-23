@@ -32,7 +32,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
-| #038 | PostgreSQL コンテナ設定のカスタマイズ対応 | 中 | 📝 設計検討中 | [active/038_postgresql_container_customization.md](active/038_postgresql_container_customization.md) |
+
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください。
@@ -45,6 +45,7 @@ completed/     → 実装完了・コミット済み
 |----|---------|--------|------|---------|
 | #036 | Alembic セットアップとリセットユーティリティの実装 | 2026-02-04 | AlembicSetup/AlembicReset/AlembicTemplates実装、alembic_init/alembic_reset CLIスクリプト、path_separator設定追加、test_migration_no_id.pyリファクタリング（139行削減）、13単体テスト全パス、ドキュメント整備完了、deprecation warning解消 | [completed/036_alembic_setup_and_reset_utilities.md](completed/036_alembic_setup_and_reset_utilities.md) |
 | #039 | MagicMock 生成ディレクトリの配置改善 | 2026-02-23 | mock_config.data_path を data/repom/ に固定し、MagicMock ディレクトリ生成を防止。Unit/Behavior テスト全パス | [completed/039_magicmock_artifact_path.md](completed/039_magicmock_artifact_path.md) |
+| #038 | PostgreSQL コンテナ設定のカスタマイズ対応 | 2026-02-23 | 汎用 Docker Compose 基盤実装（repom/_.docker_compose.py）、PostgreSQL コンテナ設定（PostgresContainerConfig、host_port/volume_name/container_name カスタマイズ対応）、pgAdmin オプショナル統合（Phase 6）、docker-compose.generated.yml 動的生成、環境別DB自動作成、postgres_generate/postgres_start/postgres_stop コマンド実装、Unit tests 15+追加、671 tests passing | [completed/038_postgresql_container_customization.md](completed/038_postgresql_container_customization.md) |
 | #037 | Config Display Command (repom_info) | 2026-02-23 | repom_info 実装、Poetry scripts/README 反映、単体テスト追加、db_type 表記統一 | [completed/037_config_display_command.md](completed/037_config_display_command.md) |
 | #035 | テストアーキテクチャの複雑性（親Issue） | 2026-02-04 | 全サブIssue完了：Issue #034 (autouse削除)、Issue #035 (fixture分離)、Issue #036 (scope見直し・見送り)、Phase 1-2完了、複雑な条件分岐削除、601 tests passing、可読性・メンテナンス性・拡張性向上達成 | [completed/035_test_architecture_complexity.md](completed/035_test_architecture_complexity.md) |
 | #034 | SQLite/PostgreSQL Fixture 分離 | 2026-02-04 | setup_repom_db_tables を setup_sqlite_tables + setup_postgres_tables に分離、複雑な条件分岐削除、重複 fixture 削除（40行→11行）、3ファイル更新、66個の Unicode 絵文字を ASCII 置換、601 tests passing | [completed/034_separate_sqlite_postgres_fixtures.md](completed/034_separate_sqlite_postgres_fixtures.md) |
