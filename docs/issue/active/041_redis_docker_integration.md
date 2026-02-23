@@ -1,6 +1,6 @@
 # Issue #041: Redis Docker 統合（repom）
 
-**ステータス**: 🟢 計画中
+**ステータス**: � 実装中（Phase 1/3）
 
 **作成日**: 2026-02-23
 
@@ -389,9 +389,83 @@ repom/
 - **参考実装**: `repom/postgres/manage.py`
 - **基盤クラス**: `repom/_/docker_manager.py`
 
+## 実装進捗
+
+### ✅ Phase 1: 基盤実装完了（2026-02-23）
+
+**完成ファイル**:
+- `repom/redis/manage.py` - RedisManager クラス（200行）
+- `repom/redis/init.template/redis.conf` - Redis 設定テンプレート
+- `repom/redis/docker-compose.template.yml` - docker-compose テンプレート
+- `repom/redis/__init__.py` - モジュール公開
+
+**実装内容**:
+1. RedisManager: DockerManager を継承（PostgreSQL と同じパターン）
+   - get_container_name() - "repom_redis" を返す
+   - get_compose_file_path() - docker-compose.generated.yml パス
+   - wait_for_service() - redis-cli ping で健全性確認
+   - print_connection_info() - 接続情報表示
+
+2. generate_docker_compose() - docker-compose 生成
+   - Redis サービス定義（7-alpine イメージ）
+   - ポートマッピング（REDIS_PORT 環境変数対応）
+   - ボリュームマウント（redis_init/redis.conf）
+   - healthcheck 設定（5秒間隔、5秒タイムアウト）
+
+3. generate_redis_conf() - redis.conf 動的生成
+   - Persistence（appendonly yes）
+   - Snapshot 設定（900s 1key, 300s 10keys など）
+   - Memory 管理（maxmemory 256mb）
+   - Logging 設定
+
+4. generate() 関数 - redis.conf と docker-compose を生成
+
+**Config 拡張**:
+- repom/config.py に redis_port プロパティ追加
+- 環境変数 REDIS_PORT でカスタマイズ可能（デフォルト: 6379）
+
+**Docker Compose 基盤拡張**:
+- DockerService に command フィールド追加
+- _generate_service() で command 出力サポート
+
+**CLI コマンド統合** (pyproject.toml):
+- poetry run redis_generate - docker-compose, redis.conf 生成
+- poetry run redis_start - Redis 起動（compose生成 → start）
+- poetry run redis_stop - Redis 停止
+- poetry run redis_remove - Redis 削除
+
+**テスト結果**:
+- ✅ 723 unit tests passed（既存テスト全パス）
+- ✅ redis_generate コマンド動作確認
+- ✅ docker-compose.generated.yml 生成確認
+- ✅ redis.conf 生成確認
+
+### 📋 Phase 2: テスト実装（予定）
+
+**計画内容**:
+- 12-15 個の unit test 実装
+- PostgreSQL Manager テストと同じパターン
+- 実 Redis コンテナでの動作確認
+
+**ファイル**: `tests/unit_tests/test_redis_manager.py`
+
+### 📋 Phase 3: ドキュメント作成（予定）
+
+**計画内容**:
+- `docs/guides/features/redis_manager_guide.md` - 使用ガイド
+- コード内 docstring 充実
+- CLI コマンド ヘルプ
+
 ## 次のアクション
 
-- [ ] Issue #041 承認
+- [ ] Phase 2: テスト実装（12-15個）
+- [ ] Phase 3: ドキュメント作成
+- [ ] Redis 起動テスト（Docker 環境）
+- [ ] PR 作成 & レビュー
+
+## 次のアクション
+
+- [ ] Issue #040: Docker 管理基盤（Phase 1-2）承認
 - [ ] 実装開始
 - [ ] テスト作成
 - [ ] ドキュメント作成
