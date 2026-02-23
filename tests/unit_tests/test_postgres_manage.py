@@ -339,3 +339,55 @@ class TestPgAdminServersJson:
         assert server["Host"] == "postgres"  # Docker network 内は常に "postgres"
         assert server["Username"] == "mine_py"
         assert server["MaintenanceDB"] == "mine_py_dev"  # カスタム DB 名
+
+class TestDirectorySeparation:
+    """Tests for separate project directory structure (Issue #043)"""
+
+    def test_get_compose_dir_uses_postgres_subdir(self):
+        """get_compose_dir が postgres サブディレクトリを使用（分離プロジェクト構造）"""
+        from repom.postgres.manage import get_compose_dir
+        from repom.config import config
+
+        compose_dir = get_compose_dir()
+        
+        # Should be config.data_path/postgres/
+        assert str(compose_dir).endswith("postgres")
+        assert "postgres" in str(compose_dir)
+
+    def test_postgres_generate_creates_in_postgres_subdir(self):
+        """postgres_generate が data/repom/postgres/ に docker-compose.yml を生成"""
+        from repom.postgres.manage import generate, get_compose_dir
+
+        # Generate files
+        generate()
+
+        # Verify files are in postgres subdirectory
+        compose_file = get_compose_dir() / "docker-compose.generated.yml"
+        assert compose_file.exists()
+        assert "postgres" in str(compose_file.parent)
+
+    def test_postgres_redis_no_conflict(self):
+        """postgres_generate と redis_generate の両方実行時に競合しない"""
+        from repom.postgres.manage import generate as postgres_generate, get_compose_dir as get_postgres_compose_dir
+        from repom.redis.manage import generate as redis_generate, get_compose_dir as get_redis_compose_dir
+
+        # Generate both
+        postgres_generate()
+        redis_generate()
+
+        # Verify both files exist in their respective directories
+        postgres_compose = get_postgres_compose_dir() / "docker-compose.generated.yml"
+        redis_compose = get_redis_compose_dir() / "docker-compose.generated.yml"
+
+        assert postgres_compose.exists()
+        assert redis_compose.exists()
+
+        # Verify they are in different directories
+        assert postgres_compose.parent != redis_compose.parent
+        assert "postgres" in str(postgres_compose)
+        assert "redis" in str(redis_compose)
+
+        # Verify Redis file doesn't contain postgres references
+        redis_content = redis_compose.read_text()
+        assert "postgres" not in redis_content.lower()
+        assert "pgadmin" not in redis_content.lower()

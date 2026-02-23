@@ -150,3 +150,22 @@ class TestDirectoryManagement:
         assert isinstance(init_dir, Path)
         # Should be a subdirectory of compose dir
         assert "redis_init" in str(init_dir)
+
+    def test_get_compose_dir_uses_redis_subdir(self):
+        """get_compose_dir が redis サブディレクトリを使用（分離プロジェクト構造）"""
+        compose_dir = get_compose_dir()
+        # Should be config.data_path/redis/
+        assert str(compose_dir).endswith("redis")
+        assert "redis" in str(compose_dir)
+
+    def test_redis_generate_creates_in_redis_subdir(self):
+        """redis_generate が data/repom/redis/ に docker-compose.yml を生成"""
+        from repom.redis.manage import generate
+        
+        # Generate files
+        generate()
+        
+        # Verify files are in redis subdirectory
+        compose_file = get_compose_dir() / "docker-compose.generated.yml"
+        assert compose_file.exists()
+        assert "redis" in str(compose_file.parent)

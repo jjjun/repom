@@ -325,6 +325,55 @@ poetry run db_sync_master
 - 開発環境 (`EXEC_ENV=dev`, デフォルト): `data/repom/db.dev.sqlite3`
 - テスト環境 (`EXEC_ENV=test`): `data/repom/db.test.sqlite3`（テストフレームワークではインメモリDBを使用）
 
+### PostgreSQL・Redis の Docker 管理（オプション）
+
+repom は PostgreSQL と Redis の Docker コンテナを独立して管理できます。各サービスの docker-compose.yml は専用ディレクトリに分離生成されます。
+
+**ディレクトリ構造:**
+
+```
+data/repom/
+├── postgres/
+│   ├── docker-compose.generated.yml  ← PostgreSQL + pgAdmin 定義
+│   ├── postgresql_init/
+│   │   └── 01_init_databases.sql
+│   ├── servers.json
+│   └── ...
+├── redis/
+│   ├── docker-compose.generated.yml  ← Redis のみ定義
+│   ├── redis_init/
+│   │   └── redis.conf
+│   └── ...
+└── db.dev.sqlite3  ← SQLite（オプション）
+```
+
+**コマンド:**
+
+```bash
+# PostgreSQL + pgAdmin（オプション）
+poetry run postgres_generate  # docker-compose.yml 生成
+poetry run postgres_start     # コンテナ起動（compose file なければ生成）
+poetry run postgres_stop      # コンテナ停止
+poetry run postgres_remove    # コンテナ・ボリューム削除
+
+# Redis（オプション）
+poetry install --extras redis  # Redis サポートを有効化
+poetry run redis_generate      # docker-compose.yml 生成
+poetry run redis_start         # コンテナ起動（compose file なければ生成）
+poetry run redis_stop          # コンテナ停止
+poetry run redis_remove        # コンテナ・ボリューム削除
+```
+
+**利点:**
+- ✅ サービスが独立したプロジェクトで管理される
+- ✅ orphan container 警告が出ない
+- ✅ 段階的な機能追加が容易（後から Redis を追加など）
+- ✅ Docker Desktop UI で各サービスのプロジェクトが分かれたまま表示
+
+**注意:**
+- ⚠️ オプション機能のため、通常の使用では不要
+- ⚠️ `poetry install --extras redis` で Redis サポートを明示的に有効化
+
 ### マイグレーション操作
 
 ```bash

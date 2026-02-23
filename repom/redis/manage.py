@@ -20,9 +20,9 @@ def get_compose_dir() -> Path:
     """docker-compose.yml の保存先ディレクトリを取得
 
     Returns:
-        config.data_path のディレクトリ
+        config.data_path/redis/ ディレクトリ（分離プロジェクト構造）
     """
-    compose_dir = Path(config.data_path)
+    compose_dir = Path(config.data_path) / "redis"
     compose_dir.mkdir(parents=True, exist_ok=True)
     return compose_dir
 

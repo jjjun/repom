@@ -20,9 +20,9 @@ def get_compose_dir() -> Path:
     """docker-compose.yml の保存先ディレクトリを取得
 
     Returns:
-        config.data_path のディレクトリ（親の data/ ディレクトリ内）
+        config.data_path/postgres/ ディレクトリ（分離プロジェクト構造）
     """
-    compose_dir = Path(config.data_path)
+    compose_dir = Path(config.data_path) / "postgres"
     compose_dir.mkdir(parents=True, exist_ok=True)
     return compose_dir
 

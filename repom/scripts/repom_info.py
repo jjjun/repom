@@ -161,7 +161,7 @@ def test_redis_connection() -> str:
     """
     try:
         import redis
-        
+
         # redis モジュールが利用可能なので、ConnectionError を参照できる
         try:
             r = redis.Redis(
