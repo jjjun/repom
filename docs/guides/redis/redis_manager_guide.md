@@ -12,8 +12,9 @@
 3. [基本的な使い方](#基本的な使い方)
 4. [API リファレンス](#apiリファレンス)
 5. [環境設定](#環境設定)
-6. [トラブルシューティング](#トラブルシューティング)
-7. [Redis CLI コマンド](#redisコマンドリファレンス)
+6. [RedisConfig 設定ガイド](#redisconfig設定ガイド)
+7. [トラブルシューティング](#トラブルシューティング)
+8. [Redis CLI コマンド](#redisコマンドリファレンス)
 
 ---
 
@@ -161,13 +162,20 @@ async def set_cache(key: str, value: str):
 
 **`get_container_name() -> str`**
 - Redis コンテナ名を取得
-- 戻り値: `"repom_redis"`
+- **config を経由**: `config.redis.container.get_container_name()` を使用
+- 戻り値: デフォルト `"repom_redis"` (カスタマイズ可能)
 
 ```python
 from repom.redis.manage import RedisManager
+from repom.config import config
 
 manager = RedisManager()
-print(manager.get_container_name())  # repom_redis
+container_name = manager.get_container_name()
+print(container_name)  # repom_redis (config 値)
+
+# config 経由の取得
+print(config.redis.container.get_container_name())
+print(config.redis.container.get_volume_name())
 ```
 
 **`get_compose_file_path() -> Path`**
@@ -217,6 +225,18 @@ print(is_running)  # True or False
 manager.wait_for_service(max_retries=30)  # 起動を確認
 ```
 
+**`print_connection_info() -> None`**
+- Redis 接続情報を表示 (config 値を使用)
+
+```python
+manager.print_connection_info()
+# 出力:
+# 📦 Redis Connection:
+#   Host: localhost
+#   Port: 6379
+#   CLI: redis-cli -p 6379
+```
+
 ### CLI コマンド
 
 #### redis_generate
@@ -264,28 +284,163 @@ poetry run redis_remove
 
 ## 環境設定
 
-### REDIS_PORT
+### 環境変数での設定
+
+#### REDIS_PORT
 
 Redis のポート番号を指定
 
 ```bash
 # .env ファイル
 REDIS_PORT=6380
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=secret123
+REDIS_DB=0
 
 # または、コマンド実行時に指定
 REDIS_PORT=6380 poetry run redis_start
 ```
 
-### config.py での設定
+#### その他の環境変数
+
+- `REDIS_HOST`: Redis ホスト（デフォルト: `localhost`）
+- `REDIS_PASSWORD`: Redis パスワード（オプション）
+- `REDIS_DB`: Redis データベース番号（デフォルト: `0`）
+
+### Config クラスでの設定
+
+RepomConfig を継承して Redis 設定をカスタマイズできます：
 
 ```python
-# repom/config.py
+# repom/config.py (Issue #042 実装)
+
+from dataclasses import dataclass, field
+from typing import Optional
+
+@dataclass
+class RedisContainerConfig:
+    """Redis コンテナ設定"""
+    container_name: str = "repom_redis"
+    volume_name: str = "repom_redis_data"
+    image: str = "redis:7-alpine"
+    
+    def get_container_name(self) -> str:
+        return self.container_name
+    
+    def get_volume_name(self) -> str:
+        return self.volume_name
+
+@dataclass
+class RedisConfig:
+    """Redis 接続設定"""
+    host: str = "localhost"
+    port: int = 6379
+    password: Optional[str] = None
+    db: int = 0
+    container: RedisContainerConfig = field(default_factory=RedisContainerConfig)
 
 class RepomConfig:
-    @property
-    def redis_port(self) -> int:
-        """Redis ポート（デフォルト: 6379）"""
-        return int(getenv('REDIS_PORT', '6379'))
+    redis: RedisConfig = field(default_factory=RedisConfig)
+```
+
+**使用例**:
+
+```python
+from repom.config import config
+
+# Redis 接続情報を取得
+print(config.redis.host)           # localhost
+print(config.redis.port)           # 6379
+print(config.redis.password)       # None
+print(config.redis.db)             # 0
+
+# コンテナ設定を取得
+print(config.redis.container.get_container_name())  # repom_redis
+print(config.redis.container.get_volume_name())      # repom_redis_data
+print(config.redis.container.image)                  # redis:7-alpine
+```
+
+**外部プロジェクトでのカスタマイズ**:
+
+```python
+# mine_py/src/mine_py/config.py
+from repom.config import RepomConfig, RedisConfig, RedisContainerConfig
+
+class MinePyConfig(RepomConfig):
+    def __init__(self):
+        super().__init__()
+        
+        # Redis 設定を上書き
+        self.redis = RedisConfig(
+            host="redis.example.com",
+            port=6380,
+            password="secret",
+            db=1,
+            container=RedisContainerConfig(
+                container_name="mine_py_redis",
+                volume_name="mine_py_redis_data",
+                image="redis:7-alpine"
+            )
+        )
+```
+
+---
+
+## RedisConfig 設定ガイド
+
+Issue #042 で実装された `RedisConfig` と `RedisContainerConfig` クラスについて詳しく説明します。
+
+### RedisContainerConfig
+
+Docker コンテナに関する設定を管理します：
+
+```python
+config.redis.container.container_name   # "repom_redis"
+config.redis.container.volume_name      # "repom_redis_data"
+config.redis.container.image            # "redis:7-alpine"
+```
+
+**メソッド**:
+
+- `get_container_name() -> str`: コンテナ名を取得
+- `get_volume_name() -> str`: ボリューム名を取得
+
+### RedisConfig
+
+Redis 接続とコンテナ設定を統一的に管理します：
+
+**属性**:
+
+| 属性 | 型 | デフォルト | 説明 |
+|-----|-----|---------|------|
+| `host` | str | `"localhost"` | Redis ホスト |
+| `port` | int | `6379` | Redis ポート |
+| `password` | Optional[str] | `None` | Redis パスワード |
+| `db` | int | `0` | Redis DB 番号 |
+| `container` | RedisContainerConfig | (デフォルト) | コンテナ設定 |
+
+**例**: ローカル開発とプロダクション環境の切り分け
+
+```python
+# 開発環境
+config_dev = RedisConfig(
+    host="localhost",
+    port=6379,
+    db=0
+)
+
+# プロダクション環境
+config_prod = RedisConfig(
+    host="redis.prod.example.com",
+    port=6380,
+    password="prod_secret",
+    db=1,
+    container=RedisContainerConfig(
+        container_name="prod_redis",
+        volume_name="prod_redis_data",
+        image="redis:7-alpine"
+    )
+)
 ```
 
 ---
@@ -480,8 +635,9 @@ class SessionManager:
 - [Redis 公式ドキュメント](https://redis.io/documentation)
 - [redis-py](https://redis-py.readthedocs.io/)
 - [Docker Manager ガイド](../features/docker_manager_guide.md)
-- [Issue #040: Docker 管理基盤](../../issue/completed/040_docker_management_base_infrastructure.md)
+- [Issue #042: Redis 設定管理と repom_info 統合](../../issue/completed/042_redis_config_and_repom_info_integration.md)
 - [Issue #041: Redis Docker 統合](../../issue/completed/041_redis_docker_integration.md)
+- [Issue #040: Docker 管理基盤](../../issue/completed/040_docker_management_base_infrastructure.md)
 
 ---
 
