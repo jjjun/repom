@@ -9,6 +9,8 @@ from unittest.mock import patch, MagicMock
 from repom.config import RepomConfig, PostgresConfig, PgAdminConfig
 from repom._.docker_compose import DockerService, DockerVolume
 
+DATA_PATH = Path("data") / "repom"
+
 
 class TestGenerateDockerComposePostgresOnly:
     """generate_docker_compose() - PostgreSQL のみ（pgAdmin 無効）"""
@@ -39,6 +41,7 @@ class TestGenerateDockerComposePostgresOnly:
 
         mock_config.postgres = mock_pg_config
         mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
 
         # import and test
         from repom.scripts.postgresql.manage import generate_docker_compose
@@ -91,6 +94,7 @@ class TestGenerateDockerComposePgAdminEnabled:
 
         mock_config.postgres = mock_pg_config
         mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
 
         # import and test
         from repom.scripts.postgresql.manage import generate_docker_compose
@@ -144,6 +148,7 @@ class TestGenerateDockerComposePgAdminEnabled:
 
         mock_config.postgres = mock_pg_config
         mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
 
         # import and test
         from repom.scripts.postgresql.manage import generate_docker_compose
@@ -168,6 +173,7 @@ class TestGenerateInitSql:
     @patch('repom.scripts.postgresql.manage.config')
     def test_default_database_names(self, mock_config):
         """デフォルトの DB 名（repom_dev, repom_test, repom_prod）が生成されることを確認"""
+        mock_config.data_path = DATA_PATH
         mock_config.postgres.database = None  # デフォルト
         mock_config.postgres.user = "repom"
 
@@ -187,6 +193,7 @@ class TestGenerateInitSql:
     @patch('repom.scripts.postgresql.manage.config')
     def test_custom_database_names(self, mock_config):
         """カスタム DB 名（mine_py_dev, mine_py_test, mine_py_prod）が生成されることを確認"""
+        mock_config.data_path = DATA_PATH
         mock_config.postgres.database = "mine_py"  # カスタム
         mock_config.postgres.user = "mine_py"
 
@@ -206,6 +213,7 @@ class TestGenerateInitSql:
     @patch('repom.scripts.postgresql.manage.config')
     def test_environment_prefixing_in_sql(self, mock_config):
         """環境別にデータベース名が正しくプレフィックスされていることを確認"""
+        mock_config.data_path = DATA_PATH
         mock_config.postgres.database = "project"
         mock_config.postgres.user = "user"
 
@@ -259,6 +267,7 @@ class TestDockerComposeFileGeneration:
 
         mock_config.postgres = mock_pg_config
         mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
 
         # Test
         from repom.scripts.postgresql.manage import generate_docker_compose
@@ -287,6 +296,7 @@ class TestPgAdminServersJson:
     def test_generate_pgadmin_servers_json(self, mock_config):
         """servers.json 設定の生成テスト - デフォルト値"""
         # Mock setup
+        mock_config.data_path = DATA_PATH
         mock_config.postgres.user = "repom"
         mock_config.postgres.password = "repom_dev"
         mock_config.postgres.database = None  # デフォルト
@@ -312,6 +322,7 @@ class TestPgAdminServersJson:
     def test_generate_pgadmin_servers_json_custom_config(self, mock_config):
         """servers.json 設定の生成テスト - カスタム値（CONFIG_HOOK 想定）"""
         # Mock setup - 外部プロジェクトの CONFIG_HOOK を想定
+        mock_config.data_path = DATA_PATH
         mock_config.postgres.user = "mine_py"
         mock_config.postgres.password = "mine_py_dev"
         mock_config.postgres.database = "mine_py"
