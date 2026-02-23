@@ -32,7 +32,6 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
-| #042 | Redis 設定管理と repom_info 統合 | 中 | 📝 レビュー待機中 | [active/042_redis_config_and_repom_info_integration.md](active/042_redis_config_and_repom_info_integration.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください.
@@ -43,6 +42,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #042 | Redis 設定管理と repom_info 統合 | 2026-02-23 | RedisConfig + RedisContainerConfig 実装（PostgreSQL パターン適用）、redis/manage.py config 統合、repom_info.py Redis 対応、test_config_redis.py 148 行テスト、test_redis_manage.py 15 テスト追加、779 tests passing（764 → 779）、Docker config 管理統一、オプション依存対応 | [completed/042_redis_config_and_repom_info_integration.md](completed/042_redis_config_and_repom_info_integration.md) |
 | #041 | Redis Docker 統合（repom） | 2026-02-23 | RedisManager 実装（Docker 管理基盤継承）、docker-compose.yml + redis.conf 自動生成、CLI コマンド統合（redis_generate/start/stop/remove）、22 単体テスト（745 total passing）、Redis Manager ガイド作成（284行）、db 関連処理の一元管理を実現 | [completed/041_redis_docker_integration.md](completed/041_redis_docker_integration.md) |
 | #040 | Docker 管理操作の統一基盤 | 2026-02-23 | DockerManager 抽象基盤実装（300+ 行）、PostgresManager 継承、共有ユーティリティ（DockerCommandExecutor など）、52 単体テスト（40 docker_manager + 12 postgres_manager）、コード削減（repom/postgres/manage.py: 355行→276行, 22.3%削減）、将来の Redis/MongoDB/Elasticsearch 統合準備完了 | [completed/040_docker_management_base_infrastructure.md](completed/040_docker_management_base_infrastructure.md) |
 | #036 | Alembic セットアップとリセットユーティリティの実装 | 2026-02-04 | AlembicSetup/AlembicReset/AlembicTemplates実装、alembic_init/alembic_reset CLIスクリプト、path_separator設定追加、test_migration_no_id.pyリファクタリング（139行削減）、13単体テスト全パス、ドキュメント整備完了、deprecation warning解消 | [completed/036_alembic_setup_and_reset_utilities.md](completed/036_alembic_setup_and_reset_utilities.md) |

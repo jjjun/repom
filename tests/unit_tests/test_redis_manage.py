@@ -49,7 +49,7 @@ class TestGenerateDockerCompose:
     def test_compose_uses_config_port(self):
         """docker-compose が config.redis.port を使用"""
         generator = generate_docker_compose()
-        
+
         # The generator should have created a Redis service
         assert generator is not None
         # The service details are embedded in the generator
