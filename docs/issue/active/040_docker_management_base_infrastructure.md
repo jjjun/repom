@@ -110,11 +110,37 @@
   - ❌ 失敗
 ```
 
+## 実装方針の確定
+
+### アーキテクチャ
+
+```
+repom/_/docker_manager.py
+  ├── DockerManager (ABC)
+  ├── DockerCommandExecutor
+  ├── ReadinessChecker
+  └── ユーティリティ関数
+
+利用側:
+  repom/postgres/manage.py → PostgresManager (repom/_/docker_manager の利用)
+  fast-domain/redis/manage.py → RedisManager (repom/_/docker_manager の利用)
+```
+
+**特性**:
+- 基盤を `repom/_` 配下に配置（汎用・再利用可能）
+- repom と fast-domain 両方で使用
+- テスト戦略: 実 Docker で信頼性検証（mock なし）
+- 既存コマンドインターフェース維持（互換性維持）
+- Config-based design（repom + fast-domain 両対応）
+- 互換性考慮なし（新規設計）
+
+---
+
 ## 提案される解決策
 
 ### Phase 1: 共通基盤設計
 
-repom に `repom/docker_manager.py` を作成し、以下の共通基盤を実装：
+repom に `repom/_/docker_manager.py` を作成し、以下の共通基盤を実装：
 
 ```python
 class DockerManager(ABC):
@@ -233,58 +259,87 @@ class PostgresManager(DockerManager):
 ### ファイル（新規作成/修正）
 
 **新規** : 
-- `repom/docker_manager.py` - 共通基盤（500-700行）
-- `repom/docker_manager/` - サブモジュール化（オプション）
+- `repom/_/docker_manager.py` - 共通基盤（約300-400行、単一ファイル）
 - `docs/guides/features/docker_manager_guide.md` - 使用ガイド
+- `docs/technical/docker_manager_architecture.md` - 設計ドキュメント
 
 **修正**:
-- `repom/postgres/manage.py` - 共通基盤を利用（100-150行削減）
-- `repom/scripts/alembic_reset.py` - docker-compose 操作を更新（必要に応じて）
-- `pyproject.toml` - 新しい entry points（postgres_reset など）
+- `repom/postgres/manage.py` - DockerManager ベースに統合（100-150行削減）
 
 **外部プロジェクト** (fast-domain など):
-- `src/fast_domain/arq/scripts/redis/manage.py` - 共通基盤適用（150-200行削減）
+- `src/fast_domain/arq/scripts/redis/manage.py` - DockerManager ベースに統合（150-200行削減）
 
 ## 実装計画
 
-### 第1段階: 基盤設計・実装
+### 第1段階: 基盤設計・実装（Phase 1）
 
-1. `DockerManager` 抽象基盤クラス設計
-2. `DockerCommandExecutor` ユーティリティ実装
-3. 単体テスト作成（15-20テスト）
+**目標**: `repom/_/docker_manager.py` 完成 + テスト
 
-### 第2段階: repom 統合
+1. DockerManager ABC + ユーティリティ実装
+   - `DockerManager` 抽象基盤クラス
+   - `DockerCommandExecutor` (docker-compose/docker 実行)
+   - `ReadinessChecker` (readiness check 汎用)
+   - ユーティリティ関数群
+2. PostgresManager 参考実装
+3. 単体テスト作成（15個程度）
+4. ドキュメント作成
 
-1. PostgresManager を基盤に移行
-2. 既存 manage.py コードを削減
-3. 互換性テスト（既存テスト全パス確認）
+**期間**: 2-3日想定
 
-### 第3段階: 外部プロジェクト統合（フェーズ6）
+### 第2段階: repom 統合（Phase 2）
 
-1. fast-domain での試験運用
-2. 共通パターン確認
-3. MongoDB など他のサービスへの展開可能性検証
+**目標**: `repom/postgres/manage.py` 統合 + 互換性確認
+
+1. PostgresManager を repom/postgres/manage.py に組み込み
+2. 既存テスト全パス確認（互換性検証）
+3. 統合テスト作成（5個程度）
+
+**期間**: 1日想定
+
+### 第3段階: 外部プロジェクト統合（Phase 3）
+
+**対象**: fast-domain など
+
+1. fast-domain (redis/manage.py) への適用
+2. MongoDB など他サービスへの展開検証
+
+**期間**: fast-domain 側で実施（後続タスク）
 
 ## テスト計画
 
+### テスト戦略
+
+**基本方針**: 実 Docker でテスト（Docker の操作信頼性を保証）
+- mock なし → 実際の docker/docker-compose コマンドで検証
+- 開発環境は SQLite で高速化（DB テストとは独立）
+- CI/CD（GitHub Actions）で Docker が利用可能であることが前提
+
 ### 単体テスト
 
-- `test_docker_command_executor.py` - docker-compose コマンド実行
-- `test_postgres_manager.py` - PostgreSQL 固有
-- `test_redis_manager.py` - Redis 固有（fast-domain と共有）
+- `test_docker_command_executor.py` - docker-compose/docker コマンド実行
+- `test_postgres_manager.py` - PostgreSQL 固有（generate 含む）
+- `test_readiness_checker.py` - readiness check 汎用ロジック
 
 ### 統合テスト
 
-- docker-compose のモック対応
-- readiness check の各パターン
-- エラーケース（docker 不在、コンテナ起動失敗など）
+- PostgreSQL フルライフサイクル（generate → start → stop → remove）
+- Redis フルライフサイクル（start → stop → remove）
+- エラーハンドリング（docker-compose 不在、コンテナ起動失敗など）
+- 並行操作（複数サービス同時実行）
 
 ### 受け入れ基準
 
-1. 既存機能がすべて動作
-2. コード行数削減（repom: 150行以上、fast-domain: 200行以上）
-3. 新規テスト: 20+個追加
+1. 既存機能がすべて動作（互換性テスト 100% パス）
+2. コード行数削減
+   - repom/postgres/manage.py: 355行 → 248行（-107, 30%）
+3. 実 Docker テスト成功
+   - Unit tests: 15+ 個
+   - Integration tests: 5+ 個
+   - 合計: 20+個テスト
 4. ドキュメント整備完了
+   - `docs/guides/features/docker_manager_guide.md`
+   - `docs/technical/docker_manager_architecture.md`
+   - コード内 docstring 充実
 
 ## 関連資料
 

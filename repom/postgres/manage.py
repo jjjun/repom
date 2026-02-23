@@ -7,13 +7,13 @@
 """
 
 import subprocess
-import time
 import sys
 import json
 from pathlib import Path
 
 from repom.config import config
 from repom._.docker_compose import DockerComposeGenerator, DockerService, DockerVolume
+from repom._ import docker_manager as dm
 
 
 def get_compose_dir() -> Path:
@@ -25,6 +25,75 @@ def get_compose_dir() -> Path:
     compose_dir = Path(config.data_path)
     compose_dir.mkdir(parents=True, exist_ok=True)
     return compose_dir
+
+
+class PostgresManager(dm.DockerManager):
+    """PostgreSQL コンテナの管理（Docker Manager 基盤を使用）
+
+    docker-compose による start/stop/remove は DockerManager 基盤クラスから継承
+    """
+
+    def __init__(self):
+        self.config = config
+
+    def get_container_name(self) -> str:
+        """PostgreSQL コンテナ名を返す"""
+        return self.config.postgres.container.get_container_name()
+
+    def get_compose_file_path(self) -> Path:
+        """compose ファイルのパスを返す"""
+        compose_file = get_compose_dir() / "docker-compose.generated.yml"
+        if not compose_file.exists():
+            raise FileNotFoundError(
+                f"Compose file not found: {compose_file}\n"
+                f"Hint: Run 'poetry run postgres_generate' first"
+            )
+        return compose_file
+
+    def wait_for_service(self, max_retries: int = 30) -> None:
+        """PostgreSQL の起動を待機（pg_isready による確認）"""
+        container_name = self.get_container_name()
+        user = self.config.postgres.user
+
+        def check_postgres_ready():
+            try:
+                result = subprocess.run(
+                    ["docker", "exec", container_name, "pg_isready", "-U", user],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                    check=False
+                )
+                return result.returncode == 0
+            except Exception:
+                return False
+
+        dm.DockerCommandExecutor.wait_for_readiness(
+            check_postgres_ready,
+            max_retries=max_retries,
+            service_name="PostgreSQL"
+        )
+
+    def print_connection_info(self) -> None:
+        """PostgreSQL 接続情報を表示"""
+        print()
+        print("📦 PostgreSQL Connection:")
+        print(f"  Host: localhost")
+        print(f"  Port: {self.config.postgres.container.host_port}")
+        print(f"  User: {self.config.postgres.user}")
+        print(f"  Password: {self.config.postgres.password}")
+        print(f"  Databases: repom_dev, repom_test, repom_prod")
+
+        # pgAdmin 情報を出力（有効な場合のみ）
+        if self.config.pgadmin.container.enabled:
+            print()
+            print("🎨 pgAdmin Access:")
+            print(f"  URL: http://localhost:{self.config.pgadmin.container.host_port}")
+            print(f"  Email: {self.config.pgadmin.email}")
+            print(f"  Password: {self.config.pgadmin.password}")
+            print()
+            print("  ✅ PostgreSQL server auto-registered (servers.json)")
+            print(f"  Server: {self.config.postgres.container.get_container_name()}")
 
 
 def get_init_dir() -> Path:
@@ -202,136 +271,35 @@ def start():
     # docker-compose.yml を生成
     generate()
 
-    print()
-    print("🐳 Starting PostgreSQL container...")
-
-    compose_dir = get_compose_dir()
-    compose_file = compose_dir / "docker-compose.generated.yml"
+    manager = PostgresManager()
 
     try:
-        subprocess.run(
-            ["docker-compose", "-f", str(compose_file), "up", "-d"],
-            check=True,
-            cwd=str(compose_dir)
-        )
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to start PostgreSQL: {e}")
-        sys.exit(1)
-    except FileNotFoundError:
-        print("❌ docker-compose command not found.")
-        print("Please install Docker Desktop: https://www.docker.com/products/docker-desktop")
-        sys.exit(1)
-
-    print("⏳ Waiting for PostgreSQL to be ready...")
-
-    try:
-        wait_for_postgres()
-        print("✅ PostgreSQL is ready")
-        print()
-        print("📦 PostgreSQL Connection:")
-        print(f"  Host: localhost")
-        print(f"  Port: {config.postgres.container.host_port}")
-        print(f"  User: {config.postgres.user}")
-        print(f"  Password: {config.postgres.password}")
-        print(f"  Databases: repom_dev, repom_test, repom_prod")
-
-        # pgAdmin 情報を出力（有効な場合のみ）
-        if config.pgadmin.container.enabled:
-            print()
-            print("🎨 pgAdmin Access:")
-            print(f"  URL: http://localhost:{config.pgadmin.container.host_port}")
-            print(f"  Email: {config.pgadmin.email}")
-            print(f"  Password: {config.pgadmin.password}")
-            print()
-            print("  ✅ PostgreSQL server auto-registered (servers.json)")
-            print(f"  Server: {config.postgres.container.get_container_name()}")
+        manager.start()
+        manager.print_connection_info()
     except TimeoutError as e:
         print(f"❌ {e}")
-        print(f"Check logs: docker logs {config.postgres.container.get_container_name()}")
+        print(f"Check logs: docker logs {manager.get_container_name()}")
         sys.exit(1)
 
 
 def stop():
     """PostgreSQL を停止（コンテナ停止のみ、削除はしない）"""
-    compose_dir = get_compose_dir()
-    compose_file = compose_dir / "docker-compose.generated.yml"
-
-    if not compose_file.exists():
-        print("⚠️  docker-compose.generated.yml が見つかりません")
-        print(f"   Expected: {compose_file}")
-        print()
-        print("ヒント: 先に 'poetry run postgres_generate' を実行してください")
-        return
-
-    print("🛑 Stopping PostgreSQL container...")
+    manager = PostgresManager()
 
     try:
-        subprocess.run(
-            ["docker-compose", "-f", str(compose_file), "stop"],
-            check=True,
-            cwd=str(compose_dir)
-        )
-        print("✅ PostgreSQL stopped")
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to stop PostgreSQL: {e}")
-        sys.exit(1)
+        manager.stop()
+    except SystemExit:
+        raise
 
 
 def remove():
     """PostgreSQL コンテナとボリュームを削除（完全リセット）"""
-    compose_dir = get_compose_dir()
-    compose_file = compose_dir / "docker-compose.generated.yml"
-
-    if not compose_file.exists():
-        print("⚠️  docker-compose.generated.yml が見つかりません")
-        print(f"   Expected: {compose_file}")
-        print()
-        print("ヒント: 先に 'poetry run postgres_generate' を実行してください")
-        return
-
-    print("🧹 Removing PostgreSQL container and volumes...")
+    manager = PostgresManager()
 
     try:
-        subprocess.run(
-            ["docker-compose", "-f", str(compose_file), "down", "-v"],
-            check=True,
-            cwd=str(compose_dir)
-        )
-        print("✅ PostgreSQL removed")
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to remove PostgreSQL: {e}")
-        sys.exit(1)
-
-
-def wait_for_postgres(max_retries=30):
-    """PostgreSQL の起動を待機
-
-    Args:
-        max_retries: 最大リトライ回数（デフォルト: 30秒）
-
-    Raises:
-        TimeoutError: 指定時間内に起動しなかった場合
-    """
-    container_name = config.postgres.container.get_container_name()
-    user = config.postgres.user
-
-    for i in range(max_retries):
-        result = subprocess.run(
-            ["docker", "exec", container_name, "pg_isready", "-U", user],
-            capture_output=True,
-            text=True
-        )
-
-        if result.returncode == 0:
-            return True
-
-        # 進捗を表示
-        if (i + 1) % 5 == 0:
-            print(f"  Still waiting... ({i + 1}/{max_retries}s)")
-
-        time.sleep(1)
-
-    raise TimeoutError(f"PostgreSQL did not start within {max_retries} seconds")
+        manager.remove()
+    except SystemExit:
+        raise
 
 
 if __name__ == "__main__":
