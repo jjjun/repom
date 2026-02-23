@@ -2,8 +2,10 @@
 
 ## Status
 - **Created**: 2026-02-22
+- **Last Updated**: 2026-02-23
 - **Priority**: Medium
 - **Complexity**: Medium
+- **Implementation Status**: Phases 1-4 ✅ Complete, Phase 5 ⏳ In Progress
 
 ## Problem Description
 
@@ -179,7 +181,16 @@ class DockerComposeGenerator:
 # repom/config.py
 @dataclass
 class PostgresContainerConfig:
-    """PostgreSQL Docker コンテナ設定"""
+    """PostgreSQL Docker コンテナ設定
+    
+    Attributes:
+        container_name: コンテナ名（None の場合は repom_postgres）
+        host_port: ホスト側のポート番号
+        volume_name: Volume名（None の場合は repom_postgres_data）
+        image: PostgreSQL イメージ
+    
+    Note: プロジェクト名による自動導出ではなく、明示的に指定する設計
+    """
     container_name: Optional[str] = field(default=None)
     host_port: int = field(default=5432)
     volume_name: Optional[str] = field(default=None)
@@ -200,7 +211,7 @@ class PostgresConfig:
     port: int = field(default=5432)
     user: str = field(default='repom')
     password: str = field(default='repom_dev')
-    database: Optional[str] = field(default=None)
+    database: Optional[str] = field(default=None)  # ← DB基本名（環境プレフィックスなし）
     
     # Docker コンテナ設定
     container: PostgresContainerConfig = field(default_factory=PostgresContainerConfig)
@@ -219,7 +230,10 @@ def hook_config(config: RepomConfig) -> RepomConfig:
     # ポートをずらす（repom: 5432, mine_py: 5433）
     config.postgres.container.host_port = 5433
     
-    # DB 設定もプロジェクト名に合わせる
+    # DB 基本名を設定（環境別プレフィックスが自動的に付く）
+    config.postgres.database = "mine_py"  # → mine_py_dev, mine_py_test, mine_py_prod
+    
+    # DB ユーザー設定
     config.postgres.user = "mine_py"
     config.postgres.password = "mine_py_dev"
     
@@ -267,9 +281,9 @@ def generate_docker_compose() -> DockerComposeGenerator:
     pg = config.postgres
     container = pg.container
     
-    # 環境別の DB 名を生成
-    base_db = "repom"
-    db_dev = f"{base_db}_dev"
+    # DB基本名を取得（config.postgres.database でカスタマイズ可能）
+    base_db = config.postgres.database or "repom"
+    db_dev = f"{base_db}_dev"  # 初期化スクリプトで作成される3つのDBのうち1つ
     
     # init スクリプトのパスを取得
     init_dir = get_init_dir()
