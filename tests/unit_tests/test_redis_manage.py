@@ -161,10 +161,10 @@ class TestDirectoryManagement:
     def test_redis_generate_creates_in_redis_subdir(self):
         """redis_generate が data/repom/redis/ に docker-compose.yml を生成"""
         from repom.redis.manage import generate
-        
+
         # Generate files
         generate()
-        
+
         # Verify files are in redis subdirectory
         compose_file = get_compose_dir() / "docker-compose.generated.yml"
         assert compose_file.exists()

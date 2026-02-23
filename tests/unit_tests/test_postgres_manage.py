@@ -340,6 +340,7 @@ class TestPgAdminServersJson:
         assert server["Username"] == "mine_py"
         assert server["MaintenanceDB"] == "mine_py_dev"  # カスタム DB 名
 
+
 class TestDirectorySeparation:
     """Tests for separate project directory structure (Issue #043)"""
 
@@ -349,7 +350,7 @@ class TestDirectorySeparation:
         from repom.config import config
 
         compose_dir = get_compose_dir()
-        
+
         # Should be config.data_path/postgres/
         assert str(compose_dir).endswith("postgres")
         assert "postgres" in str(compose_dir)
