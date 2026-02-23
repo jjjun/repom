@@ -479,9 +479,9 @@ class SessionManager:
 
 - [Redis 公式ドキュメント](https://redis.io/documentation)
 - [redis-py](https://redis-py.readthedocs.io/)
-- [Docker Manager ガイド](docker_manager_guide.md)
-- [Issue #040: Docker 管理基盤](../../issue/active/040_docker_management_base_infrastructure.md)
-- [Issue #041: Redis Docker 統合](../../issue/active/041_redis_docker_integration.md)
+- [Docker Manager ガイド](../features/docker_manager_guide.md)
+- [Issue #040: Docker 管理基盤](../../issue/completed/040_docker_management_base_infrastructure.md)
+- [Issue #041: Redis Docker 統合](../../issue/completed/041_redis_docker_integration.md)
 
 ---
 

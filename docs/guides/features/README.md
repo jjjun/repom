@@ -7,7 +7,6 @@ repom の個別機能に関するガイドです。
 ### 🐳 Docker / サービス管理
 
 - **[docker_manager_guide.md](docker_manager_guide.md)** - Docker コンテナ統一管理（PostgreSQL/Redis）
-- **[redis_manager_guide.md](redis_manager_guide.md)** ⭐ NEW - Redis 環境管理（詳細ガイド）
 
 ### ⚙️ データベース・設定
 
