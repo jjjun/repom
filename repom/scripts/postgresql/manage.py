@@ -82,6 +82,31 @@ def generate_docker_compose() -> DockerComposeGenerator:
     generator.add_service(postgres_service)
     generator.add_volume(data_volume)
 
+    # pgAdmin サービスをオプショナルに追加
+    if config.pgadmin.container.enabled:
+        pgadmin_container = config.pgadmin.container
+        pgadmin_service = DockerService(
+            name="pgadmin",
+            image=pgadmin_container.image,
+            container_name=pgadmin_container.get_container_name(),
+            environment={
+                "PGADMIN_DEFAULT_EMAIL": config.pgadmin.email,
+                "PGADMIN_DEFAULT_PASSWORD": config.pgadmin.password,
+            },
+            ports=[f"{pgadmin_container.host_port}:80"],
+            volumes=[
+                f"{pgadmin_container.get_volume_name()}:/var/lib/pgadmin",
+            ],
+            depends_on={
+                "postgres": {
+                    "condition": "service_healthy"
+                }
+            }
+        )
+        pgadmin_volume = DockerVolume(name=pgadmin_container.get_volume_name())
+        generator.add_service(pgadmin_service)
+        generator.add_volume(pgadmin_volume)
+
     return generator
 
 
@@ -121,10 +146,20 @@ def generate():
 
     print(f"✅ Generated: {output_path}")
     print(f"   Init SQL: {init_dir / '01_init_databases.sql'}")
+    print(f"\n📦 PostgreSQL Service:")
     print(f"   Container: {config.postgres.container.get_container_name()}")
     print(f"   Port: {config.postgres.container.host_port}")
     print(f"   Volume: {config.postgres.container.get_volume_name()}")
-    print(f"   Databases: repom_dev, repom_test, repom_prod")
+    
+    # pgAdmin 情報を出力（有効な場合のみ）
+    if config.pgadmin.container.enabled:
+        print(f"\n🎨 pgAdmin Service:")
+        print(f"   Container: {config.pgadmin.container.get_container_name()}")
+        print(f"   Port: {config.pgadmin.container.host_port}")
+        print(f"   Email: {config.pgadmin.email}")
+        print(f"   Volume: {config.pgadmin.container.get_volume_name()}")
+    else:
+        print(f"\n⚪ pgAdmin: Disabled (set config.pgadmin.container.enabled=True to enable)")
 
 
 def start():

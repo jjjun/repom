@@ -66,6 +66,55 @@ class PostgresConfig:
 
 
 @dataclass
+class PgAdminContainerConfig:
+    """pgAdmin Docker コンテナ設定
+
+    Attributes:
+        container_name: コンテナ名（None の場合は repom_pgadmin）
+        host_port: ホスト側のポート番号（デフォルト: 5050）
+        volume_name: Volume名（None の場合は repom_pgadmin_data）
+        image: pgAdmin イメージ（デフォルト: dpage/pgadmin4:latest）
+        enabled: pgAdmin サービスを有効化するか（デフォルト: False）
+
+    Example:
+        >>> container = PgAdminContainerConfig(
+        ...     container_name="my_pgadmin",
+        ...     host_port=5051,
+        ...     enabled=True
+        ... )
+        >>> container.get_container_name()
+        'my_pgadmin'
+    """
+    container_name: Optional[str] = field(default=None)
+    host_port: int = field(default=5050)
+    volume_name: Optional[str] = field(default=None)
+    image: str = field(default="dpage/pgadmin4:latest")
+    enabled: bool = field(default=False)
+
+    def get_container_name(self) -> str:
+        """コンテナ名を取得（デフォルト: repom_pgadmin）"""
+        return self.container_name or "repom_pgadmin"
+
+    def get_volume_name(self) -> str:
+        """Volume名を取得（デフォルト: repom_pgadmin_data）"""
+        return self.volume_name or "repom_pgadmin_data"
+
+
+@dataclass
+class PgAdminConfig:
+    """pgAdmin 設定
+
+    Attributes:
+        email: 管理者メールアドレス
+        password: 管理者パスワード
+        container: Docker コンテナ設定
+    """
+    email: str = field(default="admin@localhost")
+    password: str = field(default="admin")
+    container: PgAdminContainerConfig = field(default_factory=PgAdminContainerConfig)
+
+
+@dataclass
 class SqliteConfig:
     """SQLite データベース設定
 
@@ -111,6 +160,7 @@ class RepomConfig(Config):
 
     # データベース設定 (機能別に分離)
     postgres: PostgresConfig = field(default_factory=PostgresConfig)
+    pgadmin: PgAdminConfig = field(default_factory=PgAdminConfig)
     sqlite: SqliteConfig = field(default_factory=SqliteConfig)
 
     # データベースタイプ選択
