@@ -236,7 +236,7 @@ def display_config():
             print(f"    File Size       : {db_info['size_mb']}")
             print()
 
-    elif config.db_type == 'postgresql':
+    elif config.db_type == 'postgres':
         pg_info = parse_postgres_url(str(config.db_url))
         if pg_info:
             print("  [PostgreSQL Details]")

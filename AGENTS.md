@@ -240,3 +240,10 @@ db_engine, db_test = create_test_fixtures(
 - Tests focus on verifying the shared building blocks; avoid introducing app-specific fixtures here.
 - Ensure new shared utilities remain decoupled from any single application domain.
 - For model definitions, `get_plural_tablename()` can be used to derive table names from file names to keep them aligned.
+
+## Issue Management (AI Agent Rule)
+
+When an issue is completed:
+- Keep the file name unchanged (issue ID stays the same).
+- Move the file from `docs/issue/active/` to `docs/issue/completed/`.
+- Update `docs/issue/README.md` to move the entry from active to completed.

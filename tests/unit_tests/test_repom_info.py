@@ -87,7 +87,7 @@ class TestGetDbFileInfo:
     @patch('repom.scripts.repom_info.config')
     def test_get_db_file_info_postgresql(self, mock_config):
         """Test that PostgreSQL returns None."""
-        mock_config.db_type = 'postgresql'
+        mock_config.db_type = 'postgres'
 
         info = get_db_file_info()
 
@@ -316,7 +316,7 @@ class TestDisplayConfig:
         mock_config.root_path = Path('/test/path')
         mock_config.db_backup_path = Path('/test/path/data/repom/backups')
         mock_config.master_data_path = Path('/test/path/data_master')
-        mock_config.db_type = 'postgresql'
+        mock_config.db_type = 'postgres'
         mock_config.db_url = 'postgresql://user:password@localhost:5432/repom_test'
         mock_config.model_locations = []
         mock_config.allowed_package_prefixes = set()
