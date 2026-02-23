@@ -85,11 +85,17 @@ def generate_docker_compose() -> DockerComposeGenerator:
 
 
 def generate_init_sql() -> str:
-    """環境別の DB 作成スクリプトを生成"""
-    base = "repom"
+    """環境別の DB 作成スクリプトを生成
+    
+    config.postgres.database でカスタマイズ可能（環境プレフィックスなしのベース名）
+    デフォルト: repom → repom_dev, repom_test, repom_prod を作成
+    """
+    # ベース名を取得（環境プレフィックスなし）
+    base = config.postgres.database or "repom"
     user = config.postgres.user
 
     return f"""-- {base} project databases
+CREATE DATABASE {base}_dev;
 CREATE DATABASE {base}_test;
 CREATE DATABASE {base}_prod;
 
