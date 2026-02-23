@@ -161,23 +161,25 @@ def test_redis_connection() -> str:
     """
     try:
         import redis
-
-        r = redis.Redis(
-            host=config.redis.host,
-            port=config.redis.port,
-            socket_connect_timeout=2,
-            socket_keepalive=True,
-            health_check_interval=1
-        )
-        r.ping()  # PING コマンド実行
-        return "✓ Connected"
+        
+        # redis モジュールが利用可能なので、ConnectionError を参照できる
+        try:
+            r = redis.Redis(
+                host=config.redis.host,
+                port=config.redis.port,
+                socket_connect_timeout=2,
+                socket_keepalive=True,
+                health_check_interval=1
+            )
+            r.ping()  # PING コマンド実行
+            return "✓ Connected"
+        except redis.ConnectionError:
+            return "✗ Connection refused"
+        except Exception as e:
+            return f"✗ Error: {type(e).__name__}"
 
     except ImportError:
         return "⚠ redis-py not installed"
-    except redis.ConnectionError:
-        return "✗ Connection refused"
-    except Exception as e:
-        return f"✗ Error: {type(e).__name__}"
 
 
 def get_loaded_models() -> List[Dict[str, str]]:
