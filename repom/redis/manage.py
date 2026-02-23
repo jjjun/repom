@@ -38,7 +38,7 @@ class RedisManager(dm.DockerManager):
 
     def get_container_name(self) -> str:
         """Redis コンテナ名を返す"""
-        return "repom_redis"
+        return self.config.redis.container.get_container_name()
 
     def get_compose_file_path(self) -> Path:
         """compose ファイルのパスを返す"""
@@ -78,8 +78,8 @@ class RedisManager(dm.DockerManager):
         print()
         print("📦 Redis Connection:")
         print(f"  Host: localhost")
-        print(f"  Port: {self.config.redis_port}")
-        print(f"  CLI: redis-cli -p {self.config.redis_port}")
+        print(f"  Port: {self.config.redis.port}")
+        print(f"  CLI: redis-cli -p {self.config.redis.port}")
         print()
 
 
@@ -127,9 +127,10 @@ loglevel notice
 
 def generate_docker_compose() -> DockerComposeGenerator:
     """config から docker-compose.yml 生成器を作成"""
-    redis_port = config.redis_port
-    container_name = "repom_redis"
-    volume_name = "repom_redis_data"
+    redis_port = config.redis.port
+    container_name = config.redis.container.get_container_name()
+    volume_name = config.redis.container.get_volume_name()
+    image = config.redis.container.image
 
     # init ファイルのパスを取得
     init_dir = get_init_dir()
@@ -137,7 +138,7 @@ def generate_docker_compose() -> DockerComposeGenerator:
     # Redis サービスを定義
     redis_service = DockerService(
         name="redis",
-        image="redis:7-alpine",
+        image=image,
         container_name=container_name,
         ports=[f"{redis_port}:6379"],
         volumes=[
@@ -180,9 +181,9 @@ def generate():
     print(f"✅ Generated: {output_path}")
     print(f"   Config: {init_dir / 'redis.conf'}")
     print(f"\n📦 Redis Service:")
-    print(f"   Container: repom_redis")
-    print(f"   Port: {config.redis_port}")
-    print(f"   Volume: repom_redis_data")
+    print(f"   Container: {config.redis.container.get_container_name()}")
+    print(f"   Port: {config.redis.port}")
+    print(f"   Volume: {config.redis.container.get_volume_name()}")
 
 
 def start():

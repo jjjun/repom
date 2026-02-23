@@ -115,6 +115,60 @@ class PgAdminConfig:
 
 
 @dataclass
+class RedisContainerConfig:
+    """Redis Docker コンテナ設定
+
+    Attributes:
+        container_name: コンテナ名（None の場合は repom_redis）
+        host_port: ホスト側のポート番号（デフォルト: 6379）
+        volume_name: Volume名（None の場合は repom_redis_data）
+        image: Redis イメージ（デフォルト: redis:7-alpine）
+
+    Example:
+        >>> container = RedisContainerConfig(
+        ...     container_name="my_redis",
+        ...     host_port=6380
+        ... )
+        >>> container.get_container_name()
+        'my_redis'
+        >>> container.get_volume_name()
+        'repom_redis_data'
+    """
+    container_name: Optional[str] = field(default=None)
+    host_port: int = field(default=6379)
+    volume_name: Optional[str] = field(default=None)
+    image: str = field(default="redis:7-alpine")
+
+    def get_container_name(self) -> str:
+        """コンテナ名を取得（デフォルト: repom_redis）"""
+        return self.container_name or "repom_redis"
+
+    def get_volume_name(self) -> str:
+        """Volume名を取得（デフォルト: repom_redis_data）"""
+        return self.volume_name or "repom_redis_data"
+
+
+@dataclass
+class RedisConfig:
+    """Redis 設定
+
+    Attributes:
+        host: Redis ホスト名
+        port: Redis ポート番号
+        password: Redis パスワード（オプション）
+        database: Redis データベース番号（デフォルト: 0）
+        container: Docker コンテナ設定
+    """
+    host: str = field(default='localhost')
+    port: int = field(default=6379)
+    password: Optional[str] = field(default=None)
+    database: int = field(default=0)
+
+    # Docker コンテナ設定
+    container: RedisContainerConfig = field(default_factory=RedisContainerConfig)
+
+
+@dataclass
 class SqliteConfig:
     """SQLite データベース設定
 
@@ -161,6 +215,7 @@ class RepomConfig(Config):
     # データベース設定 (機能別に分離)
     postgres: PostgresConfig = field(default_factory=PostgresConfig)
     pgadmin: PgAdminConfig = field(default_factory=PgAdminConfig)
+    redis: RedisConfig = field(default_factory=RedisConfig)
     sqlite: SqliteConfig = field(default_factory=SqliteConfig)
 
     # データベースタイプ選択

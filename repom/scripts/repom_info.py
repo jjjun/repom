@@ -149,6 +149,37 @@ def test_postgres_connection() -> str:
         return f'✗ Error: {str(e)[:50]}'
 
 
+def test_redis_connection() -> str:
+    """Test Redis connection using redis-py library.
+
+    Returns:
+        Connection status message
+        - "✓ Connected": Successfully connected
+        - "⚠ redis-py not installed": redis library not available
+        - "✗ Connection refused": Redis server not responding
+        - "✗ Error: ...": Other connection errors
+    """
+    try:
+        import redis
+
+        r = redis.Redis(
+            host=config.redis.host,
+            port=config.redis.port,
+            socket_connect_timeout=2,
+            socket_keepalive=True,
+            health_check_interval=1
+        )
+        r.ping()  # PING コマンド実行
+        return "✓ Connected"
+
+    except ImportError:
+        return "⚠ redis-py not installed"
+    except redis.ConnectionError:
+        return "✗ Connection refused"
+    except Exception as e:
+        return f"✗ Error: {type(e).__name__}"
+
+
 def get_loaded_models() -> List[Dict[str, str]]:
     """Get list of loaded models from SQLAlchemy metadata.
 
@@ -250,6 +281,20 @@ def display_config():
     print("[PostgreSQL Connection Test]")
     connection_status = test_postgres_connection()
     print(f"  Status            : {connection_status}")
+    print()
+
+    # Redis Configuration
+    print("[Redis Configuration]")
+    print(f"  Host              : {config.redis.host}")
+    print(f"  Port              : {config.redis.port}")
+    print(f"  Container Name    : {config.redis.container.get_container_name()}")
+    print(f"  Image             : {config.redis.container.image}")
+    print()
+
+    # Redis Connection Test
+    print("[Redis Connection Test]")
+    redis_connection_status = test_redis_connection()
+    print(f"  Status            : {redis_connection_status}")
     print()
 
     # Model Loading Configuration
