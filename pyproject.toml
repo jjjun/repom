@@ -53,6 +53,7 @@ repom_info = "repom.scripts.repom_info:main"
 postgres_generate = "repom.postgres.manage:generate"
 postgres_start = "repom.postgres.manage:start"
 postgres_stop = "repom.postgres.manage:stop"
+postgres_remove = "repom.postgres.manage:remove"
 
 [tool.pytest.ini_options]
 addopts = [

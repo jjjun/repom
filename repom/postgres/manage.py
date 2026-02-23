@@ -252,7 +252,7 @@ def start():
 
 
 def stop():
-    """PostgreSQL を停止"""
+    """PostgreSQL を停止（コンテナ停止のみ、削除はしない）"""
     compose_dir = get_compose_dir()
     compose_file = compose_dir / "docker-compose.generated.yml"
 
@@ -267,13 +267,39 @@ def stop():
 
     try:
         subprocess.run(
-            ["docker-compose", "-f", str(compose_file), "down"],
+            ["docker-compose", "-f", str(compose_file), "stop"],
             check=True,
             cwd=str(compose_dir)
         )
         print("✅ PostgreSQL stopped")
     except subprocess.CalledProcessError as e:
         print(f"❌ Failed to stop PostgreSQL: {e}")
+        sys.exit(1)
+
+
+def remove():
+    """PostgreSQL コンテナとボリュームを削除（完全リセット）"""
+    compose_dir = get_compose_dir()
+    compose_file = compose_dir / "docker-compose.generated.yml"
+
+    if not compose_file.exists():
+        print("⚠️  docker-compose.generated.yml が見つかりません")
+        print(f"   Expected: {compose_file}")
+        print()
+        print("ヒント: 先に 'poetry run postgres_generate' を実行してください")
+        return
+
+    print("🧹 Removing PostgreSQL container and volumes...")
+
+    try:
+        subprocess.run(
+            ["docker-compose", "-f", str(compose_file), "down", "-v"],
+            check=True,
+            cwd=str(compose_dir)
+        )
+        print("✅ PostgreSQL removed")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to remove PostgreSQL: {e}")
         sys.exit(1)
 
 
@@ -310,7 +336,7 @@ def wait_for_postgres(max_retries=30):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python manage.py [generate|start|stop]")
+        print("Usage: python manage.py [generate|start|stop|remove]")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -320,7 +346,9 @@ if __name__ == "__main__":
         start()
     elif command == "stop":
         stop()
+    elif command == "remove":
+        remove()
     else:
         print(f"Unknown command: {command}")
-        print("Usage: python manage.py [generate|start|stop]")
+        print("Usage: python manage.py [generate|start|stop|remove]")
         sys.exit(1)
