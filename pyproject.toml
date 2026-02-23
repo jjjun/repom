@@ -54,6 +54,10 @@ postgres_generate = "repom.postgres.manage:generate"
 postgres_start = "repom.postgres.manage:start"
 postgres_stop = "repom.postgres.manage:stop"
 postgres_remove = "repom.postgres.manage:remove"
+redis_generate = "repom.redis.manage:generate"
+redis_start = "repom.redis.manage:start"
+redis_stop = "repom.redis.manage:stop"
+redis_remove = "repom.redis.manage:remove"
 
 [tool.pytest.ini_options]
 addopts = [

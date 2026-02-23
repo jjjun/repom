@@ -264,6 +264,22 @@ class RepomConfig(Config):
             return f"{base}_dev"
 
     @property
+    def redis_port(self) -> int:
+        """Redis ポート番号（デフォルト: 6379）
+
+        環境変数 REDIS_PORT で上書き可能
+
+        使用例:
+            # デフォルト
+            config.redis_port => 6379
+
+            # 環境変数で指定
+            REDIS_PORT=6380
+        """
+        from os import getenv
+        return int(getenv('REDIS_PORT', '6379'))
+
+    @property
     def db_url(self) -> Optional[str]:
         """データベースURL（SQLite/PostgreSQL 自動切り替え）
 

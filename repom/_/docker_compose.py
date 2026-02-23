@@ -46,6 +46,7 @@ class DockerService:
         ports: ポートマッピング（例: ["5432:5432"]）
         environment: 環境変数（例: {"POSTGRES_USER": "user"}）
         volumes: ボリュームマウント（例: ["data:/var/lib/postgresql/data"]）
+        command: コマンド (&& redis-server /config/redis.conf"）
         healthcheck: ヘルスチェック設定（例: {"test": "...", "interval": "5s"}）
         depends_on: 依存するサービス（例: {"postgres": {"condition": "service_healthy"}}）
 
@@ -65,6 +66,7 @@ class DockerService:
     ports: List[str] = field(default_factory=list)
     environment: Dict[str, str] = field(default_factory=dict)
     volumes: List[str] = field(default_factory=list)
+    command: Optional[str] = field(default=None)
     healthcheck: Optional[Dict] = field(default=None)
     depends_on: Optional[Dict] = field(default=None)
 
@@ -202,6 +204,9 @@ class DockerComposeGenerator:
             lines.append("    volumes:")
             for volume in service.volumes:
                 lines.append(f"      - {volume}")
+
+        if service.command:
+            lines.append(f"    command: {service.command}")
 
         if service.healthcheck:
             lines.append("    healthcheck:")

@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: {{ container_name }}
+    ports:
+      - "{{ host_port }}:6379"
+    volumes:
+      - {{ volume_name }}:/data
+      - {{ init_dir }}/redis.conf:/usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  {{ volume_name }}:

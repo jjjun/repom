@@ -33,6 +33,7 @@ completed/     → 実装完了・コミット済み
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
 | #040 | Docker 管理操作の統一基盤 | 中 | 🟡 提案中 | [active/040_docker_management_base_infrastructure.md](active/040_docker_management_base_infrastructure.md) |
+| #041 | Redis Docker 統合（repom） | 高 | 🟡 計画中 | [active/041_redis_docker_integration.md](active/041_redis_docker_integration.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください。
