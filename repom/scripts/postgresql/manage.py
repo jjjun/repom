@@ -30,7 +30,7 @@ def get_init_dir() -> Path:
     """PostgreSQL 初期化スクリプトのディレクトリを取得
 
     Returns:
-        data/{project_name}/postgresql_init/ ディレクトリ
+        config.data_path/postgresql_init/ ディレクトリ
     """
     compose_dir = get_compose_dir()
     init_dir = compose_dir / "postgresql_init"
@@ -43,8 +43,9 @@ def generate_docker_compose() -> DockerComposeGenerator:
     pg = config.postgres
     container = pg.container
 
-    # 環境別の DB 名を生成
-    base_db = container.project_name
+    # 初期化スクリプトで作成される dev 環境 DB（POSTGRES_DB として使用）
+    # ベース名は config.postgres.database でカスタマイズ可能
+    base_db = config.postgres.database or "repom"
     db_dev = f"{base_db}_dev"
 
     # init スクリプトのパスを取得
@@ -86,7 +87,7 @@ def generate_docker_compose() -> DockerComposeGenerator:
 
 def generate_init_sql() -> str:
     """環境別の DB 作成スクリプトを生成
-    
+
     config.postgres.database でカスタマイズ可能（環境プレフィックスなしのベース名）
     デフォルト: repom → repom_dev, repom_test, repom_prod を作成
     """
