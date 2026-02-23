@@ -216,11 +216,11 @@ prod_url = "postgresql+psycopg://repom:repom_dev@localhost:5432/repom_prod"
 ### ディレクトリ構成
 
 ```
-repom/scripts/postgresql/
-├── docker-compose.yml      # Docker Compose 設定
-├── init/                   # 初期化スクリプト
-│   └── 01_init_databases.sql  # 環境別DB作成
-└── manage.py               # 管理スクリプト
+repom/postgres/
+├── docker-compose.template.yml  # Docker Compose 参考テンプレート
+├── init.template/               # 初期化スクリプトテンプレート
+│   └── 01_init_databases.sql     # 環境別DB作成
+└── manage.py                     # 管理スクリプト
 ```
 
 ### docker-compose.yml の内容

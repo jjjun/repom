@@ -7,7 +7,7 @@
 - **Complexity**: Low
 
 ## Problem Description
-`repom.scripts.postgresql.manage.config` をパッチする単体テストでは、実環境の設定読込を避けてテストを独立させるために `MagicMock` を使用しています。実装側では `get_compose_dir()` が `config.data_path` からディレクトリを構築して作成しますが、モック側で `data_path` を明示しないと `MagicMock` 自体が文字列化され、プロジェクトルートに `MagicMock/` ディレクトリが作成されます。
+`repom.postgres.manage.config` をパッチする単体テストでは、実環境の設定読込を避けてテストを独立させるために `MagicMock` を使用しています。実装側では `get_compose_dir()` が `config.data_path` からディレクトリを構築して作成しますが、モック側で `data_path` を明示しないと `MagicMock` 自体が文字列化され、プロジェクトルートに `MagicMock/` ディレクトリが作成されます。
 
 これは貢献者にとって混乱を招き、リポジトリルートに不要な成果物を残します。生成物が必要な場合は、Git 管理外の一時/データ保存先である `data/repom/` 配下に配置する方針とします。
 
@@ -32,4 +32,4 @@
 
 ## Related Documents
 - tests/unit_tests/test_postgres_manage.py
-- repom/scripts/postgresql/manage.py
+- repom/postgres/manage.py

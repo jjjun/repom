@@ -10,7 +10,7 @@
 ## 概要
 
 repom プロジェクトに PostgreSQL を Docker で簡単にセットアップできる管理スクリプトを追加する。
-`repom/scripts/postgresql/` ディレクトリ配下に Docker 関連のスクリプトと設定ファイルを配置し、開発者が簡単に PostgreSQL 環境を構築できるようにする。
+`repom/postgres/` ディレクトリ配下に Docker 関連のスクリプトと設定ファイルを配置し、開発者が簡単に PostgreSQL 環境を構築できるようにする。
 
 ## 問題説明
 
@@ -30,7 +30,7 @@ repom プロジェクトに PostgreSQL を Docker で簡単にセットアップ
 ### 1. ディレクトリ構造
 
 ```
-repom/scripts/postgresql/
+repom/postgres/
 ├── docker-compose.yml      # Docker Compose 設定
 ├── init/                   # 初期化スクリプト
 │   └── 01_init_databases.sql  # 環境別DB作成
@@ -140,8 +140,8 @@ if __name__ == "__main__":
 ```toml
 # pyproject.toml
 [tool.poetry.scripts]
-postgres_start = "repom.scripts.postgresql.manage:start"
-postgres_stop = "repom.scripts.postgresql.manage:stop"
+postgres_start = "repom.postgres.manage:start"
+postgres_stop = "repom.postgres.manage:stop"
 ```
 
 ## テスト計画
@@ -186,7 +186,7 @@ def test_postgres_start_stop():
 
 ## 完了基準
 
-- [x] `repom/scripts/postgresql/` ディレクトリ構造が作成されている
+- [x] `repom/postgres/` ディレクトリ構造が作成されている
 - [x] `docker-compose.yml` が正しく動作する
 - [x] `manage.py` で起動・停止ができる
 - [x] 環境別データベース（dev/test/prod）が自動作成される
@@ -204,9 +204,9 @@ def test_postgres_start_stop():
 4. **停止テスト**: `poetry run postgres_stop` → ✅ 成功（クリーンシャットダウン）
 
 ### 成果物
-- `repom/scripts/postgresql/docker-compose.yml`: Docker Compose 設定
-- `repom/scripts/postgresql/init/01_init_databases.sql`: DB初期化スクリプト
-- `repom/scripts/postgresql/manage.py`: 管理スクリプト
+- `repom/postgres/docker-compose.template.yml`: Docker Compose 参考テンプレート
+- `repom/postgres/init.template/01_init_databases.sql`: DB初期化スクリプトテンプレート
+- `repom/postgres/manage.py`: 管理スクリプト
 - `pyproject.toml`: postgres_start/postgres_stop コマンド追加
 - `docs/guides/postgresql/postgresql_setup_guide.md`: 完全なセットアップガイド
 

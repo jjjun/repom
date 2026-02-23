@@ -50,9 +50,9 @@ list_models = "repom.scripts.list_models:list_models"
 alembic_init = "repom.scripts.alembic_init:main"
 alembic_reset = "repom.scripts.alembic_reset:main"
 repom_info = "repom.scripts.repom_info:main"
-postgres_generate = "repom.scripts.postgresql.manage:generate"
-postgres_start = "repom.scripts.postgresql.manage:start"
-postgres_stop = "repom.scripts.postgresql.manage:stop"
+postgres_generate = "repom.postgres.manage:generate"
+postgres_start = "repom.postgres.manage:start"
+postgres_stop = "repom.postgres.manage:stop"
 
 [tool.pytest.ini_options]
 addopts = [

@@ -15,8 +15,8 @@ DATA_PATH = Path("data") / "repom"
 class TestGenerateDockerComposePostgresOnly:
     """generate_docker_compose() - PostgreSQL のみ（pgAdmin 無効）"""
 
-    @patch('repom.scripts.postgresql.manage.config')
-    @patch('repom.scripts.postgresql.manage.get_init_dir')
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.get_init_dir')
     def test_postgres_only_service_generation(self, mock_get_init_dir, mock_config):
         """PostgreSQL のみのサービスが生成されることを確認"""
         # Mock setup
@@ -44,7 +44,7 @@ class TestGenerateDockerComposePostgresOnly:
         mock_config.data_path = DATA_PATH
 
         # import and test
-        from repom.scripts.postgresql.manage import generate_docker_compose
+        from repom.postgres.manage import generate_docker_compose
 
         generator = generate_docker_compose()
 
@@ -59,8 +59,8 @@ class TestGenerateDockerComposePostgresOnly:
 class TestGenerateDockerComposePgAdminEnabled:
     """generate_docker_compose() - pgAdmin 有効"""
 
-    @patch('repom.scripts.postgresql.manage.config')
-    @patch('repom.scripts.postgresql.manage.get_init_dir')
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.get_init_dir')
     def test_postgres_and_pgadmin_service_generation(self, mock_get_init_dir, mock_config):
         """PostgreSQL と pgAdmin の両サービスが生成されることを確認"""
         # Mock setup
@@ -97,7 +97,7 @@ class TestGenerateDockerComposePgAdminEnabled:
         mock_config.data_path = DATA_PATH
 
         # import and test
-        from repom.scripts.postgresql.manage import generate_docker_compose
+        from repom.postgres.manage import generate_docker_compose
 
         generator = generate_docker_compose()
 
@@ -112,8 +112,8 @@ class TestGenerateDockerComposePgAdminEnabled:
         assert "postgres" in pgadmin_service.depends_on
         assert pgadmin_service.depends_on["postgres"]["condition"] == "service_healthy"
 
-    @patch('repom.scripts.postgresql.manage.config')
-    @patch('repom.scripts.postgresql.manage.get_init_dir')
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.get_init_dir')
     def test_pgadmin_yaml_generation(self, mock_get_init_dir, mock_config):
         """pgAdmin の YAML 出力が正しく生成されることを確認"""
         # Mock setup
@@ -151,7 +151,7 @@ class TestGenerateDockerComposePgAdminEnabled:
         mock_config.data_path = DATA_PATH
 
         # import and test
-        from repom.scripts.postgresql.manage import generate_docker_compose
+        from repom.postgres.manage import generate_docker_compose
 
         generator = generate_docker_compose()
         yaml_content = generator.generate()
@@ -170,14 +170,14 @@ class TestGenerateDockerComposePgAdminEnabled:
 class TestGenerateInitSql:
     """generate_init_sql() - DB 初期化スクリプト生成"""
 
-    @patch('repom.scripts.postgresql.manage.config')
+    @patch('repom.postgres.manage.config')
     def test_default_database_names(self, mock_config):
         """デフォルトの DB 名（repom_dev, repom_test, repom_prod）が生成されることを確認"""
         mock_config.data_path = DATA_PATH
         mock_config.postgres.database = None  # デフォルト
         mock_config.postgres.user = "repom"
 
-        from repom.scripts.postgresql.manage import generate_init_sql
+        from repom.postgres.manage import generate_init_sql
 
         sql = generate_init_sql()
 
@@ -190,14 +190,14 @@ class TestGenerateInitSql:
         assert "GRANT ALL PRIVILEGES ON DATABASE repom_test TO repom;" in sql
         assert "GRANT ALL PRIVILEGES ON DATABASE repom_prod TO repom;" in sql
 
-    @patch('repom.scripts.postgresql.manage.config')
+    @patch('repom.postgres.manage.config')
     def test_custom_database_names(self, mock_config):
         """カスタム DB 名（mine_py_dev, mine_py_test, mine_py_prod）が生成されることを確認"""
         mock_config.data_path = DATA_PATH
         mock_config.postgres.database = "mine_py"  # カスタム
         mock_config.postgres.user = "mine_py"
 
-        from repom.scripts.postgresql.manage import generate_init_sql
+        from repom.postgres.manage import generate_init_sql
 
         sql = generate_init_sql()
 
@@ -210,14 +210,14 @@ class TestGenerateInitSql:
         assert "GRANT ALL PRIVILEGES ON DATABASE mine_py_test TO mine_py;" in sql
         assert "GRANT ALL PRIVILEGES ON DATABASE mine_py_prod TO mine_py;" in sql
 
-    @patch('repom.scripts.postgresql.manage.config')
+    @patch('repom.postgres.manage.config')
     def test_environment_prefixing_in_sql(self, mock_config):
         """環境別にデータベース名が正しくプレフィックスされていることを確認"""
         mock_config.data_path = DATA_PATH
         mock_config.postgres.database = "project"
         mock_config.postgres.user = "user"
 
-        from repom.scripts.postgresql.manage import generate_init_sql
+        from repom.postgres.manage import generate_init_sql
 
         sql = generate_init_sql()
 
@@ -235,9 +235,9 @@ class TestGenerateInitSql:
 class TestDockerComposeFileGeneration:
     """Compose ファイルのファイル出力テスト"""
 
-    @patch('repom.scripts.postgresql.manage.config')
-    @patch('repom.scripts.postgresql.manage.get_compose_dir')
-    @patch('repom.scripts.postgresql.manage.get_init_dir')
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.get_compose_dir')
+    @patch('repom.postgres.manage.get_init_dir')
     def test_yaml_file_is_valid(self, mock_get_init_dir, mock_get_compose_dir, mock_config, tmp_path):
         """生成される YAML ファイルが有効な形式であることを確認"""
         # Mock setup
@@ -270,7 +270,7 @@ class TestDockerComposeFileGeneration:
         mock_config.data_path = DATA_PATH
 
         # Test
-        from repom.scripts.postgresql.manage import generate_docker_compose
+        from repom.postgres.manage import generate_docker_compose
 
         generator = generate_docker_compose()
         yaml_content = generator.generate()
@@ -292,7 +292,7 @@ class TestDockerComposeFileGeneration:
 class TestPgAdminServersJson:
     """pgAdmin servers.json 設定ファイル生成のテスト"""
 
-    @patch('repom.scripts.postgresql.manage.config')
+    @patch('repom.postgres.manage.config')
     def test_generate_pgadmin_servers_json(self, mock_config):
         """servers.json 設定の生成テスト - デフォルト値"""
         # Mock setup
@@ -302,7 +302,7 @@ class TestPgAdminServersJson:
         mock_config.postgres.database = None  # デフォルト
         mock_config.postgres.container.get_container_name.return_value = "repom_postgres"
 
-        from repom.scripts.postgresql.manage import generate_pgadmin_servers_json
+        from repom.postgres.manage import generate_pgadmin_servers_json
 
         # Test
         config_dict = generate_pgadmin_servers_json()
@@ -318,7 +318,7 @@ class TestPgAdminServersJson:
         assert server["SSLMode"] == "prefer"
         assert server["MaintenanceDB"] == "repom_dev"  # デフォルト
 
-    @patch('repom.scripts.postgresql.manage.config')
+    @patch('repom.postgres.manage.config')
     def test_generate_pgadmin_servers_json_custom_config(self, mock_config):
         """servers.json 設定の生成テスト - カスタム値（CONFIG_HOOK 想定）"""
         # Mock setup - 外部プロジェクトの CONFIG_HOOK を想定
@@ -328,7 +328,7 @@ class TestPgAdminServersJson:
         mock_config.postgres.database = "mine_py"
         mock_config.postgres.container.get_container_name.return_value = "mine_py_postgres"
 
-        from repom.scripts.postgresql.manage import generate_pgadmin_servers_json
+        from repom.postgres.manage import generate_pgadmin_servers_json
 
         # Test
         config_dict = generate_pgadmin_servers_json()

@@ -14,7 +14,7 @@
 ### 現状の固定値
 
 ```yaml
-# repom/scripts/postgresql/docker-compose.yml
+# repom/postgres/docker-compose.template.yml
 services:
   postgres:
     container_name: repom_postgres  # ❌ 固定
@@ -250,7 +250,7 @@ CONFIG_HOOK=mine_py.config:hook_config
 **重要**: docker-compose.yml は `config.data_path` 配下に保存されます。
 
 ```python
-# repom/scripts/postgresql/manage.py
+# repom/postgres/manage.py
 from repom.config import config
 from repom._.docker_compose import DockerComposeGenerator, DockerService, DockerVolume
 from pathlib import Path
@@ -514,13 +514,13 @@ data/
 
 - **変更**:
   - `repom/config.py` - PostgresContainerConfig 追加
-  - `repom/scripts/postgresql/manage.py` - 基盤を使用する実装、保存先を `data/{project_name}/` に変更
+  - `repom/postgres/manage.py` - 基盤を使用する実装、保存先を `data/{project_name}/` に変更
   - `pyproject.toml` - `postgres_generate` コマンド追加
   - `.gitignore` - `data/*/docker-compose.generated.yml` と `data/*/postgresql_init/` を追加
 
 - **リネーム**:
-  - `repom/scripts/postgresql/docker-compose.yml` → `docker-compose.template.yml` (参考用として残す)
-  - `repom/scripts/postgresql/init/` → 削除（動的生成に置き換え）
+  - `repom/postgres/docker-compose.template.yml` - 参考テンプレートとして残す
+  - `repom/postgres/init.template/` - 初期化スクリプトテンプレート
 
 - **ドキュメント**:
   - `docs/guides/postgresql/postgresql_setup_guide.md` - 設定例追加

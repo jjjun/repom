@@ -53,7 +53,7 @@ elif env == 'prod':
 ### 根本原因
 
 - 最初に PostgreSQL テストを追加した際に `repom_dev` を使ってしまった
-- **確認済み**: `repom_test` データベースは既に `repom/scripts/postgresql/init/01_init_databases.sql` で作成されている
+- **確認済み**: `repom_test` データベースは既に `repom/postgres/init.template/01_init_databases.sql` で作成されている
 - 環境変数の上書きが残っているだけ
 
 ---
@@ -81,7 +81,7 @@ PostgreSQL 統合テストは **`EXEC_ENV='test'`** を使用し、**`repom_test
 
 ### ✅ 前提: `repom_test` データベースは既に存在
 
-**確認済み**: `repom/scripts/postgresql/init/01_init_databases.sql` で既に作成されている
+**確認済み**: `repom/postgres/init.template/01_init_databases.sql` で既に作成されている
 
 ```sql
 -- テスト環境用
