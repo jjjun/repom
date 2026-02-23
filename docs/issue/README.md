@@ -32,6 +32,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
+| #043 | Docker Compose プロジェクト名の分離 | 中 | 📝 設計完了、待機中 | [active/043_docker_compose_project_separation.md](active/043_docker_compose_project_separation.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください.
