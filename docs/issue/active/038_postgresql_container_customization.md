@@ -529,3 +529,73 @@ data/
 ## Related Documents
 
 - [PostgreSQL セットアップガイド](../../guides/postgresql/postgresql_setup_guide.md)
+
+## pgAdmin Integration（Phase 6 - 実装完了 ✅）
+
+pgAdmin をオプショナルな Docker サービスとして統合し、DB管理を簡素化する。
+
+### 実装状況
+
+**Phase 6.1-6.3 完了**:
+- ✅ PgAdminContainerConfig, PgAdminConfig クラス実装 (\epom/config.py\)
+- ✅ RepomConfig に pgadmin フィールド追加
+- ✅ manage.py で条件付き pgAdmin サービス生成
+- ✅ 15個の Unit tests 追加 → **660 tests 合格** (前: 645)
+- ✅ postgres_generate コマンドで動作検証完了
+
+### デフォルト（pgAdmin 無効時）
+
+\\\
+✅ Generated: data/repom/docker-compose.generated.yml
+📦 PostgreSQL Service:
+   Container: repom_postgres
+   Port: 5432
+   Volume: repom_postgres_data
+
+⚪ pgAdmin: Disabled (set config.pgadmin.container.enabled=True to enable)
+\\\
+
+### 設定例
+
+\\\python
+# カスタムプロジェクト (CONFIG_HOOK)
+class MyProjectConfig(RepomConfig):
+    def __init__(self):
+        super().__init__()
+        self.postgres.database = "myproject"
+        
+        # pgAdmin 有効化
+        self.pgadmin.container.enabled = True
+        self.pgadmin.email = "admin@myproject.local"
+        self.pgadmin.password = "secure_password"
+        self.pgadmin.container.host_port = 5051
+\\\
+
+### 生成される docker-compose.yml（pgAdmin 有効時）
+
+pgAdmin が有効な場合、以下のサービスが生成されます:
+
+\\\yaml
+services:
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: myproject_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@myproject.local
+      PGADMIN_DEFAULT_PASSWORD: secure_password
+    ports:
+      - "5051:80"
+    volumes:
+      - myproject_pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+\\\
+
+### 特徴
+
+- ✅ デフォルト無効 - 既存プロジェクト非影響
+- ✅ CONFIG_HOOK でカスタマイズ可能
+- ✅ PostgreSQL と同一設計パターン
+- ✅ depends_on で起動順序制御済み
+- ✅ プロジェクトごとに独立した pgAdmin instance
