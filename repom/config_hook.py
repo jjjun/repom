@@ -39,16 +39,13 @@ def hook_config(config: dataclass) -> dataclass:
         config.postgres.container.container_name = "repom_postgres"
         config.postgres.container.host_port = 5433
         config.postgres.port = 5433
-        config.postgres.container.volume_name = "repom_postgres_data"
         config.postgres.database = "repom"
         # pgAdmin
         config.pgadmin.container.enabled = True
         config.pgadmin.container.container_name = "repom_pgadmin"
         config.pgadmin.container.host_port = 5051
-        config.pgadmin.container.volume_name = "repom_pgadmin_data"
         # Redis
         config.redis.container.container_name = "repom_redis"
-        config.redis.container.volume_name = "repom_redis_data"
         config.redis.port = 6380
 
     return config

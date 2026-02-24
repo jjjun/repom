@@ -16,18 +16,13 @@ class PostgresContainerConfig:
     Attributes:
         container_name: コンテナ名（None の場合は repom_postgres）
         host_port: ホスト側のポート番号（デフォルト: 5432）
-        volume_name: Volume名（None の場合は repom_postgres_data）
+        volume_name: Volume名（None の場合は {container_name}_data）
         image: PostgreSQL イメージ（デフォルト: postgres:16-alpine）
 
     Example:
-        >>> container = PostgresContainerConfig(
-        ...     container_name="my_postgres",
-        ...     host_port=5433
-        ... )
-        >>> container.get_container_name()
-        'my_postgres'
+        >>> container = PostgresContainerConfig(container_name="my_postgres")
         >>> container.get_volume_name()
-        'repom_postgres_data'
+        'my_postgres_data'
     """
     container_name: Optional[str] = field(default=None)
     host_port: int = field(default=5432)
@@ -39,8 +34,8 @@ class PostgresContainerConfig:
         return self.container_name or "repom_postgres"
 
     def get_volume_name(self) -> str:
-        """Volume名を取得（デフォルト: repom_postgres_data）"""
-        return self.volume_name or "repom_postgres_data"
+        """Volume名を取得（デフォルト: {container_name}_data）"""
+        return self.volume_name or f"{self.get_container_name()}_data"
 
 
 @dataclass
@@ -72,18 +67,14 @@ class PgAdminContainerConfig:
     Attributes:
         container_name: コンテナ名（None の場合は repom_pgadmin）
         host_port: ホスト側のポート番号（デフォルト: 5050）
-        volume_name: Volume名（None の場合は repom_pgadmin_data）
+        volume_name: Volume名（None の場合は {container_name}_data）
         image: pgAdmin イメージ（デフォルト: dpage/pgadmin4:latest）
         enabled: pgAdmin サービスを有効化するか（デフォルト: False）
 
     Example:
-        >>> container = PgAdminContainerConfig(
-        ...     container_name="my_pgadmin",
-        ...     host_port=5051,
-        ...     enabled=True
-        ... )
-        >>> container.get_container_name()
-        'my_pgadmin'
+        >>> container = PgAdminContainerConfig(container_name="my_pgadmin", enabled=True)
+        >>> container.get_volume_name()
+        'my_pgadmin_data'
     """
     container_name: Optional[str] = field(default=None)
     host_port: int = field(default=5050)
@@ -96,8 +87,8 @@ class PgAdminContainerConfig:
         return self.container_name or "repom_pgadmin"
 
     def get_volume_name(self) -> str:
-        """Volume名を取得（デフォルト: repom_pgadmin_data）"""
-        return self.volume_name or "repom_pgadmin_data"
+        """Volume名を取得（デフォルト: {container_name}_data）"""
+        return self.volume_name or f"{self.get_container_name()}_data"
 
 
 @dataclass
@@ -121,18 +112,13 @@ class RedisContainerConfig:
     Attributes:
         container_name: コンテナ名（None の場合は repom_redis）
         host_port: ホスト側のポート番号（デフォルト: 6379）
-        volume_name: Volume名（None の場合は repom_redis_data）
+        volume_name: Volume名（None の場合は {container_name}_data）
         image: Redis イメージ（デフォルト: redis:7-alpine）
 
     Example:
-        >>> container = RedisContainerConfig(
-        ...     container_name="my_redis",
-        ...     host_port=6380
-        ... )
-        >>> container.get_container_name()
-        'my_redis'
+        >>> container = RedisContainerConfig(container_name="my_redis")
         >>> container.get_volume_name()
-        'repom_redis_data'
+        'my_redis_data'
     """
     container_name: Optional[str] = field(default=None)
     host_port: int = field(default=6379)
@@ -144,8 +130,8 @@ class RedisContainerConfig:
         return self.container_name or "repom_redis"
 
     def get_volume_name(self) -> str:
-        """Volume名を取得（デフォルト: repom_redis_data）"""
-        return self.volume_name or "repom_redis_data"
+        """Volume名を取得（デフォルト: {container_name}_data）"""
+        return self.volume_name or f"{self.get_container_name()}_data"
 
 
 @dataclass

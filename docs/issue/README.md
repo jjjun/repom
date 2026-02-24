@@ -42,6 +42,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #046 | volume_name のデフォルト値を container_name から自動生成 | 2026-02-24 | get_volume_name() を修正し volume_name が None の場合は {container_name}_data を返すように変更、3 ContainerConfig クラス対応、config_hook.py から冗長な volume_name 設定削除、58 テストパス | [completed/046_volume_name_derived_from_container_name.md](completed/046_volume_name_derived_from_container_name.md) |
 | #045 | Docker Compose プロジェクト名を container_name ベースに簡素化 | 2026-02-24 | config.project_name 廃止、get_project_name() が get_container_name() を返すように変更、orphan warning 解消、Docker Desktop GUI での個別管理可能、52 テストパス、ドキュメント更新 | [completed/045_service_specific_compose_project_names.md](completed/045_service_specific_compose_project_names.md) |
 | #044 | Compose プロジェクト名の config 対応 | 2026-02-24 | Config に project_name プロパティ追加（**Issue #045 で廃止**）、Docker Compose に -p オプション実装 | [completed/044_compose_project_name_config.md](completed/044_compose_project_name_config.md) |
 | #043 | Docker Compose プロジェクト名の分離 | 2026-02-23 | 分離プロジェクト構造実装、redis/manage.py + postgres/manage.py の get_compose_dir() 修正（各サービス用サブディレクトリ作成）、5 単体テスト追加、orphan warning 削除、Docker Desktop UI でプロジェクト分離表示、784 tests passing（779 → 784）、README.md Docker 構造ドキュメント追加 | [completed/043_docker_compose_project_separation.md](completed/043_docker_compose_project_separation.md) |
