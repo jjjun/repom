@@ -32,8 +32,8 @@ def hook_config(config: dataclass) -> dataclass:
         if os.getenv('EXEC_ENV') == 'test':
             config.db_type = 'sqlite'
         else:
-            # config.db_type = 'postgresql'
-            config.db_type = 'sqlite'
+            config.db_type = 'postgres'
+            # config.db_type = 'sqlite'
 
         # PostgreSQL
         config.postgres.container.container_name = "repom_postgres"

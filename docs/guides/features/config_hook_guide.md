@@ -56,7 +56,9 @@ class FastDomainConfig(RepomConfig):
     def __init__(self):
         super().__init__()
         
-        # コンテナ名を設定（Docker Compose プロジェクト名に使われる）
+        # コンテナ名を設定
+        # container_name が Docker Compose プロジェクト名としても使われる
+        # volume_name は自動的に {container_name}_data になる
         self.postgres.container.container_name = "fast_domain_postgres"
         self.redis.container.container_name = "fast_domain_redis"
         
@@ -77,10 +79,10 @@ CONFIG_HOOK=fast_domain.config:hook_config
 ```
 
 この設定により：
-- Docker Compose プロジェクト名: `fast_domain` (デフォルトは `repom`)
-- PostgreSQL コンテナ: `fast_domain-postgres-1` (ポート 5434)
-- Redis コンテナ: `fast_domain-redis-1` (ポート 6381)
-- pgAdmin コンテナ: `fast_domain-pgadmin-1`
+- PostgreSQL コンテナ: `fast_domain_postgres` (ポート 5434)
+- PostgreSQL Volume: `fast_domain_postgres_data` (自動生成)
+- Redis コンテナ: `fast_domain_redis` (ポート 6381)
+- Redis Volume: `fast_domain_redis_data` (自動生成)
 
 複数プロジェクトが同時起動でき、コンテナの衝突が起きません。
 

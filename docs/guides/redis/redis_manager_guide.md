@@ -320,15 +320,15 @@ from typing import Optional
 @dataclass
 class RedisContainerConfig:
     """Redis コンテナ設定"""
-    container_name: str = "repom_redis"
-    volume_name: str = "repom_redis_data"
+    container_name: Optional[str] = None
+    volume_name: Optional[str] = None  # None の場合は {container_name}_data
     image: str = "redis:7-alpine"
     
     def get_container_name(self) -> str:
-        return self.container_name
+        return self.container_name or "repom_redis"
     
     def get_volume_name(self) -> str:
-        return self.volume_name
+        return self.volume_name or f"{self.get_container_name()}_data"
 
 @dataclass
 class RedisConfig:
@@ -356,7 +356,7 @@ print(config.redis.db)             # 0
 
 # コンテナ設定を取得
 print(config.redis.container.get_container_name())  # repom_redis
-print(config.redis.container.get_volume_name())      # repom_redis_data
+print(config.redis.container.get_volume_name())      # repom_redis_data (container_name から自動生成)
 print(config.redis.container.image)                  # redis:7-alpine
 ```
 
@@ -378,7 +378,7 @@ class MinePyConfig(RepomConfig):
             db=1,
             container=RedisContainerConfig(
                 container_name="mine_py_redis",
-                volume_name="mine_py_redis_data",
+                # volume_name は省略可能（自動的に mine_py_redis_data になる）
                 image="redis:7-alpine"
             )
         )
@@ -395,9 +395,9 @@ Issue #042 で実装された `RedisConfig` と `RedisContainerConfig` クラス
 Docker コンテナに関する設定を管理します：
 
 ```python
-config.redis.container.container_name   # "repom_redis"
-config.redis.container.volume_name      # "repom_redis_data"
-config.redis.container.image            # "redis:7-alpine"
+config.redis.container.get_container_name()  # "repom_redis"
+config.redis.container.get_volume_name()   # "repom_redis_data" (container_name から自動生成)
+config.redis.container.image               # "redis:7-alpine"
 ```
 
 **メソッド**:
