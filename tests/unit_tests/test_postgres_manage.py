@@ -181,10 +181,13 @@ class TestGenerateInitSql:
 
         sql = generate_init_sql()
 
-        # 全環境の CREATE DATABASE が含まれる
-        assert "CREATE DATABASE repom;" in sql
-        assert "CREATE DATABASE repom_dev;" in sql
-        assert "CREATE DATABASE repom_test;" in sql
+        # 全環境の CREATE DATABASE が含まれる（\gexec パターン）
+        assert "'CREATE DATABASE repom'" in sql
+        assert "'CREATE DATABASE repom_dev'" in sql
+        assert "'CREATE DATABASE repom_test'" in sql
+        # IF NOT EXISTS パターンが含まれる
+        assert "WHERE NOT EXISTS" in sql
+        assert "pg_database" in sql
         # GRANT もすべての DB に対して含まれる
         assert "GRANT ALL PRIVILEGES ON DATABASE repom TO repom;" in sql
         assert "GRANT ALL PRIVILEGES ON DATABASE repom_dev TO repom;" in sql
@@ -201,10 +204,10 @@ class TestGenerateInitSql:
 
         sql = generate_init_sql()
 
-        # 全環境の CREATE DATABASE が含まれる
-        assert "CREATE DATABASE mine_py;" in sql
-        assert "CREATE DATABASE mine_py_dev;" in sql
-        assert "CREATE DATABASE mine_py_test;" in sql
+        # 全環境の CREATE DATABASE が含まれる（\gexec パターン）
+        assert "'CREATE DATABASE mine_py'" in sql
+        assert "'CREATE DATABASE mine_py_dev'" in sql
+        assert "'CREATE DATABASE mine_py_test'" in sql
         # GRANT もすべての DB に対して含まれる
         assert "GRANT ALL PRIVILEGES ON DATABASE mine_py TO mine_py;" in sql
         assert "GRANT ALL PRIVILEGES ON DATABASE mine_py_dev TO mine_py;" in sql
@@ -221,10 +224,10 @@ class TestGenerateInitSql:
 
         sql = generate_init_sql()
 
-        # 全環境の CREATE DATABASE が含まれる
-        assert "CREATE DATABASE project;" in sql
-        assert "CREATE DATABASE project_dev;" in sql
-        assert "CREATE DATABASE project_test;" in sql
+        # 全環境の CREATE DATABASE が含まれる（\gexec パターン）
+        assert "'CREATE DATABASE project'" in sql
+        assert "'CREATE DATABASE project_dev'" in sql
+        assert "'CREATE DATABASE project_test'" in sql
 
         # 全環境に対して GRANT が発行される
         assert "GRANT ALL PRIVILEGES ON DATABASE project TO user;" in sql

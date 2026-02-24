@@ -164,6 +164,7 @@ def generate_docker_compose() -> DockerComposeGenerator:
             "interval": "5s",
             "timeout": "5s",
             "retries": 5,
+            "start_period": "30s",  # 初期化完了までの猶予時間
         }
     )
 
@@ -212,14 +213,21 @@ def generate_init_sql() -> str:
 
     config.db_name でカスタマイズ可能（環境サフィックス付与前のベース名）
     デフォルト: repom → repom, repom_dev, repom_test を作成
+
+    Note:
+        POSTGRES_USER と同名の DB は Docker が自動作成するため、
+        \\gexec パターンで重複エラーを回避します。
+        \\gexec は psql 固有の機能で、SELECT の結果を SQL として実行します。
     """
     base = config.db_name
     user = config.postgres.user
 
     return f"""-- {base} project databases
-CREATE DATABASE {base};
-CREATE DATABASE {base}_dev;
-CREATE DATABASE {base}_test;
+-- Use \\gexec pattern to handle "IF NOT EXISTS" (PostgreSQL doesn't have CREATE DATABASE IF NOT EXISTS)
+
+SELECT 'CREATE DATABASE {base}' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{base}')\\gexec
+SELECT 'CREATE DATABASE {base}_dev' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{base}_dev')\\gexec
+SELECT 'CREATE DATABASE {base}_test' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{base}_test')\\gexec
 
 GRANT ALL PRIVILEGES ON DATABASE {base} TO {user};
 GRANT ALL PRIVILEGES ON DATABASE {base}_dev TO {user};
