@@ -123,7 +123,7 @@ class TestRedisManagerConnectionInfo:
         captured = capsys.readouterr()
         assert "Redis Connection" in captured.out
         assert "localhost" in captured.out
-        assert "6379" in captured.out or str(manager.config.redis_port) in captured.out
+        assert str(manager.config.redis.port) in captured.out
 
     def test_print_connection_info_contains_cli_command(self, capsys):
         """Test print_connection_info shows CLI command"""
@@ -186,6 +186,30 @@ class TestRedisManagerInheritance:
         assert hasattr(manager, 'remove')
         assert hasattr(manager, 'status')
         assert hasattr(manager, 'is_running')
+
+    def test_redis_manager_has_get_project_name(self):
+        """Test RedisManager has get_project_name method"""
+        manager = RedisManager()
+        assert hasattr(manager, 'get_project_name')
+        assert callable(manager.get_project_name)
+
+    def test_redis_manager_get_project_name_returns_config_value(self):
+        """Test get_project_name returns config.project_name"""
+        manager = RedisManager()
+        project_name = manager.get_project_name()
+
+        # Should return config's project_name (defaults to package_name or "default")
+        assert isinstance(project_name, str)
+        assert len(project_name) > 0
+        assert project_name == manager.config.project_name
+
+    def test_redis_manager_get_project_name_respects_override(self):
+        """Test get_project_name respects config.project_name override"""
+        manager = RedisManager()
+        manager.config.project_name = "custom_redis_project"
+
+        project_name = manager.get_project_name()
+        assert project_name == "custom_redis_project"
 
 
 class TestRedisManagerCLI:
@@ -251,17 +275,22 @@ class TestRedisDockerCompose:
 
     def test_docker_compose_yaml_content(self):
         """Test docker-compose YAML is properly formatted"""
-        from repom.redis.manage import generate_docker_compose
+        from repom.redis.manage import generate_docker_compose, RedisManager
 
         generator = generate_docker_compose()
         yaml_content = generator.generate()
+        
+        # Get config through RedisManager to use actual configured values
+        manager = RedisManager()
+        config = manager.config
 
         assert isinstance(yaml_content, str)
         assert "version:" in yaml_content
         assert "services:" in yaml_content
         assert "redis:" in yaml_content
         assert "repom_redis" in yaml_content
-        assert "6379:6379" in yaml_content
+        # Check port mapping with actual config value (host_port:container_port)
+        assert f"{config.redis.port}:6379" in yaml_content
         assert "healthcheck:" in yaml_content
         assert "redis-cli" in yaml_content
 

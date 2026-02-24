@@ -564,6 +564,61 @@ redis-cli -h <host> -p <port>
 
 ---
 
+## 複数プロジェクトでの並行開発（CONFIG_HOOK）
+
+repom をベースとする複数のプロジェクト（mine-py, fast-domain など）を同時に開発する場合、CONFIG_HOOK を使ってプロジェクトごとに独立した Redis 環境を構築できます。
+
+### 設定例: fast-domain プロジェクト
+
+```python
+# fast_domain/config.py
+from repom.config import RepomConfig
+
+def hook_config(config: RepomConfig) -> RepomConfig:
+    # **重要**: Docker Compose プロジェクト名を設定（コンテナ名の prefix）
+    config.project_name = "fast_domain"
+    
+    # ポートをずらす（repom: 6379, fast_domain: 6381）
+    config.redis.port = 6381
+    
+    return config
+```
+
+```bash
+# fast_domain/.env
+CONFIG_HOOK=fast_domain.config:hook_config
+```
+
+**重要**: `config.project_name` を設定することで、Docker Compose のプロジェクト名が変わり、コンテナ名の衝突が防げます。
+
+### 起動
+
+```powershell
+# repom プロジェクト（project_name = "repom"）
+cd repom
+poetry run redis_start
+# → Container: repom-redis-1, Port: 6379
+
+# fast-domain プロジェクト（project_name = "fast_domain"）同時起動可能
+cd fast-domain
+poetry run redis_start
+# → Container: fast_domain-redis-1, Port: 6381
+```
+
+### 接続
+
+```python
+# repom プロジェクト
+import redis
+r = redis.Redis(host='localhost', port=6379)
+
+# fast-domain プロジェクト
+import redis
+r = redis.Redis(host='localhost', port=6381)
+```
+
+---
+
 ## PostgreSQL との比較
 
 | 項目 | PostgreSQL | Redis |

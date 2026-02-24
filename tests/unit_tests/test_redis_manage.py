@@ -117,7 +117,8 @@ class TestConfigIntegration:
     def test_redis_config_has_port(self):
         """redis config に port フィールドがある"""
         assert hasattr(config.redis, 'port')
-        assert config.redis.port == 6379  # Default value
+        # repom パッケージでは config_hook で 6380 に設定されている
+        assert config.redis.port == 6380
 
     def test_redis_container_config_has_methods(self):
         """redis container config に必要なメソッドがある"""

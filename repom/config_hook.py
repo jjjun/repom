@@ -1,4 +1,5 @@
 ﻿from dataclasses import dataclass
+from logging import config
 from pathlib import Path
 import os
 
@@ -21,19 +22,33 @@ def hook_config(config: dataclass) -> dataclass:
 
     config.root_path = str(root_path)
 
-    # モデルの自動登録設定
-    config.model_locations = ['repom.examples.models']
-    config.allowed_package_prefixes = {'repom.'}
+    if config.package_name == 'repom':
+        # モデルの自動登録設定
+        config.model_locations = ['repom.examples.models']
+        config.allowed_package_prefixes = {'repom.'}
 
-    # pgAdmin 統合テスト（実装確認用）
-    config.pgadmin.container.enabled = True
+        # データベースタイプの設定
+        # テスト環境では SQLite（高速）、それ以外は PostgreSQL
+        if os.getenv('EXEC_ENV') == 'test':
+            config.db_type = 'sqlite'
+        else:
+            # config.db_type = 'postgresql'
+            config.db_type = 'sqlite'
 
-    # データベースタイプの設定
-    # テスト環境では SQLite（高速）、それ以外は PostgreSQL
-    if os.getenv('EXEC_ENV') == 'test':
-        config.db_type = 'sqlite'
-    else:
-        # config.db_type = 'postgresql'
-        config.db_type = 'sqlite'
+        # PostgreSQL
+        config.postgres.container.container_name = "repom_postgres"
+        config.postgres.container.host_port = 5433
+        config.postgres.port = 5433
+        config.postgres.container.volume_name = "repom_postgres_data"
+        config.postgres.database = "repom"
+        # pgAdmin
+        config.pgadmin.container.enabled = True
+        config.pgadmin.container.container_name = "repom_pgadmin"
+        config.pgadmin.container.host_port = 5051
+        config.pgadmin.container.volume_name = "repom_pgadmin_data"
+        # Redis
+        config.redis.container.container_name = "repom_redis"
+        config.redis.container.volume_name = "repom_redis_data"
+        config.redis.port = 6380
 
     return config

@@ -42,6 +42,7 @@ class DockerCommandExecutor:
         compose_file: Path,
         cwd: Optional[Path] = None,
         capture_output: bool = False,
+        project_name: Optional[str] = None,
     ) -> Optional[str]:
         """docker-compose コマンドを実行
 
@@ -50,6 +51,7 @@ class DockerCommandExecutor:
             compose_file: docker-compose.yml のパス
             cwd: 作業ディレクトリ（デフォルト: compose_file の親）
             capture_output: True なら stdout を返す
+            project_name: Docker Compose プロジェクト名（-p オプション）
 
         Returns:
             capture_output=True の場合は stdout、否則 None
@@ -61,7 +63,11 @@ class DockerCommandExecutor:
         if cwd is None:
             cwd = compose_file.parent
 
-        cmd = ["docker-compose", "-f", str(compose_file)] + command.split()
+        cmd = ["docker-compose"]
+        if project_name:
+            cmd.extend(["-p", project_name])
+        cmd.extend(["-f", str(compose_file)])
+        cmd.extend(command.split())
 
         try:
             result = subprocess.run(
@@ -263,6 +269,19 @@ class DockerManager(ABC):
         """
         pass
 
+    def get_project_name(self) -> str:
+        """Docker Compose プロジェクト名を取得
+
+        デフォルト実装: config.project_name を返す
+        サブクラスでオーバーライド可能
+
+        Returns:
+            プロジェクト名
+        """
+        if hasattr(self, 'config') and hasattr(self.config, 'project_name'):
+            return self.config.project_name
+        return "default"
+
     def start(self) -> None:
         """コンテナを起動
 
@@ -283,7 +302,8 @@ class DockerManager(ABC):
 
         try:
             DockerCommandExecutor.run_docker_compose(
-                "up -d", compose_file, cwd=compose_file.parent
+                "up -d", compose_file, cwd=compose_file.parent,
+                project_name=self.get_project_name()
             )
         except subprocess.CalledProcessError as e:
             print_message("❌", f"Failed to start container: {e}")
@@ -321,7 +341,8 @@ class DockerManager(ABC):
 
         try:
             DockerCommandExecutor.run_docker_compose(
-                "stop", compose_file, cwd=compose_file.parent
+                "stop", compose_file, cwd=compose_file.parent,
+                project_name=self.get_project_name()
             )
             print_message("✅", f"{self.get_container_name()} stopped")
         except subprocess.CalledProcessError as e:
@@ -350,7 +371,8 @@ class DockerManager(ABC):
 
         try:
             DockerCommandExecutor.run_docker_compose(
-                "down -v", compose_file, cwd=compose_file.parent
+                "down -v", compose_file, cwd=compose_file.parent,
+                project_name=self.get_project_name()
             )
             print_message("✅", f"{self.get_container_name()} removed")
         except subprocess.CalledProcessError as e:

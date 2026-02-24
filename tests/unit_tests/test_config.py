@@ -153,3 +153,41 @@ def test_db_url_override_takes_precedence(config_factory):
     custom_url = "sqlite:////tmp/custom.sqlite3"
     config.db_url = custom_url
     assert config.db_url == custom_url
+
+
+# Project Name Tests
+
+
+def test_project_name_defaults_to_package_name(config_factory):
+    """``project_name`` defaults to ``package_name`` when not explicitly set."""
+    config = config_factory()
+    # RepomConfig sets package_name to "repom"
+    assert config.project_name == "repom"
+
+
+def test_project_name_falls_back_to_default(tmp_path):
+    """``project_name`` falls back to "default" when ``package_name`` is None."""
+    from repom._.config_hook import Config
+
+    config = Config(root_path=str(tmp_path))
+    # package_name is None by default in base Config
+    assert config.package_name is None
+    assert config.project_name == "default"
+
+
+def test_project_name_is_overridable(config_factory):
+    """``project_name`` can be explicitly set."""
+    config = config_factory()
+
+    custom_name = "my_project"
+    config.project_name = custom_name
+    assert config.project_name == custom_name
+
+
+def test_project_name_returns_custom_after_override(config_factory):
+    """``project_name`` returns overridden value even if ``package_name`` changes."""
+    config = config_factory()
+
+    config.project_name = "custom_project"
+    # Even if package_name exists, custom project_name takes precedence
+    assert config.project_name == "custom_project"
