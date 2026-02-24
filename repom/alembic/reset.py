@@ -20,11 +20,18 @@ class AlembicReset:
         engine = create_engine(self.db_url)
 
         with engine.connect() as conn:
-            # テーブルが存在するか確認
-            result = conn.execute(text(
-                "SELECT name FROM sqlite_master "
-                "WHERE type='table' AND name='alembic_version'"
-            ))
+            # データベースタイプに応じたテーブル存在チェック
+            if self.db_url.startswith('postgresql'):
+                result = conn.execute(text(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_name = 'alembic_version'"
+                ))
+            else:
+                # SQLite
+                result = conn.execute(text(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='table' AND name='alembic_version'"
+                ))
 
             if result.fetchone():
                 conn.execute(text("DROP TABLE alembic_version"))
