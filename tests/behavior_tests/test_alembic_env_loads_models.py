@@ -177,9 +177,20 @@ def test_alembic_revision_autogenerate_works():
     - autogenerate はモデルを読み込んでスキーマを比較する
     - load_models() が正しく動作しないと autogenerate も失敗する
     - 生成されるマイグレーションファイルの品質を保証できる
+
+    Note:
+        SQLITE_USE_FILE_DB=1 を使用（test 環境のデフォルトは in-memory SQLite のため、
+        subprocess 間でDB状態が保持されない）
     """
+    import os
+
     project_root = Path(__file__).parent.parent.parent
     versions_dir = project_root / "alembic" / "versions"
+
+    # test 環境でファイルベースDB を使用（in-memory は subprocess 間で状態が保持されない）
+    test_env = os.environ.copy()
+    test_env["EXEC_ENV"] = "test"
+    test_env["SQLITE_USE_FILE_DB"] = "1"
 
     # 既存のマイグレーションファイルを一時バックアップ
     temp_backup_dir = tempfile.mkdtemp()
@@ -190,7 +201,8 @@ def test_alembic_revision_autogenerate_works():
             cwd=project_root,
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
+            env=test_env
         )
 
         assert upgrade_result.returncode == 0, (
@@ -215,7 +227,8 @@ def test_alembic_revision_autogenerate_works():
             cwd=project_root,
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
+            env=test_env
         )
 
         # コマンドが成功すること
