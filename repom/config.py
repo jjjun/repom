@@ -414,7 +414,7 @@ class RepomConfig(Config):
     @property
     def db_backup_path(self) -> Optional[str]:
         """バックアップディレクトリ - DB タイプ別にサブディレクトリ作成
-        
+
         Returns:
             - SQLite: data_path/backups/sqlite
             - PostgreSQL: data_path/backups/postgres
