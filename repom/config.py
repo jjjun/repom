@@ -174,9 +174,10 @@ class SqliteConfig:
 
     def get_default_db_file(self, exec_env: str) -> str:
         """Get default SQLite DB file name by environment."""
+        prefix = self._config.db_name if self._config else "db"
         if exec_env in ("test", "dev"):
-            return f"db.{exec_env}.sqlite3"
-        return "db.sqlite3"
+            return f"{prefix}_{exec_env}.sqlite3"
+        return f"{prefix}.sqlite3"
 
     @property
     def db_file_path(self) -> Optional[str]:
@@ -206,6 +207,9 @@ class RepomConfig(Config):
 
     # データベースタイプ選択
     _db_type: Optional[str] = field(default=None, init=False, repr=False)
+
+    # DB名のベース（環境サフィックス付与前）
+    _db_name: Optional[str] = field(default=None, init=False, repr=False)
 
     # db接続用の文字列 (カスタマイズ用)
     _db_url: Optional[str] = field(default=None, init=False, repr=False)
@@ -270,6 +274,31 @@ class RepomConfig(Config):
         self._db_type = value
 
     @property
+    def db_name(self) -> str:
+        """DB名のベース（デフォルト: repom）
+
+        PostgreSQL と SQLite の両方で使用されます:
+        - PostgreSQL: {db_name}_dev, {db_name}_test, {db_name}
+        - SQLite: {db_name}_dev.sqlite3, {db_name}_test.sqlite3, {db_name}.sqlite3
+
+        使用例:
+            # CONFIG_HOOK で設定
+            def hook_config(config):
+                config.db_name = 'mine_py'
+                return config
+
+            # 結果:
+            # dev  => mine_py_dev (PostgreSQL) / mine_py_dev.sqlite3 (SQLite)
+            # test => mine_py_test / mine_py_test.sqlite3
+            # prod => mine_py / mine_py.sqlite3
+        """
+        return self._db_name or "repom"
+
+    @db_name.setter
+    def db_name(self, value: str):
+        self._db_name = value
+
+    @property
     def postgres_db(self) -> str:
         """PostgreSQL データベース名（環境別）
 
@@ -292,7 +321,7 @@ class RepomConfig(Config):
         if self.postgres.database is not None:
             return self.postgres.database
 
-        base = 'repom'
+        base = self.db_name
         env = self.exec_env
 
         if env == 'test':

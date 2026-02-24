@@ -82,7 +82,8 @@ class PostgresManager(dm.DockerManager):
         print(f"  Port: {self.config.postgres.container.host_port}")
         print(f"  User: {self.config.postgres.user}")
         print(f"  Password: {self.config.postgres.password}")
-        print(f"  Databases: repom_dev, repom_test, repom_prod")
+        db_name = self.config.db_name
+        print(f"  Databases: {db_name}, {db_name}_dev, {db_name}_test")
 
         # pgAdmin 情報を出力（有効な場合のみ）
         if self.config.pgadmin.container.enabled:
@@ -117,8 +118,7 @@ def generate_pgadmin_servers_json() -> dict:
     Returns:
         pgAdmin servers.json の内容（dict）
     """
-    base_db = config.postgres.database or "repom"
-    db_dev = f"{base_db}_dev"
+    db_dev = f"{config.db_name}_dev"
 
     return {
         "Servers": {
@@ -210,21 +210,20 @@ def generate_docker_compose() -> DockerComposeGenerator:
 def generate_init_sql() -> str:
     """環境別の DB 作成スクリプトを生成
 
-    config.postgres.database でカスタマイズ可能（環境プレフィックスなしのベース名）
-    デフォルト: repom → repom_dev, repom_test, repom_prod を作成
+    config.db_name でカスタマイズ可能（環境サフィックス付与前のベース名）
+    デフォルト: repom → repom, repom_dev, repom_test を作成
     """
-    # ベース名を取得（環境プレフィックスなし）
-    base = config.postgres.database or "repom"
+    base = config.db_name
     user = config.postgres.user
 
     return f"""-- {base} project databases
+CREATE DATABASE {base};
 CREATE DATABASE {base}_dev;
 CREATE DATABASE {base}_test;
-CREATE DATABASE {base}_prod;
 
+GRANT ALL PRIVILEGES ON DATABASE {base} TO {user};
 GRANT ALL PRIVILEGES ON DATABASE {base}_dev TO {user};
 GRANT ALL PRIVILEGES ON DATABASE {base}_test TO {user};
-GRANT ALL PRIVILEGES ON DATABASE {base}_prod TO {user};
 """
 
 

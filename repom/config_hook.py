@@ -39,7 +39,6 @@ def hook_config(config: dataclass) -> dataclass:
         config.postgres.container.container_name = "repom_postgres"
         config.postgres.container.host_port = 5433
         config.postgres.port = 5433
-        config.postgres.database = "repom"
         # pgAdmin
         config.pgadmin.container.enabled = True
         config.pgadmin.container.container_name = "repom_pgadmin"

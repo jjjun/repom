@@ -172,9 +172,9 @@ class TestGenerateInitSql:
 
     @patch('repom.postgres.manage.config')
     def test_default_database_names(self, mock_config):
-        """デフォルトの DB 名（repom_dev, repom_test, repom_prod）が生成されることを確認"""
+        """デフォルトの DB 名（repom, repom_dev, repom_test）が生成されることを確認"""
         mock_config.data_path = DATA_PATH
-        mock_config.postgres.database = None  # デフォルト
+        mock_config.db_name = "repom"  # db_name を使用
         mock_config.postgres.user = "repom"
 
         from repom.postgres.manage import generate_init_sql
@@ -182,19 +182,19 @@ class TestGenerateInitSql:
         sql = generate_init_sql()
 
         # 全環境の CREATE DATABASE が含まれる
+        assert "CREATE DATABASE repom;" in sql
         assert "CREATE DATABASE repom_dev;" in sql
         assert "CREATE DATABASE repom_test;" in sql
-        assert "CREATE DATABASE repom_prod;" in sql
         # GRANT もすべての DB に対して含まれる
+        assert "GRANT ALL PRIVILEGES ON DATABASE repom TO repom;" in sql
         assert "GRANT ALL PRIVILEGES ON DATABASE repom_dev TO repom;" in sql
         assert "GRANT ALL PRIVILEGES ON DATABASE repom_test TO repom;" in sql
-        assert "GRANT ALL PRIVILEGES ON DATABASE repom_prod TO repom;" in sql
 
     @patch('repom.postgres.manage.config')
     def test_custom_database_names(self, mock_config):
-        """カスタム DB 名（mine_py_dev, mine_py_test, mine_py_prod）が生成されることを確認"""
+        """カスタム DB 名（mine_py, mine_py_dev, mine_py_test）が生成されることを確認"""
         mock_config.data_path = DATA_PATH
-        mock_config.postgres.database = "mine_py"  # カスタム
+        mock_config.db_name = "mine_py"  # db_name を使用
         mock_config.postgres.user = "mine_py"
 
         from repom.postgres.manage import generate_init_sql
@@ -202,19 +202,19 @@ class TestGenerateInitSql:
         sql = generate_init_sql()
 
         # 全環境の CREATE DATABASE が含まれる
+        assert "CREATE DATABASE mine_py;" in sql
         assert "CREATE DATABASE mine_py_dev;" in sql
         assert "CREATE DATABASE mine_py_test;" in sql
-        assert "CREATE DATABASE mine_py_prod;" in sql
         # GRANT もすべての DB に対して含まれる
+        assert "GRANT ALL PRIVILEGES ON DATABASE mine_py TO mine_py;" in sql
         assert "GRANT ALL PRIVILEGES ON DATABASE mine_py_dev TO mine_py;" in sql
         assert "GRANT ALL PRIVILEGES ON DATABASE mine_py_test TO mine_py;" in sql
-        assert "GRANT ALL PRIVILEGES ON DATABASE mine_py_prod TO mine_py;" in sql
 
     @patch('repom.postgres.manage.config')
     def test_environment_prefixing_in_sql(self, mock_config):
         """環境別にデータベース名が正しくプレフィックスされていることを確認"""
         mock_config.data_path = DATA_PATH
-        mock_config.postgres.database = "project"
+        mock_config.db_name = "project"  # db_name を使用
         mock_config.postgres.user = "user"
 
         from repom.postgres.manage import generate_init_sql
@@ -222,14 +222,14 @@ class TestGenerateInitSql:
         sql = generate_init_sql()
 
         # 全環境の CREATE DATABASE が含まれる
+        assert "CREATE DATABASE project;" in sql
         assert "CREATE DATABASE project_dev;" in sql
         assert "CREATE DATABASE project_test;" in sql
-        assert "CREATE DATABASE project_prod;" in sql
 
         # 全環境に対して GRANT が発行される
+        assert "GRANT ALL PRIVILEGES ON DATABASE project TO user;" in sql
         assert "GRANT ALL PRIVILEGES ON DATABASE project_dev TO user;" in sql
         assert "GRANT ALL PRIVILEGES ON DATABASE project_test TO user;" in sql
-        assert "GRANT ALL PRIVILEGES ON DATABASE project_prod TO user;" in sql
 
 
 class TestDockerComposeFileGeneration:
@@ -299,7 +299,7 @@ class TestPgAdminServersJson:
         mock_config.data_path = DATA_PATH
         mock_config.postgres.user = "repom"
         mock_config.postgres.password = "repom_dev"
-        mock_config.postgres.database = None  # デフォルト
+        mock_config.db_name = "repom"  # db_name を使用
         mock_config.postgres.container.get_container_name.return_value = "repom_postgres"
 
         from repom.postgres.manage import generate_pgadmin_servers_json
@@ -325,7 +325,7 @@ class TestPgAdminServersJson:
         mock_config.data_path = DATA_PATH
         mock_config.postgres.user = "mine_py"
         mock_config.postgres.password = "mine_py_dev"
-        mock_config.postgres.database = "mine_py"
+        mock_config.db_name = "mine_py"  # db_name を使用
         mock_config.postgres.container.get_container_name.return_value = "mine_py_postgres"
 
         from repom.postgres.manage import generate_pgadmin_servers_json

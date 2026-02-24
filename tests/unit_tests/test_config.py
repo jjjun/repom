@@ -39,9 +39,9 @@ def test_db_path_defaults_to_data_path(config_factory, tmp_path):
 @pytest.mark.parametrize(
     ("exec_env", "expected"),
     [
-        ("test", "db.test.sqlite3"),
-        ("dev", "db.dev.sqlite3"),
-        ("prod", "db.sqlite3"),
+        ("test", "repom_test.sqlite3"),
+        ("dev", "repom_dev.sqlite3"),
+        ("prod", "repom.sqlite3"),
     ],
 )
 def test_db_file_defaults_follow_exec_env(config_factory, exec_env, expected):
@@ -153,3 +153,64 @@ def test_db_url_override_takes_precedence(config_factory):
     custom_url = "sqlite:////tmp/custom.sqlite3"
     config.db_url = custom_url
     assert config.db_url == custom_url
+
+
+# =============================================================================
+# db_name tests
+# =============================================================================
+
+
+def test_db_name_default(config_factory):
+    """``db_name`` defaults to 'repom'."""
+    config = config_factory()
+    assert config.db_name == "repom"
+
+
+def test_db_name_is_settable(config_factory):
+    """``db_name`` can be explicitly set."""
+    config = config_factory()
+    config.db_name = "myapp"
+    assert config.db_name == "myapp"
+
+
+def test_postgres_db_uses_db_name(config_factory):
+    """``postgres_db`` uses ``db_name`` as base."""
+    config = config_factory(exec_env="dev")
+    config.db_name = "myapp"
+    assert config.postgres_db == "myapp_dev"
+
+    config_test = config_factory(exec_env="test")
+    config_test.db_name = "myapp"
+    assert config_test.postgres_db == "myapp_test"
+
+    config_prod = config_factory(exec_env="prod")
+    config_prod.db_name = "myapp"
+    assert config_prod.postgres_db == "myapp"
+
+
+def test_postgres_database_overrides_db_name(config_factory):
+    """``postgres.database`` takes precedence over ``db_name``."""
+    config = config_factory(exec_env="dev")
+    config.db_name = "myapp"
+    config.postgres.database = "custom_db"
+    assert config.postgres_db == "custom_db"
+
+
+def test_sqlite_db_file_uses_db_name(config_factory):
+    """SQLite db_file uses ``db_name`` as prefix."""
+    config = config_factory(exec_env="dev")
+    config.db_name = "myapp"
+    # Re-initialize to apply db_name to sqlite config
+    config.sqlite.db_file = None
+    config.sqlite.bind(config)
+    expected_file = "myapp_dev.sqlite3"
+    assert config.sqlite.get_default_db_file("dev") == expected_file
+
+
+def test_sqlite_db_file_prod_uses_db_name(config_factory):
+    """SQLite db_file for prod uses ``db_name`` without suffix."""
+    config = config_factory(exec_env="prod")
+    config.db_name = "myapp"
+    config.sqlite.bind(config)
+    expected_file = "myapp.sqlite3"
+    assert config.sqlite.get_default_db_file("prod") == expected_file
