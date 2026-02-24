@@ -170,6 +170,7 @@ class DockerComposeGenerator:
             lines.extend(["", "volumes:"])
             for volume in self.volumes:
                 lines.append(f"  {volume.name}:")
+                lines.append(f"    name: {volume.name}")
                 if volume.driver != "local":
                     lines.append(f"    driver: {volume.driver}")
 
