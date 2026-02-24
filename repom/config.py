@@ -413,11 +413,17 @@ class RepomConfig(Config):
 
     @property
     def db_backup_path(self) -> Optional[str]:
-        """バックアップディレクトリ - デフォルトで data_path/backups"""
+        """バックアップディレクトリ - DB タイプ別にサブディレクトリ作成
+        
+        Returns:
+            - SQLite: data_path/backups/sqlite
+            - PostgreSQL: data_path/backups/postgres
+        """
         if self._db_backup_path is not None:
             return self._db_backup_path
         if self.data_path:
-            return str(Path(self.data_path) / 'backups')
+            base_backup_path = Path(self.data_path) / 'backups'
+            return str(base_backup_path / self.db_type)
         return None
 
     @db_backup_path.setter

@@ -37,29 +37,32 @@ def format_size(size_bytes: int) -> str:
 
 
 def get_backups(backup_dir: str) -> List[Path]:
-    """バックアップファイルを最新順に取得
+    """バックアップファイルを最新順に取得（DB タイプに応じてフィルタリング）
 
     Args:
         backup_dir: バックアップディレクトリパス
 
     Returns:
-        バックアップファイルのリスト（最新順）
+        バックアップファイルのリスト（最新順、現在の DB タイプのみ）
     """
     if not os.path.exists(backup_dir):
         return []
 
     backup_path = Path(backup_dir)
 
-    # SQLite と PostgreSQL 両方のバックアップファイルを検出
-    sqlite_backups = list(backup_path.glob("*.sqlite3"))
-    postgres_backups = list(backup_path.glob("db_*.sql.gz"))
-
-    all_backups = sqlite_backups + postgres_backups
+    # DB タイプに応じてバックアップファイルを検出
+    if config.db_type == 'sqlite':
+        backups = list(backup_path.glob("*.sqlite3"))
+    elif config.db_type == 'postgres':
+        backups = list(backup_path.glob("db_*.sql.gz"))
+    else:
+        logger.warning(f"Unknown db_type: {config.db_type}, showing all backups")
+        backups = list(backup_path.glob("*"))
 
     # 最新順にソート（作成日時の降順）
-    all_backups.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+    backups.sort(key=lambda f: f.stat().st_mtime, reverse=True)
 
-    return all_backups
+    return backups
 
 
 def display_backups(backups: List[Path]) -> Optional[Path]:
