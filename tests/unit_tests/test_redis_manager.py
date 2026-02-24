@@ -193,23 +193,16 @@ class TestRedisManagerInheritance:
         assert hasattr(manager, 'get_project_name')
         assert callable(manager.get_project_name)
 
-    def test_redis_manager_get_project_name_returns_config_value(self):
-        """Test get_project_name returns config.project_name"""
+    def test_redis_manager_get_project_name_returns_container_name(self):
+        """Test get_project_name returns get_container_name value"""
         manager = RedisManager()
         project_name = manager.get_project_name()
+        container_name = manager.get_container_name()
 
-        # Should return config's project_name (defaults to package_name or "default")
+        # get_project_name should return the same value as get_container_name
+        assert project_name == container_name
         assert isinstance(project_name, str)
         assert len(project_name) > 0
-        assert project_name == manager.config.project_name
-
-    def test_redis_manager_get_project_name_respects_override(self):
-        """Test get_project_name respects config.project_name override"""
-        manager = RedisManager()
-        manager.config.project_name = "custom_redis_project"
-
-        project_name = manager.get_project_name()
-        assert project_name == "custom_redis_project"
 
 
 class TestRedisManagerCLI:

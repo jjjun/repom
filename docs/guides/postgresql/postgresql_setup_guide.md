@@ -429,8 +429,8 @@ repom をベースとする複数のプロジェクト（mine-py, fast-domain �
 from repom.config import RepomConfig
 
 def hook_config(config: RepomConfig) -> RepomConfig:
-    # **重要**: Docker Compose プロジェクト名を設定（コンテナ名の prefix）
-    config.project_name = "mine_py"
+    # **重要**: コンテナ名を設定（Docker Compose プロジェクト名に使われる）
+    config.postgres.container.container_name = "mine_py_postgres"
     
     # ポートをずらす（repom: 5432, mine_py: 5433）
     config.postgres.port = 5433
@@ -448,20 +448,20 @@ def hook_config(config: RepomConfig) -> RepomConfig:
 CONFIG_HOOK=mine_py.config:hook_config
 ```
 
-**重要**: `config.project_name` を設定することで、Docker Compose のプロジェクト名が変わり、コンテナ名の衝突が防げます。
+**重要**: `container_name` を設定することで、Docker Compose のプロジェクト名が分離され、コンテナ名の衝突が防げます。
 
 #### 起動
 
 ```powershell
-# repom プロジェクト（project_name = "repom"）
+# repom プロジェクト（container_name = "repom_postgres"）
 cd repom
 poetry run postgres_start
-# → Container: repom-postgres-1, Port: 5432
+# → Container: repom_postgres, Port: 5432
 
-# mine-py プロジェクト（project_name = "mine_py"）同時起動可能
+# mine-py プロジェクト（container_name = "mine_py_postgres"）同時起動可能
 cd mine-py
 poetry run postgres_start
-# → Container: mine_py-postgres-1, Port: 5433
+# → Container: mine_py_postgres, Port: 5433
 ```
 
 #### 生成されるファイル

@@ -46,7 +46,7 @@ $env:CONFIG_HOOK='myapp.config:hook_config'
 
 ### 3. 複数プロジェクトで Docker コンテナを分離する
 
-同じマシン上で複数の repom ベースプロジェクトを開発する場合、Docker Compose のプロジェクト名を分離する必要があります。
+同じマシン上で複数の repom ベースプロジェクトを開発する場合、Docker コンテナ名を分離する必要があります。
 
 ```python
 # fast_domain/config.py
@@ -56,8 +56,9 @@ class FastDomainConfig(RepomConfig):
     def __init__(self):
         super().__init__()
         
-        # Docker Compose プロジェクト名を設定（コンテナ名の prefix になる）
-        self.project_name = "fast_domain"
+        # コンテナ名を設定（Docker Compose プロジェクト名に使われる）
+        self.postgres.container.container_name = "fast_domain_postgres"
+        self.redis.container.container_name = "fast_domain_redis"
         
         # PostgreSQL ポートを変更してコンフリクトを回避
         self.postgres.port = 5434

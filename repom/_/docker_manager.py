@@ -272,15 +272,14 @@ class DockerManager(ABC):
     def get_project_name(self) -> str:
         """Docker Compose プロジェクト名を取得
 
-        デフォルト実装: config.project_name を返す
-        サブクラスでオーバーライド可能
+        container_name をそのままプロジェクト名として使用。
+        これにより各サービス（Redis/PostgreSQL）が独立したプロジェクトになり、
+        orphan container の警告を防止できる。
 
         Returns:
-            プロジェクト名
+            コンテナ名（get_container_name() の値）
         """
-        if hasattr(self, 'config') and hasattr(self.config, 'project_name'):
-            return self.config.project_name
-        return "default"
+        return self.get_container_name()
 
     def start(self) -> None:
         """コンテナを起動

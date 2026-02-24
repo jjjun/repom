@@ -71,8 +71,6 @@ class Config:
     # ログ関連
     _log_path: Optional[str] = field(default=None, init=False, repr=False)
     _log_file: Optional[str] = field(default=None, init=False, repr=False)
-    # Docker Compose プロジェクト名
-    _project_name: Optional[str] = field(default=None, init=False, repr=False)
 
     def _get_or_default(self, private_attr: str, default_value):
         """プライベート属性が設定されていれば返し、そうでなければデフォルト値を返す"""
@@ -179,28 +177,3 @@ class Config:
         if not self.log_path:
             return None
         return str(Path(self.log_path) / self.log_file)
-
-    @property
-    def project_name(self) -> str:
-        """Docker Compose プロジェクト名
-
-        デフォルトで package_name を使用します。
-        package_name が None の場合は "default" を返します。
-
-        使用例:
-            # hook_config でカスタマイズ
-            def hook_config(config):
-                config.project_name = "my_project"
-                return config
-
-        Returns:
-            プロジェクト名（デフォルト: package_name または "default"）
-        """
-        if self._project_name is not None:
-            return self._project_name
-        return self.package_name or "default"
-
-    @project_name.setter
-    def project_name(self, value: Optional[str]):
-        """Docker Compose プロジェクト名を設定"""
-        self._project_name = value

@@ -575,8 +575,8 @@ repom をベースとする複数のプロジェクト（mine-py, fast-domain �
 from repom.config import RepomConfig
 
 def hook_config(config: RepomConfig) -> RepomConfig:
-    # **重要**: Docker Compose プロジェクト名を設定（コンテナ名の prefix）
-    config.project_name = "fast_domain"
+    # **重要**: コンテナ名を設定（Docker Compose プロジェクト名に使われる）
+    config.redis.container.container_name = "fast_domain_redis"
     
     # ポートをずらす（repom: 6379, fast_domain: 6381）
     config.redis.port = 6381
@@ -589,20 +589,20 @@ def hook_config(config: RepomConfig) -> RepomConfig:
 CONFIG_HOOK=fast_domain.config:hook_config
 ```
 
-**重要**: `config.project_name` を設定することで、Docker Compose のプロジェクト名が変わり、コンテナ名の衝突が防げます。
+**重要**: `container_name` を設定することで、Docker Compose のプロジェクト名が分離され、コンテナ名の衝突が防げます。
 
 ### 起動
 
 ```powershell
-# repom プロジェクト（project_name = "repom"）
+# repom プロジェクト（container_name = "repom_redis"）
 cd repom
 poetry run redis_start
-# → Container: repom-redis-1, Port: 6379
+# → Container: repom_redis, Port: 6379
 
-# fast-domain プロジェクト（project_name = "fast_domain"）同時起動可能
+# fast-domain プロジェクト（container_name = "fast_domain_redis"）同時起動可能
 cd fast-domain
 poetry run redis_start
-# → Container: fast_domain-redis-1, Port: 6381
+# → Container: fast_domain_redis, Port: 6381
 ```
 
 ### 接続
