@@ -279,7 +279,7 @@ class TestRedisDockerCompose:
 
         generator = generate_docker_compose()
         yaml_content = generator.generate()
-        
+
         # Get config through RedisManager to use actual configured values
         manager = RedisManager()
         config = manager.config
