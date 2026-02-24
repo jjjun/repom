@@ -32,6 +32,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
+| #050 | バックアップディレクトリの DB タイプ別分離 | 中 | 🟡 提案中 | [active/050_separate_backup_by_db_type.md](active/050_separate_backup_by_db_type.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください.
