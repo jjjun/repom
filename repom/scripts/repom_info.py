@@ -279,11 +279,35 @@ def display_config():
             print(f"    User            : {pg_info['user']}")
             print()
 
+        # PostgreSQL Container Configuration
+        print("  [PostgreSQL Container]")
+        print(f"    Container Name  : {config.postgres.container.get_container_name()}")
+        print(f"    Image           : {config.postgres.container.image}")
+        print(f"    Host Port       : {config.postgres.container.host_port}")
+        print(f"    Volume Name     : {config.postgres.container.get_volume_name()}")
+        print()
+
+        # pgAdmin Configuration (if enabled)
+        if config.pgadmin.container.enabled:
+            print("  [pgAdmin Configuration]")
+            print(f"    Enabled         : Yes")
+            print(f"    Container Name  : {config.pgadmin.container.get_container_name()}")
+            print(f"    Image           : {config.pgadmin.container.image}")
+            print(f"    Host Port       : {config.pgadmin.container.host_port}")
+            print(f"    Volume Name     : {config.pgadmin.container.get_volume_name()}")
+            print(f"    Email           : {config.pgadmin.email}")
+            print()
+        else:
+            print("  [pgAdmin Configuration]")
+            print(f"    Enabled         : No")
+            print()
+
     # PostgreSQL Connection Test
-    print("[PostgreSQL Connection Test]")
-    connection_status = test_postgres_connection()
-    print(f"  Status            : {connection_status}")
-    print()
+    if config.db_type == 'postgres':
+        print("[PostgreSQL Connection Test]")
+        connection_status = test_postgres_connection()
+        print(f"  Status            : {connection_status}")
+        print()
 
     # Redis Configuration
     print("[Redis Configuration]")

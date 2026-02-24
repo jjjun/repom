@@ -120,6 +120,82 @@ class DockerCommandExecutor:
             ) from e
 
     @staticmethod
+    def is_container_running(container_name: str) -> bool:
+        """コンテナが起動中か確認
+
+        Args:
+            container_name: コンテナ名
+
+        Returns:
+            True: コンテナが起動中（Status が "Up" で始まる）
+            False: コンテナが停止中または存在しない
+
+        Example:
+            >>> if DockerCommandExecutor.is_container_running("repom_postgres"):
+            ...     print("PostgreSQL is running")
+        """
+        status = DockerCommandExecutor.get_container_status(container_name)
+        return status.startswith("Up")
+
+    @staticmethod
+    def exec_command(
+        container_name: str,
+        command: list[str],
+        stdin: Optional[bytes] = None,
+        capture_output: bool = True,
+    ) -> subprocess.CompletedProcess:
+        """docker exec でコンテナ内コマンドを実行
+
+        Args:
+            container_name: コンテナ名
+            command: 実行コマンド（リスト形式）
+            stdin: 標準入力に渡すデータ（バイト列）
+            capture_output: stdout/stderr をキャプチャするか
+
+        Returns:
+            subprocess.CompletedProcess
+
+        Raises:
+            FileNotFoundError: docker コマンド不在
+            subprocess.CalledProcessError: コマンド失敗（exit code != 0）
+
+        Example:
+            >>> # pg_dump 実行
+            >>> result = DockerCommandExecutor.exec_command(
+            ...     "repom_postgres",
+            ...     ["pg_dump", "-U", "repom", "-d", "repom_dev"]
+            ... )
+            >>> print(result.stdout)
+
+            >>> # psql でリストア（stdin 使用）
+            >>> with open("backup.sql", "rb") as f:
+            ...     sql_data = f.read()
+            >>> result = DockerCommandExecutor.exec_command(
+            ...     "repom_postgres",
+            ...     ["psql", "-U", "repom", "-d", "repom_dev"],
+            ...     stdin=sql_data
+            ... )
+        """
+        cmd = ["docker", "exec"]
+        if stdin is not None:
+            cmd.append("-i")  # Interactive mode for stdin
+        cmd.append(container_name)
+        cmd.extend(command)
+
+        try:
+            return subprocess.run(
+                cmd,
+                input=stdin,
+                capture_output=capture_output,
+                check=True,
+            )
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                "docker command not found. "
+                "Please install Docker Desktop: https://www.docker.com/products/docker-desktop"
+            ) from e
+
+    @staticmethod
     def wait_for_readiness(
         check_func: Callable[[], bool],
         max_retries: int = 30,
