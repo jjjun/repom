@@ -29,11 +29,7 @@ def hook_config(config: dataclass) -> dataclass:
 
         # データベースタイプの設定
         # テスト環境では SQLite（高速）、それ以外は PostgreSQL
-        if os.getenv('EXEC_ENV') == 'test':
-            config.db_type = 'sqlite'
-        else:
-            config.db_type = 'postgres'
-            # config.db_type = 'sqlite'
+        config.db_type = 'sqlite' if os.getenv('EXEC_ENV') == 'test' else 'postgres'
 
         config.db_name = "repom"
 
