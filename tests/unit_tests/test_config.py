@@ -89,11 +89,11 @@ def test_db_url_defaults_to_sqlite_uri(config_factory):
 
 
 def test_db_backup_path_defaults_to_backups_dir(config_factory, tmp_path):
-    """``db_backup_path`` defaults to ``data_path / 'backups'`` and is overridable."""
+    """``db_backup_path`` defaults to ``data_path / 'backups' / {db_type}`` and is overridable."""
 
     config = config_factory()
 
-    expected_default = Path(config.data_path) / "backups"
+    expected_default = Path(config.data_path) / "backups" / config.db_type
     assert config.db_backup_path == str(expected_default)
 
     override = tmp_path / "custom_backups"
