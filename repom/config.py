@@ -161,12 +161,15 @@ class SqliteConfig:
 
     Attributes:
         db_path: データベース格納ディレクトリ (None の場合は data_path を使用)
-        db_file: データベースファイル名 (None の場合は環境別に自動生成)
         use_in_memory_for_tests: テスト時に in-memory DB を使用するか
+
+    Note:
+        db_file は自動計算プロパティです。明示的に設定する場合のみ変更してください。
+        db_name を変更すると自動的に db_file も再計算されます。
     """
     db_path: Optional[str] = field(default=None)
-    db_file: Optional[str] = field(default=None)
     use_in_memory_for_tests: bool = field(default=True)
+    _db_file: Optional[str] = field(default=None, init=False, repr=False)
     _config: Optional["RepomConfig"] = field(default=None, init=False, repr=False)
 
     def bind(self, config: "RepomConfig"):
@@ -181,12 +184,43 @@ class SqliteConfig:
         return f"{prefix}.sqlite3"
 
     @property
+    def db_file(self) -> Optional[str]:
+        """データベースファイル名（自動計算プロパティ）
+
+        明示的に設定されている場合はそれを使用。
+        未設定の場合は db_name から自動計算。
+
+        これにより db_name を変更すると、自動的に db_file も再計算されます。
+        """
+        # 明示的に設定されている場合はそれを返す
+        if self._db_file is not None:
+            return self._db_file
+
+        # 未設定の場合は自動計算
+        if not self._config:
+            return None
+        return self.get_default_db_file(self._config.exec_env)
+
+    @db_file.setter
+    def db_file(self, value: Optional[str]):
+        """データベースファイル名を設定
+
+        None を設定すると、次回アクセス時に db_name から自動計算されます。
+        """
+        self._db_file = value
+
+    @property
     def db_file_path(self) -> Optional[str]:
         """db file full path (including file name)."""
         if not self._config:
             return None
         db_path = self.db_path if self.db_path else self._config.data_path
-        db_file = self.db_file if self.db_file else self.get_default_db_file(self._config.exec_env)
+        if not db_path:
+            return None
+        # db_file は property なので自動計算される
+        db_file = self.db_file
+        if not db_file:
+            return None
         return str(Path(db_path) / db_file)
 
 
@@ -237,8 +271,7 @@ class RepomConfig(Config):
         # SqliteConfig のデフォルト値を設定（data_path が存在する場合のみ）
         if self.data_path and self.sqlite.db_path is None:
             self.sqlite.db_path = self.data_path
-        if self.sqlite.db_file is None:
-            self.sqlite.db_file = self.sqlite.get_default_db_file(self.exec_env)
+        # db_file は property で自動計算されるため、ここでの初期化は不要
 
         if self.auto_create_dirs:
             self._ensure_path_exists([
@@ -402,7 +435,7 @@ class RepomConfig(Config):
 
         # SQLite: 通常環境ではファイルベース
         db_path = self.sqlite.db_path if self.sqlite.db_path else self.data_path
-        db_file = self.sqlite.db_file if self.sqlite.db_file else self.sqlite.get_default_db_file(self.exec_env)
+        db_file = self.sqlite.db_file  # property で自動計算される
         if db_file:
             return f'sqlite:///{db_path}/{db_file}'
         return None

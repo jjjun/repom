@@ -36,13 +36,13 @@ def hook_config(config: dataclass) -> dataclass:
         config.postgres.container.container_name = "repom_postgres"
         config.postgres.container.host_port = 5433
         config.postgres.port = 5433
-        # config.postgres.user = 'fast_domain'  # 必要に応じて
+        # config.postgres.user = 'repom'  # 必要に応じて
         # config.postgres.password = 'your_password'  # 必要に応じて
         # pgAdmin
         config.pgadmin.container.enabled = True
         config.pgadmin.container.container_name = "repom_pgadmin"
         config.pgadmin.container.host_port = 5051
-        # config.pgadmin.email = 'admin@fast-domain.local'
+        # config.pgadmin.email = 'admin@repom.local'
         # config.pgadmin.password = 'secure_password'
         # Redis
         config.redis.container.container_name = "repom_redis"
