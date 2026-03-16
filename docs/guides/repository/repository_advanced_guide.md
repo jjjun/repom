@@ -124,7 +124,7 @@ tasks = await repo.find(offset=10, limit=10)
 # デフォルト: id 昇順
 tasks = await repo.find()
 
-# 降順・昇順指定（簡易）
+# 降順・昇順指定（canonical form）
 tasks = await repo.find(order_by='created_at:desc')
 tasks = await repo.find(order_by='title:asc')
 
@@ -144,6 +144,19 @@ class TaskRepository(AsyncBaseRepository[Task]):
         )
         result = await self.session.execute(query)
         return result.scalars().all()
+```
+
+**注意**:
+
+- 文字列の `order_by` は `column:asc` または `column:desc` のみサポート
+- `column` 単独指定はサポートしない
+
+```python
+# ❌ 非対応
+tasks = await repo.find(order_by='created_at')
+
+# ✅ 対応
+tasks = await repo.find(order_by='created_at:asc')
 ```
 
 ### ソート可能なカラムの制限
@@ -184,6 +197,37 @@ from repom import AsyncBaseRepository
 class TaskRepository(AsyncBaseRepository[Task]):
     allowed_order_columns = AsyncBaseRepository.allowed_order_columns + ['custom_field']
 ```
+
+### FastAPI / OpenAPI 統合
+
+`repom` は Repository 定義から OpenAPI 用の `order_by` dependency を構築できます。
+
+```python
+from fastapi import Depends
+from repom import build_order_by_query_depends
+
+@router.get("/tasks")
+async def read_tasks(
+    order_params: dict = Depends(build_order_by_query_depends(TaskRepository)),
+):
+    return order_params
+```
+
+候補一覧だけ必要な場合は introspection API を使います。
+
+```python
+from repom import (
+    get_order_by_columns,
+    get_order_by_default_value,
+    get_order_by_values,
+)
+
+get_order_by_columns(TaskRepository)
+get_order_by_values(TaskRepository)
+get_order_by_default_value(TaskRepository)
+```
+
+移行方針は [order_by 移行ガイド](order_by_migration_guide.md) を参照してください。
 
 ### 件数カウント
 

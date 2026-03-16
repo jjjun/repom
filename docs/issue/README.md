@@ -33,6 +33,7 @@ completed/     → 実装完了・コミット済み
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
+| #051 | `order_by` OpenAPI introspection と FastAPI helper の追加 | 中 | 🟡 提案中 | [active/051_order_by_openapi_introspection.md](active/051_order_by_openapi_introspection.md) |
 
 詳細は各ファイルを参照してください.
 
@@ -181,4 +182,4 @@ completed/
 └── 2024/
 ```
 
-最終更新: 2026-02-06
+最終更新: 2026-03-16

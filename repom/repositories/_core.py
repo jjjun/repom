@@ -9,6 +9,7 @@ from sqlalchemy import ColumnElement, UnaryExpression, asc, desc
 from pydantic import BaseModel
 import inspect
 import logging
+from repom.repositories._order_by import normalize_order_by_value
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +183,6 @@ def parse_order_by(model_class, order_by_str: str, allowed_order_columns: List[s
     """Parse order_by string and return SQLAlchemy order expression.
 
     Format: "column_name:direction" (e.g., "created_at:desc", "id:asc")
-    Direction defaults to "asc" if not specified.
 
     Column names must be in the allowed_order_columns whitelist (security measure).
     Subclasses can extend the whitelist by overriding allowed_order_columns:
@@ -200,15 +200,10 @@ def parse_order_by(model_class, order_by_str: str, allowed_order_columns: List[s
         SQLAlchemy column expression with asc() or desc()
 
     Raises:
-        ValueError: If column is not in whitelist, direction is invalid, or column doesn't exist
+        ValueError: If format is invalid, column is not in whitelist, direction is invalid,
+            or column doesn't exist
     """
-    if ':' not in order_by_str:
-        column_name = order_by_str.strip()
-        direction = 'asc'
-    else:
-        parts = order_by_str.split(':', 1)
-        column_name = parts[0].strip()
-        direction = parts[1].strip().lower()
+    column_name, direction = normalize_order_by_value(order_by_str)
 
     # Validate column against whitelist
     if column_name not in allowed_order_columns:
