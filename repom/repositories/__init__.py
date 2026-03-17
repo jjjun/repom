@@ -15,6 +15,7 @@ from repom.repositories._order_by import (
     get_order_by_columns,
     get_order_by_default_value,
     get_order_by_values,
+    VirtualColumnError,
 )
 from repom.repositories._query_builder import QueryBuilderMixin
 from repom.repositories.base_repository import BaseRepository
@@ -29,4 +30,5 @@ __all__ = [
     'get_order_by_columns',
     'get_order_by_default_value',
     'get_order_by_values',
+    'VirtualColumnError',
 ]

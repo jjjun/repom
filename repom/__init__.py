@@ -28,6 +28,7 @@ from repom.repositories import (
     get_order_by_columns,
     get_order_by_default_value,
     get_order_by_values,
+    VirtualColumnError,
 )
 
 # Mixins
@@ -48,6 +49,7 @@ __all__ = [
     'get_order_by_columns',
     'get_order_by_default_value',
     'get_order_by_values',
+    'VirtualColumnError',
     # Mixins
     'SoftDeletableMixin',
     # Query Analysis

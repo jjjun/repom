@@ -11,6 +11,7 @@ from repom import (
     get_order_by_columns,
     get_order_by_default_value,
     get_order_by_values,
+    VirtualColumnError,
 )
 from repom.models.base_model import BaseModel
 
@@ -63,6 +64,23 @@ class BareDefaultOrderRepository(BaseRepository[OrderByOpenAPIModel]):
         super().__init__(OrderByOpenAPIModel, session)
 
 
+class VirtualOrderByRepository(BaseRepository[OrderByOpenAPIModel]):
+    allowed_order_columns = ["id", "name", "priority", "rating"]
+    virtual_order_columns = ["rating"]
+    default_order_by = "priority:desc"
+
+    def __init__(self, session):
+        super().__init__(OrderByOpenAPIModel, session)
+
+
+class InvalidVirtualOrderByRepository(BaseRepository[OrderByOpenAPIModel]):
+    allowed_order_columns = ["id", "name", "priority"]
+    virtual_order_columns = ["rating"]
+
+    def __init__(self, session):
+        super().__init__(OrderByOpenAPIModel, session)
+
+
 def _find_enum_schemas(node, matches: list):
     if isinstance(node, dict):
         if "enum" in node:
@@ -99,6 +117,36 @@ def test_get_order_by_values_supports_async_repository_classes():
     )
 
 
+def test_get_order_by_columns_includes_virtual_columns():
+    assert get_order_by_columns(VirtualOrderByRepository) == [
+        "id",
+        "name",
+        "priority",
+        "rating",
+    ]
+
+
+def test_get_order_by_columns_rejects_virtual_columns_outside_allowed_list():
+    with pytest.raises(
+        ValueError,
+        match="virtual_order_columns must also be present in allowed_order_columns",
+    ):
+        get_order_by_columns(InvalidVirtualOrderByRepository)
+
+
+def test_get_order_by_values_includes_virtual_columns():
+    assert get_order_by_values(VirtualOrderByRepository) == [
+        "id:asc",
+        "id:desc",
+        "name:asc",
+        "name:desc",
+        "priority:asc",
+        "priority:desc",
+        "rating:asc",
+        "rating:desc",
+    ]
+
+
 def test_get_order_by_default_value_returns_canonical_string():
     assert get_order_by_default_value(OrderByRepository) == "priority:desc"
 
@@ -124,6 +172,16 @@ def test_parse_order_by_rejects_bare_column_input(db_test):
         match="canonical format 'column:asc' or 'column:desc'",
     ):
         repo.find(order_by="priority")
+
+
+def test_parse_order_by_raises_virtual_column_error(db_test):
+    repo = VirtualOrderByRepository(session=db_test)
+
+    with pytest.raises(VirtualColumnError) as exc_info:
+        repo.parse_order_by(OrderByOpenAPIModel, "rating:desc")
+
+    assert exc_info.value.column_name == "rating"
+    assert exc_info.value.direction == "desc"
 
 
 def test_default_order_by_rejects_bare_column_default_at_runtime(db_test):
@@ -188,6 +246,39 @@ def test_build_order_by_query_depends_exposes_enum_in_openapi():
     parameters = operation["parameters"]
     order_by_param = next(param for param in parameters if param["name"] == "order_by")
     assert order_by_param["required"] is False
+
+
+@pytest.mark.skipif(
+    not FASTAPI_AVAILABLE,
+    reason="FastAPI is not installed. Install with: poetry add --group dev fastapi httpx",
+)
+def test_build_order_by_query_depends_exposes_virtual_enum_in_openapi():
+    app = FastAPI()
+
+    @app.get("/items")
+    def read_items(
+        order_params: dict = Depends(
+            build_order_by_query_depends(VirtualOrderByRepository)
+        ),
+    ):
+        return order_params
+
+    client = TestClient(app)
+    schema = client.get("/openapi.json").json()
+
+    enum_matches = []
+    _find_enum_schemas(schema, enum_matches)
+
+    assert [
+        "id:asc",
+        "id:desc",
+        "name:asc",
+        "name:desc",
+        "priority:asc",
+        "priority:desc",
+        "rating:asc",
+        "rating:desc",
+    ] in enum_matches
 
 
 @pytest.mark.skipif(

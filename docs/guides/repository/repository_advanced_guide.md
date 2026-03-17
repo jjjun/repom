@@ -227,7 +227,7 @@ get_order_by_values(TaskRepository)
 get_order_by_default_value(TaskRepository)
 ```
 
-移行方針は [order_by 移行ガイド](order_by_migration_guide.md) を参照してください。
+詳細は [order_by ガイド](order_by_guide.md) を参照してください。
 
 ### 件数カウント
 

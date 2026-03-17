@@ -12,8 +12,8 @@
 - **[検索・クエリガイド](repository_advanced_guide.md)**  
   find(), ソート、ページネーション、カウント、Eager Loading（N+1問題の解決）
 
-- **[order_by 移行ガイド](order_by_migration_guide.md)**  
-  canonical な `order_by` 仕様、OpenAPI helper、fast-domain からの移行手順
+- **[order_by ガイド](order_by_guide.md)**  
+  canonical な `order_by` 仕様、OpenAPI helper、virtual_order_columns の運用
 
 - **[FilterParams ガイド](repository_filter_params_guide.md)**  
   FastAPI との統合、検索パラメータの型安全な処理

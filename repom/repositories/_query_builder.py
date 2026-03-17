@@ -34,6 +34,7 @@ class QueryBuilderMixin(Generic[T]):
         'id', 'title', 'created_at', 'updated_at',
         'started_at', 'finished_at', 'executed_at'
     ]
+    virtual_order_columns: list[str] = []
     default_order_by = None
 
     def set_find_option(self, query, **kwargs):
@@ -44,6 +45,7 @@ class QueryBuilderMixin(Generic[T]):
             query,
             self.model,
             self.allowed_order_columns,
+            self.virtual_order_columns,
             default_options,
             default_order_by,
             **kwargs
@@ -51,7 +53,12 @@ class QueryBuilderMixin(Generic[T]):
 
     def parse_order_by(self, model_class, order_by_str: str):
         """Parse order_by string（_core.parse_order_by を呼び出し）"""
-        return parse_order_by(model_class, order_by_str, self.allowed_order_columns)
+        return parse_order_by(
+            model_class,
+            order_by_str,
+            self.allowed_order_columns,
+            self.virtual_order_columns,
+        )
 
     def _get_attr_with_class_priority(self, attr_name: str):
         """クラス属性を優先し、未設定の場合はインスタンス属性を参照する"""

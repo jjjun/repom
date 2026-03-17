@@ -10,6 +10,18 @@ from sqlalchemy.inspection import inspect as sa_inspect
 from sqlalchemy.orm.exc import UnmappedClassError
 
 
+class VirtualColumnError(ValueError):
+    """Raised when a virtual order_by column requires manual query handling."""
+
+    def __init__(self, column_name: str, direction: str):
+        self.column_name = column_name
+        self.direction = direction
+        super().__init__(
+            f"'{column_name}' is a virtual order_by column. "
+            "Handle sorting manually in a custom repository method."
+        )
+
+
 def get_repository_model_class(repository_class: type) -> Type:
     """Resolve the SQLAlchemy model class from a repository class."""
     if hasattr(repository_class, "__orig_bases__"):
@@ -27,6 +39,17 @@ def get_order_by_columns(repository_class: type) -> list[str]:
     """Return orderable columns that exist on the repository model."""
     model_class = get_repository_model_class(repository_class)
     allowed_columns = list(getattr(repository_class, "allowed_order_columns", []))
+    virtual_columns = list(getattr(repository_class, "virtual_order_columns", []))
+
+    invalid_virtual_columns = [
+        column for column in virtual_columns if column not in allowed_columns
+    ]
+    if invalid_virtual_columns:
+        invalid_columns_str = ", ".join(sorted(invalid_virtual_columns))
+        raise ValueError(
+            "virtual_order_columns must also be present in allowed_order_columns: "
+            f"{invalid_columns_str}"
+        )
 
     try:
         mapper = sa_inspect(model_class)
@@ -34,7 +57,12 @@ def get_order_by_columns(repository_class: type) -> list[str]:
         raise TypeError(f"Model {model_class.__name__} is not a mapped class") from exc
 
     model_columns = set(mapper.columns.keys())
-    return [column for column in allowed_columns if column in model_columns]
+    virtual_columns_set = set(virtual_columns)
+    return [
+        column
+        for column in allowed_columns
+        if column in model_columns or column in virtual_columns_set
+    ]
 
 
 def normalize_order_by_value(order_by_value: str) -> tuple[str, str]:

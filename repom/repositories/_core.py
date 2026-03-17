@@ -9,7 +9,7 @@ from sqlalchemy import ColumnElement, UnaryExpression, asc, desc
 from pydantic import BaseModel
 import inspect
 import logging
-from repom.repositories._order_by import normalize_order_by_value
+from repom.repositories._order_by import normalize_order_by_value, VirtualColumnError
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +179,12 @@ def build_filters_from_mapping(params: FilterParams, field_to_column: Mapping[st
     return filters
 
 
-def parse_order_by(model_class, order_by_str: str, allowed_order_columns: List[str]):
+def parse_order_by(
+    model_class,
+    order_by_str: str,
+    allowed_order_columns: List[str],
+    virtual_order_columns: Optional[List[str]] = None,
+):
     """Parse order_by string and return SQLAlchemy order expression.
 
     Format: "column_name:direction" (e.g., "created_at:desc", "id:asc")
@@ -213,6 +218,10 @@ def parse_order_by(model_class, order_by_str: str, allowed_order_columns: List[s
     if direction not in ['asc', 'desc']:
         raise ValueError(f"Direction must be 'asc' or 'desc', got '{direction}'")
 
+    # Virtual columns are allowed for API exposure but must be handled by callers.
+    if virtual_order_columns and column_name in set(virtual_order_columns):
+        raise VirtualColumnError(column_name, direction)
+
     # Validate column exists on model
     if not hasattr(model_class, column_name):
         raise ValueError(f"Column '{column_name}' does not exist on model")
@@ -226,6 +235,7 @@ def set_find_option(
     query,
     model,
     allowed_order_columns: List[str],
+    virtual_order_columns: Optional[List[str]] = None,
     default_options: Optional[List] = None,
     default_order_by=None,
     **kwargs
@@ -301,7 +311,12 @@ def set_find_option(
     # order_by の型に応じて処理を分岐
     if isinstance(order_by, str):
         # 文字列の場合は変換
-        order_by = parse_order_by(model, order_by, allowed_order_columns)
+        order_by = parse_order_by(
+            model,
+            order_by,
+            allowed_order_columns,
+            virtual_order_columns,
+        )
     elif isinstance(order_by, (UnaryExpression, ColumnElement)):
         # SQLAlchemy のカラムオブジェクトの場合はそのまま使用
         pass
