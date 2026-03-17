@@ -1,8 +1,10 @@
 # Issue #051: `order_by` OpenAPI introspection と FastAPI helper の追加
 
-**ステータス**: 🟡 提案中
+**ステータス**: ✅ 完了
 
 **作成日**: 2026-03-16
+
+**完了日**: 2026-03-17
 
 **優先度**: 中
 
@@ -232,13 +234,23 @@ OpenAPI に公開するカラムは、以下の積集合とする。
 
 ## 完了条件
 
-- [ ] Repository class ベースの `order_by` introspection API が追加されている
-- [ ] FastAPI Query helper が追加されている
-- [ ] `order_by` の canonical runtime 仕様が定義され、必要なら破壊的整理が実施されている
-- [ ] sync / async 両系統のテストが追加されている
-- [ ] OpenAPI enum 表示の統合テストが追加されている
-- [ ] fast-domain 向け移行資料が追加されている
-- [ ] 利用ガイドまたは README が更新されている
+- [x] Repository class ベースの `order_by` introspection API が追加されている
+- [x] FastAPI Query helper が追加されている
+- [x] `order_by` の canonical runtime 仕様が定義され、必要なら破壊的整理が実施されている
+- [x] sync / async 両系統のテストが追加されている
+- [x] OpenAPI enum 表示の統合テストが追加されている
+- [x] fast-domain 向け移行資料が追加されている
+- [x] 利用ガイドまたは README が更新されている
+
+## 実装サマリ
+
+- `repom/repositories/_order_by.py` を新規作成し、`get_order_by_columns()` / `get_order_by_values()` / `get_order_by_default_value()` / `build_order_by_query_depends()` / `VirtualColumnError` を実装
+- `parse_order_by()` を canonical form 必須に統一（bare column 廃止）
+- `virtual_order_columns` サポートを Issue #052 として追加実装
+- `repom/__init__.py` / `repom/repositories/__init__.py` から公開 export
+- `tests/unit_tests/test_order_by_openapi.py` に 16 件のテストを追加（全パス）
+- `docs/guides/repository/order_by_guide.md` に利用ガイドと移行メモを追加
+- `include_implicit_asc` オプションは canonical 統一方針と逆方向のため導入せず
 
 ## 関連リソース
 
