@@ -7,6 +7,7 @@ DatabaseManager の同期セッション管理機能を検証します。
 from repom.database import (
     get_db_session,
     get_db_transaction,
+    get_reusable_sync_transaction,
     get_sync_engine,
     get_inspector,
     DatabaseManager,
@@ -75,6 +76,86 @@ class TestGetDbTransaction:
     def test_deprecated_with_statement_tests(self):
         """Old tests removed - FastAPI Depends compatibility tests in TestFastAPIDependsPattern"""
         pytest.skip("Old 'with' statement tests removed - generator protocol tested in TestFastAPIDependsPattern")
+
+
+class TestReusableSyncTransaction:
+    """Tests for get_reusable_sync_transaction() public API."""
+
+    def test_returns_context_manager(self):
+        """get_reusable_sync_transaction() should return a context manager."""
+        result = get_reusable_sync_transaction()
+        assert hasattr(result, '__enter__')
+        assert hasattr(result, '__exit__')
+        assert not hasattr(result, '__next__')
+
+    def test_auto_commit(self):
+        """Should auto-commit when context exits normally."""
+        from sqlalchemy import select
+
+        with get_reusable_sync_transaction() as session:
+            item = DatabaseTestModel(name="reusable_tx_commit")
+            session.add(item)
+
+        gen = get_db_session()
+        try:
+            verify_session = next(gen)
+            result = verify_session.execute(
+                select(DatabaseTestModel).where(DatabaseTestModel.name == "reusable_tx_commit")
+            )
+            found = result.scalar_one_or_none()
+            assert found is not None
+        finally:
+            try:
+                next(gen)
+            except StopIteration:
+                pass
+
+    def test_auto_rollback_on_exception(self):
+        """Should rollback when an exception is raised in context."""
+        from sqlalchemy import select
+
+        with pytest.raises(ValueError):
+            with get_reusable_sync_transaction() as session:
+                item = DatabaseTestModel(name="reusable_tx_rollback")
+                session.add(item)
+                raise ValueError("force rollback")
+
+        gen = get_db_session()
+        try:
+            verify_session = next(gen)
+            result = verify_session.execute(
+                select(DatabaseTestModel).where(DatabaseTestModel.name == "reusable_tx_rollback")
+            )
+            found = result.scalar_one_or_none()
+            assert found is None
+        finally:
+            try:
+                next(gen)
+            except StopIteration:
+                pass
+
+    def test_does_not_dispose_engine_on_exit(self):
+        """Reusable transaction should not dispose engine when context exits."""
+        manager = DatabaseManager()
+        manager.get_sync_engine()
+        assert manager._sync_engine is not None
+
+        with manager.get_sync_transaction() as session:
+            assert isinstance(session, Session)
+
+        assert manager._sync_engine is not None
+        manager.dispose_sync()
+
+    def test_standalone_still_disposes_engine(self):
+        """Standalone transaction should keep dispose behavior."""
+        manager = DatabaseManager()
+        manager.get_sync_engine()
+        assert manager._sync_engine is not None
+
+        with manager.get_standalone_sync_transaction() as session:
+            assert isinstance(session, Session)
+
+        assert manager._sync_engine is None
 
 
 class TestDatabaseManager:

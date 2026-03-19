@@ -17,10 +17,10 @@ Example (FastAPI with lifespan):
     >>>     return result.scalars().all()
 
 Example (CLI script - sync):
-    >>> from repom.database import get_db_transaction
+    >>> from repom.database import get_reusable_sync_transaction
     >>> 
     >>> def main():
-    >>>     with get_db_transaction() as session:
+    >>>     with get_reusable_sync_transaction() as session:
     >>>         user = User(name="test")
     >>>         session.add(user)
     >>>         # Auto commit on exit
@@ -203,7 +203,8 @@ class DatabaseManager:
             Session: SQLAlchemy synchronous session
 
         Example:
-            >>> with get_db_session() as session:
+            >>> from repom.database import _db_manager
+            >>> with _db_manager.get_sync_session() as session:
             >>>     user = session.execute(select(User)).scalar_one()
             >>>     session.commit()
         """
@@ -229,7 +230,8 @@ class DatabaseManager:
             Exception: Any exception raised within the context
 
         Example:
-            >>> with get_db_transaction() as session:
+            >>> from repom.database import _db_manager
+            >>> with _db_manager.get_sync_transaction() as session:
             >>>     user = User(name="test")
             >>>     session.add(user)
             >>>     # Auto commit on exit
@@ -672,6 +674,31 @@ def get_standalone_sync_transaction():
     return _db_manager.get_standalone_sync_transaction()
 
 
+def get_reusable_sync_transaction():
+    """
+    Get a reusable synchronous transaction context manager.
+
+    This API is designed for task/worker/CLI code that executes multiple
+    transactions within the same process. Unlike
+    get_standalone_sync_transaction(), this function does not dispose the
+    engine on exit.
+
+    For FastAPI applications, use get_db_transaction() with Depends.
+
+    Returns:
+        ContextManager[Session]: Context manager that yields Session
+
+    Example:
+        >>> from repom.database import get_reusable_sync_transaction
+        >>> from sqlalchemy import select
+        >>>
+        >>> with get_reusable_sync_transaction() as session:
+        >>>     result = session.execute(select(User).limit(10))
+        >>>     users = result.scalars().all()
+    """
+    return _db_manager.get_sync_transaction()
+
+
 def get_inspector():
     """
     Get database inspector for schema introspection.
@@ -803,6 +830,7 @@ __all__ = [
     'get_sync_engine',
     'get_db_session',
     'get_db_transaction',
+    'get_reusable_sync_transaction',
     'get_standalone_sync_transaction',
     'get_inspector',
     # Async API
