@@ -33,6 +33,7 @@ completed/     → 実装完了・コミット済み
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
+| #054 | ガイド・テスト内の private API 利用残存の整理 | 中 | 🟢 進行中 | [active/054_private_api_usage_residual_audit.md](active/054_private_api_usage_residual_audit.md) |
 
 詳細は各ファイルを参照してください.
 

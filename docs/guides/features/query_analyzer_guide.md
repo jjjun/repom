@@ -20,7 +20,7 @@
 
 ```python
 from repom.diagnostics.query_analyzer import QueryAnalyzer
-from repom.database import _db_manager
+from repom.database import get_reusable_sync_transaction
 from myapp.models import User
 ```
 
@@ -31,7 +31,7 @@ analyzer = QueryAnalyzer()
 
 with analyzer.capture():
     # ここで実行されるクエリが記録される
-    with _db_manager.get_sync_session() as session:
+    with get_reusable_sync_transaction() as session:
         users = session.query(User).all()
         for user in users:
             print(user.posts)  # N+1 問題が発生する可能性
@@ -72,13 +72,13 @@ Repeated Query Patterns:
 ```python
 from repom.diagnostics.query_analyzer import QueryAnalyzer
 from repom import BaseRepository
-from repom.database import _db_manager
+from repom.database import get_reusable_sync_transaction
 from myapp.models import Author
 
 analyzer = QueryAnalyzer()
 
 with analyzer.capture():
-    with _db_manager.get_sync_session() as session:
+    with get_reusable_sync_transaction() as session:
         repo = BaseRepository(Author, session)
         
         # 全著者を取得
@@ -111,7 +111,7 @@ from sqlalchemy.orm import joinedload
 analyzer = QueryAnalyzer()
 
 with analyzer.capture():
-    with _db_manager.get_sync_session() as session:
+    with get_reusable_sync_transaction() as session:
         # joinedload で本も一緒に取得
         authors = session.query(Author).options(joinedload(Author.books)).all()
         
@@ -147,7 +147,7 @@ class AuthorRepository(BaseRepository[Author]):
 analyzer = QueryAnalyzer()
 
 with analyzer.capture():
-    with _db_manager.get_sync_session() as session:
+    with get_reusable_sync_transaction() as session:
         repo = AuthorRepository(session)
         authors = repo.find()
         
@@ -165,7 +165,7 @@ analyzer.print_report()  # N+1 問題なし
 analyzer = QueryAnalyzer()
 
 with analyzer.capture():
-    with _db_manager.get_sync_session() as session:
+    with get_reusable_sync_transaction() as session:
         users = session.query(User).limit(3).all()
 
 # verbose=True で全クエリの内容を表示
@@ -370,7 +370,7 @@ if UserModel:
     analyzer = QueryAnalyzer()
     
     with analyzer.capture():
-        with _db_manager.get_sync_session() as session:
+        with get_reusable_sync_transaction() as session:
             users = session.query(UserModel).all()
     
     analyzer.print_report()
@@ -421,14 +421,14 @@ def test_no_n_plus_1_in_user_list(db_test):
 ```python
 # mine-py/src/mine_py/debug.py
 from repom.diagnostics.query_analyzer import QueryAnalyzer
-from repom.database import _db_manager
+from repom.database import get_standalone_sync_transaction
 from mine_py.repositories import UserRepository
 
 def analyze_user_query():
     analyzer = QueryAnalyzer()
     
     with analyzer.capture():
-        with _db_manager.get_sync_session() as session:
+        with get_standalone_sync_transaction() as session:
             repo = UserRepository(session)
             users = repo.find()
             

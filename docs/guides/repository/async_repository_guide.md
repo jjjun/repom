@@ -640,9 +640,9 @@ async with get_async_db_session() as session:
 **同期版 (BaseRepository)**:
 ```python
 from repom import BaseRepository
-from repom.database import _db_manager
+from repom.database import get_reusable_sync_transaction
 
-with _db_manager.get_sync_session() as session:
+with get_reusable_sync_transaction() as session:
     repo = BaseRepository(Task, session)
     task = repo.get_by_id(1)
     tasks = repo.find(filters=[Task.status == 'active'])

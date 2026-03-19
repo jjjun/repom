@@ -80,9 +80,9 @@ task = Task(title="新しいタスク", status="active")
 saved_task = repo.save(task)  # commit が自動実行
 
 # 外部セッション: 呼び出し側が commit
-from repom.database import _db_manager
+from repom.database import get_reusable_sync_transaction
 
-with _db_manager.get_sync_transaction() as session:
+with get_reusable_sync_transaction() as session:
     repo = TaskRepository(session)
     task = Task(title="新しいタスク", status="active")
     saved_task = repo.save(task)  # flush のみ、commit は with 終了時
@@ -101,6 +101,12 @@ repo.dict_saves(data_list)
 
 **注意**: 外部セッションを使用する場合、`save()` / `saves()` は `flush()` のみを実行します。
 変更を確定するには、`with` ブロックを抜けるか、明示的に `session.commit()` を呼んでください。
+
+**用途別の使い分け**:
+- FastAPI Depends: `get_db_session()` / `get_db_transaction()`
+- sync の反復 transaction（task/worker/CLI）: `get_reusable_sync_transaction()`
+- one-shot script（終了時 dispose を含む）: `get_standalone_sync_transaction()`
+- async パターン: `get_async_db_session()` / `get_async_db_transaction()` / `get_standalone_async_transaction()`
 
 **詳細**: [セッション管理パターンガイド](repository_session_patterns.md#トランザクション管理の詳細)
 
