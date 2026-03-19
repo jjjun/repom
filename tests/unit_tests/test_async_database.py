@@ -6,9 +6,11 @@ DatabaseManager の非同期セッション管理機能を検証します。
 
 from repom.examples.models.sample import SampleModel
 from repom.database import (
+    Base,
     get_async_engine,
     get_async_db_session,
     get_async_db_transaction,
+    get_standalone_async_transaction,
     convert_to_async_uri,
     DatabaseManager,
 )
@@ -115,7 +117,7 @@ class TestGetAsyncDbSession:
         """Skip old tests that used 'async with' statement"""
         pytest.skip(
             "get_async_db_session() no longer supports 'async with' statement. "
-            "Use DatabaseManager._db_manager.get_async_session() for context manager usage."
+            "Use DatabaseManager().get_async_session() for context manager usage."
         )
 
 
@@ -131,7 +133,7 @@ class TestGetAsyncDbTransaction:
         """Skip old tests that used 'async with' statement"""
         pytest.skip(
             "get_async_db_transaction() no longer supports 'async with' statement. "
-            "Use DatabaseManager._db_manager.get_async_transaction() for context manager usage."
+            "Use DatabaseManager().get_async_transaction() for context manager usage."
         )
 
 
@@ -155,27 +157,34 @@ class TestDatabaseManager:
     @pytest.mark.asyncio
     async def test_async_session_context_manager(self, async_db_test):
         """Async Session の context manager 動作確認"""
-        from repom.database import _db_manager
-        async with _db_manager.get_async_session() as session:
+        manager = DatabaseManager()
+        async with manager.get_async_session() as session:
             assert isinstance(session, AsyncSession)
 
     @pytest.mark.asyncio
     async def test_async_transaction_auto_commit(self, async_db_test):
         """トランザクションの自動コミット確認"""
-        from repom.database import _db_manager
+        # テスト用に独立したマネージャーを作成し、自身の engine にテーブルを準備する
+        manager = DatabaseManager()
+        engine = await manager.get_async_engine()
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
-        async with _db_manager.get_async_transaction() as session:
-            item = SampleModel(value="test_manager_async_commit")
-            session.add(item)
-            await session.flush()
+        try:
+            async with manager.get_async_transaction() as session:
+                item = SampleModel(value="test_manager_async_commit")
+                session.add(item)
+                await session.flush()
 
-        # 別のセッションで確認
-        async with _db_manager.get_async_session() as session:
-            result = await session.execute(
-                select(SampleModel).where(SampleModel.value == "test_manager_async_commit")
-            )
-            items = result.scalars().all()
-            assert len(items) == 1
+            # 別のセッションで確認（同じ manager の engine を共有）
+            async with manager.get_async_session() as session:
+                result = await session.execute(
+                    select(SampleModel).where(SampleModel.value == "test_manager_async_commit")
+                )
+                items = result.scalars().all()
+                assert len(items) == 1
+        finally:
+            await manager.dispose_async()
 
     @pytest.mark.asyncio
     async def test_dispose_async(self):
@@ -472,9 +481,7 @@ class TestStandaloneAsyncTransaction:
     @pytest.mark.asyncio
     async def test_yields_async_session(self):
         """AsyncSession が返されることを確認"""
-        from repom.database import _db_manager
-
-        async with _db_manager.get_standalone_async_transaction() as session:
+        async with get_standalone_async_transaction() as session:
             assert isinstance(session, AsyncSession)
 
     @pytest.mark.asyncio
@@ -513,9 +520,7 @@ class TestStandaloneAsyncTransaction:
     @pytest.mark.asyncio
     async def test_session_has_required_methods(self):
         """返されるセッションが必要なメソッドを持つことを確認"""
-        from repom.database import _db_manager
-
-        async with _db_manager.get_standalone_async_transaction() as session:
+        async with get_standalone_async_transaction() as session:
             # 必要なメソッドが存在することを確認
             assert hasattr(session, 'execute')
             assert hasattr(session, 'add')
@@ -531,8 +536,6 @@ class TestStandaloneAsyncTransaction:
     @pytest.mark.asyncio
     async def test_public_api_works_with_async_with(self):
         """Public API (get_standalone_async_transaction) が async with で使えることを確認"""
-        from repom.database import get_standalone_async_transaction
-
         async with get_standalone_async_transaction() as session:
             assert isinstance(session, AsyncSession)
             assert hasattr(session, 'execute')

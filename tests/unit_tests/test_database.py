@@ -174,24 +174,19 @@ class TestDatabaseManager:
 
     def test_sync_session_context_manager(self, db_test):
         """Sync Session の context manager 動作確認"""
-        # グローバルインスタンスを使用
-        from repom.database import _db_manager
-        with _db_manager.get_sync_session() as session:
+        with get_reusable_sync_transaction() as session:
             assert isinstance(session, Session)
 
     def test_sync_transaction_auto_commit(self, db_test):
         """トランザクションの自動コミット確認"""
         from sqlalchemy import select
 
-        # グローバルインスタンスを使用（テーブルが存在する）
-        from repom.database import _db_manager
-
-        with _db_manager.get_sync_transaction() as session:
+        with get_reusable_sync_transaction() as session:
             item = DatabaseTestModel(name="test_manager_commit")
             session.add(item)
 
         # 別のセッションで確認
-        with _db_manager.get_sync_session() as session:
+        with get_reusable_sync_transaction() as session:
             result = session.execute(select(DatabaseTestModel).where(
                 DatabaseTestModel.name == "test_manager_commit"
             ))
@@ -210,8 +205,7 @@ class TestDatabaseManager:
 
     def test_get_inspector_from_manager(self):
         """DatabaseManager から Inspector を取得"""
-        from repom.database import _db_manager
-        inspector = _db_manager.get_inspector()
+        inspector = get_inspector()
         assert isinstance(inspector, Inspector)
 
 

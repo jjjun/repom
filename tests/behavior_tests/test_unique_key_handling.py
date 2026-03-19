@@ -10,7 +10,7 @@ from tests.utils import (
     generate_sample_roster_data,
     save_model_instances
 )
-from repom.database import Base, _db_manager
+from repom.database import Base
 import pytest
 
 
@@ -118,7 +118,8 @@ def test_skip_on_exception(db_test):
 
     # save_model_instancesにより、既にデータは保存されている
     # この先の処理では事前にキーをチェックして、既に存在している為、保存はスキップされる
-    # Note: db_testセッションを使用する必要がある（_db_manager.get_sync_session()は別接続のため、テーブルが見えない）
+    # Note: 此テストは db_test セッションを使用する必要がある。
+    # get_reusable_sync_transaction() はテスト用トランザクション外の別接続のため、テーブルが見えない。
     try:
         for item in sample_data:
             try:

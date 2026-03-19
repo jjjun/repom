@@ -10,7 +10,7 @@ from sqlalchemy import String, select
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.models.base_model import BaseModel
 from repom.repositories import BaseRepository
-from repom.database import _db_manager
+from repom.database import get_reusable_sync_transaction
 
 
 class ExternalSessionTestModel(BaseModel):
@@ -53,7 +53,7 @@ def test_external_session_no_auto_commit(db_test):
     外部セッションを渡した場合、Repository は flush のみを実行し、
     commit は呼び出し側（with ブロック終了時）に委ねられることを検証。
     """
-    with _db_manager.get_sync_transaction() as session:
+    with get_reusable_sync_transaction() as session:
         repo = ExternalSessionTestRepository(session)
 
         # インスタンスを保存（flush のみ、commit しない）
@@ -82,7 +82,7 @@ def test_external_session_no_auto_commit(db_test):
 def test_external_session_rollback_on_error(db_test):
     """外部セッション: エラー時に rollback が呼び出し側で制御される"""
     try:
-        with _db_manager.get_sync_transaction() as session:
+        with get_reusable_sync_transaction() as session:
             repo = ExternalSessionTestRepository(session)
 
             # 正常なインスタンスを保存
@@ -128,7 +128,7 @@ def test_internal_session_saves_with_commit(db_test):
 
 def test_external_session_saves_no_commit(db_test):
     """外部セッション: saves() が commit を実行しない"""
-    with _db_manager.get_sync_transaction() as session:
+    with get_reusable_sync_transaction() as session:
         repo = ExternalSessionTestRepository(session)
 
         instances = [
@@ -179,7 +179,7 @@ def test_external_session_remove_no_commit(db_test):
     saved = prep_repo.save(instance)
     instance_id = saved.id
 
-    with _db_manager.get_sync_transaction() as session:
+    with get_reusable_sync_transaction() as session:
         repo = ExternalSessionTestRepository(session)
 
         # インスタンスを再取得して削除
@@ -205,7 +205,7 @@ def test_external_session_remove_no_commit(db_test):
 
 def test_multiple_repos_in_one_transaction(db_test):
     """複数の Repository を 1 つのトランザクションで使用"""
-    with _db_manager.get_sync_transaction() as session:
+    with get_reusable_sync_transaction() as session:
         repo = ExternalSessionTestRepository(session)
 
         # 複数のインスタンスを保存
