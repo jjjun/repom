@@ -33,7 +33,6 @@ completed/     → 実装完了・コミット済み
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
-| #054 | ガイド・テスト内の private API 利用残存の整理 | 中 | 🟢 進行中 | [active/054_private_api_usage_residual_audit.md](active/054_private_api_usage_residual_audit.md) |
 
 詳細は各ファイルを参照してください.
 
@@ -43,6 +42,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #054 | ガイド・テスト内の private API 利用残存の整理 | 2026-03-19 | Phase 1: 利用者向けガイド4本の `_db_manager` private API 利用を public API に統一。Phase 2 Round 1: テストファイル4本の `_db_manager` import・呼び出しを `get_reusable_sync_transaction()`/`get_standalone_async_transaction()` 等 public API に全面置換。63 passed | [completed/054_private_api_usage_residual_audit.md](completed/054_private_api_usage_residual_audit.md) |
 | #053 | task/CLI 向け sync transaction public API の追加 | 2026-03-19 | `get_reusable_sync_transaction()` を追加し、FastAPI Depends 用 generator API と with 文向け API の契約を明確化。`test_database.py` に契約/commit/rollback/lifecycle テストを追加し、`tests/unit_tests` と `tests/behavior_tests` の回帰を確認。利用ガイドも public API 推奨に更新 | [completed/053_sync_transaction_public_api_for_task_cli.md](completed/053_sync_transaction_public_api_for_task_cli.md) |
 | #051 | `order_by` OpenAPI introspection と FastAPI helper の追加 | 2026-03-17 | introspection API（`get_order_by_columns`/`get_order_by_values`/`get_order_by_default_value`）と FastAPI helper（`build_order_by_query_depends`）を実装。canonical formに統一（bare column廃止）、`VirtualColumnError`導入、16件の unit test 全パス、利用ガイド追加 | [completed/051_order_by_openapi_introspection.md](completed/051_order_by_openapi_introspection.md) |
 | #052 | virtual_order_columns — JOIN 先・集計列のソート公式サポート | 2026-03-17 | virtual_order_columns を公式サポートとして実装。`get_order_by_columns()`/OpenAPI enum への virtual 列反映、`VirtualColumnError` 導入、`QueryBuilderMixin.virtual_order_columns` 追加、関連 unit tests 追加、`order_by` ガイドの常用化を実施 | [completed/052_virtual_order_columns.md](completed/052_virtual_order_columns.md) |
