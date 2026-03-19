@@ -82,6 +82,50 @@ repom 利用パッケージ側から、次の指摘を受領した。
 2. 置換可能なものから public API に順次移行
 3. 置換しないものはコメントで理由を明記
 
+### Phase 2 棚卸し結果（2026-03-19）
+
+#### 対象ファイル（要修正）
+
+1. `tests/unit_tests/test_external_session_commit.py`
+- 現状: `_db_manager.get_sync_transaction()` を複数箇所で利用
+- 判定: **置換可能**
+- 置換方針: `get_reusable_sync_transaction()` に統一
+
+2. `tests/unit_tests/test_database.py`
+- 現状: `_db_manager.get_sync_session()` / `_db_manager.get_sync_transaction()` / `_db_manager.get_inspector()` を利用
+- 判定: **置換可能（大半）**
+- 置換方針:
+  - transaction 文脈は `get_reusable_sync_transaction()` へ
+  - inspector は `get_inspector()` へ
+  - manager 挙動検証は `DatabaseManager()` インスタンス経由で継続（public メソッドの契約検証として許容）
+
+3. `tests/unit_tests/test_async_database.py`
+- 現状: `_db_manager.get_async_session()` / `_db_manager.get_async_transaction()` / `_db_manager.get_standalone_async_transaction()` を利用
+- 判定: **置換可能（大半）**
+- 置換方針:
+  - standalone は `get_standalone_async_transaction()` に置換
+  - FastAPI Depends 互換テストのメッセージ内 private 文言を public API ベースに修正
+  - manager 直接検証が必要な箇所は `DatabaseManager()` インスタンス経由へ寄せる
+
+4. `tests/behavior_tests/test_unique_key_handling.py`
+- 現状: import に `_db_manager` が残存（実利用なし）、説明コメントに private 参照
+- 判定: **置換可能**
+- 置換方針: `_db_manager` import を削除し、コメントを `db_test` ベースの説明に更新
+
+#### 1周目（Phase 2 - Round 1）実施対象
+
+1. `tests/unit_tests/test_external_session_commit.py`（全面置換しやすく影響が局所的）
+2. `tests/behavior_tests/test_unique_key_handling.py`（import/comment の軽微修正）
+3. `tests/unit_tests/test_database.py`（明確な置換箇所を先行対応）
+4. `tests/unit_tests/test_async_database.py`（範囲が広いので round 1 では public API 直置換可能部分を優先）
+
+#### Round 1 の完了条件（提案）
+
+1. 上記4ファイルで module-level `_db_manager` import を解消
+2. public API で代替可能な呼び出しを置換
+3. manager 挙動の内部契約テストは `DatabaseManager()` インスタンス経由に明示化
+4. `poetry run pytest tests/unit_tests/test_database.py tests/unit_tests/test_external_session_commit.py tests/unit_tests/test_async_database.py tests/behavior_tests/test_unique_key_handling.py` が通過
+
 ## 受け入れ条件
 
 1. `base_repository_guide.md` の private 利用例が解消される
@@ -104,5 +148,4 @@ repom 利用パッケージ側から、次の指摘を受領した。
 
 ## 備考
 
-- この Issue は「調査結果の登録と是正方針の明文化」を目的とする。
 - 実装修正は本 Issue に紐づけて段階実施する。
