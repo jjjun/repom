@@ -537,12 +537,12 @@ class DatabaseManager:
         # Check if already async
         async_drivers = ['sqlite+aiosqlite', 'postgresql+asyncpg', 'mysql+aiomysql']
         if url.drivername in async_drivers:
-            return str(url)
+            return url.render_as_string(hide_password=False)
 
         # Convert to async driver
         if base_driver in async_driver_map:
             url = url.set(drivername=async_driver_map[base_driver])
-            return str(url)
+            return url.render_as_string(hide_password=False)
         else:
             raise ValueError(
                 f"Unsupported database URL format: {sync_url}\n"
