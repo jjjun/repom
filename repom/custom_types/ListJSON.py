@@ -24,7 +24,10 @@ class ListJSON(TypeDecorator):
     def process_result_value(self, value, dialect):
         if value is None:
             return []
-        result = json.loads(value)
+        if isinstance(value, list):
+            result = value
+        else:
+            result = json.loads(value)
         if not isinstance(result, list):
             raise ValueError("Expected a list, but got a different type")
         return result
