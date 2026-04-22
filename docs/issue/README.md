@@ -33,6 +33,7 @@ completed/     → 実装完了・コミット済み
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
+| #055 | AutoDateTime のタイムゾーン非対応による naive datetime 返却 | 高 | 🟢 進行中 | [active/055_autodatetime_timezone_awareness.md](active/055_autodatetime_timezone_awareness.md) |
 
 詳細は各ファイルを参照してください.
 

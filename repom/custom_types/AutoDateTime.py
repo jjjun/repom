@@ -1,5 +1,5 @@
 ﻿from sqlalchemy.types import TypeDecorator, DateTime
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class AutoDateTime(TypeDecorator):
@@ -21,13 +21,17 @@ class AutoDateTime(TypeDecorator):
         （BaseModel の @event.listens_for を参照）
     """
 
-    impl = DateTime
+    impl = DateTime(timezone=True)
     cache_ok = True  # SQLAlchemy 2.0+ でキャッシュを有効化
 
     def process_bind_param(self, value, dialect):
         if value is None:
-            value = datetime.now()
+            value = datetime.now(timezone.utc)
+        if isinstance(value, datetime) and value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
         return value
 
     def process_result_value(self, value, dialect):
+        if value is not None and value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
         return value
