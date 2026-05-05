@@ -15,7 +15,7 @@
     {
       "label": "🧪Pytest/all",
       "type": "shell",
-      "command": "poetry run pytest tests/unit_tests; poetry run pytest tests/behavior_tests",
+      "command": "poetry run pytest tests/unit_tests tests/behavior_tests",
       "group": {
         "kind": "test"
       },
