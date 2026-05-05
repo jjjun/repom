@@ -135,6 +135,18 @@ Follow the workflow in `docs/issue/README.md`:
 - Mark completed issues automatically when user confirms
 - Use sequential numbering (001, 002, ...)
 
+### When Creating External Proposal Documents (docs/proposals/)
+
+Use `docs/proposals/` only when repom cannot complete the goal by itself because another project or package must change.
+
+- Follow `docs/proposals/README.md` and copy `docs/proposals/_template.md`
+- Number proposals by scanning only files directly under `docs/proposals/`
+- Exclude `README.md` and `_template.md` from numbering
+- Use `NNN_<target>_<slug>.md`, where target is a snake_case project/package name
+- Continue implementing any repom-side workaround or follow-up that can be done locally
+
+Do not use proposals for repom's own feature ideas or tasks. Use `docs/ideas/` or `docs/issue/` for those.
+
 ## �📚 重要なドキュメントファイル
 
 ### Core Documentation (必ず参照)
@@ -235,6 +247,7 @@ Follow the workflow in `docs/issue/README.md`:
 docs/
 ├── guides/             # 📘 Usage guides (concise, practical, for teaching other AI agents)
 ├── ideas/              # 💡 Feature proposals and enhancement ideas
+├── proposals/          # 📮 Temporary proposals for external projects/packages
 ├── technical/          # 🔧 Implementation decisions and constraints (for AI improvement work)
 └── issue/              # 📋 Problem tracking and resolution
     ├── README.md      # Issue index (MUST update when moving files)

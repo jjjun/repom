@@ -241,6 +241,24 @@ db_engine, db_test = create_test_fixtures(
 - Ensure new shared utilities remain decoupled from any single application domain.
 - For model definitions, `get_plural_tablename()` can be used to derive table names from file names to keep them aligned.
 
+## Proposal Management (AI Agent Rule)
+
+Use `docs/proposals/` when work in repom reveals that another project or package must change before the overall goal can be completed.
+
+- `docs/ideas/` is for repom's own feature ideas.
+- `docs/issue/` is for repom implementation tasks.
+- `docs/proposals/` is for temporary proposals to external projects/packages such as `mine-py`, `fast-domain`, `mine-js-monorepo`, or `py_cr_wrapper`.
+
+When creating a proposal:
+1. Check existing Markdown files directly under `docs/proposals/`.
+2. Ignore `README.md` and `_template.md` when choosing the number.
+3. Use the next number after the current maximum, zero-padded to three digits.
+4. Copy `docs/proposals/_template.md` to `docs/proposals/NNN_<target>_<slug>.md`.
+5. Fill in why repom cannot complete the change alone, what the target should change, and what follow-up remains in repom.
+6. Continue implementing any part that can be handled inside repom.
+
+Proposal files are temporary. Delete them after the target project has accepted, rejected, or otherwise completed the proposal and repom no longer needs the tracking note.
+
 ## Issue Management (AI Agent Rule)
 
 When an issue is completed:

@@ -182,6 +182,7 @@ version_locations = %(here)s/alembic/versions
 docs/
 ├── guides/         # 使い方ガイド（testing, repository, model など）
 ├── ideas/          # 機能提案
+├── proposals/      # 外部プロジェクトへの一時提案書
 ├── technical/      # 実装詳細・制約の調査
 └── issue/
     ├── README.md   # Issue インデックス（必ず更新）
@@ -208,6 +209,18 @@ Issue が完了したら:
 3. コミット: `docs(issue): Complete issue #NNN - [title]`
 
 完了トリガーワード: 「完了」「終わった」「解決しました」「done」「complete」
+
+## Proposal Management
+
+repom 側だけでは完結できず、外部プロジェクト・外部パッケージ側の変更が必要な場合は `docs/proposals/` を使う。
+
+1. `docs/proposals/` 直下の `.md` を確認する
+2. `README.md` と `_template.md` を除いた既存 proposal の最大番号 + 1 を採番する
+3. `docs/proposals/_template.md` を `docs/proposals/NNN_<target>_<slug>.md` にコピーする
+4. 提案先で必要な変更、repom 側だけでは解決できない理由、repom 側の後続作業を記録する
+5. repom 側で実装できる範囲は proposal 作成後も続けて対応する
+
+`docs/ideas/` は repom 内の機能アイデア、`docs/issue/` は repom 内の実装タスクに使う。
 
 ## Development Guidelines
 

@@ -594,6 +594,7 @@ docs/
 ├── README.md           # ドキュメント構造
 ├── guides/             # 📖 使い方ガイド
 ├── ideas/              # 💡 機能提案
+├── proposals/          # 📮 外部プロジェクトへの一時提案書
 ├── technical/          # 🔧 実装判断記録
 └── issue/              # 📋 問題管理（active/completed）
   ├── README.md      # Issue インデックス
@@ -609,6 +610,7 @@ docs/
 
 - **問題報告**: AI が Issue ファイルを作成し、解決をサポート
 - **アイデア提案**: AI がテンプレートに沿ってドキュメント化
+- **外部提案**: repom 外の変更が必要な場合は `docs/proposals/` に連番 proposal を作成
 - **自動完了処理**: 完了時に自動的に `completed/` へ移動
 
 詳細: `.github/copilot-instructions.md`
@@ -664,6 +666,7 @@ poetry run python -c "from repom.config import config; print(config)"
   - [features/](docs/guides/features/) - マスターデータ同期、ロギング、モデル自動インポート
   - [testing/](docs/guides/testing/) - テスト戦略とフィクスチャ
 - **[docs/technical/](docs/technical/)**: 技術詳細と実装判断記録
+- **[docs/proposals/](docs/proposals/)**: 外部プロジェクト・外部パッケージへの一時提案書
 - **[.github/copilot-instructions.md](.github/copilot-instructions.md)**: GitHub Copilot 専用の指示
 
 ---
