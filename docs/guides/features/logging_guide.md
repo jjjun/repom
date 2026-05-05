@@ -2,6 +2,21 @@
 
 repom は Python 標準の logging モジュールを使ったロギング機能を提供します。**ハイブリッドアプローチ**により、CLI ツール実行時とアプリケーション使用時の両方で柔軟に対応できます。
 
+## ログファイル命名規則
+
+ログファイルは **`<区分>_<YYYY-MM-DD>.log`** 形式で日次ローテーションされます。
+
+```
+data/repom/logs/
+├── main_2026-05-05.log   ← 今日（アクティブ）
+├── main_2026-05-04.log   ← 昨日
+└── main_2026-05-03.log   ← 一昨日
+```
+
+- **区分**: `main`（通常）/ `test`（`EXEC_ENV=test` 時）
+- **ローテーション**: 毎日 0 時に自動切り替え
+- **保持期間**: デフォルト 30 日分（古いファイルは自動削除）
+
 ## 目次
 
 - [基本的な使い方](#基本的な使い方)
@@ -203,19 +218,19 @@ def test_no_n_plus_one(db_test):
 クエリログは以下の場所に出力されます：
 
 - **コンソール**: 🔍 SQL: プレフィックス付き
-- **ログファイル**: `config.log_file_path` が設定されている場合
+- **ログファイル**: `config.log_file_path` が設定されている場合（日次ローテーション）
 
 ```python
-# ログファイルの例
-2024-01-15 10:30:45,123 - sqlalchemy.engine - INFO - SELECT user.id, user.name FROM user
-2024-01-15 10:30:45,125 - sqlalchemy.engine - INFO - SELECT task.id FROM task WHERE task.user_id = ?
+# ログファイルの例（main_2026-05-05.log）
+2026-05-05 10:30:45,123 - sqlalchemy.engine.Engine - INFO - SELECT user.id, user.name FROM user
+2026-05-05 10:30:45,125 - sqlalchemy.engine.Engine - INFO - SELECT task.id FROM task WHERE task.user_id = ?
 ```
 
 ### 注意事項
 
 - **本番環境では無効化**: `enable_sqlalchemy_echo = False`（デフォルト）
 - **パフォーマンス**: ログ出力により若干の処理時間が増加します
-- **ログサイズ**: 大量のクエリがある場合、ログファイルが肥大化する可能性があります
+- **ログサイズ**: 日次ローテーションにより自動管理されます（デフォルト 30 日分保持）
 
 ---
 
@@ -232,7 +247,7 @@ poetry run db_create
 ```
 
 **ログ出力先**:
-- **ファイル**: `data/repom/logs/main.log`（デフォルト）
+- **ファイル**: `data/repom/logs/main_<YYYY-MM-DD>.log`（デフォルト、日次ローテーション）
 - **コンソール**: INFO 以上のメッセージ
 
 **ログフォーマット**:
@@ -242,8 +257,8 @@ poetry run db_create
 ### ログ内容の例
 
 ```bash
-# data/repom/logs/main.log
-2024-01-15 10:30:45,123 - repom.db - INFO - Database created: data/repom/db.dev.sqlite3
+# data/repom/logs/main_2026-05-05.log
+2026-05-05 10:30:45,123 - repom.scripts.db_create - INFO - Database created: data/repom/db.dev.sqlite3
 
 # コンソール出力
 INFO: Database created: data/repom/db.dev.sqlite3
@@ -310,13 +325,9 @@ class MinePyConfig(RepomConfig):
     def __init__(self):
         super().__init__()
         
-        # カスタムログパス
-        self._log_path = 'logs/mine_py.log'
-    
-    @property
-    def log_file_path(self):
-        """カスタムログファイルパス"""
-        return self._log_path
+        # カスタムログパス（拡張子・日付なし）
+        # 実際のファイルは logs/mine_py_<YYYY-MM-DD>.log になる
+        self.log_file = 'mine_py'
 
 def get_repom_config():
     return MinePyConfig()
@@ -328,8 +339,11 @@ CONFIG_HOOK=mine_py.config:get_repom_config
 ```
 
 **動作**:
-- repom の CLI ツールを実行すると、`logs/mine_py.log` に出力される
+- repom の CLI ツールを実行すると、`data/<pkg>/logs/mine_py_<YYYY-MM-DD>.log` に出力される
 - アプリ側で `logging.basicConfig()` を呼べば、そちらが優先される
+
+> **注意**: `log_file_path` は拡張子・日付なしのベースパスです。`.log` を付けないでください。
+> 付けた場合、`mine_py.log_2026-05-05.log` のような意図しないファイル名になります。
 
 ---
 
@@ -339,16 +353,16 @@ CONFIG_HOOK=mine_py.config:get_repom_config
 
 ### テスト時の設定
 
+`EXEC_ENV=test` を設定すると、ログ区分名が自動的に `test` に切り替わります。
+ファイルは `data/repom/logs/test_<YYYY-MM-DD>.log` に出力されます。
+
 ```python
 # tests/conftest.py
 import os
 os.environ['EXEC_ENV'] = 'test'
 
-import logging
-from repom.config import config
-
-# テスト時はログファイルを test.log に変更
-config._log_path = 'logs/test.log'
+# これだけで logs/test_<YYYY-MM-DD>.log に出力される
+# config.log_file は自動的に 'test' になる
 ```
 
 ### caplog を使ったテスト
@@ -530,18 +544,19 @@ class MinePyConfig(RepomConfig):
 
 ## まとめ
 
-- **CLI ツール実行時**: repom のデフォルト設定が自動適用（`config.log_file_path`）
+- **ログファイル形式**: `<区分>_<YYYY-MM-DD>.log`（日次ローテーション、30日保持）
+- **CLI ツール実行時**: repom のデフォルト設定が自動適用（`data/<pkg>/logs/main_<日付>.log`）
 - **アプリケーション使用時**: `logging.basicConfig()` を呼べば、そちらが優先
 - **SQLAlchemy クエリログ**: `config.enable_sqlalchemy_echo = True` で有効化
   - INFO: SQL文のみ（N+1 問題調査に最適）
   - DEBUG: SQL文 + パラメータ + 実行結果の詳細
-- **config_hook**: ログパスをプロジェクトごとにカスタマイズ可能
-- **テスト時**: `EXEC_ENV=test` で別のログファイルに分離
+- **config_hook**: `config.log_file` で区分名をカスタマイズ（`.log` 拡張子は不要）
+- **テスト時**: `EXEC_ENV=test` で自動的に `test_<日付>.log` に分離
 - **ログレベル変更**: `logging.getLogger('repom').setLevel(logging.WARNING)`
 - **複数ログファイル**: `dictConfig` でモジュールごとに分割
 
 **推奨パターン**:
 - アプリケーションでは、必ず `logging.basicConfig()` を呼ぶ
-- CLI ツールでは、`config_hook` でログパスをカスタマイズ
+- CLI ツールでは、`config.log_file` で区分名をカスタマイズ
 - テストでは、`caplog` を使ってログを検証
 - N+1 問題調査では、`config.enable_sqlalchemy_echo = True` で可視化
