@@ -32,6 +32,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
+| #056 | docker_manager テストの絵文字エンコードエラー（Windows cp932） | 高 | 🐛 バグ調査済み | [active/056_docker_manager_emoji_unicode_test_failure.md](active/056_docker_manager_emoji_unicode_test_failure.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください.
