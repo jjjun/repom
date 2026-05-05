@@ -1,8 +1,9 @@
 # Issue #057: ログのアクティブファイルを日付付き形式に固定する
 
-**ステータス**: 🟢 進行中
+**ステータス**: ✅ 完了
 
 **作成日**: 2026-05-05
+**完了日**: 2026-05-05
 
 **優先度**: 中
 
@@ -50,10 +51,12 @@ repom のロギングガイドは、ログファイルを `<区分>_<YYYY-MM-DD>
 
 ## 検証
 
-- `poetry run pytest -c pyproject.toml submod/repom/tests/unit_tests/test_logging.py -q --no-cov`（fast-domain poetry 環境から実行）: 9 passed
+- `poetry run pytest tests/unit_tests/test_logging.py -q`: **9 passed**
+- `poetry run pytest tests/unit_tests -q`: **831 passed, 10 skipped**
+- fast-domain 側: `tests/unit_tests/test_logging.py tests/unit_tests/test_config_hook_standalone.py`: **16 passed**
 
-## 関連リソース
+## 関連コミット
 
-- `docs/guides/features/logging_guide.md`
-- `docs/guides/tmp/fast_domain_logging_migration.md`
-- fast-domain: `docs/issues/active/114_repom_logging_migration.md`
+- repom: `104b019 Fix dated logging handler`
+- fast-domain: `4a3b0af Use repom dated logging handler`
+- repom proposal: `docs/guide/tmp/fast_domain_logging_migration.md`（実装完了後に削除）

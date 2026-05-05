@@ -38,7 +38,7 @@ from repom.mixins import SoftDeletableMixin
 from repom.diagnostics.query_analyzer import QueryAnalyzer
 
 # Logging utilities
-from repom.logging import make_timed_rotating_handler
+from repom.logging import make_timed_rotating_handler, DateNamedDailyFileHandler
 
 __all__ = [
     # Models
@@ -59,4 +59,5 @@ __all__ = [
     'QueryAnalyzer',
     # Logging utilities
     'make_timed_rotating_handler',
+    'DateNamedDailyFileHandler',
 ]

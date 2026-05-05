@@ -34,7 +34,6 @@ completed/     → 実装完了・コミット済み
 |----|---------| -------|-----------| ---------|
 
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
-| #057 | ログのアクティブファイルを日付付き形式に固定する | 中 | 🟢 進行中 | [active/057_logging_active_daily_file_handler.md](active/057_logging_active_daily_file_handler.md) |
 
 詳細は各ファイルを参照してください.
 
@@ -44,6 +43,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #057 | ログのアクティブファイルを日付付き形式に固定する | 2026-05-05 | `DateNamedDailyFileHandler` を新設し `make_timed_rotating_handler()` が日付付き active file (`main_YYYY-MM-DD.log`) を直接開くよう変更。fast-domain でも repom handler を使うよう移行完了。9 passed (repom), 16 passed (fast-domain) | [completed/057_logging_active_daily_file_handler.md](completed/057_logging_active_daily_file_handler.md) |
 | #056 | docker_manager テストの絵文字エンコードエラー（Windows cp932） | 2026-05-05 | `conftest.py` に UTF-8 reconfigure 追加、`print_message()` にフォールバック追加。831 passed, 10 skipped | [completed/056_docker_manager_emoji_unicode_test_failure.md](completed/056_docker_manager_emoji_unicode_test_failure.md) |
 | #055 | AutoDateTime のタイムゾーン非対応による naive datetime 返却 | 2026-04-22 | `AutoDateTime` を timezone-aware 実装へ更新（`DateTime(timezone=True)` + bind/result の UTC 補完）。`BaseModel` の `updated_at` 自動更新を UTC aware 化。関連 unit test 更新/追加後、`tests/unit_tests` で 831 passed, 10 skipped を確認。fast-domain 側の実運用確認も完了 | [completed/055_autodatetime_timezone_awareness.md](completed/055_autodatetime_timezone_awareness.md) |
 | #054 | ガイド・テスト内の private API 利用残存の整理 | 2026-03-19 | Phase 1: 利用者向けガイド4本の `_db_manager` private API 利用を public API に統一。Phase 2 Round 1: テストファイル4本の `_db_manager` import・呼び出しを `get_reusable_sync_transaction()`/`get_standalone_async_transaction()` 等 public API に全面置換。63 passed | [completed/054_private_api_usage_residual_audit.md](completed/054_private_api_usage_residual_audit.md) |

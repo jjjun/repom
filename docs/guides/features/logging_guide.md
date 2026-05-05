@@ -537,7 +537,7 @@ print(config.log_file_path)  # None なら設定されていない
 class MinePyConfig(RepomConfig):
     @property
     def log_file_path(self):
-        return 'logs/mine_py.log'  # カスタムパスを指定
+        return 'logs/mine_py'  # カスタムパスを指定（拡張子・日付なし）
 ```
 
 ---
