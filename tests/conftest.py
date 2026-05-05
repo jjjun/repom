@@ -1,5 +1,6 @@
 ﻿# fmt: off
 import os
+import sys
 import pytest
 import logging
 
@@ -12,6 +13,13 @@ from tests.fixtures.models import User, Post, Parent, Child
 
 
 def pytest_configure(config):
+    # Windows 環境で絵文字を含む出力が cp932 エンコードエラーを起こさないよう UTF-8 に統一
+    # （--capture=tee-sys と capsys の teardown 連携で発生する UnicodeEncodeError を防止）
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8')
+
     # -vv オプション時のみデバッグログを有効化
     if config.option.verbose >= 2:
         logging.basicConfig(

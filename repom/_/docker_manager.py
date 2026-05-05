@@ -248,7 +248,11 @@ def print_message(
         ...     "Port: 5432"
         ... ])
     """
-    print(f"{symbol} {message}")
+    try:
+        print(f"{symbol} {message}")
+    except UnicodeEncodeError:
+        # Windows cp932 などの環境で絵文字が出力できない場合のフォールバック
+        print(f"[*] {message}")
     if details:
         for detail in details:
             print(f"  {detail}")
@@ -265,14 +269,10 @@ def validate_compose_file_exists(compose_file: Path, service_name: str) -> None:
         FileNotFoundError: ファイルが見つからない
     """
     if not compose_file.exists():
-        print(
-            f"⚠️  docker-compose.generated.yml が見つかりません"
-        )
+        print_message("⚠️", "docker-compose.generated.yml が見つかりません")
         print(f"   Expected: {compose_file}")
         print()
-        print(
-            f"ヒント: 先に 'poetry run {service_name.lower()}_generate' を実行してください"
-        )
+        print(f"ヒント: 先に 'poetry run {service_name.lower()}_generate' を実行してください")
         raise FileNotFoundError(f"Compose file not found: {compose_file}")
 
 
@@ -387,7 +387,7 @@ class DockerManager(ABC):
             print_message("❌", str(e))
             sys.exit(1)
 
-        print("⏳ Waiting for service to be ready...")
+        print_message("⏳", "Waiting for service to be ready...")
 
         try:
             self.wait_for_service()
