@@ -204,4 +204,3 @@ def _setup_sqlalchemy_logging():
 
 
 __all__ = ['get_logger', '_setup_sqlalchemy_logging', 'make_timed_rotating_handler']
-
