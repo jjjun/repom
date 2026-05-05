@@ -19,15 +19,82 @@ CLI ツール実行時:
 """
 
 import logging
-from logging.handlers import TimedRotatingFileHandler
+from datetime import date
 from pathlib import Path
-from typing import Optional
 
 _logger_initialized = False
 _sqlalchemy_logging_initialized = False
 
 
-def make_timed_rotating_handler(base_path: str, backup_count: int = 30) -> TimedRotatingFileHandler:
+class DateNamedDailyFileHandler(logging.FileHandler):
+    """日付付きのアクティブファイルへ出力する日次ローテーション handler."""
+
+    def __init__(
+        self,
+        base_path: str,
+        backup_count: int = 30,
+        encoding: str = 'utf-8',
+    ):
+        self.base_path = Path(base_path)
+        self.backup_count = backup_count
+        self.base_path.parent.mkdir(parents=True, exist_ok=True)
+        self.current_date = self._today()
+        super().__init__(
+            self._path_for_date(self.current_date),
+            mode='a',
+            encoding=encoding,
+        )
+        self._cleanup_old_logs()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        today = self._today()
+        if today != self.current_date:
+            self._switch_to_date(today)
+        super().emit(record)
+
+    def _today(self) -> date:
+        return date.today()
+
+    def _path_for_date(self, target_date: date) -> str:
+        return str(
+            self.base_path.with_name(
+                f"{self.base_path.name}_{target_date.isoformat()}.log"
+            )
+        )
+
+    def _switch_to_date(self, target_date: date) -> None:
+        if self.stream:
+            self.stream.flush()
+            self.stream.close()
+            self.stream = None
+        self.current_date = target_date
+        self.baseFilename = self._path_for_date(target_date)
+        self.stream = self._open()
+        self._cleanup_old_logs()
+
+    def _cleanup_old_logs(self) -> None:
+        if self.backup_count <= 0:
+            return
+
+        candidates: list[tuple[date, Path]] = []
+        prefix = f"{self.base_path.name}_"
+        for path in self.base_path.parent.glob(f"{prefix}*.log"):
+            date_text = path.name[len(prefix):-4]
+            try:
+                log_date = date.fromisoformat(date_text)
+            except ValueError:
+                continue
+            candidates.append((log_date, path))
+
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        for _, path in candidates[self.backup_count:]:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                continue
+
+
+def make_timed_rotating_handler(base_path: str, backup_count: int = 30) -> DateNamedDailyFileHandler:
     """``<base_path>_<YYYY-MM-DD>.log`` 形式で日次ローテーションするハンドラーを作成
 
     Args:
@@ -35,33 +102,19 @@ def make_timed_rotating_handler(base_path: str, backup_count: int = 30) -> Timed
         backup_count: 保持する世代数（デフォルト: 30日分）
 
     Returns:
-        TimedRotatingFileHandler
+        DateNamedDailyFileHandler
     """
-    log_path = Path(base_path)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    return DateNamedDailyFileHandler(base_path, backup_count=backup_count)
 
-    handler = TimedRotatingFileHandler(
-        str(log_path),
-        when='midnight',
-        backupCount=backup_count,
-        encoding='utf-8',
-    )
-    # ローテーション後のファイル名: <base>_<YYYY-MM-DD>.log
-    handler.suffix = '_%Y-%m-%d.log'
-    # アクティブなファイル名も同形式にする
-    # デフォルトは <base>.YYYY-MM-DD になるが、namer で <base>_<YYYY-MM-DD>.log に変換
-    import re
-    handler.extMatch = re.compile(r'_\d{4}-\d{2}-\d{2}\.log$')
 
-    def namer(default_name: str) -> str:
-        # default_name 例: /path/main.2026-05-04
-        # → /path/main_2026-05-04.log
-        base, _, date_part = default_name.rpartition('.')
-        return f"{base}_{date_part}.log"
-
-    handler.namer = namer
-
-    return handler
+def _has_logging_handlers(logger_name: str) -> bool:
+    """アプリ側または package root に handler が設定済みか判定する。"""
+    root_handlers = [
+        handler
+        for handler in logging.getLogger().handlers
+        if not type(handler).__module__.startswith('_pytest.')
+    ]
+    return bool(logging.getLogger(logger_name).handlers or root_handlers)
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -109,12 +162,10 @@ def get_logger(name: str) -> logging.Logger:
     if not _logger_initialized:
         _logger_initialized = True
 
-        # repom のルートロガーを取得
-        repom_root_logger = logging.getLogger('repom')
-
-        # ルートロガーにハンドラーがない場合のみ、デフォルト設定を追加
-        if not repom_root_logger.handlers:
+        # repom / root logger にハンドラーがない場合のみ、デフォルト設定を追加
+        if not _has_logging_handlers('repom'):
             from repom.config import config
+            repom_root_logger = logging.getLogger('repom')
 
             if config.log_file_path:
                 # ログレベルを設定
@@ -203,4 +254,9 @@ def _setup_sqlalchemy_logging():
         sqlalchemy_logger.addHandler(file_handler)
 
 
-__all__ = ['get_logger', '_setup_sqlalchemy_logging', 'make_timed_rotating_handler']
+__all__ = [
+    'get_logger',
+    '_setup_sqlalchemy_logging',
+    'make_timed_rotating_handler',
+    'DateNamedDailyFileHandler',
+]

@@ -307,7 +307,7 @@ logger.info("アプリケーション起動")
 
 **動作**:
 - repom のデフォルト設定が適用されます
-- `data/repom/logs/main.log` + コンソール（INFO 以上）にログ出力
+- `data/repom/logs/main_<YYYY-MM-DD>.log` + コンソール（INFO 以上）にログ出力
 
 ---
 

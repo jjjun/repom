@@ -3,11 +3,42 @@ repom/logging.py のテスト（ハイブリッドアプローチ）
 """
 
 import logging
+from datetime import date
 import pytest
-from pathlib import Path
-from unittest.mock import patch
 
-from repom.logging import get_logger
+from repom.logging import DateNamedDailyFileHandler, get_logger, make_timed_rotating_handler
+
+
+@pytest.fixture(autouse=True)
+def reset_logging_state():
+    import repom.logging as logging_module
+
+    logging_module._logger_initialized = False
+    logging_module._sqlalchemy_logging_initialized = False
+    repom_root_logger = logging.getLogger('repom')
+    root_logger = logging.getLogger()
+    original_root_handlers = list(root_logger.handlers)
+
+    for handler in original_root_handlers:
+        root_logger.removeHandler(handler)
+    for handler in repom_root_logger.handlers[:]:
+        handler.close()
+        repom_root_logger.removeHandler(handler)
+
+    yield
+
+    logging_module._logger_initialized = False
+    logging_module._sqlalchemy_logging_initialized = False
+    for handler in repom_root_logger.handlers[:]:
+        handler.close()
+        repom_root_logger.removeHandler(handler)
+    for handler in root_logger.handlers[:]:
+        if handler not in original_root_handlers:
+            handler.close()
+            root_logger.removeHandler(handler)
+    for handler in original_root_handlers:
+        if handler not in root_logger.handlers:
+            root_logger.addHandler(handler)
 
 
 class TestGetLogger:
@@ -32,9 +63,10 @@ class TestGetLogger:
             handlers=[logging.FileHandler(app_log_file)]
         )
 
-        # repom のルートロガーにハンドラーが追加されているか確認
+        # root logger にハンドラーが追加されているか確認
+        root_logger = logging.getLogger()
         repom_root_logger = logging.getLogger('repom')
-        assert len(repom_root_logger.handlers) > 0  # basicConfig() でハンドラーが追加される
+        assert len(root_logger.handlers) > 0
 
         # get_logger() を呼んでも、追加のハンドラーは追加されない
         logger = get_logger('test')
@@ -63,7 +95,7 @@ class TestGetLogger:
             repom_root_logger.removeHandler(handler)
 
         # config.log_file_path をモック（monkeypatch を使用）
-        log_file = tmp_path / "test.log"
+        log_file = tmp_path / "test"
         from repom.config import config
         monkeypatch.setattr(config.__class__, 'log_file_path', property(lambda self: log_file))
 
@@ -74,10 +106,11 @@ class TestGetLogger:
 
         # ログファイルが作成されているか確認
         logger.debug("Test message")
-        assert log_file.exists()
+        active_log_file = tmp_path / f"test_{date.today().isoformat()}.log"
+        assert active_log_file.exists()
 
         # ログファイルの内容を確認
-        content = log_file.read_text(encoding='utf-8')
+        content = active_log_file.read_text(encoding='utf-8')
         assert "Test message" in content
         assert "repom.test" in content
 
@@ -123,7 +156,7 @@ class TestGetLogger:
             repom_root_logger.removeHandler(handler)
 
         # config.log_file_path をモック（monkeypatch を使用）
-        log_file = tmp_path / "test.log"
+        log_file = tmp_path / "test"
         from repom.config import config
         monkeypatch.setattr(config.__class__, 'log_file_path', property(lambda self: log_file))
 
@@ -155,7 +188,7 @@ class TestGetLogger:
             repom_root_logger.removeHandler(handler)
 
         # 存在しないディレクトリを指定
-        log_file = tmp_path / "logs" / "subdir" / "test.log"
+        log_file = tmp_path / "logs" / "subdir" / "test"
         assert not log_file.parent.exists()
 
         # config.log_file_path をモック（monkeypatch を使用）
@@ -167,4 +200,77 @@ class TestGetLogger:
 
         # ログディレクトリが作成されたことを確認
         assert log_file.parent.exists()
-        assert log_file.exists()
+        assert (log_file.parent / f"test_{date.today().isoformat()}.log").exists()
+
+
+class TestDateNamedDailyFileHandler:
+    """日付付きアクティブログファイル handler の動作確認。"""
+
+    def test_make_handler_writes_to_dated_active_file(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            DateNamedDailyFileHandler,
+            '_today',
+            lambda self: date(2026, 5, 5),
+        )
+
+        handler = make_timed_rotating_handler(str(tmp_path / 'main'))
+        logger = logging.getLogger('repom.handler_test')
+        logger.handlers.clear()
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(handler)
+
+        logger.info("active file message")
+        handler.flush()
+        handler.close()
+
+        active_file = tmp_path / 'main_2026-05-05.log'
+        assert active_file.exists()
+        assert not (tmp_path / 'main').exists()
+        assert "active file message" in active_file.read_text(encoding='utf-8')
+
+    def test_handler_switches_file_when_date_changes(self, tmp_path, monkeypatch):
+        current = date(2026, 5, 5)
+        monkeypatch.setattr(
+            DateNamedDailyFileHandler,
+            '_today',
+            lambda self: current,
+        )
+
+        handler = make_timed_rotating_handler(str(tmp_path / 'main'))
+        logger = logging.getLogger('repom.handler_switch_test')
+        logger.handlers.clear()
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(handler)
+
+        logger.info("first day")
+        current = date(2026, 5, 6)
+        logger.info("second day")
+        handler.flush()
+        handler.close()
+
+        first_file = tmp_path / 'main_2026-05-05.log'
+        second_file = tmp_path / 'main_2026-05-06.log'
+        assert "first day" in first_file.read_text(encoding='utf-8')
+        assert "second day" in second_file.read_text(encoding='utf-8')
+
+    def test_handler_deletes_old_logs_by_backup_count(self, tmp_path, monkeypatch):
+        for day in range(1, 5):
+            (tmp_path / f"main_2026-05-0{day}.log").write_text(
+                f"day {day}",
+                encoding='utf-8',
+            )
+
+        monkeypatch.setattr(
+            DateNamedDailyFileHandler,
+            '_today',
+            lambda self: date(2026, 5, 5),
+        )
+
+        handler = make_timed_rotating_handler(str(tmp_path / 'main'), backup_count=3)
+        handler.close()
+
+        assert not (tmp_path / 'main_2026-05-01.log').exists()
+        assert not (tmp_path / 'main_2026-05-02.log').exists()
+        assert (tmp_path / 'main_2026-05-03.log').exists()
+        assert (tmp_path / 'main_2026-05-04.log').exists()
+        assert (tmp_path / 'main_2026-05-05.log').exists()

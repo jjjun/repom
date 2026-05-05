@@ -164,7 +164,7 @@ class Config:
     def log_file(self) -> Optional[str]:
         """ログファイルの区分名（拡張子・日付なし）。exec_env によりファイル名を切り替える
 
-        TimedRotatingFileHandler がこの値を元に
+        repom の日次ログ handler がこの値を元に
         ``<log_file>_<YYYY-MM-DD>.log`` 形式のファイルを生成します。
         """
         return self._get_or_default(
@@ -180,7 +180,7 @@ class Config:
     def log_file_path(self) -> Optional[str]:
         """ログファイルのベースパス（拡張子・日付なし）。
 
-        TimedRotatingFileHandler に渡す際のベースパスとして使用します。
+        repom の日次ログ handler に渡す際のベースパスとして使用します。
         実際のファイルは ``<log_file_path>_<YYYY-MM-DD>.log`` 形式になります。
         """
         if not self.log_path:
