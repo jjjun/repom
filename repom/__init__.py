@@ -37,6 +37,9 @@ from repom.mixins import SoftDeletableMixin
 # Query Analysis
 from repom.diagnostics.query_analyzer import QueryAnalyzer
 
+# Logging utilities
+from repom.logging import make_timed_rotating_handler
+
 __all__ = [
     # Models
     'BaseModel',
@@ -54,4 +57,6 @@ __all__ = [
     'SoftDeletableMixin',
     # Query Analysis
     'QueryAnalyzer',
+    # Logging utilities
+    'make_timed_rotating_handler',
 ]

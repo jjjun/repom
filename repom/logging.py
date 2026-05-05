@@ -27,7 +27,7 @@ _logger_initialized = False
 _sqlalchemy_logging_initialized = False
 
 
-def _make_timed_rotating_handler(base_path: str, backup_count: int = 30) -> TimedRotatingFileHandler:
+def make_timed_rotating_handler(base_path: str, backup_count: int = 30) -> TimedRotatingFileHandler:
     """``<base_path>_<YYYY-MM-DD>.log`` 形式で日次ローテーションするハンドラーを作成
 
     Args:
@@ -121,7 +121,7 @@ def get_logger(name: str) -> logging.Logger:
                 repom_root_logger.setLevel(logging.DEBUG)
 
                 # 日次ローテーションファイルハンドラーを追加
-                file_handler = _make_timed_rotating_handler(config.log_file_path)
+                file_handler = make_timed_rotating_handler(config.log_file_path)
                 file_handler.setLevel(logging.DEBUG)
                 file_handler.setFormatter(
                     logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -195,7 +195,7 @@ def _setup_sqlalchemy_logging():
 
     # ファイルハンドラーを追加（ログファイルが設定されている場合）
     if config.log_file_path:
-        file_handler = _make_timed_rotating_handler(config.log_file_path)
+        file_handler = make_timed_rotating_handler(config.log_file_path)
         file_handler.setLevel(log_level)
         file_handler.setFormatter(
             logging.Formatter('%(asctime)s - sqlalchemy.engine.Engine - %(levelname)s - %(message)s')
@@ -203,5 +203,5 @@ def _setup_sqlalchemy_logging():
         sqlalchemy_logger.addHandler(file_handler)
 
 
-__all__ = ['get_logger', '_setup_sqlalchemy_logging']
+__all__ = ['get_logger', '_setup_sqlalchemy_logging', 'make_timed_rotating_handler']
 
