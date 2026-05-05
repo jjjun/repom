@@ -21,6 +21,37 @@ from repom.utility import load_models
 from repom.config import config
 from repom.database import get_standalone_sync_transaction
 from repom import BaseRepository
+from repom._.docker_manager import DockerCommandExecutor
+
+
+def ensure_postgres_running() -> None:
+    """PostgreSQL コンテナが起動していない場合、自動的に起動する
+
+    db_type が 'postgres' の場合のみ実行されます。
+    docker コマンドが存在しない場合や compose ファイルがない場合は
+    その旨を表示して終了します。
+    """
+    container_name = config.postgres.container.get_container_name()
+
+    try:
+        if DockerCommandExecutor.is_container_running(container_name):
+            return
+    except FileNotFoundError:
+        print(f"\nエラー: docker コマンドが見つかりません。Docker Desktop をインストールしてください。")
+        sys.exit(1)
+
+    print(f"\n[PostgreSQL] コンテナ '{container_name}' が未起動のため、自動起動します...")
+    try:
+        from repom.postgres.manage import start as postgres_start
+        postgres_start()
+    except FileNotFoundError as e:
+        print(f"\nエラー: {e}")
+        sys.exit(1)
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"\nエラー: PostgreSQL の自動起動に失敗しました: {e}")
+        sys.exit(1)
 
 
 def load_master_data_files(directory: str) -> Generator[Tuple[Type, List[Dict[str, Any]]], None, None]:
@@ -124,6 +155,10 @@ def main():
     if not master_data_dir:
         print("エラー: master_data_path が設定されていません")
         sys.exit(1)
+
+    # PostgreSQL 使用時、コンテナが未起動なら自動起動
+    if config.db_type == 'postgres':
+        ensure_postgres_running()
 
     try:
         # トランザクション内で全ファイルを処理
