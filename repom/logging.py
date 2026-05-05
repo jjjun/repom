@@ -11,14 +11,57 @@ CLI ツール実行時:
 アプリケーション実行時:
     アプリ側で logging.basicConfig() を呼べば、そちらが優先されます。
     呼ばなければ、repom のデフォルト設定が使われます。
+
+ログファイル命名規則:
+    <区分>_<YYYY-MM-DD>.log
+    例: main_2026-05-05.log / test_2026-05-05.log
+    日付が変わると自動ローテーション（デフォルト 30 日分保持）
 """
 
 import logging
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
 _logger_initialized = False
 _sqlalchemy_logging_initialized = False
+
+
+def _make_timed_rotating_handler(base_path: str, backup_count: int = 30) -> TimedRotatingFileHandler:
+    """``<base_path>_<YYYY-MM-DD>.log`` 形式で日次ローテーションするハンドラーを作成
+
+    Args:
+        base_path: ログファイルのベースパス（拡張子・日付なし）
+        backup_count: 保持する世代数（デフォルト: 30日分）
+
+    Returns:
+        TimedRotatingFileHandler
+    """
+    log_path = Path(base_path)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    handler = TimedRotatingFileHandler(
+        str(log_path),
+        when='midnight',
+        backupCount=backup_count,
+        encoding='utf-8',
+    )
+    # ローテーション後のファイル名: <base>_<YYYY-MM-DD>.log
+    handler.suffix = '_%Y-%m-%d.log'
+    # アクティブなファイル名も同形式にする
+    # デフォルトは <base>.YYYY-MM-DD になるが、namer で <base>_<YYYY-MM-DD>.log に変換
+    import re
+    handler.extMatch = re.compile(r'_\d{4}-\d{2}-\d{2}\.log$')
+
+    def namer(default_name: str) -> str:
+        # default_name 例: /path/main.2026-05-04
+        # → /path/main_2026-05-04.log
+        base, _, date_part = default_name.rpartition('.')
+        return f"{base}_{date_part}.log"
+
+    handler.namer = namer
+
+    return handler
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -42,7 +85,7 @@ def get_logger(name: str) -> logging.Logger:
     Examples:
         # CLI ツール（repom 単体）
         poetry run db_create
-        → config.log_file_path + コンソールに出力
+        → <区分>_<YYYY-MM-DD>.log + コンソールに出力
 
         # アプリ側で制御（優先される）
         import logging
@@ -52,7 +95,7 @@ def get_logger(name: str) -> logging.Logger:
         # アプリ側で設定なし（デフォルト動作）
         from repom.logging import get_logger
         logger = get_logger(__name__)
-        → config.log_file_path + コンソールに出力
+        → <区分>_<YYYY-MM-DD>.log + コンソールに出力
 
     Note:
         最初の呼び出し時に、repom のルートロガーにハンドラーがない場合のみ、
@@ -74,15 +117,11 @@ def get_logger(name: str) -> logging.Logger:
             from repom.config import config
 
             if config.log_file_path:
-                # ログディレクトリを作成
-                log_path = Path(config.log_file_path)
-                log_path.parent.mkdir(parents=True, exist_ok=True)
-
                 # ログレベルを設定
                 repom_root_logger.setLevel(logging.DEBUG)
 
-                # FileHandler を追加
-                file_handler = logging.FileHandler(config.log_file_path, encoding='utf-8')
+                # 日次ローテーションファイルハンドラーを追加
+                file_handler = _make_timed_rotating_handler(config.log_file_path)
                 file_handler.setLevel(logging.DEBUG)
                 file_handler.setFormatter(
                     logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -156,7 +195,7 @@ def _setup_sqlalchemy_logging():
 
     # ファイルハンドラーを追加（ログファイルが設定されている場合）
     if config.log_file_path:
-        file_handler = logging.FileHandler(config.log_file_path, encoding='utf-8')
+        file_handler = _make_timed_rotating_handler(config.log_file_path)
         file_handler.setLevel(log_level)
         file_handler.setFormatter(
             logging.Formatter('%(asctime)s - sqlalchemy.engine.Engine - %(levelname)s - %(message)s')
@@ -165,3 +204,4 @@ def _setup_sqlalchemy_logging():
 
 
 __all__ = ['get_logger', '_setup_sqlalchemy_logging']
+

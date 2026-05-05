@@ -162,10 +162,14 @@ class Config:
 
     @property
     def log_file(self) -> Optional[str]:
-        """ログファイル名。exec_env によりファイル名を切り替える"""
+        """ログファイルの区分名（拡張子・日付なし）。exec_env によりファイル名を切り替える
+
+        TimedRotatingFileHandler がこの値を元に
+        ``<log_file>_<YYYY-MM-DD>.log`` 形式のファイルを生成します。
+        """
         return self._get_or_default(
             '_log_file',
-            'test.log' if self.exec_env == 'test' else 'main.log',
+            'test' if self.exec_env == 'test' else 'main',
         )
 
     @log_file.setter
@@ -174,6 +178,11 @@ class Config:
 
     @property
     def log_file_path(self) -> Optional[str]:
+        """ログファイルのベースパス（拡張子・日付なし）。
+
+        TimedRotatingFileHandler に渡す際のベースパスとして使用します。
+        実際のファイルは ``<log_file_path>_<YYYY-MM-DD>.log`` 形式になります。
+        """
         if not self.log_path:
             return None
         return str(Path(self.log_path) / self.log_file)
