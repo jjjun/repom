@@ -32,7 +32,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
-| #056 | docker_manager テストの絵文字エンコードエラー（Windows cp932） | 高 | 🐛 バグ調査済み | [active/056_docker_manager_emoji_unicode_test_failure.md](active/056_docker_manager_emoji_unicode_test_failure.md) |
+
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください.
@@ -43,6 +43,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #056 | docker_manager テストの絵文字エンコードエラー（Windows cp932） | 2026-05-05 | `conftest.py` に UTF-8 reconfigure 追加、`print_message()` にフォールバック追加。831 passed, 10 skipped | [completed/056_docker_manager_emoji_unicode_test_failure.md](completed/056_docker_manager_emoji_unicode_test_failure.md) |
 | #055 | AutoDateTime のタイムゾーン非対応による naive datetime 返却 | 2026-04-22 | `AutoDateTime` を timezone-aware 実装へ更新（`DateTime(timezone=True)` + bind/result の UTC 補完）。`BaseModel` の `updated_at` 自動更新を UTC aware 化。関連 unit test 更新/追加後、`tests/unit_tests` で 831 passed, 10 skipped を確認。fast-domain 側の実運用確認も完了 | [completed/055_autodatetime_timezone_awareness.md](completed/055_autodatetime_timezone_awareness.md) |
 | #054 | ガイド・テスト内の private API 利用残存の整理 | 2026-03-19 | Phase 1: 利用者向けガイド4本の `_db_manager` private API 利用を public API に統一。Phase 2 Round 1: テストファイル4本の `_db_manager` import・呼び出しを `get_reusable_sync_transaction()`/`get_standalone_async_transaction()` 等 public API に全面置換。63 passed | [completed/054_private_api_usage_residual_audit.md](completed/054_private_api_usage_residual_audit.md) |
 | #053 | task/CLI 向け sync transaction public API の追加 | 2026-03-19 | `get_reusable_sync_transaction()` を追加し、FastAPI Depends 用 generator API と with 文向け API の契約を明確化。`test_database.py` に契約/commit/rollback/lifecycle テストを追加し、`tests/unit_tests` と `tests/behavior_tests` の回帰を確認。利用ガイドも public API 推奨に更新 | [completed/053_sync_transaction_public_api_for_task_cli.md](completed/053_sync_transaction_public_api_for_task_cli.md) |
