@@ -299,6 +299,33 @@ def stop():
         raise
 
 
+def ensure_running():
+    """PostgreSQL コンテナが未起動の場合、自動的に起動する
+
+    DB 操作スクリプトから呼び出され、接続前にコンテナの起動を保証します。
+    docker コマンドが存在しない場合はエラーメッセージを表示して終了します。
+    """
+    from repom._.docker_manager import DockerCommandExecutor
+
+    container_name = config.postgres.container.get_container_name()
+
+    try:
+        if DockerCommandExecutor.is_container_running(container_name):
+            return
+    except FileNotFoundError:
+        print("\nエラー: docker コマンドが見つかりません。Docker Desktop をインストールしてください。")
+        sys.exit(1)
+
+    print(f"\n[PostgreSQL] コンテナ '{container_name}' が未起動のため、自動起動します...")
+    try:
+        start()
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"\nエラー: PostgreSQL の自動起動に失敗しました: {e}")
+        sys.exit(1)
+
+
 def remove():
     """PostgreSQL コンテナとボリュームを削除（完全リセット）"""
     manager = PostgresManager()
