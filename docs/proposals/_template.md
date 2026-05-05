@@ -63,7 +63,7 @@
 ## 関連ファイル・資料
 
 - `repom/...`
-- `docs/issue/...`
+- `docs/issues/...`
 - `docs/guides/...`
 
 ---

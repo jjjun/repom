@@ -90,7 +90,7 @@ def test_type_checking_with_manual_import_order(isolated_mapper_registry)
 
 #### Step 1: ドキュメント削除
 - ✅ `docs/guides/testing/isolated_mapper_fixture.md` を削除
-- ✅ `docs/issue/active/022_isolated_mapper_registry_improvement.md` を completed へ移動
+- ✅ `docs/issues/active/022_isolated_mapper_registry_improvement.md` を completed へ移動
 - ✅ `docs/guides/testing/README.md` を更新
 
 #### Step 2: `conftest.py` の更新
@@ -165,8 +165,8 @@ def test_type_checking(isolated_mapper_registry, db_test):
 ```bash
 # 削除対象
 git rm docs/guides/testing/isolated_mapper_fixture.md
-git mv docs/issue/active/022_isolated_mapper_registry_improvement.md \
-       docs/issue/completed/022_isolated_mapper_registry_improvement.md
+git mv docs/issues/active/022_isolated_mapper_registry_improvement.md \
+       docs/issues/completed/022_isolated_mapper_registry_improvement.md
 ```
 
 #### Step 2-2: README 更新
@@ -255,7 +255,7 @@ def test_type_checking(isolated_mapper_registry, db_test):
 - `docs/guides/testing/isolated_mapper_fixture.md` - 削除
 - `docs/guides/testing/README.md` - 更新
 - `docs/guides/testing/testing_guide.md` - 更新（使い分けガイド追加）
-- `docs/issue/active/022_isolated_mapper_registry_improvement.md` - completed へ移動
+- `docs/issues/active/022_isolated_mapper_registry_improvement.md` - completed へ移動
 
 #### コード
 - `tests/conftest.py` - docstring 更新
@@ -273,8 +273,8 @@ def test_type_checking(isolated_mapper_registry, db_test):
 1. **ドキュメント削除**
    ```bash
    git rm docs/guides/testing/isolated_mapper_fixture.md
-   git mv docs/issue/active/022_isolated_mapper_registry_improvement.md \
-          docs/issue/completed/022_isolated_mapper_registry_improvement.md
+   git mv docs/issues/active/022_isolated_mapper_registry_improvement.md \
+          docs/issues/completed/022_isolated_mapper_registry_improvement.md
    ```
 
 2. **README 更新**

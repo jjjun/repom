@@ -181,7 +181,7 @@ $ poetry run repom validate-schemas
 
 ## 関連ドキュメント
 
-- `docs/issue/completed/001_get_response_schema_forward_refs_improvement.md` - Phase 2 エラーハンドリング
+- `docs/issues/completed/001_get_response_schema_forward_refs_improvement.md` - Phase 2 エラーハンドリング
 - `README.md` - Phase 2 実装詳細
 - `repom/base_model.py` - エラーハンドリング付き BaseModel 実装
 

@@ -599,7 +599,7 @@ module = importlib.import_module(type_name)  # 任意モジュール実行
 
 ### 実装済み機能
 
-- **Phase 1**: [docs/issue/get_response_schema_forward_refs_improvement.md](../issue/get_response_schema_forward_refs_improvement.md)
+- **Phase 1**: [docs/issues/get_response_schema_forward_refs_improvement.md](../issues/get_response_schema_forward_refs_improvement.md)
 - **Phase 2**: 同上
 
 ### 関連ドキュメント

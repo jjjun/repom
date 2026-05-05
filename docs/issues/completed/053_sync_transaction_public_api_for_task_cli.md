@@ -192,4 +192,4 @@
 ## 参考
 
 - mine-py ドラフト: task/CLI での性能劣化観測（`dispose_sync()` 起因）
-- 既存 Issue: `docs/issue/completed/001_fastapi_depends_fix.md`
+- 既存 Issue: `docs/issues/completed/001_fastapi_depends_fix.md`

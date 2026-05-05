@@ -572,7 +572,7 @@ repom/
 
 ## 次のステップ
 
-Issue #041 が完成しました。このドキュメントは `docs/issue/completed/` に移行予定。
+Issue #041 が完成しました。このドキュメントは `docs/issues/completed/` に移行予定。
 
 ---
 

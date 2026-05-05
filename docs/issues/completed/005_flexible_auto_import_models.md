@@ -463,7 +463,7 @@ def load_models(self) -> None:
 ### ドキュメント
 
 - ✅ `docs/guides/auto_import_models_guide.md` - 使用ガイド（日本語、AI向け80%）
-- ✅ `docs/issue/in_progress/004_flexible_auto_import_models.md` - 技術仕様と実装記録
+- ✅ `docs/issues/in_progress/004_flexible_auto_import_models.md` - 技術仕様と実装記録
 
 ---
 

@@ -128,9 +128,9 @@ items = repo.get_by(name="example")
 - Code examples > 10 lines (simplify)
 - Similar code blocks (consolidate)
 
-### When Creating Issue Documents (docs/issue/)
+### When Creating Issue Documents (docs/issues/)
 
-Follow the workflow in `docs/issue/README.md`:
+Follow the workflow in `docs/issues/README.md`:
 - Problem description → Expected behavior → Solution → Test results
 - Mark completed issues automatically when user confirms
 - Use sequential numbering (001, 002, ...)
@@ -145,7 +145,7 @@ Use `docs/proposals/` only when repom cannot complete the goal by itself because
 - Use `NNN_<target>_<slug>.md`, where target is a snake_case project/package name
 - Continue implementing any repom-side workaround or follow-up that can be done locally
 
-Do not use proposals for repom's own feature ideas or tasks. Use `docs/ideas/` or `docs/issue/` for those.
+Do not use proposals for repom's own feature ideas or tasks. Use `docs/ideas/` or `docs/issues/` for those.
 
 ## �📚 重要なドキュメントファイル
 
@@ -235,7 +235,7 @@ Do not use proposals for repom's own feature ideas or tasks. Use `docs/ideas/` o
 
 ### Issue Tracking
 
-- **docs/issue/README.md**: Issue 管理システムの使い方
+- **docs/issues/README.md**: Issue 管理システムの使い方
 
 ---
 
@@ -249,7 +249,7 @@ docs/
 ├── ideas/              # 💡 Feature proposals and enhancement ideas
 ├── proposals/          # 📮 Temporary proposals for external projects/packages
 ├── technical/          # 🔧 Implementation decisions and constraints (for AI improvement work)
-└── issue/              # 📋 Problem tracking and resolution
+└── issues/              # 📊 Problem tracking and resolution
     ├── README.md      # Issue index (MUST update when moving files)
     ├── active/        # 🚧 Planned and active work (backlog + in_progress merged)
     └── completed/     # ✅ Resolved issues (NNN_name.md with sequential numbering)
@@ -266,12 +266,12 @@ docs/
 
 2. **Create Issue File**
    ```markdown
-   # Location: docs/issue/active/XXX_issue_name.md
+   # Location: docs/issues/active/XXX_issue_name.md
    # Use descriptive snake_case naming
    ```
 
 3. **Update Issue Index**
-   - Add entry to `docs/issue/README.md` in appropriate section
+   - Add entry to `docs/issues/README.md` in appropriate section
    - Include status, overview, and file path
 
 4. **Work Together**
@@ -282,7 +282,7 @@ docs/
 5. **Mark as Complete** (when user confirms "完了" / "done" / "finished")
    - **AUTOMATICALLY** move file: `active/XXX_*.md` → `completed/NNN_*.md`
    - Assign sequential number (001, 002, 003...)
-   - **AUTOMATICALLY** update `docs/issue/README.md`:
+   - **AUTOMATICALLY** update `docs/issues/README.md`:
      * Remove from "📝 実装予定・作業中の Issue"
      * Add to "📋 完了済み Issue" with summary
    - Commit with message: `docs(issue): Complete issue #NNN - [title]`
@@ -334,7 +334,7 @@ AI confirms understanding
     ↓
 Create: active/XXX_name.md
     ↓
-Update: docs/issue/README.md (add to appropriate section)
+Update: docs/issues/README.md (add to appropriate section)
     ↓
 Work on solution together (testing, debugging, implementing)
     ↓
@@ -342,7 +342,7 @@ User says "完了" / "done" / "finished"
     ↓
 AI AUTOMATICALLY:
   1. Move: active/XXX_name.md → completed/NNN_name.md
-  2. Update: docs/issue/README.md (move entry to completed section)
+  2. Update: docs/issues/README.md (move entry to completed section)
   3. Commit: "docs(issue): Complete issue #NNN - [title]"
 ```
 
@@ -358,7 +358,7 @@ Create: docs/ideas/feature_name.md
 Evaluate feasibility
     ↓
 If needs investigation → docs/technical/topic.md
-If ready → docs/issue/active/XXX_name.md
+If ready → docs/issues/active/XXX_name.md
 ```
 ### 🔄 Automatic Completion Triggers
 
@@ -371,7 +371,7 @@ When user says any of these phrases, **AUTOMATICALLY** complete the issue:
 
 **Automatic Actions:**
 1. Move file to `completed/` with next sequential number
-2. Update `docs/issue/README.md` (remove from active, add to completed)
+2. Update `docs/issues/README.md` (remove from active, add to completed)
 3. Git commit with descriptive message
 4. Confirm completion to user
 

@@ -246,7 +246,7 @@ db_engine, db_test = create_test_fixtures(
 Use `docs/proposals/` when work in repom reveals that another project or package must change before the overall goal can be completed.
 
 - `docs/ideas/` is for repom's own feature ideas.
-- `docs/issue/` is for repom implementation tasks.
+- `docs/issues/` is for repom implementation tasks.
 - `docs/proposals/` is for temporary proposals to external projects/packages such as `mine-py`, `fast-domain`, `mine-js-monorepo`, or `py_cr_wrapper`.
 
 When creating a proposal:
@@ -263,5 +263,5 @@ Proposal files are temporary. Delete them after the target project has accepted,
 
 When an issue is completed:
 - Keep the file name unchanged (issue ID stays the same).
-- Move the file from `docs/issue/active/` to `docs/issue/completed/`.
-- Update `docs/issue/README.md` to move the entry from active to completed.
+- Move the file from `docs/issues/active/` to `docs/issues/completed/`.
+- Update `docs/issues/README.md` to move the entry from active to completed.

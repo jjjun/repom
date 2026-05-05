@@ -67,21 +67,21 @@ docs/
 
 ---
 
-### 5. **issue/** - 問題管理
+### 5. **issues/** - 問題管理
 
 **目的**: 実装タスクの管理と記録
 
 **対象読者**: AI エージェント（プロジェクト管理）
 
-**詳細**: [docs/issue/README.md](issue/README.md) を参照
+**詳細**: [docs/issues/README.md](issues/README.md) を参照
 
 ---
 
 ## 🔄 情報のライフサイクル
 
 1. **ideas/**: 問題提起、簡潔な提案（250-350行制限）
-2. **issue/active/**: 実装計画、タスク管理（進捗管理）
-3. **issue/completed/**: 実装記録
+2. **issues/active/**: 実装計画、タスク管理（進捗管理）
+3. **issues/completed/**: 実装記録
 4. **technical/**: 設計判断の背景（なぜこうなったか）
 5. **guides/**: 使い方マニュアル（How-to）
 

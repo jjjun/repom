@@ -259,7 +259,7 @@ def setup_refresh_repo(db_test):
 
 3. **Issue クローズ**
    - 完了報告
-   - `docs/issue/completed/019_refactor_tests_to_use_fixtures.md` へ移動
+   - `docs/issues/completed/019_refactor_tests_to_use_fixtures.md` へ移動
 
 ---
 

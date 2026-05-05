@@ -509,7 +509,7 @@ def test_user_forward_refs_take_precedence():
 **ドキュメント**:
 - `docs/get_response_schema_technical.md` - 技術的な詳細
 - `docs/get_response_schema_testing_guide.md` - テストガイド
-- `docs/issue/README.md` - Issue 管理インデックス
+- `docs/issues/README.md` - Issue 管理インデックス
 
 ### 参考資料
 
@@ -792,7 +792,7 @@ except Exception as e:
 **ドキュメント**:
 - `docs/get_response_schema_technical.md` - 技術的な詳細
 - `docs/get_response_schema_testing_guide.md` - テストガイド
-- `docs/issue/README.md` - Issue 管理インデックス
+- `docs/issues/README.md` - Issue 管理インデックス
 - `README.md` - FastAPI 統合セクション（Phase 1 改善内容を含む）
 
 ### 参考資料

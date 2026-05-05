@@ -5,7 +5,7 @@
 ## ディレクトリ構造
 
 ```
-docs/issue/
+docs/issues/
 ├── README.md              # このファイル、Issue 管理のインデックス
 ├── active/                # 実装予定・作業中の Issue
 │   └── XXX_*.md          # Issue（着手前または作業中）

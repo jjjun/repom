@@ -2,7 +2,7 @@
 
 このディレクトリは、`repom` から他プロジェクト・他パッケージへ送る提案書を置く場所です。
 
-`docs/ideas/` は repom 自体の機能アイデア、`docs/issue/` は repom 内の実装タスクを扱います。
+`docs/ideas/` は repom 自体の機能アイデア、`docs/issues/` は repom 内の実装タスクを扱います。
 一方、`docs/proposals/` は repom 側だけでは完結できず、外部システム側の変更や判断が必要なときだけ使います。
 
 提案書は一時ファイルとして管理します。提案先で対応が完了したら削除してください。
@@ -55,5 +55,5 @@ NNN_<target>_<slug>.md
 ## 補足
 
 - 提案書は repom 外の変更や意思決定が必要な場合にだけ作成します
-- repom 内で実装できる機能追加・修正は `docs/issue/` または `docs/ideas/` を使います
+- repom 内で実装できる機能追加・修正は `docs/issues/` または `docs/ideas/` を使います
 - 提案先で対応が完了したら、関連する repom 側変更を確認したうえで proposal ファイルを削除します

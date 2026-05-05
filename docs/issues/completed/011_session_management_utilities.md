@@ -80,7 +80,7 @@
 ### 変更ファイル
 - ✅ `repom/db.py`: `SessionLocal` のエクスポート追加
 - ✅ `README.md`: セッション管理ガイドへのリンク追加
-- ✅ `docs/issue/README.md`: Issue #011 の登録
+- ✅ `docs/issues/README.md`: Issue #011 の登録
 
 ### 影響を受ける機能
 - なし（新規機能の追加のみ、既存機能への影響なし）

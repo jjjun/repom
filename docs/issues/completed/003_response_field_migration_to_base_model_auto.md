@@ -538,8 +538,8 @@ MyResponse = MyModel.get_response_schema()
 - **実装ガイド**: `docs/base_model_auto_guide.md`
 - **技術詳細**: `docs/technical/get_response_schema_technical.md`
 - **前方参照調査**: `docs/research/auto_forward_refs_resolution.md`
-- **Issue #1**: `docs/issue/completed/001_get_response_schema_forward_refs_improvement.md`
-- **Issue #2**: `docs/issue/completed/002_sqlalchemy_column_inheritance_constraint.md`
+- **Issue #1**: `docs/issues/completed/001_get_response_schema_forward_refs_improvement.md`
+- **Issue #2**: `docs/issues/completed/002_sqlalchemy_column_inheritance_constraint.md`
 
 ## Notes
 
