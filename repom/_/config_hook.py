@@ -51,6 +51,9 @@ def get_config_from_hook(config: dataclass) -> dataclass:
 
     # フック関数をロード
     hook_function = load_hook_function(hook_path)
+    if hook_function is None:
+        return config
+
     config = hook_function(config)
     return config
 
