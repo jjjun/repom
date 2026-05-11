@@ -1,7 +1,5 @@
 ﻿from dataclasses import dataclass
-from logging import config
 from pathlib import Path
-import os
 
 
 def hook_config(config: dataclass) -> dataclass:
