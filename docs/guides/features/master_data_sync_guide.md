@@ -121,20 +121,20 @@ data_master/
 
 ```bash
 # デフォルト環境（EXEC_ENV=dev）
-poetry run db_sync_master
+uv run db_sync_master
 ```
 
 ### 環境指定
 
 ```bash
 # 開発環境
-EXEC_ENV=dev poetry run db_sync_master
+EXEC_ENV=dev uv run db_sync_master
 
 # 本番環境
-EXEC_ENV=prod poetry run db_sync_master
+EXEC_ENV=prod uv run db_sync_master
 
 # テスト環境
-EXEC_ENV=test poetry run db_sync_master
+EXEC_ENV=test uv run db_sync_master
 ```
 
 ### 実行結果の例
@@ -210,10 +210,10 @@ MASTER_DATA = [
 
 ```bash
 # マスターデータを同期
-poetry run db_sync_master
+uv run db_sync_master
 
 # 動作確認
-poetry run python -m your_app
+uv run python -m your_app
 ```
 
 ### 4. バージョン管理
@@ -402,7 +402,7 @@ MASTER_DATA = [
 **ログを確認**:
 
 ```bash
-poetry run db_sync_master
+uv run db_sync_master
 # 出力: ✓ ModelName: 3 件
 ```
 
@@ -414,11 +414,11 @@ poetry run db_sync_master
 
 ```bash
 # 基本実行
-poetry run db_sync_master
+uv run db_sync_master
 
 # 環境指定
-EXEC_ENV=dev poetry run db_sync_master
-EXEC_ENV=prod poetry run db_sync_master
+EXEC_ENV=dev uv run db_sync_master
+EXEC_ENV=prod uv run db_sync_master
 ```
 
 ### チェックリスト
@@ -430,7 +430,7 @@ EXEC_ENV=prod poetry run db_sync_master
 - [ ] 外部キー制約を考慮した順序でファイルを配置
 - [ ] `id` を明示的に指定
 - [ ] Git でバージョン管理
-- [ ] 実行前にバックアップ作成（`poetry run db_backup`）
+- [ ] 実行前にバックアップ作成（`uv run db_backup`）
 
 ---
 

@@ -7,7 +7,7 @@
 ## Technology Stack
 
 - **Language**: Python 3.12+
-- **Package Manager**: Poetry
+- **Package Manager**: uv
 - **Database ORM**: SQLAlchemy 2.0+
 - **Migration Tool**: Alembic
 - **Testing Framework**: pytest
@@ -22,7 +22,7 @@ repom/
 │   ├── custom_types/          # Reusable custom SQLAlchemy types
 │   ├── repositories/          # Repository implementations
 │   ├── mixins/                # SoftDeletableMixin, etc.
-│   ├── scripts/               # CLI scripts (Poetry entry points)
+│   ├── scripts/               # CLI scripts (console script entry points)
 │   ├── postgres/              # PostgreSQL Docker management
 │   ├── redis/                 # Redis Docker management
 │   ├── config.py              # Environment-aware configuration
@@ -42,32 +42,32 @@ repom/
 
 ## Commands
 
-Always use `poetry run` prefix:
+Always use `uv run` prefix:
 
 ```bash
 # Tests
-poetry run pytest tests/unit_tests      # Unit tests (~3s)
-poetry run pytest tests/behavior_tests  # Behavior tests (~2s)
-poetry run pytest                        # All tests (~5s)
+uv run pytest tests/unit_tests      # Unit tests (~3s)
+uv run pytest tests/behavior_tests  # Behavior tests (~2s)
+uv run pytest                        # All tests (~5s)
 
 # Database
-poetry run db_create                     # Create DB (dev + prod)
-poetry run db_delete                     # Delete DB tables
-poetry run db_backup                     # Backup DB
-poetry run db_restore                    # Restore DB
-poetry run db_sync_master               # Sync master data
+uv run db_create                     # Create DB (dev + prod)
+uv run db_delete                     # Delete DB tables
+uv run db_backup                     # Backup DB
+uv run db_restore                    # Restore DB
+uv run db_sync_master               # Sync master data
 
 # PostgreSQL Docker
-poetry run postgres_generate             # Generate docker-compose.yml
-poetry run postgres_start                # Start PostgreSQL container
-poetry run postgres_stop                 # Stop PostgreSQL container
+uv run postgres_generate             # Generate docker-compose.yml
+uv run postgres_start                # Start PostgreSQL container
+uv run postgres_stop                 # Stop PostgreSQL container
 
 # Migrations
-poetry run alembic revision --autogenerate -m "description"
-poetry run alembic upgrade head
+uv run alembic revision --autogenerate -m "description"
+uv run alembic upgrade head
 
 # Diagnostics
-poetry run repom_info                    # Show config and loaded models
+uv run repom_info                    # Show config and loaded models
 ```
 
 ## Environment Variables

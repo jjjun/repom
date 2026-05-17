@@ -22,16 +22,16 @@ repom の PostgreSQL 関連ガイドです。
 
 ```bash
 # PostgreSQL 環境を生成
-poetry run postgres_generate
+uv run postgres_generate
 
 # PostgreSQL を起動
-poetry run postgres_start
+uv run postgres_start
 
 # PostgreSQL に接続
 psql -U repom -d repom_dev -h localhost -p 5432
 
 # PostgreSQL を停止
-poetry run postgres_stop
+uv run postgres_stop
 ```
 
 ## 📦 環境変数

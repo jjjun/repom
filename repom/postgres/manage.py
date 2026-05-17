@@ -1,9 +1,9 @@
 """PostgreSQL Docker 環境管理スクリプト
 
 使用方法:
-    poetry run postgres_generate  # docker-compose.yml を生成
-    poetry run postgres_start      # PostgreSQL を起動
-    poetry run postgres_stop       # PostgreSQL を停止
+    uv run postgres_generate  # docker-compose.yml を生成
+    uv run postgres_start      # PostgreSQL を起動
+    uv run postgres_stop       # PostgreSQL を停止
 """
 
 import subprocess
@@ -46,7 +46,7 @@ class PostgresManager(dm.DockerManager):
         if not compose_file.exists():
             raise FileNotFoundError(
                 f"Compose file not found: {compose_file}\n"
-                f"Hint: Run 'poetry run postgres_generate' first"
+                f"Hint: Run 'uv run postgres_generate' first"
             )
         return compose_file
 

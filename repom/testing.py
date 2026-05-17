@@ -200,7 +200,7 @@ def convert_to_async_uri(sync_uri: str) -> str:
 
     repom をインストールする際に extras で指定してください::
 
-        poetry add repom[async]
+        uv add repom[async]
     """
     if sync_uri.startswith("sqlite:///"):
         return sync_uri.replace("sqlite:///", "sqlite+aiosqlite:///")
@@ -268,11 +268,11 @@ def create_async_test_fixtures(
     必要な依存関係::
 
         # pyproject.toml
-        [tool.poetry.dependencies]
-        repom = { version = "^2.0", extras = ["async"] }
+        [project]
+        dependencies = ["repom[async]>=2.0,<3.0"]
 
-        [tool.poetry.group.dev.dependencies]
-        pytest-asyncio = "^0.23.0"
+        [dependency-groups]
+        dev = ["pytest-asyncio>=0.23.0,<1.0.0"]
 
     async では lazy loading が使えません::
 
@@ -293,7 +293,7 @@ def create_async_test_fixtures(
     except ImportError as e:
         raise ImportError(
             "Async support requires additional dependencies. "
-            "Install with: poetry add repom[async] pytest-asyncio"
+            "Install with: uv add repom[async] pytest-asyncio"
         ) from e
 
     # デフォルト値の設定

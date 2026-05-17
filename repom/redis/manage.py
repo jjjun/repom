@@ -1,10 +1,10 @@
 """Redis Docker 環境管理スクリプト
 
 使用方法:
-    poetry run redis_generate   # docker-compose.yml を生成
-    poetry run redis_start      # Redis を起動
-    poetry run redis_stop       # Redis を停止
-    poetry run redis_remove     # Redis を削除
+    uv run redis_generate   # docker-compose.yml を生成
+    uv run redis_start      # Redis を起動
+    uv run redis_stop       # Redis を停止
+    uv run redis_remove     # Redis を削除
 """
 
 import subprocess
@@ -46,7 +46,7 @@ class RedisManager(dm.DockerManager):
         if not compose_file.exists():
             raise FileNotFoundError(
                 f"Compose file not found: {compose_file}\n"
-                f"Hint: Run 'poetry run redis_generate' first"
+                f"Hint: Run 'uv run redis_generate' first"
             )
         return compose_file
 

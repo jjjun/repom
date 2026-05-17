@@ -10,10 +10,10 @@ Note:
 
 使用方法:
     # FastAPIがインストールされている場合のみ実行
-    poetry run pytest tests/unit_tests/test_response_schema_fastapi.py -v
+    uv run pytest tests/unit_tests/test_response_schema_fastapi.py -v
     
     # FastAPIをインストール
-    poetry add --group dev fastapi httpx
+    uv add --dev fastapi httpx
 """
 
 import pytest
@@ -29,7 +29,7 @@ except ImportError:
 # FastAPIが利用できない場合はすべてのテストをスキップ
 pytestmark = pytest.mark.skipif(
     not FASTAPI_AVAILABLE,
-    reason="FastAPI is not installed. Install with: poetry add --group dev fastapi httpx"
+    reason="FastAPI is not installed. Install with: uv add --dev fastapi httpx"
 )
 
 if FASTAPI_AVAILABLE:

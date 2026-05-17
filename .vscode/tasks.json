@@ -67,7 +67,7 @@
       "problemMatcher": []
     },
     {
-      "label": "🤖Poetry/scaffold",
+      "label": "🤖uv/scaffold",
       "type": "shell",
       "command": "uv run scaffold",
       "group": {

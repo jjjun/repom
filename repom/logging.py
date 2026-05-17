@@ -137,7 +137,7 @@ def get_logger(name: str) -> logging.Logger:
 
     Examples:
         # CLI ツール（repom 単体）
-        poetry run db_create
+        uv run db_create
         → <区分>_<YYYY-MM-DD>.log + コンソールに出力
 
         # アプリ側で制御（優先される）

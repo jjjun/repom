@@ -32,8 +32,14 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
-| #058 | Poetry から uv へのパッケージマネージャ移行 | 中 | 🔴 未着手 | [active/058_migrate_from_poetry_to_uv.md](active/058_migrate_from_poetry_to_uv.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
+| #059 | `repom/scripts/tmp/` 投資調査スクリプトの削除 | 中 | 🔴 未着手 | [active/059_remove_scripts_tmp_artifacts.md](active/059_remove_scripts_tmp_artifacts.md) |
+| #060 | `BaseStaticModel` の利用状況確認と deprecation/削除判断 | 低 | 🔴 未着手 | [active/060_basestaticmodel_usage_review.md](active/060_basestaticmodel_usage_review.md) |
+| #061 | `repom/scripts/repom_info.py` の未使用 import (`text`) 除去 | 低 | 🔴 未着手 | [active/061_remove_unused_text_import.md](active/061_remove_unused_text_import.md) |
+| #062 | postgres/redis Manager の compose_dir/init_dir/compose_file_path 共通化 | 低 | 🔴 未着手 | [active/062_postgres_redis_compose_dir_unification.md](active/062_postgres_redis_compose_dir_unification.md) |
+| #063 | `db_backup.py` の SQLite/PostgreSQL ローテーション処理の共通化 | 低 | 🔴 未着手 | [active/063_unify_backup_rotation_logic.md](active/063_unify_backup_rotation_logic.md) |
+| #064 | `BaseRepository` への bulk insert/update/delete ヘルパ追加 | 中 | 🔴 未着手 | [active/064_baserepository_bulk_operations.md](active/064_baserepository_bulk_operations.md) |
+| #065 | `CLAUDE.md` のビルド/パッケージマネージャ記述更新（poetry → uv/hatchling） | 中 | 🔴 未着手 | [active/065_update_claude_md_build_tooling.md](active/065_update_claude_md_build_tooling.md) |
 
 詳細は各ファイルを参照してください.
 
@@ -43,6 +49,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #058 | Poetry から uv へのパッケージマネージャ移行 | 2026-05-17 | `uv.lock` 生成、`poetry.lock` 削除、VSCode タスク・ドキュメント・ソース内コマンド例を `uv` に更新。`repom_info` の Windows cp932 非互換表示を ASCII 化し、875 tests passing、`uv build` 成功 | [completed/058_migrate_from_poetry_to_uv.md](completed/058_migrate_from_poetry_to_uv.md) |
 | #057 | ログのアクティブファイルを日付付き形式に固定する | 2026-05-05 | `DateNamedDailyFileHandler` を新設し `make_timed_rotating_handler()` が日付付き active file (`main_YYYY-MM-DD.log`) を直接開くよう変更。fast-domain でも repom handler を使うよう移行完了。9 passed (repom), 16 passed (fast-domain) | [completed/057_logging_active_daily_file_handler.md](completed/057_logging_active_daily_file_handler.md) |
 | #056 | docker_manager テストの絵文字エンコードエラー（Windows cp932） | 2026-05-05 | `conftest.py` に UTF-8 reconfigure 追加、`print_message()` にフォールバック追加。831 passed, 10 skipped | [completed/056_docker_manager_emoji_unicode_test_failure.md](completed/056_docker_manager_emoji_unicode_test_failure.md) |
 | #055 | AutoDateTime のタイムゾーン非対応による naive datetime 返却 | 2026-04-22 | `AutoDateTime` を timezone-aware 実装へ更新（`DateTime(timezone=True)` + bind/result の UTC 補完）。`BaseModel` の `updated_at` 自動更新を UTC aware 化。関連 unit test 更新/追加後、`tests/unit_tests` で 831 passed, 10 skipped を確認。fast-domain 側の実運用確認も完了 | [completed/055_autodatetime_timezone_awareness.md](completed/055_autodatetime_timezone_awareness.md) |
@@ -190,4 +197,4 @@ completed/
 └── 2024/
 ```
 
-最終更新: 2026-05-17
+最終更新: 2026-05-17（リファクタリング監査により #059〜#065 追加）

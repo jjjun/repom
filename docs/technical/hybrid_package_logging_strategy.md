@@ -16,8 +16,8 @@
 2. **ライブラリ**: 他のアプリケーションから import されて使用される
 
 **例**:
-- **repom**: `poetry run db_create` + `from repom import BaseRepository`
-- **fast-domain**: `poetry run domain_command` + `from fast_domain.service import DomainService`
+- **repom**: `uv run db_create` + `from repom import BaseRepository`
+- **fast-domain**: `uv run domain_command` + `from fast_domain.service import DomainService`
 - **Alembic**: `alembic upgrade head` + `from alembic import context`
 - **Django**: `django-admin migrate` + `from django.db import models`
 
@@ -69,7 +69,7 @@ logging.basicConfig(
 
 ```bash
 # CLI ツール実行時
-poetry run db_create
+uv run db_create
 # → アプリの main.py は実行されない
 # → logging.basicConfig() は呼ばれない
 # → ログが出力されない ❌
@@ -141,7 +141,7 @@ def get_logger(name: str) -> logging.Logger:
     
     Examples:
         # CLI ツール（repom 単体）
-        poetry run db_create
+        uv run db_create
         → config.log_file_path + コンソールに出力
         
         # アプリ側で制御（優先される）
@@ -468,10 +468,10 @@ class TestGetLogger:
 
 ```bash
 # fast-domain のテスト
-poetry run pytest tests/unit_tests/test_logging.py -v
+uv run pytest tests/unit_tests/test_logging.py -v
 
 # 全テスト
-poetry run pytest
+uv run pytest
 ```
 
 ---
@@ -481,7 +481,7 @@ poetry run pytest
 ### ハイブリッドアプローチの利点
 
 1. ✅ **CLI ツールのログが出力される**
-   - `poetry run domain_command` でログが見える
+   - `uv run domain_command` でログが見える
    - デバッグが容易になる
 
 2. ✅ **アプリ側が完全に制御できる**

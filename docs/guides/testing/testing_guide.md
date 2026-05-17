@@ -148,13 +148,13 @@ db_engine, db_test = create_test_fixtures()
 **実行**:
 ```bash
 # すべてのテスト
-poetry run pytest
+uv run pytest
 
 # 特定のディレクトリ
-poetry run pytest tests/unit_tests
+uv run pytest tests/unit_tests
 
 # 詳細表示
-poetry run pytest -v
+uv run pytest -v
 ```
 
 ---
@@ -457,8 +457,8 @@ db_engine, db_test = create_test_fixtures(
 ```bash
 # これは間違い
 $env:EXEC_ENV='test'
-poetry run alembic upgrade head  # テスト用DBには不要
-poetry run pytest
+uv run alembic upgrade head  # テスト用DBには不要
+uv run pytest
 ```
 
 **理由**:
@@ -470,7 +470,7 @@ poetry run pytest
 
 ```bash
 # これが正しい（DBは自動作成される）
-poetry run pytest
+uv run pytest
 ```
 
 **動作フロー**:
@@ -490,13 +490,13 @@ poetry run pytest
 ```powershell
 # PowerShell
 $env:EXEC_ENV='test'
-poetry run db_create
+uv run db_create
 ```
 
 ```bash
 # Unix系
 export EXEC_ENV=test
-poetry run db_create
+uv run db_create
 ```
 
 ---
@@ -881,12 +881,12 @@ db_engine, db_test = create_test_fixtures()
 
 ```bash
 # ✅ Good: これだけでOK
-poetry run pytest
+uv run pytest
 
 # ❌ Bad: 不要な前処理
-poetry run alembic upgrade head  # 不要
-poetry run db_create             # 不要
-poetry run pytest
+uv run alembic upgrade head  # 不要
+uv run db_create             # 不要
+uv run pytest
 ```
 
 ---
@@ -902,7 +902,7 @@ def pytest_configure(config):
 
 **メリット**:
 - コマンドラインで環境変数を設定する必要がない
-- `poetry run pytest` だけで実行可能
+- `uv run pytest` だけで実行可能
 
 ---
 
@@ -974,16 +974,16 @@ async def test_create_user(async_db_test):
 
 ```bash
 # SQLite async サポート
-poetry add repom[async]
+uv add repom[async]
 
 # PostgreSQL async サポート
-poetry add repom[postgres-async]
+uv add repom[postgres-async]
 
 # 両方サポート
-poetry add repom[async-all]
+uv add repom[async-all]
 
 # pytest-asyncio も必要
-poetry add --group dev pytest-asyncio
+uv add --dev pytest-asyncio
 ```
 
 ### FastAPI Users との統合例

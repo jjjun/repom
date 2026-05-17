@@ -671,8 +671,8 @@ result = await session.execute(...)  # ✅ I/O メソッドを await
 
 **解決方法**:
 ```bash
-poetry add aiosqlite  # SQLite の場合
-poetry add asyncpg    # PostgreSQL の場合
+uv add aiosqlite  # SQLite の場合
+uv add asyncpg    # PostgreSQL の場合
 ```
 
 ### RuntimeError: Event loop is closed

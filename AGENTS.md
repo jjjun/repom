@@ -7,7 +7,7 @@
 ## Technology Stack
 
 - **Language**: Python 3.12+
-- **Package Manager**: Poetry
+- **Package Manager**: uv
 - **Database ORM**: SQLAlchemy 2.0+
 - **Migration Tool**: Alembic
 - **Testing Framework**: pytest (unit and behavior tests)
@@ -22,7 +22,7 @@ repom/
 │   ├── custom_types/          # Reusable custom SQLAlchemy types
 │   ├── repositories/          # Repository implementations (query builder & soft delete mixins)
 │   ├── mixins/                # Reusable mixins (SoftDeletableMixin, etc.)
-│   ├── scripts/               # CLI scripts (Poetry entry points)
+│   ├── scripts/               # CLI scripts (console script entry points)
 │   ├── config.py              # Environment-aware configuration
 │   ├── database.py            # Database connection setup
 │   └── utility.py             # Shared utility functions
@@ -34,7 +34,7 @@ repom/
 ├── alembic/                  # Database migration files
 ├── data/                     # SQLite databases for each environment
 ├── docs/                     # Documentation and usage notes
-├── pyproject.toml           # Poetry configuration
+├── pyproject.toml           # uv configuration
 ├── pytest.ini              # Pytest configuration
 └── alembic.ini             # Alembic configuration
 ```
@@ -53,21 +53,21 @@ $env:EXEC_ENV='dev'  # for development
 $env:EXEC_ENV='prod' # for production
 ```
 
-## Available Commands (Poetry Scripts)
+## Available Commands (Console Scripts)
 
 ```bash
 # Database management
-poetry run db_create_master    # Create master database
-poetry run db_create          # Create database
-poetry run db_delete          # Delete database
-poetry run db_backup          # Backup database
+uv run db_create_master    # Create master database
+uv run db_create          # Create database
+uv run db_delete          # Delete database
+uv run db_backup          # Backup database
 
 # Configuration / diagnostics
-poetry run repom_info          # Show config and loaded models
+uv run repom_info          # Show config and loaded models
 
 # Migration commands
-poetry run alembic revision --autogenerate -m "description"  # Generate migration
-poetry run alembic upgrade head                              # Apply migrations
+uv run alembic revision --autogenerate -m "description"  # Generate migration
+uv run alembic upgrade head                              # Apply migrations
 ```
 
 ## Alembic Configuration
@@ -182,16 +182,16 @@ db_engine, db_test = create_test_fixtures()
 ### Running Tests
 ```bash
 # All tests (195 tests, ~5s)
-poetry run pytest
+uv run pytest
 
 # Unit tests only (187 tests, ~3s)
-poetry run pytest tests/unit_tests
+uv run pytest tests/unit_tests
 
 # Behavior tests only (8 tests, ~2s)
-poetry run pytest tests/behavior_tests
+uv run pytest tests/behavior_tests
 
 # With verbose output
-poetry run pytest -v
+uv run pytest -v
 ```
 
 ### For External Projects
@@ -236,7 +236,7 @@ db_engine, db_test = create_test_fixtures(
 
 ## Notes for AI Assistants
 
-- This project uses **Poetry** for dependency management — always use `poetry run` when executing scripts/tests.
+- This project uses **uv** for dependency management — always use `uv run` when executing scripts/tests.
 - Tests focus on verifying the shared building blocks; avoid introducing app-specific fixtures here.
 - Ensure new shared utilities remain decoupled from any single application domain.
 - For model definitions, `get_plural_tablename()` can be used to derive table names from file names to keep them aligned.

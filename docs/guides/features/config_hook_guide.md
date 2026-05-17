@@ -171,10 +171,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 または `pyproject.toml` で設定：
 
 ```toml
-[tool.poetry]
-packages = [
-    { include = "mine_py", from = "src" }
-]
+[tool.hatch.build.targets.wheel]
+packages = ["src/mine_py"]
 ```
 
 ### Q3: 設定が部分的にしか反映されない

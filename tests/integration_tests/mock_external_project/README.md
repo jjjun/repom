@@ -31,7 +31,7 @@ Reproduce the issue where:
 
 ```powershell
 cd tests/integration_tests/mock_external_project
-poetry run python debug_migration_location.py
+uv run python debug_migration_location.py
 ```
 
 This will verify that CONFIG_HOOK is working correctly.
@@ -47,7 +47,7 @@ $env:EXEC_ENV='test'
 $env:PYTHONPATH='src;' + $env:PYTHONPATH
 
 # Generate migration file
-poetry run alembic revision --autogenerate -m "test migration"
+uv run alembic revision --autogenerate -m "test migration"
 ```
 
 ### 3. Check Result

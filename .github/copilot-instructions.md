@@ -26,7 +26,7 @@ from repom.testing import create_test_fixtures
 db_engine, db_test = create_test_fixtures()
 ```
 
-- Run tests: `poetry run pytest tests/unit_tests`
+- Run tests: `uv run pytest tests/unit_tests`
 - Test fixtures: `db_engine` (session scope), `db_test` (function scope)
 - Performance: 195 tests in ~5s (old: ~30s)
 - Clean state: Automatic transaction rollback per test
@@ -44,10 +44,10 @@ db_engine, db_test = create_test_fixtures()
 - Database files: `db.dev.sqlite3`, `db.test.sqlite3`, `db.sqlite3`
 
 ### Commands
-- Always use `poetry run` prefix for commands
-- Migration: `poetry run alembic upgrade head`
-- DB creation: `poetry run db_create`
-- Tests: `poetry run pytest tests/unit_tests`
+- Always use `uv run` prefix for commands
+- Migration: `uv run alembic upgrade head`
+- DB creation: `uv run db_create`
+- Tests: `uv run pytest tests/unit_tests`
 
 ### Alembic Configuration
 - **Migration file location**: Controlled by `alembic.ini` only
@@ -67,8 +67,8 @@ version_locations = %(here)s/alembic/versions
 
 - `⭐Pytest/unit_tests` - Run unit tests
 - `🧪Pytest/all` - Run all tests
-- `🤖Poetry/scaffold` - Scaffold new models
-- `💾Poetry/db_backup` - Backup database
+- `🤖uv/scaffold` - Scaffold new models
+- `💾uv/db_backup` - Backup database
 - `Alembic/migration/all` - Run migrations for all environments
 
 ## Common Patterns
@@ -102,7 +102,7 @@ items = repo.get_by(name="example")
 
 - This is a **shared package** - keep it framework-agnostic
 - App-specific models should be in consuming projects
-- Always test changes with `poetry run pytest`
+- Always test changes with `uv run pytest`
 - Keep dependencies minimal
 - For model definitions, `get_plural_tablename()` can be used to derive table names from file names to keep them aligned
 

@@ -85,8 +85,8 @@ class Task(BaseModelAuto, SoftDeletableMixin):
 Mixin を追加した後、Alembic でマイグレーションを作成します：
 
 ```bash
-poetry run alembic revision --autogenerate -m "Add soft delete to tasks"
-poetry run alembic upgrade head
+uv run alembic revision --autogenerate -m "Add soft delete to tasks"
+uv run alembic upgrade head
 ```
 
 ---

@@ -5,10 +5,10 @@ data_master/ ディレクトリ配下の Python ファイルを読み込み、
 定義されたマスターデータを DB に同期（Upsert）します。
 
 使用方法:
-    poetry run db_sync_master
+    uv run db_sync_master
 
     # 環境指定
-    EXEC_ENV=dev poetry run db_sync_master
+    EXEC_ENV=dev uv run db_sync_master
 """
 
 import os

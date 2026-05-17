@@ -11,10 +11,10 @@ def hook_config(config: dataclass) -> dataclass:
 
     使用例:
         # テスト実行（自動的に SQLite）
-        poetry run pytest
+        uv run pytest
 
         # 開発環境で PostgreSQL を使用
-        $env:EXEC_ENV='dev'; poetry run repom_info
+        $env:EXEC_ENV='dev'; uv run repom_info
     """
     root_path = Path(__file__).parent.parent
 

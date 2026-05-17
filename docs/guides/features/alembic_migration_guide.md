@@ -66,7 +66,7 @@ setup.create_version_directory()
 
 ```bash
 # repom プロジェクトで実行
-poetry run alembic_init
+uv run alembic_init
 
 # 出力例:
 # ✓ Created alembic.ini: /path/to/project/alembic.ini
@@ -85,7 +85,7 @@ poetry run alembic_init
 
 ```bash
 # CLI コマンドで実行
-poetry run alembic_reset
+uv run alembic_reset
 
 # 動作:
 # 1. alembic_version テーブルを削除（履歴をクリア）
@@ -118,22 +118,22 @@ repom は `EXEC_ENV` 環境変数で環境を切り替えます。
 
 ```bash
 # 開発環境（デフォルト）
-poetry run alembic upgrade head
+uv run alembic upgrade head
 # → data/repom/db.dev.sqlite3 に適用
 
 # テスト環境
-EXEC_ENV=test poetry run alembic upgrade head
+EXEC_ENV=test uv run alembic upgrade head
 # → data/repom/db.test.sqlite3 に適用
 
 # 本番環境
-EXEC_ENV=prod poetry run alembic upgrade head
+EXEC_ENV=prod uv run alembic upgrade head
 # → data/repom/db.sqlite3 に適用
 ```
 
 **PowerShell の場合**:
 ```powershell
-$env:EXEC_ENV='dev'; poetry run alembic upgrade head
-$env:EXEC_ENV='prod'; poetry run alembic upgrade head
+$env:EXEC_ENV='dev'; uv run alembic upgrade head
+$env:EXEC_ENV='prod'; uv run alembic upgrade head
 ```
 
 ### ディレクトリ構造
@@ -215,11 +215,11 @@ CONFIG_HOOK=mine_py.config:get_repom_config
 # mine-py/ ディレクトリで実行
 
 # マイグレーションファイルを作成
-poetry run alembic revision --autogenerate -m "Add custom model"
+uv run alembic revision --autogenerate -m "Add custom model"
 # → mine-py/alembic/versions/ に作成される
 
 # マイグレーションを実行
-poetry run alembic upgrade head
+uv run alembic upgrade head
 ```
 
 ### ディレクトリ構造
@@ -252,29 +252,29 @@ mine-py/
 
 ```bash
 # Alembic 環境を初期化（alembic.ini + versions/ 作成）
-poetry run alembic_init
+uv run alembic_init
 
 # マイグレーション履歴をリセット（開発時のみ）
-poetry run alembic_reset
+uv run alembic_reset
 ```
 
 ### マイグレーション操作
 
 ```bash
 # マイグレーションファイル作成（自動生成）
-poetry run alembic revision --autogenerate -m "説明"
+uv run alembic revision --autogenerate -m "説明"
 
 # マイグレーション実行
-poetry run alembic upgrade head
+uv run alembic upgrade head
 
 # 現在の状態を確認
-poetry run alembic current
+uv run alembic current
 
 # 履歴を表示
-poetry run alembic history
+uv run alembic history
 
 # 1つ戻す
-poetry run alembic downgrade -1
+uv run alembic downgrade -1
 ```
 
 ---
@@ -297,8 +297,8 @@ class User(BaseModel):
 ```
 
 ```bash
-poetry run alembic revision --autogenerate -m "Add users table"
-poetry run alembic upgrade head
+uv run alembic revision --autogenerate -m "Add users table"
+uv run alembic upgrade head
 ```
 
 ### 例2: カラムを追加
@@ -311,8 +311,8 @@ class User(BaseModel):
 ```
 
 ```bash
-poetry run alembic revision --autogenerate -m "Add phone column"
-poetry run alembic upgrade head
+uv run alembic revision --autogenerate -m "Add phone column"
+uv run alembic upgrade head
 ```
 
 ### 例3: カラム名を変更
@@ -320,7 +320,7 @@ poetry run alembic upgrade head
 **注意**: 自動検出できないため、手動編集が必要です。
 
 ```bash
-poetry run alembic revision -m "Rename email to email_address"
+uv run alembic revision -m "Rename email to email_address"
 ```
 
 ```python
@@ -398,11 +398,11 @@ print("Loaded models:", Base.metadata.tables.keys())
 **PowerShell の正しい書き方**:
 ```powershell
 # 正しい
-$env:EXEC_ENV='prod'; poetry run alembic upgrade head
+$env:EXEC_ENV='prod'; uv run alembic upgrade head
 
 # 間違い（環境変数が残る）
 $env:EXEC_ENV='prod'
-poetry run alembic upgrade head
+uv run alembic upgrade head
 ```
 
 ### マイグレーションファイルが見つからない
@@ -415,7 +415,7 @@ Can't locate revision identified by 'abc123'
 **確認方法**:
 ```bash
 # 履歴を確認
-poetry run alembic history
+uv run alembic history
 
 # alembic.ini の version_locations を確認
 cat alembic.ini | grep version_locations

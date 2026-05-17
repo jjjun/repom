@@ -377,7 +377,7 @@ except FileNotFoundError:
 
 **対応**:
 ```
-ヒント: 先に 'poetry run postgres_generate' を実行してください
+ヒント: 先に 'uv run postgres_generate' を実行してください
 ```
 
 ### 3. サービス起動タイムアウト
@@ -438,16 +438,16 @@ finally:
 
 ```bash
 # 起動
-poetry run postgres_start
+uv run postgres_start
 
 # 停止
-poetry run postgres_stop
+uv run postgres_stop
 
 # 削除
-poetry run postgres_remove
+uv run postgres_remove
 
 # ステータス確認
-poetry run postgres_status
+uv run postgres_status
 ```
 
 ---

@@ -272,7 +272,7 @@ def validate_compose_file_exists(compose_file: Path, service_name: str) -> None:
         print_message("⚠️", "docker-compose.generated.yml が見つかりません")
         print(f"   Expected: {compose_file}")
         print()
-        print(f"ヒント: 先に 'poetry run {service_name.lower()}_generate' を実行してください")
+        print(f"ヒント: 先に 'uv run {service_name.lower()}_generate' を実行してください")
         raise FileNotFoundError(f"Compose file not found: {compose_file}")
 
 

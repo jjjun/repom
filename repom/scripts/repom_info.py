@@ -116,12 +116,12 @@ def test_postgres_connection() -> str:
     """
     # Check if PostgreSQL settings are configured
     if not config.postgres.host:
-        return '✗ Not configured (host missing)'
+        return '[NG] Not configured (host missing)'
 
     # Get database name (may be auto-generated)
     database = config.postgres_db
     if not database:
-        return '✗ Not configured (database missing)'
+        return '[NG] Not configured (database missing)'
 
     # Build PostgreSQL connection URL (psycopg3)
     try:
@@ -141,12 +141,12 @@ def test_postgres_connection() -> str:
             conn.execute(text("SELECT 1"))
 
         test_engine.dispose()
-        return '✓ Connected'
+        return '[OK] Connected'
     except SQLAlchemyError as e:
         error_msg = str(e.orig) if hasattr(e, 'orig') else str(e)
-        return f'✗ Failed: {error_msg[:50]}'
+        return f'[NG] Failed: {error_msg[:50]}'
     except Exception as e:
-        return f'✗ Error: {str(e)[:50]}'
+        return f'[NG] Error: {str(e)[:50]}'
 
 
 def test_redis_connection() -> str:
@@ -154,10 +154,10 @@ def test_redis_connection() -> str:
 
     Returns:
         Connection status message
-        - "✓ Connected": Successfully connected
-        - "⚠ redis-py not installed": redis library not available
-        - "✗ Connection refused": Redis server not responding
-        - "✗ Error: ...": Other connection errors
+        - "[OK] Connected": Successfully connected
+        - "[NG] redis-py not installed": redis library not available
+        - "[NG] Connection refused": Redis server not responding
+        - "[NG] Error: ...": Other connection errors
     """
     try:
         import redis
@@ -172,14 +172,14 @@ def test_redis_connection() -> str:
                 health_check_interval=1
             )
             r.ping()  # PING コマンド実行
-            return "✓ Connected"
+            return "[OK] Connected"
         except redis.ConnectionError:
-            return "✗ Connection refused"
+            return "[NG] Connection refused"
         except Exception as e:
-            return f"✗ Error: {type(e).__name__}"
+            return f"[NG] Error: {type(e).__name__}"
 
     except ImportError:
-        return "⚠ redis-py not installed"
+        return "[NG] redis-py not installed"
 
 
 def get_loaded_models() -> List[Dict[str, str]]:

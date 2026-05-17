@@ -197,7 +197,7 @@ def test_default_order_by_rejects_bare_column_default_at_runtime(db_test):
 
 @pytest.mark.skipif(
     not FASTAPI_AVAILABLE,
-    reason="FastAPI is not installed. Install with: poetry add --group dev fastapi httpx",
+    reason="FastAPI is not installed. Install with: uv add --dev fastapi httpx",
 )
 def test_build_order_by_query_depends_returns_default_dict_shape():
     app = FastAPI()
@@ -216,7 +216,7 @@ def test_build_order_by_query_depends_returns_default_dict_shape():
 
 @pytest.mark.skipif(
     not FASTAPI_AVAILABLE,
-    reason="FastAPI is not installed. Install with: poetry add --group dev fastapi httpx",
+    reason="FastAPI is not installed. Install with: uv add --dev fastapi httpx",
 )
 def test_build_order_by_query_depends_exposes_enum_in_openapi():
     app = FastAPI()
@@ -250,7 +250,7 @@ def test_build_order_by_query_depends_exposes_enum_in_openapi():
 
 @pytest.mark.skipif(
     not FASTAPI_AVAILABLE,
-    reason="FastAPI is not installed. Install with: poetry add --group dev fastapi httpx",
+    reason="FastAPI is not installed. Install with: uv add --dev fastapi httpx",
 )
 def test_build_order_by_query_depends_exposes_virtual_enum_in_openapi():
     app = FastAPI()
@@ -283,7 +283,7 @@ def test_build_order_by_query_depends_exposes_virtual_enum_in_openapi():
 
 @pytest.mark.skipif(
     not FASTAPI_AVAILABLE,
-    reason="FastAPI is not installed. Install with: poetry add --group dev fastapi httpx",
+    reason="FastAPI is not installed. Install with: uv add --dev fastapi httpx",
 )
 def test_build_order_by_query_depends_rejects_invalid_string_default():
     with pytest.raises(

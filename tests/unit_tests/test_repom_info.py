@@ -1,9 +1,9 @@
 """Tests for repom_info script."""
 
 import os
-import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
+from importlib.metadata import entry_points
 
 import pytest
 from sqlalchemy import text
@@ -153,7 +153,7 @@ class TestPostgresConnectionTest:
 
         result = check_postgres_connection()
 
-        assert '✗ Not configured' in result
+        assert '[NG] Not configured' in result
 
     @patch('repom.scripts.repom_info.create_engine')
     @patch('repom.scripts.repom_info.config')
@@ -179,7 +179,7 @@ class TestPostgresConnectionTest:
 
         result = check_postgres_connection()
 
-        assert result == '✓ Connected'
+        assert result == '[OK] Connected'
         mock_engine.dispose.assert_called_once()
 
     @patch('repom.scripts.repom_info.create_engine')
@@ -200,7 +200,7 @@ class TestPostgresConnectionTest:
 
         result = check_postgres_connection()
 
-        assert '✗ Failed' in result
+        assert '[NG] Failed' in result
 
 
 class TestGetLoadedModels:
@@ -328,7 +328,7 @@ class TestDisplayConfig:
             'database': 'repom_test',
             'user': 'user'
         }
-        mock_check_conn.return_value = '✓ Connected'
+        mock_check_conn.return_value = '[OK] Connected'
         mock_get_models.return_value = []
 
         display_config()
@@ -339,7 +339,7 @@ class TestDisplayConfig:
         assert 'localhost' in captured.out
         assert '5432' in captured.out
         assert 'repom_test' in captured.out
-        assert '✓ Connected' in captured.out
+        assert '[OK] Connected' in captured.out
         assert 'EXEC_ENV          : test' in captured.out
         assert 'CONFIG_HOOK       : test.config:get_config' in captured.out
 
@@ -370,19 +370,10 @@ class TestMain:
 class TestCommandExecution:
     """Integration test for command execution."""
 
-    def test_repom_info_command_runs(self):
-        """Test that poetry run repom_info executes without error."""
-        # This is a basic smoke test
-        result = subprocess.run(
-            ['poetry', 'run', 'repom_info'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+    def test_repom_info_console_script_is_registered(self):
+        """Test that the repom_info console script is installed."""
+        scripts = entry_points(group='console_scripts')
+        repom_info = [script for script in scripts if script.name == 'repom_info']
 
-        # Should not crash (exit code 0 or 1 are both acceptable for config tests)
-        assert result.returncode in (0, 1)
-
-        # Should contain expected output sections
-        output = result.stdout + result.stderr
-        assert 'repom Configuration Information' in output or 'Error' in output
+        assert repom_info
+        assert repom_info[0].value == 'repom.scripts.repom_info:main'

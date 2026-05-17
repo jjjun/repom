@@ -24,7 +24,7 @@ Redis Manager は **repom に統合された Redis コンテナ管理ツール**
 
 ### 特徴
 
-- ✅ **簡単セットアップ**: `poetry run redis_generate` で構成自動生成
+- ✅ **簡単セットアップ**: `uv run redis_generate` で構成自動生成
 - ✅ **統一インターフェース**: PostgreSQL と同じパターン
 - ✅ **健全性確認**: `redis-cli ping` で確実な起動確認
 - ✅ **持続化対応**: AOF（Append Only File）による永続化設定
@@ -39,7 +39,7 @@ repom/redis/
 ├── init.template/redis.conf   # Redis 設定テンプレート
 └── __init__.py
 
-CLI コマンド (poetry run)
+CLI コマンド (uv run)
 ├── redis_generate   # docker-compose + redis.conf 生成
 ├── redis_start      # Redis 起動
 ├── redis_stop       # Redis 停止
@@ -53,7 +53,7 @@ CLI コマンド (poetry run)
 ### 1. Redis を生成
 
 ```bash
-poetry run redis_generate
+uv run redis_generate
 ```
 
 **出力例**:
@@ -70,7 +70,7 @@ poetry run redis_generate
 ### 2. Redis を起動
 
 ```bash
-poetry run redis_start
+uv run redis_start
 ```
 
 **出力例**:
@@ -98,7 +98,7 @@ redis-cli -p 6379
 ### 4. Redis を停止
 
 ```bash
-poetry run redis_stop
+uv run redis_stop
 ```
 
 ---
@@ -244,7 +244,7 @@ manager.print_connection_info()
 **説明**: docker-compose.yml と redis.conf を生成
 
 ```bash
-poetry run redis_generate
+uv run redis_generate
 ```
 
 **生成ファイル**:
@@ -256,7 +256,7 @@ poetry run redis_generate
 **説明**: Redis を起動
 
 ```bash
-poetry run redis_start
+uv run redis_start
 ```
 
 **実行内容**:
@@ -269,7 +269,7 @@ poetry run redis_start
 **説明**: Redis を停止
 
 ```bash
-poetry run redis_stop
+uv run redis_stop
 ```
 
 #### redis_remove
@@ -277,7 +277,7 @@ poetry run redis_stop
 **説明**: Redis を削除（完全リセット）
 
 ```bash
-poetry run redis_remove
+uv run redis_remove
 ```
 
 ---
@@ -298,7 +298,7 @@ REDIS_PASSWORD=secret123
 REDIS_DB=0
 
 # または、コマンド実行時に指定
-REDIS_PORT=6380 poetry run redis_start
+REDIS_PORT=6380 uv run redis_start
 ```
 
 #### その他の環境変数
@@ -453,7 +453,7 @@ config_prod = RedisConfig(
 
 **解決策 1: 別のポートを指定**
 ```bash
-REDIS_PORT=6380 poetry run redis_start
+REDIS_PORT=6380 uv run redis_start
 ```
 
 **解決策 2: 既存の Redis を確認・停止**
@@ -489,8 +489,8 @@ docker exec -it repom_redis redis-cli
 
 **解決策**:
 ```bash
-poetry run redis_generate  # 最初に実行
-poetry run redis_start     # その後、起動
+uv run redis_generate  # 最初に実行
+uv run redis_start     # その後、起動
 ```
 
 ---
@@ -596,12 +596,12 @@ CONFIG_HOOK=fast_domain.config:hook_config
 ```powershell
 # repom プロジェクト（container_name = "repom_redis"）
 cd repom
-poetry run redis_start
+uv run redis_start
 # → Container: repom_redis, Port: 6379
 
 # fast-domain プロジェクト（container_name = "fast_domain_redis"）同時起動可能
 cd fast-domain
-poetry run redis_start
+uv run redis_start
 # → Container: fast_domain_redis, Port: 6381
 ```
 

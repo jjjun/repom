@@ -35,7 +35,7 @@ def test_alembic_env_loads_without_error():
     # repom のルートディレクトリを取得
     project_root = Path(__file__).parent.parent.parent
 
-    # alembic current を実行（既に poetry run pytest の中なので poetry run は不要）
+    # alembic current を実行（既に uv run pytest の中なので uv run は不要）
     result = subprocess.run(
         [sys.executable, "-m", "alembic", "current"],
         cwd=project_root,
@@ -100,7 +100,7 @@ def test_alembic_revision_check_loads_without_error():
     # repom のルートディレクトリを取得
     project_root = Path(__file__).parent.parent.parent
 
-    # alembic heads コマンドを実行（既に poetry run pytest の中なので poetry run は不要）
+    # alembic heads コマンドを実行（既に uv run pytest の中なので uv run は不要）
     result = subprocess.run(
         [sys.executable, "-m", "alembic", "heads"],
         cwd=project_root,

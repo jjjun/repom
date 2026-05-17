@@ -120,7 +120,7 @@ if not compose_file.exists():
     print("⚠️  docker-compose.generated.yml が見つかりません")
     print(f"   Expected: {compose_file}")
     print()
-    print("ヒント: 先に 'poetry run postgres_generate' を実行してください")
+    print("ヒント: 先に 'uv run postgres_generate' を実行してください")
     return
 ```
 
@@ -436,7 +436,7 @@ def test_negative_max_retries():
 ```markdown
 1. ✅ 既存機能がすべて動作（互換性テスト 100% パス）
    - repom/postgres/manage.py の全機能稼働
-   - poetry run postgres_* コマンド全て動作
+   - uv run postgres_* コマンド全て動作
    
 2. ✅ コード行数削減
    - repom/postgres/manage.py: 355行 → 248行（-107, 30%）

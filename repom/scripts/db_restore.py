@@ -4,10 +4,10 @@
 データベースを復元します。
 
 使用方法:
-    poetry run db_restore
+    uv run db_restore
 
     # 環境指定
-    EXEC_ENV=dev poetry run db_restore
+    EXEC_ENV=dev uv run db_restore
 """
 
 from repom.config import config
@@ -315,7 +315,7 @@ def restore_postgresql(backup_file: Path):
     else:
         logger.warning(
             f"Container {container_name} is not running, falling back to host tools. "
-            f"Consider running 'poetry run postgres_start' first."
+            f"Consider running 'uv run postgres_start' first."
         )
         restore_postgresql_via_host(backup_file)
 

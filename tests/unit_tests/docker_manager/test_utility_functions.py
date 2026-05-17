@@ -46,7 +46,7 @@ class TestValidateComposeFileExists:
             validate_compose_file_exists(compose_file, "PostgreSQL")
         captured = capsys.readouterr()
         assert "docker-compose.generated.yml が見つかりません" in captured.out
-        assert "poetry run postgresql_generate" in captured.out
+        assert "uv run postgresql_generate" in captured.out
 
 
 class TestFormatConnectionInfo:

@@ -408,7 +408,7 @@ class AssetRepository(BaseRepository[AssetItem]):
 マイグレーションファイルを�E動生成します！E
 
 ```bash
-poetry run alembic revision --autogenerate -m "add soft delete to articles"
+uv run alembic revision --autogenerate -m "add soft delete to articles"
 ```
 
 生�Eされる�Eイグレーション例！E
@@ -428,7 +428,7 @@ def downgrade():
 適用�E�E
 
 ```bash
-poetry run alembic upgrade head
+uv run alembic upgrade head
 ```
 
 ### 外部プロジェクトで使用する場吁E
@@ -437,8 +437,8 @@ poetry run alembic upgrade head
 
 ```bash
 # mine-py/ チE��レクトリで実衁E
-poetry run alembic revision --autogenerate -m "add soft delete to asset_items"
-poetry run alembic upgrade head
+uv run alembic revision --autogenerate -m "add soft delete to asset_items"
+uv run alembic upgrade head
 ```
 
 ---
@@ -571,8 +571,8 @@ print(hasattr(MyModel, 'deleted_at'))  # False の場合�E Mixin がなぁE
 3. マイグレーション実衁E
 
 ```bash
-poetry run alembic revision --autogenerate -m "add soft delete"
-poetry run alembic upgrade head
+uv run alembic revision --autogenerate -m "add soft delete"
+uv run alembic upgrade head
 ```
 
 既存�Eレコード�E `deleted_at = NULL`�E�削除されてぁE��ぁE��として扱われます、E

@@ -282,7 +282,7 @@ def backup_postgresql():
     else:
         logger.warning(
             f"Container {container_name} is not running, falling back to host pg_dump. "
-            f"Consider running 'poetry run postgres_start' first."
+            f"Consider running 'uv run postgres_start' first."
         )
         backup_postgresql_via_host()
 

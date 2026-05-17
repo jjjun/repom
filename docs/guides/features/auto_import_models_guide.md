@@ -443,7 +443,7 @@ config.allowed_package_prefixes = {'myapp.', 'repom.', 'newpackage.'}
 
 **解決方法**:
 1. パッケージ名のスペルを確認
-2. パッケージがインストールされているか確認（`poetry show` or `pip list`）
+2. パッケージがインストールされているか確認（`uv pip show <package>` or `uv pip list`）
 3. `PYTHONPATH` が正しく設定されているか確認
 
 ### モデルが Alembic で検出されない

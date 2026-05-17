@@ -101,7 +101,7 @@ print(script.version_locations)  # → ['/custom/path'] ✅
 
 ```bash
 # env.py で config.set_main_option() を呼んでいる状態で:
-poetry run alembic revision -m "test"
+uv run alembic revision -m "test"
 # → repom/alembic/versions/ に作成される ❌
 ```
 
@@ -116,7 +116,7 @@ version_locations = custom/path/versions
 ```
 
 ```bash
-poetry run alembic revision -m "test"
+uv run alembic revision -m "test"
 # → custom/path/versions/ に作成される ✅
 ```
 
@@ -242,7 +242,7 @@ def main():
     command.revision(config, message="...", autogenerate=True)
 
 # pyproject.toml
-[tool.poetry.scripts]
+[project.scripts]
 repom-revision = "repom.scripts.repom_revision:main"
 ```
 
@@ -250,7 +250,7 @@ repom-revision = "repom.scripts.repom_revision:main"
 
 ```bash
 # 標準の alembic コマンドの代わりに
-poetry run repom-revision -m "add column"
+uv run repom-revision -m "add column"
 ```
 
 **メリット**:

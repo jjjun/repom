@@ -245,7 +245,7 @@ def stop():
 
 ```toml
 # pyproject.toml
-[tool.poetry.scripts]
+[project.scripts]
 redis_generate = "repom.scripts.redis.manage:generate"
 redis_start = "repom.scripts.redis.manage:start"
 redis_stop = "repom.scripts.redis.manage:stop"

@@ -31,16 +31,16 @@ repom の Redis 関連ガイドです。
 
 ```bash
 # Redis 環境を生成
-poetry run redis_generate
+uv run redis_generate
 
 # Redis を起動
-poetry run redis_start
+uv run redis_start
 
 # Redis CLI で接続
 docker exec -it repom_redis redis-cli
 
 # Redis を停止
-poetry run redis_stop
+uv run redis_stop
 ```
 
 ## 📦 設定
@@ -76,7 +76,7 @@ Details:
 `repom_info` コマンドで Redis 設定と接続状態を確認できます：
 
 ```bash
-poetry run repom_info
+uv run repom_info
 ```
 
 **出力例**:

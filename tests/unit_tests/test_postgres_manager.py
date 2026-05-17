@@ -146,7 +146,7 @@ class TestPostgresManagerCLI:
     """Test CLI commands using PostgresManager"""
 
     def test_cli_generate_command(self, tmp_path):
-        """Test 'poetry run postgres_generate' command still works"""
+        """Test 'uv run postgres_generate' command still works"""
         # This is a smoke test - just verify the cli entry point exists
         from repom.postgres.manage import generate
 

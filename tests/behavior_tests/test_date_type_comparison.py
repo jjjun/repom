@@ -62,7 +62,7 @@ def generate_test_data(model: Type, start_date: datetime, end_date: datetime, nu
     return records
 
 
-# poetry run pytest tests/behavior_tests/test_date_type_comparison.py::test_compare_save_behavior
+# uv run pytest tests/behavior_tests/test_date_type_comparison.py::test_compare_save_behavior
 def test_compare_save_behavior(db_test):
     """
     TaskDateModel と TaskStringModel にデータを保存した際、日付の挙動の違いを確認する。
@@ -135,7 +135,7 @@ def test_compare_save_behavior(db_test):
     configure_mappers()
 
 
-# poetry run pytest tests/behavior_tests/test_date_type_comparison.py::test_handle_invalid_date_save
+# uv run pytest tests/behavior_tests/test_date_type_comparison.py::test_handle_invalid_date_save
 def test_handle_invalid_date_save(db_test):
     """
     TaskDateModel.created_at と TaskStringModel.created_at に違反したデータを保存する。
@@ -203,7 +203,7 @@ def test_handle_invalid_date_save(db_test):
     configure_mappers()
 
 
-# poetry run pytest tests/behavior_tests/test_date_type_comparison.py::test_compare_search_behavior
+# uv run pytest tests/behavior_tests/test_date_type_comparison.py::test_compare_search_behavior
 def test_compare_search_behavior(db_test):
     """
     辞書型のデータを保存する
