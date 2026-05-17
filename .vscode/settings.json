@@ -2,8 +2,15 @@
   "editor.wordWrap": "on",
   "python.envFile": "${workspaceFolder}/.env",
   "[python]": {
-    "editor.defaultFormatter": "ms-python.autopep8"
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
   },
+  "isort.enabled": false,
+  "ruff.enable": true,
+  "ruff.organizeImports": true,
   "esbonio.sphinx.confDir": "${workspaceFolder}",
   "esbonio.sphinx.buildDir": "${workspaceFolder}/_build",
   "workbench.colorCustomizations": {
