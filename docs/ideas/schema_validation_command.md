@@ -29,19 +29,19 @@
 ```yaml
 # .github/workflows/test.yml
 - name: Validate Model Schemas
-  run: poetry run repom validate-schemas
+  run: uv run repom validate-schemas
 ```
 
 ### 2. プレコミットフック
 ```bash
 # .git/hooks/pre-commit
-poetry run repom validate-schemas || exit 1
+uv run repom validate-schemas || exit 1
 ```
 
 ### 3. 開発ワークフロー
 ```bash
 # 開発中の迅速な検証
-poetry run repom validate-schemas
+uv run repom validate-schemas
 # ✓ すべてのスキーマが正常に検証されました（15モデル）
 ```
 
@@ -130,7 +130,7 @@ models:
 ### 依存関係
 - 新しい依存関係不要
 - 既存の repom インフラを使用
-- Poetry スクリプトと互換性あり
+- `uv run` で実行できるコンソールスクリプトと互換性あり
 
 ### 出力フォーマット
 - 色付きコンソール出力（✓/✗）
@@ -141,7 +141,7 @@ models:
 
 ### 影響を受けるコンポーネント
 - `repom/scripts/` - 新規スクリプト: `validate_schemas.py`
-- `pyproject.toml` - Poetry スクリプトエントリーポイントを追加
+- `pyproject.toml` - `[project.scripts]` エントリーポイントを追加
 - `README.md` - 新しいコマンドをドキュメント化
 
 ### 既存機能との相互作用
@@ -151,7 +151,7 @@ models:
 
 ### 出力例
 ```
-$ poetry run repom validate-schemas
+$ uv run repom validate-schemas
 
 モデルスキーマを検証中...
 

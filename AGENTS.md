@@ -58,9 +58,9 @@ $env:EXEC_ENV='prod' # for production
 
 ```bash
 # Database management
-uv run db_create_master    # Create master database
 uv run db_create          # Create database
 uv run db_delete          # Delete database
+uv run db_sync_master     # Sync master data
 uv run db_backup          # Backup database
 
 # Configuration / diagnostics

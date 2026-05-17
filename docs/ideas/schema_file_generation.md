@@ -34,7 +34,7 @@ repom モデルで API を構築する際、開発者は以下を必要とする
 ### 1. OpenAPI ドキュメント
 ```bash
 # API ドキュメント用のスキーマを生成
-poetry run repom generate-schemas --output schemas/
+uv run repom generate-schemas --output schemas/
 
 # OpenAPI 仕様で使用
 # openapi.yml が schemas/Sample.json を参照
@@ -43,7 +43,7 @@ poetry run repom generate-schemas --output schemas/
 ### 2. フロントエンド TypeScript 生成
 ```bash
 # スキーマを生成
-poetry run repom generate-schemas --output schemas/
+uv run repom generate-schemas --output schemas/
 
 # TypeScript に変換
 npx json-schema-to-typescript schemas/*.json --output src/types/
@@ -117,7 +117,7 @@ def serialize_schema(model_cls: Type[BaseModel]) -> dict:
 
 **例**:
 ```bash
-poetry run repom generate-schemas \
+uv run repom generate-schemas \
   --format json-schema \
   --template openapi \
   --output schemas/
@@ -180,7 +180,7 @@ def serialize_schema(model_cls: Type[BaseModel]) -> dict:
 
 **Example**:
 ```bash
-poetry run repom generate-schemas \
+uv run repom generate-schemas \
   --format json-schema \
   --template openapi \
   --output schemas/
@@ -221,7 +221,7 @@ schemas/
 
 ### 影響を受けるコンポーネント
 - `repom/scripts/` - 新規スクリプト: `generate_schemas.py`
-- `pyproject.toml` - Poetry スクリプトエントリーポイントを追加
+- `pyproject.toml` - `[project.scripts]` エントリーポイントを追加
 - `repom/base_model.py` - スキーマシリアライゼーションヘルパーの可能性
 - `README.md` - 新しいコマンドをドキュメント化
 
@@ -233,16 +233,16 @@ schemas/
 ### コマンド例
 ```bash
 # すべてのスキーマを生成
-poetry run repom generate-schemas
+uv run repom generate-schemas
 
 # 特定のモデルを生成
-poetry run repom generate-schemas Sample UserSession
+uv run repom generate-schemas Sample UserSession
 
 # 出力ディレクトリを指定
-poetry run repom generate-schemas --output ./api/schemas/
+uv run repom generate-schemas --output ./api/schemas/
 
 # 異なるフォーマット
-poetry run repom generate-schemas --format openapi-yaml
+uv run repom generate-schemas --format openapi-yaml
 ```
 
 ### 出力例
@@ -314,11 +314,11 @@ API 互換性のためにスキーマバージョンを追跡:
 ### ドキュメント統合
 スキーマから markdown ドキュメントを生成:
 ```bash
-poetry run repom generate-docs --from-schemas
+uv run repom generate-docs --from-schemas
 ```
 
 ### ウォッチモード
 ファイル変更時にスキーマを自動再生成:
 ```bash
-poetry run repom generate-schemas --watch
+uv run repom generate-schemas --watch
 ```

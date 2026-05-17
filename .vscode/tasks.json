@@ -31,9 +31,9 @@
       "problemMatcher": []
     },
     {
-      "label": "💾uv/db_create_master",
+      "label": "💾uv/db_sync_master",
       "type": "shell",
-      "command": "uv run db_create_master",
+      "command": "uv run db_sync_master",
       "group": {
         "kind": "none",
       },

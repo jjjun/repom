@@ -207,7 +207,7 @@ repom/integrations/
 
 ### オプショナル依存関係
 ```toml
-[tool.poetry.extras]
+[project.optional-dependencies]
 fastapi = ["fastapi>=0.100.0"]
 flask = ["flask>=2.0.0"]
 all = ["fastapi>=0.100.0", "flask>=2.0.0"]
@@ -216,10 +216,10 @@ all = ["fastapi>=0.100.0", "flask>=2.0.0"]
 ### インストール
 ```bash
 # FastAPI 統合付きでインストール
-poetry add repom[fastapi]
+uv add "repom[fastapi]"
 
 # すべての統合付きでインストール
-poetry add repom[all]
+uv add "repom[all]"
 ```
 
 ## 次のステップ
