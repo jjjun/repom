@@ -55,3 +55,10 @@ grep の結果、ヒットは以下のみ:
 
 - [repom/models/base_static.py](../../../repom/models/base_static.py)
 - [repom/models/__init__.py](../../../repom/models/__init__.py)
+
+## 完了メモ
+
+- repom 内の利用は定義・export・ドキュメント言及のみで、実利用はなし。
+- 既知の外部プロジェクト（mine-py, fast-domain, py_cr_wrapper, mine_task, mine_db）を確認し、`repom.models.BaseStaticModel` の利用はなし。
+- `mine_db` には同名の `mine_db.base_static.BaseStaticModel` 利用があるが、repom の公開 API ではない。
+- `repom.models` からの export と `repom/models/base_static.py` を削除。

@@ -18,7 +18,7 @@
 ```
 repom/
 ├── repom/                      # Main package
-│   ├── models/                # BaseModel, BaseModelAuto, BaseStaticModel
+│   ├── models/                # BaseModel, BaseModelAuto
 │   ├── custom_types/          # Reusable custom SQLAlchemy types
 │   ├── repositories/          # Repository implementations
 │   ├── mixins/                # SoftDeletableMixin, etc.

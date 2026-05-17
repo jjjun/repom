@@ -40,3 +40,9 @@ from sqlalchemy import text, create_engine  # ← text は未使用
 ## 関連リソース
 
 - [repom/scripts/repom_info.py:8](../../../repom/scripts/repom_info.py#L8)
+
+## 完了メモ
+
+- 現在の `repom/scripts/repom_info.py` では `text` は `test_postgres_connection()` 内の `conn.execute(text("SELECT 1"))` で使用されている。
+- `ruff check --select F401` はこの環境に ruff が入っていないため実行不可だったが、対象 import は未使用ではないことをコード上で確認。
+- 変更不要として完了。

@@ -33,8 +33,6 @@ completed/     → 実装完了・コミット済み
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
-| #060 | `BaseStaticModel` の利用状況確認と deprecation/削除判断 | 低 | 🔴 未着手 | [active/060_basestaticmodel_usage_review.md](active/060_basestaticmodel_usage_review.md) |
-| #061 | `repom/scripts/repom_info.py` の未使用 import (`text`) 除去 | 低 | 🔴 未着手 | [active/061_remove_unused_text_import.md](active/061_remove_unused_text_import.md) |
 | #063 | `db_backup.py` の SQLite/PostgreSQL ローテーション処理の共通化 | 低 | 🔴 未着手 | [active/063_unify_backup_rotation_logic.md](active/063_unify_backup_rotation_logic.md) |
 | #064 | `BaseRepository` への bulk insert/update/delete ヘルパ追加 | 中 | 🔴 未着手 | [active/064_baserepository_bulk_operations.md](active/064_baserepository_bulk_operations.md) |
 | #065 | `CLAUDE.md` のビルド/パッケージマネージャ記述更新（poetry → uv/hatchling） | 中 | 🔴 未着手 | [active/065_update_claude_md_build_tooling.md](active/065_update_claude_md_build_tooling.md) |
@@ -48,6 +46,8 @@ completed/     → 実装完了・コミット済み
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
 | #062 | postgres/redis Manager の compose_dir/init_dir/compose_file_path 共通化 | 2026-05-17 | `DockerManager` に compose/init directory と generated compose file 解決を集約。postgres/redis はサービス固有の定数を宣言し、公開モジュール関数は互換ラッパとして維持。関連 107 tests passed | [completed/062_postgres_redis_compose_dir_unification.md](completed/062_postgres_redis_compose_dir_unification.md) |
+| #061 | `repom/scripts/repom_info.py` の未使用 import (`text`) 除去 | 2026-05-17 | 調査の結果、`text` は PostgreSQL 接続確認の `conn.execute(text("SELECT 1"))` で使用中。変更不要として完了 | [completed/061_remove_unused_text_import.md](completed/061_remove_unused_text_import.md) |
+| #060 | `BaseStaticModel` の利用状況確認と deprecation/削除判断 | 2026-05-17 | repom 内と既知外部プロジェクトで `repom.models.BaseStaticModel` の実利用なしを確認し、`repom.models` export と `base_static.py` を削除。875 tests passed | [completed/060_basestaticmodel_usage_review.md](completed/060_basestaticmodel_usage_review.md) |
 | #059 | `repom/scripts/tmp/` 投資調査スクリプトの削除 | 2026-05-17 | `repom/scripts/tmp/` 配下の調査用スクリプト 4 件を削除。参照は Issue 本文のみであることを確認 | [completed/059_remove_scripts_tmp_artifacts.md](completed/059_remove_scripts_tmp_artifacts.md) |
 | #058 | Poetry から uv へのパッケージマネージャ移行 | 2026-05-17 | `uv.lock` 生成、`poetry.lock` 削除、VSCode タスク・ドキュメント・ソース内コマンド例を `uv` に更新。`repom_info` の Windows cp932 非互換表示を ASCII 化し、875 tests passing、`uv build` 成功 | [completed/058_migrate_from_poetry_to_uv.md](completed/058_migrate_from_poetry_to_uv.md) |
 | #057 | ログのアクティブファイルを日付付き形式に固定する | 2026-05-05 | `DateNamedDailyFileHandler` を新設し `make_timed_rotating_handler()` が日付付き active file (`main_YYYY-MM-DD.log`) を直接開くよう変更。fast-domain でも repom handler を使うよう移行完了。9 passed (repom), 16 passed (fast-domain) | [completed/057_logging_active_daily_file_handler.md](completed/057_logging_active_daily_file_handler.md) |
