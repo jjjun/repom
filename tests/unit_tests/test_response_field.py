@@ -1,9 +1,8 @@
 ﻿"""Tests for BaseModelAuto.response_field decorator and get_response_schema"""
 
 from tests._init import *
-from sqlalchemy import String, Integer, inspect
+from sqlalchemy import String, Integer
 from sqlalchemy.orm import Mapped, mapped_column
-from typing import List, Optional
 from repom.models.base_model_auto import BaseModelAuto
 
 
@@ -69,8 +68,8 @@ def test_response_field_metadata():
     response_fields = to_dict_method._response_fields
     assert 'is_active' in response_fields
     assert 'total_count' in response_fields
-    assert response_fields['is_active'] == bool
-    assert response_fields['total_count'] == int
+    assert response_fields['is_active'] is bool
+    assert response_fields['total_count'] is int
 
 
 def test_response_field_does_not_affect_to_dict():
@@ -232,5 +231,5 @@ def test_get_extra_fields_debug():
 
     assert 'is_active' in extra_fields
     assert 'total_count' in extra_fields
-    assert extra_fields['is_active'] == bool
-    assert extra_fields['total_count'] == int
+    assert extra_fields['is_active'] is bool
+    assert extra_fields['total_count'] is int

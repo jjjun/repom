@@ -26,7 +26,6 @@ import re
 
 from sqlalchemy import event
 from sqlalchemy.engine import Engine, Connection
-from sqlalchemy.orm import DeclarativeMeta
 
 from repom.database import get_sync_engine
 

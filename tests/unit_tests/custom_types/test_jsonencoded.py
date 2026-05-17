@@ -1,10 +1,8 @@
 ﻿from tests._init import *
 from sqlalchemy import Integer
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.exc import StatementError
 from repom.custom_types.JSONEncoded import JSONEncoded
 from repom.models.base_model import BaseModel
-from datetime import datetime
 from typing import Any
 
 

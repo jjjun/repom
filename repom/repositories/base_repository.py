@@ -47,9 +47,9 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
         # scoped_session も含めてチェック
         if isinstance(model, (Session, scoped_session)):
             raise TypeError(
-                f"Session object was passed as 'model' parameter. "
-                f"This usually happens when __init__ is omitted and repo_class(session) is called. "
-                f"Please use 'session' parameter: repo_class(session=session) or define __init__ explicitly."
+                "Session object was passed as 'model' parameter. "
+                "This usually happens when __init__ is omitted and repo_class(session) is called. "
+                "Please use 'session' parameter: repo_class(session=session) or define __init__ explicitly."
             )
 
         # model が明示的に指定されていない場合、型パラメータから推論

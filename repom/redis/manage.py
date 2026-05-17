@@ -68,7 +68,7 @@ class RedisManager(dm.DockerManager):
         """Redis 接続情報を表示"""
         print()
         print("📦 Redis Connection:")
-        print(f"  Host: localhost")
+        print("  Host: localhost")
         print(f"  Port: {self.config.redis.port}")
         print(f"  CLI: redis-cli -p {self.config.redis.port}")
         print()
@@ -168,7 +168,7 @@ def generate():
 
     print(f"✅ Generated: {output_path}")
     print(f"   Config: {init_dir / 'redis.conf'}")
-    print(f"\n📦 Redis Service:")
+    print("\n📦 Redis Service:")
     print(f"   Container: {config.redis.container.get_container_name()}")
     print(f"   Port: {config.redis.port}")
     print(f"   Volume: {config.redis.container.get_volume_name()}")
@@ -186,7 +186,7 @@ def start():
         manager.print_connection_info()
     except TimeoutError as e:
         print(f"❌ {e}")
-        print(f"Check logs: docker logs repom_redis")
+        print("Check logs: docker logs repom_redis")
         sys.exit(1)
 
 

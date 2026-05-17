@@ -1,7 +1,5 @@
 """repom._.docker_compose の単体テスト"""
 
-import pytest
-from pathlib import Path
 from repom._.docker_compose import DockerComposeGenerator, DockerService, DockerVolume
 
 

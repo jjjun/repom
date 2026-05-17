@@ -29,7 +29,6 @@
 from enum import Enum as PyEnum
 from typing import Type, Any, Optional, Dict, List, Callable, Set, Literal
 from weakref import WeakKeyDictionary
-from datetime import datetime, date
 from pydantic import BaseModel as PydanticBaseModel, create_model, Field
 from repom.models.base_model import BaseModel
 from sqlalchemy import Enum as SQLAlchemyEnum, inspect
@@ -571,7 +570,7 @@ class BaseModelAuto(BaseModel):
                     f"  Undefined types: {', '.join(sorted(undefined_types))}",
                     "",
                     "Solution:",
-                    f"  Pass the missing types in the forward_refs parameter:",
+                    "  Pass the missing types in the forward_refs parameter:",
                     f"  schema = {cls.__name__}.get_response_schema(",
                     "      forward_refs={",
                 ]

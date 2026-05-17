@@ -11,7 +11,6 @@ N+1 問題を解決するための一括取得メソッドです。
 5. include_deleted パラメータ
 """
 
-import pytest
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.models.base_model_auto import BaseModelAuto

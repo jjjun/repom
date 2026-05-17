@@ -75,7 +75,7 @@ print()
 repom_versions = Path(__file__).parent.parent.parent.parent / 'alembic' / 'versions'
 mock_versions = expected_path
 
-print(f"repom/alembic/versions/:")
+print("repom/alembic/versions/:")
 if repom_versions.exists():
     repom_files = [f.name for f in repom_versions.glob('*.py') if f.name != '__init__.py']
     if repom_files:
@@ -87,7 +87,7 @@ else:
     print("  (directory does not exist)")
 print()
 
-print(f"mock_external_project/alembic/versions/:")
+print("mock_external_project/alembic/versions/:")
 if mock_versions.exists():
     mock_files = [f.name for f in mock_versions.glob('*.py') if f.name != '__init__.py']
     if mock_files:

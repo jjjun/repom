@@ -72,9 +72,9 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         # async_scoped_session も含めてチェック
         if isinstance(model, (AsyncSession, async_scoped_session)):
             raise TypeError(
-                f"AsyncSession object was passed as 'model' parameter. "
-                f"This usually happens when __init__ is omitted and repo_class(session) is called. "
-                f"Please use 'session' parameter: repo_class(session=session) or define __init__ explicitly."
+                "AsyncSession object was passed as 'model' parameter. "
+                "This usually happens when __init__ is omitted and repo_class(session) is called. "
+                "Please use 'session' parameter: repo_class(session=session) or define __init__ explicitly."
             )
 
         # model が明示的に指定されていない場合、型パラメータから推論

@@ -16,7 +16,6 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import pytest
 from sqlalchemy import String, select
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -167,7 +166,7 @@ class TestCreateTestFixturesConfiguration:
         StaticPool と組み合わせることで、マルチスレッドアクセスが可能になる。
         """
         # connect_args を確認
-        connect_args = db_engine.url.query.get("check_same_thread")
+        db_engine.url.query.get("check_same_thread")
 
         # URL に含まれていない場合は、engine 作成時の connect_args を確認する必要がある
         # ここでは、実際に別スレッドからアクセスできることで検証する

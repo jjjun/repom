@@ -3,7 +3,6 @@
 This test validates Option 1 implementation: db_file as a property that
 automatically recalculates based on db_name without explicit reset.
 """
-import pytest
 from repom.config import RepomConfig
 
 

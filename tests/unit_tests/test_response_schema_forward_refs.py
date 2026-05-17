@@ -6,10 +6,9 @@
 
 from tests._init import *
 from sqlalchemy import String, Integer, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 from typing import List, Optional, Dict, Any
 from repom.models.base_model_auto import BaseModelAuto
-from pydantic import ValidationError
 import pytest
 
 
@@ -328,7 +327,7 @@ def test_forward_refs_model_rebuild_warning():
     # 警告は出るが、スキーマ生成は成功するはず
     import warnings
 
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True):
         warnings.simplefilter("always")
 
         Schema = BookModel.get_response_schema(
@@ -517,7 +516,6 @@ def test_listjson_type_annotation_resolution():
 
     # List 型が解決されていることを確認（文字列ではない）
     # これが失敗する場合、List の前方参照が解決されていない
-    import typing
     annotation_str = str(all_tags_field.annotation)
 
     # 'List[str]' または 'list[str]' の形式であることを確認
@@ -922,7 +920,6 @@ def test_phase2_extract_undefined_types():
 
 def test_phase2_error_message_in_dev_environment(monkeypatch):
     """Phase 2: 開発環境でエラーメッセージが例外として投げられることを確認"""
-    import pytest
     from repom.models.base_model_auto import SchemaGenerationError
 
     # Set EXEC_ENV to 'dev'
@@ -963,7 +960,6 @@ def test_phase2_error_message_in_prod_environment(monkeypatch, caplog):
     Note: 現在の実装では環境に関わらず SchemaGenerationError が発生します。
     将来的に環境依存の動作（prod では警告のみ）を実装する可能性があります。
     """
-    import pytest
     from repom.models.base_model_auto import SchemaGenerationError
 
     # Set EXEC_ENV to 'prod'
@@ -998,7 +994,6 @@ def test_phase2_error_message_in_prod_environment(monkeypatch, caplog):
 
 def test_phase2_helpful_error_suggestions():
     """Phase 2: エラーメッセージに具体的な解決策が含まれることを確認"""
-    import pytest
     from repom.models.base_model_auto import SchemaGenerationError
     import os
 

@@ -3,11 +3,8 @@
 DockerService, Volume 生成、および docker-compose.yml ファイル出力の機能をテストします。
 """
 
-import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from repom.config import RepomConfig, PostgresConfig, PgAdminConfig
-from repom._.docker_compose import DockerService, DockerVolume
 
 DATA_PATH = Path("data") / "repom"
 
@@ -350,7 +347,6 @@ class TestDirectorySeparation:
     def test_get_compose_dir_uses_postgres_subdir(self):
         """get_compose_dir が postgres サブディレクトリを使用（分離プロジェクト構造）"""
         from repom.postgres.manage import get_compose_dir
-        from repom.config import config
 
         compose_dir = get_compose_dir()
 

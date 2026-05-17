@@ -3,7 +3,6 @@ import uuid
 from sqlalchemy import Integer, String, event, inspect
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 from repom.database import Base
 from repom.custom_types.AutoDateTime import AutoDateTime
 

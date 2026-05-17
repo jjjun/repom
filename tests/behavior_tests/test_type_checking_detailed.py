@@ -15,7 +15,6 @@ import warnings
 from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-import pytest
 
 
 def test_inspect_import_order():
@@ -177,7 +176,7 @@ print(">>> z_child.py: ZChildModel defined successfully")
                 configure_mappers()
 
                 if w:
-                    print(f"[WARN]️  警告が発生しました:")
+                    print("[WARN]️  警告が発生しました:")
                     for warning in w:
                         print(f"   {warning.category.__name__}: {warning.message}")
                 else:
@@ -294,7 +293,7 @@ class ParentModel(BaseModelAuto):
                     print(f"[NG] エラー発生（予想通り）: {type(e).__name__}: {e}")
 
                 if w:
-                    print(f"[WARN]️  警告:")
+                    print("[WARN]️  警告:")
                     for warning in w:
                         print(f"   {warning.message}")
 

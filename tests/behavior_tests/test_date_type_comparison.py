@@ -1,8 +1,7 @@
 ﻿from tests._init import *
-import pytest
 from typing import List, Type, Optional
-from datetime import datetime, timedelta, date as date_type
-from sqlalchemy.orm import Session, Mapped, mapped_column
+from datetime import datetime, date as date_type
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import (
     Integer,
     String,
@@ -10,7 +9,7 @@ from sqlalchemy import (
     Date,
     text,
 )
-from repom.database import get_sync_engine, get_inspector, get_db_session, Base
+from repom.database import Base
 
 
 """

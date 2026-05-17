@@ -3,7 +3,6 @@ Test to verify if save() method can be used for entity creation (not just update
 """
 import pytest
 import pytest_asyncio
-from datetime import datetime
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.models.base_model import BaseModel
@@ -46,7 +45,7 @@ class TestSaveMethodForCreation:
         # Create NEW entity (not yet in database)
         new_entity = SaveCreationTestModel(name="New Entity")
 
-        print(f"\n[TEST] Before save():")
+        print("\n[TEST] Before save():")
         print(f"  id: {new_entity.id}")
         print(f"  created_at: {new_entity.created_at}")
         print(f"  updated_at: {new_entity.updated_at}")
@@ -54,7 +53,7 @@ class TestSaveMethodForCreation:
         # Use save() method (external session: flush only)
         saved_entity = await repo.save(new_entity)
 
-        print(f"\n[TEST] After save() (before refresh):")
+        print("\n[TEST] After save() (before refresh):")
         print(f"  id: {saved_entity.id}")
         print(f"  created_at: {saved_entity.created_at}")
         print(f"  updated_at: {saved_entity.updated_at}")
@@ -64,7 +63,7 @@ class TestSaveMethodForCreation:
         assert saved_entity.created_at is None  # Not refreshed yet
         assert saved_entity.updated_at is None  # Not refreshed yet
 
-        print(f"\n[OK] RESULT: save() works for NEW entity creation (flush mode)!")
+        print("\n[OK] RESULT: save() works for NEW entity creation (flush mode)!")
 
     async def test_save_method_for_existing_entity_update(self, save_repo):
         """Test: save() can be used for EXISTING entity update"""
@@ -76,7 +75,7 @@ class TestSaveMethodForCreation:
         original_created_at = saved_entity.created_at
         original_id = saved_entity.id
 
-        print(f"\n[TEST] Original entity:")
+        print("\n[TEST] Original entity:")
         print(f"  id: {saved_entity.id}")
         print(f"  name: {saved_entity.name}")
         print(f"  created_at: {saved_entity.created_at}")
@@ -85,7 +84,7 @@ class TestSaveMethodForCreation:
         saved_entity.name = "Updated Name"
         updated_entity = await repo.save(saved_entity)
 
-        print(f"\n[TEST] After update:")
+        print("\n[TEST] After update:")
         print(f"  id: {updated_entity.id}")
         print(f"  name: {updated_entity.name}")
         print(f"  created_at: {updated_entity.created_at}")
@@ -96,7 +95,7 @@ class TestSaveMethodForCreation:
         assert updated_entity.name == "Updated Name"  # Name was updated
         assert updated_entity.created_at == original_created_at  # created_at unchanged
 
-        print(f"\n[OK] RESULT: save() works for EXISTING entity update!")
+        print("\n[OK] RESULT: save() works for EXISTING entity update!")
 
     async def test_save_vs_manual_flush_comparison(self, save_repo, async_db_test):
         """Compare: save() vs manual add+flush pattern with external session
@@ -110,18 +109,18 @@ class TestSaveMethodForCreation:
         entity1 = SaveCreationTestModel(name="Using save()")
         entity1 = await repo.save(entity1)
 
-        print(f"\n[PATTERN 1] Using save() with external session:")
+        print("\n[PATTERN 1] Using save() with external session:")
         print(f"  created_at: {entity1.created_at}")
-        print(f"  Lines of code: 2 lines")
+        print("  Lines of code: 2 lines")
 
         # Pattern 2: Manual add + flush (同等の動作)
         entity2 = SaveCreationTestModel(name="Manual pattern")
         async_db_test.add(entity2)
         await async_db_test.flush()
 
-        print(f"\n[PATTERN 2] Manual add+flush:")
+        print("\n[PATTERN 2] Manual add+flush:")
         print(f"  created_at: {entity2.created_at}")
-        print(f"  Lines of code: 2 lines")
+        print("  Lines of code: 2 lines")
 
         # 外部セッション使用時: 両方とも flush のみなので created_at は None
         assert entity1.created_at is None
@@ -134,8 +133,8 @@ class TestSaveMethodForCreation:
         assert entity1.created_at is not None
         assert entity2.created_at is not None
 
-        print(f"\n[OK] RESULT: save() with external session = flush only (same as manual pattern)")
-        print(f"   - Both patterns require explicit refresh for AutoDateTime values")
+        print("\n[OK] RESULT: save() with external session = flush only (same as manual pattern)")
+        print("   - Both patterns require explicit refresh for AutoDateTime values")
 
 
 @pytest.mark.asyncio
@@ -171,7 +170,7 @@ class TestSaveMethodReplacesMinePatterns:
         # id は設定されている（flush で採番）
         assert link.id is not None
 
-        print(f"\n[OK] save() simplifies transaction management!")
-        print(f"   - External session: save() = flush only")
-        print(f"   - Commit is controlled by caller (with block)")
-        print(f"   - Explicit refresh needed for AutoDateTime values")
+        print("\n[OK] save() simplifies transaction management!")
+        print("   - External session: save() = flush only")
+        print("   - Commit is controlled by caller (with block)")
+        print("   - Explicit refresh needed for AutoDateTime values")

@@ -1,7 +1,7 @@
 ﻿import os
 import inflect
 import unicodedata
-from typing import Optional, List
+from typing import Optional
 
 # Import generic discovery helpers from repom._
 from repom._.discovery import (

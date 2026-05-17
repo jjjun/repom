@@ -1,2 +1,4 @@
-﻿import pytest
-import pdb
+﻿
+import pytest
+
+__all__ = ["pytest"]

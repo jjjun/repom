@@ -346,7 +346,7 @@ if FASTAPI_AVAILABLE:
         from repom import BaseRepository
 
         # リポジトリを作成
-        repo = BaseRepository(ProductModel)
+        BaseRepository(ProductModel)
 
         # データを作成
         product = ProductModel(name='Test Product', price=1500, stock=20)

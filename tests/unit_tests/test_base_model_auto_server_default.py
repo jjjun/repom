@@ -129,7 +129,7 @@ def test_server_default_with_explicit_required_override():
 
     # info で明示的に必須としているため、Required
     assert status_field.is_required()
-    assert status_field.annotation == str  # Optional ではない
+    assert status_field.annotation is str  # Optional ではない
 
 
 def test_server_default_in_update_schema():
@@ -157,4 +157,4 @@ def test_server_default_not_in_response_schema():
 
     # nullable=False なので、Response では Optional ではない
     response_field = ResponseSchema.model_fields['status']
-    assert response_field.annotation == str  # Optional[str] ではない
+    assert response_field.annotation is str  # Optional[str] ではない

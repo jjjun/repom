@@ -8,9 +8,7 @@ db_sync_master のテスト
 - エラーハンドリング
 """
 
-import os
 import pytest
-from pathlib import Path
 from repom.scripts.db_sync_master import load_master_data_files, sync_master_data
 from repom.examples.models.sample import SampleModel
 from repom.repositories import BaseRepository

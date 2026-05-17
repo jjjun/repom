@@ -49,7 +49,7 @@ class TestRefreshBehaviorSync:
         saved = refresh_repo.save(instance)
 
         # CRITICAL TEST: Are created_at/updated_at still None?
-        print(f"\nAfter save (no refresh):")
+        print("\nAfter save (no refresh):")
         print(f"  created_at: {saved.created_at}")
         print(f"  updated_at: {saved.updated_at}")
 
@@ -58,7 +58,7 @@ class TestRefreshBehaviorSync:
         is_created_at_none = saved.created_at is None
         is_updated_at_none = saved.updated_at is None
 
-        print(f"\nVerification:")
+        print("\nVerification:")
         print(f"  created_at is None: {is_created_at_none}")
         print(f"  updated_at is None: {is_updated_at_none}")
 
@@ -66,7 +66,7 @@ class TestRefreshBehaviorSync:
         db_test.commit()  # Ensure database is updated
         fetched = db_test.query(RefreshTestModel).filter_by(id=saved.id).first()
 
-        print(f"\nFetched from database:")
+        print("\nFetched from database:")
         print(f"  created_at: {fetched.created_at}")
         print(f"  updated_at: {fetched.updated_at}")
 
@@ -82,7 +82,7 @@ class TestRefreshBehaviorSync:
         # Manually refresh
         db_test.refresh(saved)
 
-        print(f"\nAfter save + manual refresh:")
+        print("\nAfter save + manual refresh:")
         print(f"  created_at: {saved.created_at}")
         print(f"  updated_at: {saved.updated_at}")
 
@@ -116,14 +116,14 @@ class TestRefreshBehaviorAsync:
         # Save with external session (flush only, no refresh)
         saved = await repo.save(instance)
 
-        print(f"\n[ASYNC] After save (external session, no auto-refresh):")
+        print("\n[ASYNC] After save (external session, no auto-refresh):")
         print(f"  created_at: {saved.created_at}")
         print(f"  updated_at: {saved.updated_at}")
 
         is_created_at_none = saved.created_at is None
         is_updated_at_none = saved.updated_at is None
 
-        print(f"\n[ASYNC] Verification:")
+        print("\n[ASYNC] Verification:")
         print(f"  created_at is None: {is_created_at_none}")
         print(f"  updated_at is None: {is_updated_at_none}")
 
@@ -141,7 +141,7 @@ class TestRefreshBehaviorAsync:
         # Manually refresh
         await async_db_test.refresh(saved)
 
-        print(f"\n[ASYNC] After save + manual refresh:")
+        print("\n[ASYNC] After save + manual refresh:")
         print(f"  created_at: {saved.created_at}")
         print(f"  updated_at: {saved.updated_at}")
 

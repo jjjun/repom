@@ -14,13 +14,11 @@ data_master/ ディレクトリ配下の Python ファイルを読み込み、
 import os
 import sys
 import importlib.util
-from pathlib import Path
 from typing import Generator, Tuple, Type, List, Dict, Any
 
 from repom.utility import load_models
 from repom.config import config
 from repom.database import get_standalone_sync_transaction
-from repom import BaseRepository
 
 
 def load_master_data_files(directory: str) -> Generator[Tuple[Type, List[Dict[str, Any]]], None, None]:
@@ -97,7 +95,7 @@ def sync_master_data(model_class: Type, data_list: List[Dict[str, Any]], session
     for data in data_list:
         # session.merge() を使って Upsert
         # merge() は id が一致するレコードがあれば UPDATE、なければ INSERT
-        instance = session.merge(model_class(**data))
+        session.merge(model_class(**data))
         count += 1
 
     # flush() でデータベースに反映（commit は transaction() が行う）
@@ -157,7 +155,7 @@ def main():
         print(f"\nエラー: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"\nエラー: マスターデータの同期に失敗しました")
+        print("\nエラー: マスターデータの同期に失敗しました")
         print(f"詳細: {e}")
         sys.exit(1)
 

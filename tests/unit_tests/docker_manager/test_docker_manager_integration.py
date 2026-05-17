@@ -2,10 +2,9 @@
 Integration tests for DockerManager - tests actual container lifecycle
 """
 import subprocess
-import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 

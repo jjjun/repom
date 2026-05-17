@@ -4,7 +4,6 @@
 1. すべてのモデルを先にインポートしてからマッパー初期化
 2. 循環参照を解消する設計パターン
 """
-import pytest
 from repom.models.base_model import Base
 
 
@@ -236,7 +235,6 @@ class TestSolution2_DesignPatterns:
         """
         from sqlalchemy import String, Integer, ForeignKey
         from sqlalchemy.orm import relationship, mapped_column, Mapped, clear_mappers
-        from typing import List
         from repom import BaseModelAuto
 
         # クリーンアップ

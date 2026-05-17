@@ -199,9 +199,9 @@ class TestDefaultOrderByEdgeCases:
 
         repo = ExpressionOrderRepository(session=db_test)
 
-        item1 = repo.save(OrderTestModel(name='First', priority=1))
-        item2 = repo.save(OrderTestModel(name='Second', priority=2))
-        item3 = repo.save(OrderTestModel(name='Third', priority=3))
+        repo.save(OrderTestModel(name='First', priority=1))
+        repo.save(OrderTestModel(name='Second', priority=2))
+        repo.save(OrderTestModel(name='Third', priority=3))
 
         results = repo.find()
 

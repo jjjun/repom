@@ -5,7 +5,6 @@ Repository が外部セッションと内部セッションを正しく区別し
 適切なタイミングで commit を実行することを確認します。
 """
 
-import pytest
 from sqlalchemy import String, select
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.models.base_model import BaseModel

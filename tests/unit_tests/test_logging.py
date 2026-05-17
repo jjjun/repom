@@ -134,7 +134,7 @@ class TestGetLogger:
         from repom.config import config
         monkeypatch.setattr(config.__class__, 'log_file_path', property(lambda self: None))
 
-        logger = get_logger('test')
+        get_logger('test')
 
         # ハンドラーが追加されていないことを確認
         assert len(repom_root_logger.handlers) == 0
@@ -161,11 +161,11 @@ class TestGetLogger:
         monkeypatch.setattr(config.__class__, 'log_file_path', property(lambda self: log_file))
 
         # 1回目の呼び出し
-        logger1 = get_logger('test1')
+        get_logger('test1')
         handler_count_1 = len(repom_root_logger.handlers)
 
         # 2回目の呼び出し
-        logger2 = get_logger('test2')
+        get_logger('test2')
         handler_count_2 = len(repom_root_logger.handlers)
 
         # ハンドラー数が変わらないことを確認

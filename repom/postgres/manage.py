@@ -69,7 +69,7 @@ class PostgresManager(dm.DockerManager):
         """PostgreSQL 接続情報を表示"""
         print()
         print("📦 PostgreSQL Connection:")
-        print(f"  Host: localhost")
+        print("  Host: localhost")
         print(f"  Port: {self.config.postgres.container.host_port}")
         print(f"  User: {self.config.postgres.user}")
         print(f"  Password: {self.config.postgres.password}")
@@ -245,20 +245,20 @@ def generate():
 
     print(f"✅ Generated: {output_path}")
     print(f"   Init SQL: {init_dir / '01_init_databases.sql'}")
-    print(f"\n📦 PostgreSQL Service:")
+    print("\n📦 PostgreSQL Service:")
     print(f"   Container: {config.postgres.container.get_container_name()}")
     print(f"   Port: {config.postgres.container.host_port}")
     print(f"   Volume: {config.postgres.container.get_volume_name()}")
 
     # pgAdmin 情報を出力（有効な場合のみ）
     if config.pgadmin.container.enabled:
-        print(f"\n🎨 pgAdmin Service:")
+        print("\n🎨 pgAdmin Service:")
         print(f"   Container: {config.pgadmin.container.get_container_name()}")
         print(f"   Port: {config.pgadmin.container.host_port}")
         print(f"   Email: {config.pgadmin.email}")
         print(f"   Volume: {config.pgadmin.container.get_volume_name()}")
     else:
-        print(f"\n⚪ pgAdmin: Disabled (set config.pgadmin.container.enabled=True to enable)")
+        print("\n⚪ pgAdmin: Disabled (set config.pgadmin.container.enabled=True to enable)")
 
 
 def start():

@@ -10,7 +10,6 @@ Expected behavior:
 """
 import pytest
 import tempfile
-import shutil
 from pathlib import Path
 from alembic.config import Config
 from repom.config import RepomConfig
@@ -90,7 +89,7 @@ def test_repom_has_no_migration_files():
             "\n\nrepom is a library and should not contain its own migrations."
         )
 
-        print(f"\n[OK] repom/alembic/versions/ is empty (correct)")
+        print("\n[OK] repom/alembic/versions/ is empty (correct)")
 
         # .gitkeep should exist to preserve the directory
         gitkeep = repom_versions_dir / '.gitkeep'

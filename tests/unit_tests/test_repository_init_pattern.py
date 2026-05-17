@@ -29,7 +29,7 @@ class TestRepositoryInitPatterns:
         # モデルを渡さずにインスタンス化
         repo = CustomInitRepository(session=db_test)
 
-        print(f"\n[Pattern 1] Custom __init__:")
+        print("\n[Pattern 1] Custom __init__:")
         print(f"  repo.model: {repo.model}")
         print(f"  repo.session: {repo.session}")
 
@@ -41,7 +41,7 @@ class TestRepositoryInitPatterns:
         saved = repo.save(item)
         assert saved.name == "Test 1"
 
-        print(f"  [OK] Works! Can create without passing model")
+        print("  [OK] Works! Can create without passing model")
 
     def test_pattern2_without_custom_init(self, db_test):
         """Pattern 2: No custom __init__ (新しい書き方 - 自動推論)"""
@@ -52,7 +52,7 @@ class TestRepositoryInitPatterns:
         # ✅ 修正後: session=... で渡せば自動推論される
         repo = NoInitRepository(session=db_test)
 
-        print(f"\n[Pattern 2] No __init__ (session only, auto-inference):")
+        print("\n[Pattern 2] No __init__ (session only, auto-inference):")
         print(f"  repo.model: {repo.model}")
         print(f"  repo.session: {repo.session}")
 
@@ -64,7 +64,7 @@ class TestRepositoryInitPatterns:
         saved = repo.save(item)
         assert saved.name == "Test 2"
 
-        print(f"  [OK] Works! Model is auto-inferred from type parameter")
+        print("  [OK] Works! Model is auto-inferred from type parameter")
 
     def test_pattern3_without_custom_init_but_pass_model(self, db_test):
         """Pattern 3: No custom __init__, but pass model explicitly"""
@@ -75,7 +75,7 @@ class TestRepositoryInitPatterns:
         # [OK] モデルを明示的に渡せば動作する
         repo = NoInitRepository(InitTestModel, session=db_test)
 
-        print(f"\n[Pattern 3] No __init__ (pass model explicitly):")
+        print("\n[Pattern 3] No __init__ (pass model explicitly):")
         print(f"  repo.model: {repo.model}")
         print(f"  repo.session: {repo.session}")
 
@@ -87,7 +87,7 @@ class TestRepositoryInitPatterns:
         saved = repo.save(item)
         assert saved.name == "Test 3"
 
-        print(f"  [OK] Works! But need to pass model")
+        print("  [OK] Works! But need to pass model")
 
     def test_pattern4_direct_base_repository(self, db_test):
         """Pattern 4: Use BaseRepository directly (no subclass)"""
@@ -95,7 +95,7 @@ class TestRepositoryInitPatterns:
         # [OK] 直接 BaseRepository を使う
         repo = BaseRepository(InitTestModel, session=db_test)
 
-        print(f"\n[Pattern 4] Direct BaseRepository:")
+        print("\n[Pattern 4] Direct BaseRepository:")
         print(f"  repo.model: {repo.model}")
         print(f"  repo.session: {repo.session}")
 
@@ -107,7 +107,7 @@ class TestRepositoryInitPatterns:
         saved = repo.save(item)
         assert saved.name == "Test 4"
 
-        print(f"  [OK] Works! Simplest way")
+        print("  [OK] Works! Simplest way")
 
 
 @pytest.mark.asyncio
@@ -124,7 +124,7 @@ class TestAsyncRepositoryInitPatterns:
         # モデルを渡さずにインスタンス化
         repo = CustomInitAsyncRepository(session=async_db_test)
 
-        print(f"\n[Async Pattern 1] Custom __init__:")
+        print("\n[Async Pattern 1] Custom __init__:")
         print(f"  repo.model: {repo.model}")
         print(f"  repo.session: {repo.session}")
 
@@ -136,7 +136,7 @@ class TestAsyncRepositoryInitPatterns:
         saved = await repo.save(item)
         assert saved.name == "Async Test 1"
 
-        print(f"  [OK] Works! Can create without passing model")
+        print("  [OK] Works! Can create without passing model")
 
     async def test_async_pattern2_without_custom_init(self, async_db_test):
         """Pattern 2: No custom __init__ (新しい書き方 - 自動推論) - ASYNC"""
@@ -147,7 +147,7 @@ class TestAsyncRepositoryInitPatterns:
         # ✅ 修正後: session=... で渡せば自動推論される
         repo = NoInitAsyncRepository(session=async_db_test)
 
-        print(f"\n[Async Pattern 2] No __init__ (session only, auto-inference):")
+        print("\n[Async Pattern 2] No __init__ (session only, auto-inference):")
         print(f"  repo.model: {repo.model}")
         print(f"  repo.session: {repo.session}")
 
@@ -159,7 +159,7 @@ class TestAsyncRepositoryInitPatterns:
         saved = await repo.save(item)
         assert saved.name == "Async Test 2"
 
-        print(f"  [OK] Works! Model is auto-inferred from type parameter")
+        print("  [OK] Works! Model is auto-inferred from type parameter")
 
     async def test_async_pattern3_without_custom_init_but_pass_model(self, async_db_test):
         """Pattern 3: No custom __init__, but pass model explicitly - ASYNC"""
@@ -170,7 +170,7 @@ class TestAsyncRepositoryInitPatterns:
         # [OK] モデルを明示的に渡せば動作する
         repo = NoInitAsyncRepository(InitTestModel, session=async_db_test)
 
-        print(f"\n[Async Pattern 3] No __init__ (pass model explicitly):")
+        print("\n[Async Pattern 3] No __init__ (pass model explicitly):")
         print(f"  repo.model: {repo.model}")
         print(f"  repo.session: {repo.session}")
 
@@ -182,7 +182,7 @@ class TestAsyncRepositoryInitPatterns:
         saved = await repo.save(item)
         assert saved.name == "Async Test 3"
 
-        print(f"  [OK] Works! But need to pass model")
+        print("  [OK] Works! But need to pass model")
 
 
 class TestBestPracticeRecommendation:
@@ -192,7 +192,7 @@ class TestBestPracticeRecommendation:
         """すべてのパターンを比較"""
 
         print(f"\n{'='*60}")
-        print(f"パターン比較")
+        print("パターン比較")
         print(f"{'='*60}")
 
         # Pattern 1: Custom __init__ (過去の書き方)
@@ -201,35 +201,35 @@ class TestBestPracticeRecommendation:
                 super().__init__(InitTestModel, session)
 
         repo1 = Pattern1Repo(session=db_test)
-        print(f"\nPattern 1 (Custom __init__):")
-        print(f"  インスタンス化: Pattern1Repo(session=db_test)")
-        print(f"  コード量: 3行 (__init__ 定義が必要)")
-        print(f"  メリット: モデル名を省略できる")
-        print(f"  デメリット: __init__ の定義が冗長")
+        print("\nPattern 1 (Custom __init__):")
+        print("  インスタンス化: Pattern1Repo(session=db_test)")
+        print("  コード量: 3行 (__init__ 定義が必要)")
+        print("  メリット: モデル名を省略できる")
+        print("  デメリット: __init__ の定義が冗長")
 
         # Pattern 2: No __init__ + pass model
         class Pattern2Repo(BaseRepository[InitTestModel]):
             pass
 
         repo2 = Pattern2Repo(InitTestModel, session=db_test)
-        print(f"\nPattern 2 (No __init__ + pass model):")
-        print(f"  インスタンス化: Pattern2Repo(InitTestModel, session=db_test)")
-        print(f"  コード量: 1行 (pass のみ)")
-        print(f"  メリット: __init__ 定義不要")
-        print(f"  デメリット: モデル名を毎回渡す必要がある")
+        print("\nPattern 2 (No __init__ + pass model):")
+        print("  インスタンス化: Pattern2Repo(InitTestModel, session=db_test)")
+        print("  コード量: 1行 (pass のみ)")
+        print("  メリット: __init__ 定義不要")
+        print("  デメリット: モデル名を毎回渡す必要がある")
 
         # Pattern 3: Direct BaseRepository
         repo3 = BaseRepository(InitTestModel, session=db_test)
-        print(f"\nPattern 3 (Direct BaseRepository):")
-        print(f"  インスタンス化: BaseRepository(InitTestModel, session=db_test)")
-        print(f"  コード量: 0行 (クラス定義不要)")
-        print(f"  メリット: 最もシンプル")
-        print(f"  デメリット: カスタムメソッドを追加できない")
+        print("\nPattern 3 (Direct BaseRepository):")
+        print("  インスタンス化: BaseRepository(InitTestModel, session=db_test)")
+        print("  コード量: 0行 (クラス定義不要)")
+        print("  メリット: 最もシンプル")
+        print("  デメリット: カスタムメソッドを追加できない")
 
         print(f"\n{'='*60}")
-        print(f"[OK] 推奨パターン:")
-        print(f"  - カスタムメソッドが必要 → Pattern 1")
-        print(f"  - カスタムメソッド不要 → Pattern 3")
+        print("[OK] 推奨パターン:")
+        print("  - カスタムメソッドが必要 → Pattern 1")
+        print("  - カスタムメソッド不要 → Pattern 3")
         print(f"{'='*60}")
 
         # すべてのパターンが動作することを確認

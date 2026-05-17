@@ -132,7 +132,7 @@ def restore_sqlite(backup_file: Path):
     try:
         logger.info(f"Restoring {backup_file.name} to {current_db}")
         shutil.copy2(backup_file, current_db)
-        print(f"\n✓ Restore completed successfully")
+        print("\n✓ Restore completed successfully")
         print(f"  Database: {current_db}")
         logger.info("SQLite restore completed successfully")
     except Exception as e:
@@ -209,7 +209,7 @@ def restore_postgresql_via_host(backup_file: Path):
             print(f"\n✗ Error: Restore failed\n{error_msg}")
             return
 
-        print(f"\n✓ Restore completed successfully")
+        print("\n✓ Restore completed successfully")
         print(f"  Database: {config.postgres_db}")
         logger.info("PostgreSQL restore completed successfully")
 
@@ -266,14 +266,14 @@ def restore_postgresql_via_docker(backup_file: Path):
         print("Restoring database...")
 
         # docker exec -i で psql 実行（stdin から SQL を注入）
-        result = DockerCommandExecutor.exec_command(
+        DockerCommandExecutor.exec_command(
             container_name=container_name,
             command=psql_cmd,
             stdin=sql_data,
             capture_output=True
         )
 
-        print(f"\n✓ Restore completed successfully")
+        print("\n✓ Restore completed successfully")
         print(f"  Database: {config.postgres_db}")
         logger.info("PostgreSQL restore completed successfully")
 
@@ -289,7 +289,7 @@ def restore_postgresql_via_docker(backup_file: Path):
         return
     except gzip.BadGzipFile:
         logger.error("Invalid gzip file")
-        print(f"\n✗ Error: Invalid backup file (not a gzip file)")
+        print("\n✗ Error: Invalid backup file (not a gzip file)")
         return
     except Exception as e:
         logger.error(f"Restore failed: {e}")
@@ -364,7 +364,7 @@ def main():
         elif is_postgres and config.db_type == 'postgres':
             restore_postgresql(selected)
         else:
-            print(f"\n✗ Error: Backup file type mismatch")
+            print("\n✗ Error: Backup file type mismatch")
             print(f"  Current db_type: {config.db_type}")
             print(f"  Backup file: {selected.name}")
             logger.error(f"Backup file type mismatch: {config.db_type} vs {selected.name}")
@@ -372,7 +372,7 @@ def main():
 
     except Exception as e:
         logger.error(f"Restore process failed: {e}")
-        print(f"\n✗ Restore process failed")
+        print("\n✗ Restore process failed")
         return
 
     logger.info("Database restore process completed")

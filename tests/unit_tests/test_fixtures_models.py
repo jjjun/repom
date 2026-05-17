@@ -1,5 +1,4 @@
 """tests/fixtures/models のモデルが正しく使えるかテスト"""
-import pytest
 from tests.fixtures.models import User, Post, Parent, Child
 from repom import BaseRepository
 
@@ -57,7 +56,7 @@ def test_user_post_relationship(db_test):
 
     # 複数の Post を作成
     post1 = post_repo.save(Post(title="Post 1", content="Content 1", user_id=user.id))
-    post2 = post_repo.save(Post(title="Post 2", content="Content 2", user_id=user.id))
+    post_repo.save(Post(title="Post 2", content="Content 2", user_id=user.id))
 
     # リレーションシップを検証（db_test.refresh でリレーションをロード）
     db_test.refresh(user)

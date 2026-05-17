@@ -8,7 +8,6 @@ Based on Alembic source code investigation:
 
 Goal: Make file creation and execution use the same location source (RepomConfig)
 """
-import os
 from pathlib import Path
 from alembic.config import Config
 from alembic.script import ScriptDirectory

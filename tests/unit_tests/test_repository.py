@@ -1,8 +1,7 @@
 ﻿from tests._init import *
-from sqlalchemy import Integer, String, inspect, select, desc, and_
+from sqlalchemy import Integer, String, desc
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
-from datetime import datetime
 from typing import Optional, List
 from repom.models.base_model import BaseModel
 from repom import BaseRepository
@@ -308,7 +307,6 @@ def test_count(db_test):
     # 全件カウント
     assert repo.count() == 3
     # value=1 のみカウント
-    from sqlalchemy import and_
     filters = [SimpleModel.value == 1]
     assert repo.count(filters) == 1
     # 存在しない値

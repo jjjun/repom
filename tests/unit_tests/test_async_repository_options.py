@@ -6,7 +6,7 @@ N+1 問題を解決するための joinedload, selectinload などの
 SQLAlchemy の load options をテストします。
 """
 from tests._init import *
-from sqlalchemy import Integer, String, ForeignKey, select
+from sqlalchemy import String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship, joinedload, selectinload
 import pytest
 import pytest_asyncio

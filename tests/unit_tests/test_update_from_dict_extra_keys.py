@@ -1,7 +1,6 @@
 ﻿"""
 update_from_dict() が余計なキー（モデルに存在しないキー）と読み取り専用プロパティを正しく処理することを確認
 """
-import pytest
 from sqlalchemy import String, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from repom.models.base_model import BaseModel
@@ -131,7 +130,6 @@ def test_update_from_dict_mixed_valid_and_invalid_keys(db_test):
     db_test.add(model)
     db_test.commit()
 
-    original_name = model.name
     original_age = model.age
 
     # 一部のキーのみ有効

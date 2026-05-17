@@ -8,8 +8,6 @@ Tests verify that redis/manage.py correctly uses config values for:
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
-import pytest
 
 from repom.config import config
 from repom.redis.manage import (

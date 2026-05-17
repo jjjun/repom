@@ -5,8 +5,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 from importlib.metadata import entry_points
 
-import pytest
-from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 from repom.scripts.repom_info import (

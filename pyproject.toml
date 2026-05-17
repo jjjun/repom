@@ -52,6 +52,7 @@ dev = [
   "fastapi>=0.136.1,<0.137.0",
   "httpx>=0.28.1,<0.29.0",
   "requests>=2.33.1,<3.0.0",
+  "ruff>=0.15.13",
 ]
 
 [build-system]
@@ -86,3 +87,6 @@ filterwarnings = [
   "ignore:The garbage collector is trying to clean up non-checked-in connection.*:sqlalchemy.exc.SAWarning",
   "ignore:Task was destroyed but it is pending.*:RuntimeWarning",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["F403", "F405"]

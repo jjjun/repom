@@ -11,12 +11,10 @@ This test suite verifies:
 """
 
 import pytest
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 from repom._.discovery import (
     import_package_directory,
-    import_from_packages,
-    DEFAULT_EXCLUDED_DIRS
+    import_from_packages
 )
 from repom.utility import load_models
 from repom.config import config

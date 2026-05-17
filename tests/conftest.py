@@ -9,7 +9,6 @@ os.environ['EXEC_ENV'] = 'test'
 from repom.testing import create_test_fixtures, create_async_test_fixtures
 
 # テストモデルをインポート（自動登録される）
-from tests.fixtures.models import User, Post, Parent, Child
 
 
 def pytest_configure(config):

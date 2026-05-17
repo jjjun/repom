@@ -9,7 +9,7 @@ from datetime import datetime
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.models.base_model import BaseModel
-from repom import BaseRepository, AsyncBaseRepository
+from repom import AsyncBaseRepository
 
 
 class FlushTestModel(BaseModel, use_created_at=True, use_updated_at=True):
@@ -35,14 +35,14 @@ class TestFlushRefreshPatternSync:
         db_test.add(instance)
         db_test.flush()
 
-        print(f"\n[SYNC] After flush (no refresh):")
+        print("\n[SYNC] After flush (no refresh):")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
 
         is_created_at_none = instance.created_at is None
         is_updated_at_none = instance.updated_at is None
 
-        print(f"\n[SYNC] Verification:")
+        print("\n[SYNC] Verification:")
         print(f"  created_at is None: {is_created_at_none}")
         print(f"  updated_at is None: {is_updated_at_none}")
 
@@ -58,7 +58,7 @@ class TestFlushRefreshPatternSync:
         db_test.flush()
         db_test.refresh(instance)
 
-        print(f"\n[SYNC] After flush + refresh:")
+        print("\n[SYNC] After flush + refresh:")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
 
@@ -78,7 +78,7 @@ class TestFlushRefreshPatternSync:
 
         # After commit, try to access created_at
         # Sync session should auto-load it due to expire_on_commit
-        print(f"\n[SYNC] After flush + commit (accessing attribute):")
+        print("\n[SYNC] After flush + commit (accessing attribute):")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
 
@@ -103,14 +103,14 @@ class TestFlushRefreshPatternAsync:
         async_db_test.add(instance)
         await async_db_test.flush()
 
-        print(f"\n[ASYNC] After flush (no refresh):")
+        print("\n[ASYNC] After flush (no refresh):")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
 
         is_created_at_none = instance.created_at is None
         is_updated_at_none = instance.updated_at is None
 
-        print(f"\n[ASYNC] Verification:")
+        print("\n[ASYNC] Verification:")
         print(f"  created_at is None: {is_created_at_none}")
         print(f"  updated_at is None: {is_updated_at_none}")
 
@@ -126,7 +126,7 @@ class TestFlushRefreshPatternAsync:
         await async_db_test.flush()
         await async_db_test.refresh(instance)
 
-        print(f"\n[ASYNC] After flush + refresh:")
+        print("\n[ASYNC] After flush + refresh:")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
 
@@ -146,7 +146,7 @@ class TestFlushRefreshPatternAsync:
 
         # After commit, try to access created_at
         # Async session does NOT auto-load
-        print(f"\n[ASYNC] After flush + commit (accessing attribute):")
+        print("\n[ASYNC] After flush + commit (accessing attribute):")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
 
@@ -169,7 +169,7 @@ class TestRepositorySaveVsFlush:
         instance = FlushTestModel(name="Via save() method")
         saved = await repo.save(instance)
 
-        print(f"\n[COMPARE] Using repo.save() with external session:")
+        print("\n[COMPARE] Using repo.save() with external session:")
         print(f"  created_at (before refresh): {saved.created_at}")
         print(f"  updated_at (before refresh): {saved.updated_at}")
 
@@ -191,7 +191,7 @@ class TestRepositorySaveVsFlush:
         await async_db_test.flush()
         # Deliberately NOT calling refresh()
 
-        print(f"\n[COMPARE] Using manual flush (no refresh):")
+        print("\n[COMPARE] Using manual flush (no refresh):")
         print(f"  created_at: {instance.created_at}")
         print(f"  updated_at: {instance.updated_at}")
 

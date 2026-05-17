@@ -56,7 +56,6 @@ def test_update_from_dict_excludes_created_at(db_test, sample_model):
 
 def test_update_from_dict_excludes_updated_at(db_test, sample_model):
     """update_from_dict() で updated_at が更新されないことを確認（手動変更不可）"""
-    original_updated_at = sample_model.updated_at
 
     # updated_at を含むデータで更新を試みる
     new_time = datetime(2020, 1, 1)

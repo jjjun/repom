@@ -1,5 +1,5 @@
 ﻿from tests._init import *
-from sqlalchemy import Column, Integer, inspect
+from sqlalchemy import inspect
 from datetime import datetime
 
 from repom.models.base_model import BaseModel

@@ -9,7 +9,7 @@ from sqlalchemy import text, create_engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from repom.config import config
-from repom.database import get_sync_engine, Base
+from repom.database import Base
 from repom._.discovery import import_from_packages
 
 
@@ -290,7 +290,7 @@ def display_config():
         # pgAdmin Configuration (if enabled)
         if config.pgadmin.container.enabled:
             print("  [pgAdmin Configuration]")
-            print(f"    Enabled         : Yes")
+            print("    Enabled         : Yes")
             print(f"    Container Name  : {config.pgadmin.container.get_container_name()}")
             print(f"    Image           : {config.pgadmin.container.image}")
             print(f"    Host Port       : {config.pgadmin.container.host_port}")
@@ -299,7 +299,7 @@ def display_config():
             print()
         else:
             print("  [pgAdmin Configuration]")
-            print(f"    Enabled         : No")
+            print("    Enabled         : No")
             print()
 
     # PostgreSQL Connection Test

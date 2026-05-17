@@ -15,7 +15,7 @@ from repom.database import (
 from repom.models.base_model import BaseModel
 import os
 import pytest
-from sqlalchemy import Column, Integer, String, Engine
+from sqlalchemy import Column, String, Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.engine import Inspector
 
@@ -197,7 +197,7 @@ class TestDatabaseManager:
         """Sync Engine の dispose 動作確認"""
         # 新しいインスタンスでテスト
         manager = DatabaseManager()
-        engine = manager.get_sync_engine()
+        manager.get_sync_engine()
         assert manager._sync_engine is not None
 
         manager.dispose_sync()

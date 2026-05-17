@@ -126,7 +126,7 @@ def test_skip_on_exception(db_test):
                 instance = LocalRosterModel1(**item)
                 db_test.add(instance)
                 db_test.commit()
-            except IntegrityError as e:
+            except IntegrityError:
                 # トランザクションをロールバックし、データベースの一貫性を保たないといけないみたい
                 # この処理をしないと `sqlalchemy.exc.PendingRollbackError` が起こる。
                 db_test.rollback()

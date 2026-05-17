@@ -1,6 +1,5 @@
 """PostgresContainerConfig の単体テスト"""
 
-import pytest
 from repom.config import (
     PostgresContainerConfig, PostgresConfig, RepomConfig,
     PgAdminContainerConfig, PgAdminConfig

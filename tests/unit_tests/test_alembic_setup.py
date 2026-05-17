@@ -5,7 +5,6 @@ a unified interface for Alembic initialization and reset operations.
 """
 
 import tempfile
-import pytest
 from pathlib import Path
 
 from repom.alembic import AlembicSetup

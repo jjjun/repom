@@ -1,6 +1,4 @@
 """Integration tests configuration - PostgreSQL specific"""
-import pytest
-import os
 
 
 # 統合テスト用の設定

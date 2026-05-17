@@ -4,10 +4,9 @@ AsyncBaseRepository の非同期版テスト
 test_repository.py の全テストケースを非同期版に変換したもの。
 """
 from tests._init import *
-from sqlalchemy import Integer, inspect, select, desc, and_, String
+from sqlalchemy import Integer, desc, String
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
-from datetime import datetime
 from typing import Optional, List
 from repom.models.base_model import BaseModel
 from repom.repositories import AsyncBaseRepository, FilterParams
@@ -323,7 +322,6 @@ async def test_count(async_db_test):
     # 全件カウント
     assert await repo.count() == 3
     # value=1 のみカウント
-    from sqlalchemy import and_
     filters = [AsyncSimpleModel.value == 1]
     assert await repo.count(filters) == 1
     # 存在しない値

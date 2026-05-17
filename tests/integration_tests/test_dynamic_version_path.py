@@ -2,7 +2,6 @@
 Test if we can control migration file location dynamically in env.py
 without requiring version_locations in alembic.ini
 """
-import os
 from pathlib import Path
 from alembic.config import Config
 from alembic import command
@@ -27,7 +26,7 @@ script_location = alembic
     config = Config(str(alembic_ini))
 
     # Try to use version_path parameter
-    print(f"Testing version_path parameter...")
+    print("Testing version_path parameter...")
     print(f"Target directory: {versions_dir}")
 
     # This should work according to the signature we found

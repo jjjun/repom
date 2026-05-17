@@ -1,5 +1,5 @@
 ﻿from tests._init import *
-from sqlalchemy import Integer, func
+from sqlalchemy import Integer
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.exc import StatementError
 from repom.custom_types.ListJSON import ListJSON, listjson_filter

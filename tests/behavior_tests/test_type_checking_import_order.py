@@ -179,7 +179,6 @@ def test_type_checking_with_manual_import_order():
     このテストでは、TYPE_CHECKING を使わずに直接インポートすることで
     問題が解決することを確認する
     """
-    from sqlalchemy.orm import clear_mappers, configure_mappers
     # 一時ディレクトリ作成
     temp_dir = Path(tempfile.mkdtemp(prefix="test_models_fixed_"))
 

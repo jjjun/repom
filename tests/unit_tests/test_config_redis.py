@@ -4,7 +4,6 @@ Redis config support tests
 このテストファイルは RepomConfig の Redis 関連プロパティのみをテストし、
 実際のデータベース接続は行いません。
 """
-import pytest
 import os
 
 

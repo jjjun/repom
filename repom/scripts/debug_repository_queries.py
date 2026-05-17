@@ -86,13 +86,13 @@ def debug_repository_queries(repo_class: Type[BaseRepository]) -> None:
                         results = repo.find(param_instance)
                     except Exception as e:
                         print(f"⚠️  パラメータインスタンスの作成に失敗: {e}")
-                        print(f"   filters=[] で呼び出します")
+                        print("   filters=[] で呼び出します")
                         print()
                         results = repo.find(filters=[])
                 else:
                     # 型アノテーションがない場合は filters=[] で試す
                     print(f"ℹ️  find() に必須パラメータ '{first_param_name}' がありますが型が不明です")
-                    print(f"   filters=[] で呼び出します")
+                    print("   filters=[] で呼び出します")
                     print()
                     results = repo.find(filters=[])
             else:
@@ -119,7 +119,7 @@ def debug_repository_queries(repo_class: Type[BaseRepository]) -> None:
                 result_dict = first_result.to_dict()
                 query_count_after_dict = len(analyzer.get_queries())
 
-                print(f"✅ to_dict() 完了")
+                print("✅ to_dict() 完了")
                 print(
                     f"📊 クエリ実行数: {query_count_after_dict - query_count_before_dict} 件"
                 )
