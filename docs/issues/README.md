@@ -30,9 +30,7 @@ completed/     → 実装完了・コミット済み
 
 ## 🚧 実装予定・作業中の Issue
 
-| ID | タイトル | 優先度 | ステータス | ファイル |
-|----|---------| -------|-----------| ---------|
-| #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
+現在 active な Issue はありません。
 
 詳細は各ファイルを参照してください.
 
@@ -42,6 +40,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #007 | Annotation Inheritance の実装検証 | 2026-05-17 | 調査結果を Issue 文書へ反映し、`tests/unit_tests/test_annotation_inheritance.py` を追加（mixin 継承 / 多重継承 / `use_id=False` の組合せを検証）。4 tests passed。実装変更は不要と判断 | [completed/007_annotation_inheritance_validation.md](completed/007_annotation_inheritance_validation.md) |
 | #065 | `CLAUDE.md` のビルド/パッケージマネージャ記述更新（poetry → uv/hatchling） | 2026-05-17 | `CLAUDE.md` / `AGENTS.md` に hatchling build backend を明記し、CLAUDE/AGENTS/README/docs/guides に古い poetry 記述が残っていないことを確認 | [completed/065_update_claude_md_build_tooling.md](completed/065_update_claude_md_build_tooling.md) |
 | #064 | `BaseRepository` への bulk insert/update/delete ヘルパ追加 | 2026-05-17 | 同期/非同期リポジトリに `bulk_insert` / `bulk_update` / `bulk_delete` を追加。SoftDeletableMixin 対応モデルは一括論理削除し、ガイドと単体テストを更新。`tests/unit_tests` passed | [completed/064_baserepository_bulk_operations.md](completed/064_baserepository_bulk_operations.md) |
 | #063 | `db_backup.py` の SQLite/PostgreSQL ローテーション処理の共通化 | 2026-05-17 | `rotate_backups()` を `repom/scripts/_backup_utils.py` に切り出し、SQLite/PostgreSQL(host/docker)のバックアップローテーションを共通化。境界条件の単体テストを追加。`tests/unit_tests` passed | [completed/063_unify_backup_rotation_logic.md](completed/063_unify_backup_rotation_logic.md) |
@@ -197,4 +196,4 @@ completed/
 └── 2024/
 ```
 
-最終更新: 2026-05-17（リファクタリング監査により #059〜#065 追加）
+最終更新: 2026-05-17（Issue #007 を completed へ移動）
