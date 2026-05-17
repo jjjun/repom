@@ -81,6 +81,9 @@ async def get_task(task_id: int, session: AsyncSession = Depends(get_async_db_se
 | `await count(filters)` | 件数カウント | `int` |
 | `await save(instance)` | 保存 | `T` |
 | `await saves(instances)` | 一括保存 | `None` |
+| `await bulk_insert(objects)` | 一括作成 | `list[T]` |
+| `await bulk_update(values, filter_by=None)` | 一括更新 | `int` |
+| `await bulk_delete(filter_by=None, ids=None)` | 一括削除 | `int` |
 | `await remove(instance)` | 削除 | `None` |
 | `await soft_delete(id)` | 論理削除 | `bool` |
 | `await restore(id)` | 復元 | `bool` |
@@ -188,6 +191,9 @@ async def create_task(
     # 辞書リストから保存
     data_list = [{"title": f"タスク{i}"} for i in range(3)]
     await repo.dict_saves(data_list)
+
+    # bulk_insert は保存済みオブジェクトを返す
+    tasks = await repo.bulk_insert([Task(title=f"タスク{i}") for i in range(100)])
     
     return saved_task
 ```
@@ -234,6 +240,18 @@ async def update_task(task_id: int):
         # または BaseModel の update_from_dict を使用
         task.update_from_dict({"status": "completed"})
         await repo.save(task)
+
+        # ID を含む dict で複数行を更新
+        updated = await repo.bulk_update([
+            {"id": 1, "status": "completed"},
+            {"id": 2, "status": "archived"},
+        ])
+
+        # 共通条件に一致する行を同じ値で更新
+        updated = await repo.bulk_update(
+            [{"status": "archived"}],
+            filter_by={"status": "stale"},
+        )
 ```
 
 ### Delete（削除）
@@ -247,6 +265,12 @@ async def delete_task(task_id: int):
         task = await repo.get_by_id(task_id)
         if task:
             await repo.remove(task)
+
+        # 複数 ID をまとめて削除
+        deleted = await repo.bulk_delete(ids=[1, 2, 3])
+
+        # 条件に一致する行をまとめて削除
+        deleted = await repo.bulk_delete(filter_by={"status": "archived"})
 ```
 
 ---

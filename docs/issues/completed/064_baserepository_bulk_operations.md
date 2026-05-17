@@ -68,3 +68,10 @@
 - 関連完了 Issue: #018（default_options）, #015（SoftDeleteMixin）
 - [repom/repositories/_core.py](../../../repom/repositories/_core.py)
 - [repom/repositories/_soft_delete.py](../../../repom/repositories/_soft_delete.py)
+
+## Completion
+
+**Status**: ✅ 完了
+**Completed**: 2026-05-17
+
+Implemented sync/async `bulk_insert()`, `bulk_update()`, and `bulk_delete()`. Soft-delete models use `deleted_at` updates for bulk deletes. Added unit tests and repository guide updates.

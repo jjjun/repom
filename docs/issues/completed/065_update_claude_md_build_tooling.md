@@ -67,3 +67,10 @@ poetry run db_create
 
 - 完了 Issue: [#058 Poetry → uv 移行](../completed/058_migrate_from_poetry_to_uv.md)
 - コミット: `6352497 chore: migrate build system from poetry to hatchling`
+
+## Completion
+
+**Status**: ✅ 完了
+**Completed**: 2026-05-17
+
+Confirmed `CLAUDE.md`, `AGENTS.md`, `README.md`, and `docs/guides/` use current uv guidance and added hatchling as the build backend where relevant.

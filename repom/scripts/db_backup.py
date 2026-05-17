@@ -7,6 +7,7 @@ import subprocess
 import gzip
 from datetime import datetime
 from pathlib import Path
+from repom.scripts._backup_utils import rotate_backups
 
 # ロガーを取得
 logger = get_logger(__name__)
@@ -34,22 +35,13 @@ def backup_sqlite():
     backup_path = os.path.join(config.db_backup_path, backup_name)
     logger.debug(f"Backup file name: {backup_name}")
 
-    # Find existing backups for this db name
-    existing = [f for f in os.listdir(config.db_backup_path)
-                if f.startswith(name + "_") and f.endswith(ext)]
-    # Sort by creation time (oldest first)
-    existing.sort()
-    logger.debug(f"Found {len(existing)} existing backups for {name}")
-
-    if len(existing) >= MAX_BACKUPS_PER_DB:
-        # Remove oldest backups to keep only MAX_BACKUPS_PER_DB-1
-        to_remove = existing[:len(existing) - MAX_BACKUPS_PER_DB + 1]
-        logger.info(f"Removing {len(to_remove)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
-        for old in to_remove:
-            old_path = os.path.join(config.db_backup_path, old)
-            os.remove(old_path)
-            print(f"Removed old backup: {old}")
-            logger.warning(f"Removed old backup: {old}")
+    backup_dir = Path(config.db_backup_path)
+    removed = rotate_backups(backup_dir, f"{name}_*{ext}", MAX_BACKUPS_PER_DB - 1)
+    if removed:
+        logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
+        for old in removed:
+            print(f"Removed old backup: {old.name}")
+            logger.warning(f"Removed old backup: {old.name}")
 
     # Copy the file
     logger.debug(f"Copying {config.sqlite.db_file_path} to {backup_path}")
@@ -77,22 +69,12 @@ def backup_postgresql_via_host():
     backup_path = Path(config.db_backup_path) / backup_name
     logger.debug(f"Backup file name: {backup_name}")
 
-    # Find existing backups (db_*.sql.gz)
-    existing = sorted([
-        f for f in os.listdir(config.db_backup_path)
-        if f.startswith("db_") and f.endswith(".sql.gz")
-    ])
-    logger.debug(f"Found {len(existing)} existing backups")
-
-    if len(existing) >= MAX_BACKUPS_PER_DB:
-        # Remove oldest backups to keep only MAX_BACKUPS_PER_DB-1
-        to_remove = existing[:len(existing) - MAX_BACKUPS_PER_DB + 1]
-        logger.info(f"Removing {len(to_remove)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
-        for old in to_remove:
-            old_path = os.path.join(config.db_backup_path, old)
-            os.remove(old_path)
-            print(f"Removed old backup: {old}")
-            logger.warning(f"Removed old backup: {old}")
+    removed = rotate_backups(Path(config.db_backup_path), "db_*.sql.gz", MAX_BACKUPS_PER_DB - 1)
+    if removed:
+        logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
+        for old in removed:
+            print(f"Removed old backup: {old.name}")
+            logger.warning(f"Removed old backup: {old.name}")
 
     # pg_dump コマンド実行
     try:
@@ -187,22 +169,12 @@ def backup_postgresql_via_docker():
     backup_path = Path(config.db_backup_path) / backup_name
     logger.debug(f"Backup file name: {backup_name}")
 
-    # Find existing backups (db_*.sql.gz)
-    existing = sorted([
-        f for f in os.listdir(config.db_backup_path)
-        if f.startswith("db_") and f.endswith(".sql.gz")
-    ])
-    logger.debug(f"Found {len(existing)} existing backups")
-
-    if len(existing) >= MAX_BACKUPS_PER_DB:
-        # Remove oldest backups to keep only MAX_BACKUPS_PER_DB-1
-        to_remove = existing[:len(existing) - MAX_BACKUPS_PER_DB + 1]
-        logger.info(f"Removing {len(to_remove)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
-        for old in to_remove:
-            old_path = os.path.join(config.db_backup_path, old)
-            os.remove(old_path)
-            print(f"Removed old backup: {old}")
-            logger.warning(f"Removed old backup: {old}")
+    removed = rotate_backups(Path(config.db_backup_path), "db_*.sql.gz", MAX_BACKUPS_PER_DB - 1)
+    if removed:
+        logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
+        for old in removed:
+            print(f"Removed old backup: {old.name}")
+            logger.warning(f"Removed old backup: {old.name}")
 
     # docker exec で pg_dump 実行
     try:

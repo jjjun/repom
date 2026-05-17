@@ -33,9 +33,6 @@ completed/     → 実装完了・コミット済み
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
-| #063 | `db_backup.py` の SQLite/PostgreSQL ローテーション処理の共通化 | 低 | 🔴 未着手 | [active/063_unify_backup_rotation_logic.md](active/063_unify_backup_rotation_logic.md) |
-| #064 | `BaseRepository` への bulk insert/update/delete ヘルパ追加 | 中 | 🔴 未着手 | [active/064_baserepository_bulk_operations.md](active/064_baserepository_bulk_operations.md) |
-| #065 | `CLAUDE.md` のビルド/パッケージマネージャ記述更新（poetry → uv/hatchling） | 中 | 🔴 未着手 | [active/065_update_claude_md_build_tooling.md](active/065_update_claude_md_build_tooling.md) |
 
 詳細は各ファイルを参照してください.
 
@@ -45,6 +42,9 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #065 | `CLAUDE.md` のビルド/パッケージマネージャ記述更新（poetry → uv/hatchling） | 2026-05-17 | `CLAUDE.md` / `AGENTS.md` に hatchling build backend を明記し、CLAUDE/AGENTS/README/docs/guides に古い poetry 記述が残っていないことを確認 | [completed/065_update_claude_md_build_tooling.md](completed/065_update_claude_md_build_tooling.md) |
+| #064 | `BaseRepository` への bulk insert/update/delete ヘルパ追加 | 2026-05-17 | 同期/非同期リポジトリに `bulk_insert` / `bulk_update` / `bulk_delete` を追加。SoftDeletableMixin 対応モデルは一括論理削除し、ガイドと単体テストを更新。`tests/unit_tests` passed | [completed/064_baserepository_bulk_operations.md](completed/064_baserepository_bulk_operations.md) |
+| #063 | `db_backup.py` の SQLite/PostgreSQL ローテーション処理の共通化 | 2026-05-17 | `rotate_backups()` を `repom/scripts/_backup_utils.py` に切り出し、SQLite/PostgreSQL(host/docker)のバックアップローテーションを共通化。境界条件の単体テストを追加。`tests/unit_tests` passed | [completed/063_unify_backup_rotation_logic.md](completed/063_unify_backup_rotation_logic.md) |
 | #062 | postgres/redis Manager の compose_dir/init_dir/compose_file_path 共通化 | 2026-05-17 | `DockerManager` に compose/init directory と generated compose file 解決を集約。postgres/redis はサービス固有の定数を宣言し、公開モジュール関数は互換ラッパとして維持。関連 107 tests passed | [completed/062_postgres_redis_compose_dir_unification.md](completed/062_postgres_redis_compose_dir_unification.md) |
 | #061 | `repom/scripts/repom_info.py` の未使用 import (`text`) 除去 | 2026-05-17 | 調査の結果、`text` は PostgreSQL 接続確認の `conn.execute(text("SELECT 1"))` で使用中。変更不要として完了 | [completed/061_remove_unused_text_import.md](completed/061_remove_unused_text_import.md) |
 | #060 | `BaseStaticModel` の利用状況確認と deprecation/削除判断 | 2026-05-17 | repom 内と既知外部プロジェクトで `repom.models.BaseStaticModel` の実利用なしを確認し、`repom.models` export と `base_static.py` を削除。875 tests passed | [completed/060_basestaticmodel_usage_review.md](completed/060_basestaticmodel_usage_review.md) |

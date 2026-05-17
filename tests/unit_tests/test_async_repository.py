@@ -9,6 +9,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from typing import Optional, List
 from repom.models.base_model import BaseModel
+from repom.models.base_model_auto import BaseModelAuto
+from repom.mixins import SoftDeletableMixin
 from repom.repositories import AsyncBaseRepository, FilterParams
 
 
@@ -61,6 +63,12 @@ class AsyncAutoFilterRepository(AsyncBaseRepository[AsyncAutoFilterModel]):
 
     def __init__(self, session):
         super().__init__(AsyncAutoFilterModel, session)
+
+
+class AsyncSoftDeleteBulkModel(BaseModelAuto, SoftDeletableMixin):
+    __tablename__ = 'async_soft_delete_bulk_items'
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
 @pytest.mark.asyncio
@@ -196,6 +204,105 @@ async def test_dict_saves(async_db_test):
     assert len(all_objs) >= 2
     assert all_objs[0].value == 1
     assert all_objs[1].value == 2
+
+
+@pytest.mark.asyncio
+async def test_bulk_insert_returns_saved_objects(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    objects = [AsyncSimpleModel(value=i) for i in range(100)]
+
+    saved = await repo.bulk_insert(objects)
+
+    assert saved == objects
+    assert all(obj.id is not None for obj in saved)
+    assert await repo.count() == 100
+
+
+@pytest.mark.asyncio
+async def test_bulk_insert_empty_sequence_returns_empty_list(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+
+    assert await repo.bulk_insert([]) == []
+    assert await repo.count() == 0
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_updates_multiple_rows_by_id(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    first, second = await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
+
+    rowcount = await repo.bulk_update([
+        {"id": first.id, "value": 10},
+        {"id": second.id, "value": 20},
+    ])
+
+    assert rowcount == 2
+    assert (await repo.get_by_id(first.id)).value == 10
+    assert (await repo.get_by_id(second.id)).value == 20
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_requires_id_without_filter_by(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+
+    with pytest.raises(ValueError):
+        await repo.bulk_update([{"value": 10}])
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_uses_filter_by_when_provided(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
+
+    rowcount = await repo.bulk_update([{"value": 9}], filter_by={"value": 1})
+
+    assert rowcount == 2
+    assert await repo.count(filters=[AsyncSimpleModel.value == 9]) == 2
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_physically_deletes_by_ids(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    first, second, third = await repo.bulk_insert([
+        AsyncSimpleModel(value=1),
+        AsyncSimpleModel(value=2),
+        AsyncSimpleModel(value=3),
+    ])
+
+    rowcount = await repo.bulk_delete(ids=[first.id, third.id])
+
+    assert rowcount == 2
+    assert await repo.get_by_id(first.id) is None
+    assert await repo.get_by_id(second.id) is not None
+    assert await repo.get_by_id(third.id) is None
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_soft_deletes_supported_models(async_db_test):
+    repo = AsyncBaseRepository(AsyncSoftDeleteBulkModel, async_db_test)
+    active = await repo.bulk_insert([
+        AsyncSoftDeleteBulkModel(name="first"),
+        AsyncSoftDeleteBulkModel(name="second"),
+    ])
+
+    rowcount = await repo.bulk_delete(ids=[active[0].id])
+
+    assert rowcount == 1
+    assert await repo.get_by_id(active[0].id) is None
+    deleted = await repo.get_by_id(active[0].id, include_deleted=True)
+    assert deleted is not None
+    assert deleted.is_deleted
+    assert await repo.count() == 1
+    assert await repo.count(include_deleted=True) == 2
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_empty_ids_returns_zero(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    await repo.bulk_insert([AsyncSimpleModel(value=1)])
+
+    assert await repo.bulk_delete(ids=[]) == 0
+    assert await repo.count() == 1
 
 
 @pytest.mark.asyncio

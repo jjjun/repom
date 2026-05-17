@@ -22,8 +22,10 @@ Example:
 """
 
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from collections.abc import Sequence
 from typing import Any, Callable, Type, TypeVar, Generic, Optional, List, Dict, Union, get_args
-from sqlalchemy import ColumnElement, and_, select
+from sqlalchemy import ColumnElement, and_, delete, select, true, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 from repom.database import get_async_db_session
@@ -313,6 +315,124 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
         """
         instances = [self.model(**data) for data in data_list]
         await self.saves(instances)
+
+    async def bulk_insert(self, objects: Sequence[T]) -> list[T]:
+        """複数インスタンスを一括保存して、保存済みオブジェクトを返す。"""
+        if not objects:
+            return []
+
+        instances = list(objects)
+        async with self._session_scope() as session:
+            using_internal_session = self._session_override is None and self._scoped_session is session
+            try:
+                session.add_all(instances)
+                if using_internal_session:
+                    await session.commit()
+                    for instance in instances:
+                        await session.refresh(instance)
+                else:
+                    await session.flush()
+            except SQLAlchemyError:
+                if using_internal_session:
+                    await session.rollback()
+                raise
+        return instances
+
+    async def bulk_update(self, values: Sequence[dict], *, filter_by: dict | None = None) -> int:
+        """複数レコードを一括更新し、影響行数を返す。
+
+        ``filter_by`` 未指定時は各 dict の ``id`` を条件として使います。
+        ``filter_by`` 指定時は渡された条件に対して各 dict の値を適用します。
+        """
+        if not values:
+            return 0
+
+        if filter_by is None:
+            for row in values:
+                if "id" not in row:
+                    raise ValueError("bulk_update() requires each values dict to include 'id' when filter_by is not provided.")
+
+        async with self._session_scope() as session:
+            using_internal_session = self._session_override is None and self._scoped_session is session
+            rowcount = 0
+            try:
+                for row in values:
+                    update_values = dict(row)
+                    filters = self._bulk_filters(filter_by)
+                    if filter_by is None:
+                        filters.append(self.model.id == update_values.pop("id"))
+                    if not update_values:
+                        continue
+
+                    result = await session.execute(
+                        update(self.model)
+                        .where(and_(*filters))
+                        .values(**update_values)
+                        .execution_options(synchronize_session="fetch")
+                    )
+                    rowcount += result.rowcount or 0
+
+                if using_internal_session:
+                    await session.commit()
+                else:
+                    await session.flush()
+            except SQLAlchemyError:
+                if using_internal_session:
+                    await session.rollback()
+                raise
+        return rowcount
+
+    async def bulk_delete(self, *, filter_by: dict | None = None, ids: Sequence[Any] | None = None) -> int:
+        """条件に一致するレコードを一括削除し、影響行数を返す。
+
+        SoftDeletableMixin 対応モデルでは ``deleted_at`` を更新し、非対応モデルでは
+        物理削除します。``filter_by`` と ``ids`` を省略すると全件が対象です。
+        """
+        filters = self._bulk_filters(filter_by)
+        if ids is not None:
+            if not ids:
+                return 0
+            filters.append(self.model.id.in_(ids))
+
+        async with self._session_scope() as session:
+            using_internal_session = self._session_override is None and self._scoped_session is session
+            try:
+                if self._has_soft_delete():
+                    filters.append(self.model.deleted_at.is_(None))
+                    statement = (
+                        update(self.model)
+                        .where(and_(*filters) if filters else true())
+                        .values(deleted_at=datetime.now(timezone.utc))
+                        .execution_options(synchronize_session="fetch")
+                    )
+                else:
+                    statement = (
+                        delete(self.model)
+                        .where(and_(*filters) if filters else true())
+                        .execution_options(synchronize_session="fetch")
+                    )
+                result = await session.execute(statement)
+                rowcount = result.rowcount or 0
+                if using_internal_session:
+                    await session.commit()
+                else:
+                    await session.flush()
+            except SQLAlchemyError:
+                if using_internal_session:
+                    await session.rollback()
+                raise
+        return rowcount
+
+    def _bulk_filters(self, filter_by: dict | None) -> list[ColumnElement]:
+        if not filter_by:
+            return []
+
+        filters = []
+        for column_name, value in filter_by.items():
+            if not hasattr(self.model, column_name):
+                raise AttributeError(f"Column '{column_name}' does not exist on {self.model.__name__}")
+            filters.append(getattr(self.model, column_name) == value)
+        return filters
 
     async def remove(self, instance: T) -> None:
         """インスタンスを削除

@@ -8,6 +8,7 @@
 
 - **Language**: Python 3.12+
 - **Package Manager**: uv
+- **Build Backend**: hatchling
 - **Database ORM**: SQLAlchemy 2.0+
 - **Migration Tool**: Alembic
 - **Testing Framework**: pytest

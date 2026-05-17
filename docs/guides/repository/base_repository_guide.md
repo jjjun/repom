@@ -65,6 +65,9 @@ repo = BaseRepository(Task, session=db_session)
 | `count(filters)` | 件数カウント | `int` |
 | `save(instance)` | 保存 | `T` |
 | `saves(instances)` | 一括保存 | `None` |
+| `bulk_insert(objects)` | 一括作成 | `list[T]` |
+| `bulk_update(values, filter_by=None)` | 一括更新 | `int` |
+| `bulk_delete(filter_by=None, ids=None)` | 一括削除 | `int` |
 | `remove(instance)` | 削除 | `None` |
 
 ---
@@ -97,6 +100,9 @@ repo.saves(tasks)
 # 辞書リストから保存
 data_list = [{"title": f"タスク{i}"} for i in range(3)]
 repo.dict_saves(data_list)
+
+# bulk_insert は保存済みオブジェクトを返す
+tasks = repo.bulk_insert([Task(title=f"タスク{i}") for i in range(100)])
 ```
 
 **注意**: 外部セッションを使用する場合、`save()` / `saves()` は `flush()` のみを実行します。
@@ -139,6 +145,18 @@ repo.save(task)
 # または BaseModel の update_from_dict を使用
 task.update_from_dict({"status": "completed"})
 repo.save(task)
+
+# ID を含む dict で複数行を更新
+updated = repo.bulk_update([
+    {"id": 1, "status": "completed"},
+    {"id": 2, "status": "archived"},
+])
+
+# 共通条件に一致する行を同じ値で更新
+updated = repo.bulk_update(
+    [{"status": "archived"}],
+    filter_by={"status": "stale"},
+)
 ```
 
 ### Delete（削除）
@@ -146,9 +164,16 @@ repo.save(task)
 ```python
 task = repo.get_by_id(1)
 repo.remove(task)  # 物理削除（完全削除）
+
+# 複数 ID をまとめて削除
+deleted = repo.bulk_delete(ids=[1, 2, 3])
+
+# 条件に一致する行をまとめて削除
+deleted = repo.bulk_delete(filter_by={"status": "archived"})
 ```
 
 **論理削除（復元可能な削除）** については [SoftDelete ガイド](repository_soft_delete_guide.md) を参照してください。
+`bulk_delete()` は `SoftDeletableMixin` 対応モデルでは物理削除ではなく `deleted_at` を更新します。
 
 ---
 

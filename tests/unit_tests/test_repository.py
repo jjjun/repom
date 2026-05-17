@@ -193,6 +193,97 @@ def test_dict_saves(db_test):
     assert all_objs[1].value == 2
 
 
+def test_bulk_insert_returns_saved_objects(db_test):
+    repo = SimpleRepository(session=db_test)
+    objects = [SimpleModel(value=i) for i in range(100)]
+
+    saved = repo.bulk_insert(objects)
+
+    assert saved == objects
+    assert all(obj.id is not None for obj in saved)
+    assert repo.count() == 100
+
+
+def test_bulk_insert_empty_sequence_returns_empty_list(db_test):
+    repo = SimpleRepository(session=db_test)
+
+    assert repo.bulk_insert([]) == []
+    assert repo.count() == 0
+
+
+def test_bulk_update_updates_multiple_rows_by_id(db_test):
+    repo = SimpleRepository(session=db_test)
+    first, second = repo.bulk_insert([SimpleModel(value=1), SimpleModel(value=2)])
+
+    rowcount = repo.bulk_update([
+        {"id": first.id, "value": 10},
+        {"id": second.id, "value": 20},
+    ])
+
+    assert rowcount == 2
+    assert repo.get_by_id(first.id).value == 10
+    assert repo.get_by_id(second.id).value == 20
+
+
+def test_bulk_update_requires_id_without_filter_by(db_test):
+    repo = SimpleRepository(session=db_test)
+
+    with pytest.raises(ValueError):
+        repo.bulk_update([{"value": 10}])
+
+
+def test_bulk_update_uses_filter_by_when_provided(db_test):
+    repo = SimpleRepository(session=db_test)
+    repo.bulk_insert([SimpleModel(value=1), SimpleModel(value=1), SimpleModel(value=2)])
+
+    rowcount = repo.bulk_update([{"value": 9}], filter_by={"value": 1})
+
+    assert rowcount == 2
+    assert repo.count(filters=[SimpleModel.value == 9]) == 2
+
+
+def test_bulk_delete_physically_deletes_by_ids(db_test):
+    repo = SimpleRepository(session=db_test)
+    first, second, third = repo.bulk_insert([
+        SimpleModel(value=1),
+        SimpleModel(value=2),
+        SimpleModel(value=3),
+    ])
+
+    rowcount = repo.bulk_delete(ids=[first.id, third.id])
+
+    assert rowcount == 2
+    assert repo.get_by_id(first.id) is None
+    assert repo.get_by_id(second.id) is not None
+    assert repo.get_by_id(third.id) is None
+
+
+def test_bulk_delete_soft_deletes_supported_models(db_test):
+    repo = BaseRepository(SoftDeleteCountModel, db_test)
+    active = repo.bulk_insert([
+        SoftDeleteCountModel(name="first"),
+        SoftDeleteCountModel(name="second"),
+    ])
+
+    rowcount = repo.bulk_delete(ids=[active[0].id])
+
+    assert rowcount == 1
+    assert repo.get_by_id(active[0].id) is None
+    deleted = repo.get_by_id(active[0].id, include_deleted=True)
+    assert deleted is not None
+    assert deleted.is_deleted
+    assert repo.count() == 1
+    assert repo.count(include_deleted=True) == 2
+
+
+def test_bulk_delete_empty_ids_returns_zero(db_test):
+    repo = SimpleRepository(session=db_test)
+    repo.bulk_insert([SimpleModel(value=1)])
+
+    assert repo.bulk_delete(ids=[]) == 0
+    assert repo.count() == 1
+
+
 def test_find_with_offset(db_test):
     """
     offsetによる取得テスト
