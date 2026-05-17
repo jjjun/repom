@@ -53,6 +53,7 @@ Thumbs.db
 __pycache__/
 .benchmarks/
 .venv/
+.ruff_cache/
 
 # sphinx
 _build/*
