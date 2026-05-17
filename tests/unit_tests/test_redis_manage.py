@@ -168,3 +168,130 @@ class TestDirectoryManagement:
         compose_file = get_compose_dir() / "docker-compose.generated.yml"
         assert compose_file.exists()
         assert "redis" in str(compose_file.parent)
+
+
+class TestRedisEnsureRunning:
+    """ensure_running() の単体テスト"""
+
+    def _patch_config(self):
+        from unittest.mock import MagicMock
+
+        mock_config = MagicMock()
+        mock_config.redis.container.get_container_name.return_value = "repom_redis"
+        return mock_config
+
+    def test_returns_when_redis_already_running(self):
+        from unittest.mock import patch
+
+        from repom.redis import manage
+
+        with patch.object(manage, "config", self._patch_config()):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                return_value=True,
+            ) as is_running:
+                with patch.object(manage, "generate") as generate:
+                    with patch.object(manage, "RedisManager") as manager_cls:
+                        manage.ensure_running()
+
+        is_running.assert_called_once_with("repom_redis")
+        generate.assert_not_called()
+        manager_cls.assert_not_called()
+
+    def test_starts_when_redis_down(self):
+        from unittest.mock import MagicMock, patch
+
+        from repom.redis import manage
+
+        manager_instance = MagicMock()
+        with patch.object(manage, "config", self._patch_config()):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                return_value=False,
+            ):
+                with patch.object(manage, "generate") as generate:
+                    with patch.object(
+                        manage, "RedisManager", return_value=manager_instance
+                    ):
+                        manage.ensure_running(timeout_seconds=12)
+
+        generate.assert_called_once_with()
+        manager_instance.start.assert_called_once_with(timeout_seconds=12)
+
+    def test_default_timeout_seconds_is_30(self):
+        from unittest.mock import MagicMock, patch
+
+        from repom.redis import manage
+
+        manager_instance = MagicMock()
+        with patch.object(manage, "config", self._patch_config()):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                return_value=False,
+            ):
+                with patch.object(manage, "generate"):
+                    with patch.object(
+                        manage, "RedisManager", return_value=manager_instance
+                    ):
+                        manage.ensure_running()
+
+        manager_instance.start.assert_called_once_with(timeout_seconds=30)
+
+    def test_raises_runtime_error_when_docker_missing(self):
+        from unittest.mock import patch
+
+        import pytest
+
+        from repom.redis import manage
+
+        with patch.object(manage, "config", self._patch_config()):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                side_effect=FileNotFoundError("docker not found"),
+            ):
+                with pytest.raises(RuntimeError, match="docker command not found"):
+                    manage.ensure_running()
+
+    def test_raises_runtime_error_on_timeout(self):
+        from unittest.mock import MagicMock, patch
+
+        import pytest
+
+        from repom.redis import manage
+
+        manager_instance = MagicMock()
+        manager_instance.start.side_effect = TimeoutError(
+            "Redis did not start within 30 seconds"
+        )
+        with patch.object(manage, "config", self._patch_config()):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                return_value=False,
+            ):
+                with patch.object(manage, "generate"):
+                    with patch.object(
+                        manage, "RedisManager", return_value=manager_instance
+                    ):
+                        with pytest.raises(RuntimeError, match="Failed to start Redis"):
+                            manage.ensure_running()
+
+    def test_raises_runtime_error_on_system_exit(self):
+        from unittest.mock import MagicMock, patch
+
+        import pytest
+
+        from repom.redis import manage
+
+        manager_instance = MagicMock()
+        manager_instance.start.side_effect = SystemExit(1)
+        with patch.object(manage, "config", self._patch_config()):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                return_value=False,
+            ):
+                with patch.object(manage, "generate"):
+                    with patch.object(
+                        manage, "RedisManager", return_value=manager_instance
+                    ):
+                        with pytest.raises(RuntimeError, match="Failed to start Redis"):
+                            manage.ensure_running()

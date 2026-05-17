@@ -200,6 +200,54 @@ def stop():
         raise
 
 
+def ensure_running(*, timeout_seconds: int = 30) -> None:
+    """Redis コンテナの稼働を保証する。
+
+    すでに Redis コンテナが running なら何もしない。未起動の場合は
+    docker-compose.yml を生成し、 RedisManager.start() で起動する。
+
+    fast-domain の arq lifespan などから呼び出される上位エントリポイント:
+
+    - docker コマンドが見つからない場合は ``RuntimeError`` を投げる
+    - readiness check のタイムアウトを ``timeout_seconds`` で受け取り、
+      呼び出し側の lifespan 設定値をそのまま渡せる
+
+    Args:
+        timeout_seconds: readiness check の最大待機秒数 (デフォルト 30)。
+            ``RedisManager.start(timeout_seconds=...)`` に伝搬する。
+
+    Raises:
+        RuntimeError: docker コマンドが見つからない、readiness が間に合わない、
+            または compose up に失敗した場合。
+    """
+    from repom._.docker_manager import DockerCommandExecutor
+
+    container_name = config.redis.container.get_container_name()
+
+    try:
+        if DockerCommandExecutor.is_container_running(container_name):
+            return
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "docker command not found. "
+            "Please install Docker Desktop: "
+            "https://www.docker.com/products/docker-desktop"
+        ) from exc
+
+    print(
+        f"\n[Redis] auto-start: コンテナ '{container_name}' が未起動のため起動します..."
+    )
+
+    try:
+        generate()
+        manager = RedisManager()
+        manager.start(timeout_seconds=timeout_seconds)
+    except (TimeoutError, SystemExit) as exc:
+        raise RuntimeError(
+            f"Failed to start Redis via Docker: {exc}"
+        ) from exc
+
+
 def remove():
     """Redis コンテナとボリュームを削除（完全リセット）"""
     manager = RedisManager()

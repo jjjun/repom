@@ -83,6 +83,30 @@ class TestDockerManagerStart:
                 with pytest.raises(SystemExit):
                     manager.start()
 
+    def test_start_propagates_timeout_seconds_to_wait_for_service(self, tmp_path):
+        """start(timeout_seconds=...) は wait_for_service(max_retries=...) に伝搬する"""
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("version: '3.8'\n")
+
+        manager = _TestDockerManagerImpl("test_container", compose_file)
+
+        with patch("repom._.docker_manager.DockerCommandExecutor.run_docker_compose"):
+            with patch.object(manager, "wait_for_service") as mock_wait:
+                manager.start(timeout_seconds=45)
+                mock_wait.assert_called_once_with(max_retries=45)
+
+    def test_start_default_timeout_seconds_is_30(self, tmp_path):
+        """timeout_seconds の既定値は 30 (wait_for_service の既定と一致)"""
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("version: '3.8'\n")
+
+        manager = _TestDockerManagerImpl("test_container", compose_file)
+
+        with patch("repom._.docker_manager.DockerCommandExecutor.run_docker_compose"):
+            with patch.object(manager, "wait_for_service") as mock_wait:
+                manager.start()
+                mock_wait.assert_called_once_with(max_retries=30)
+
 
 class TestDockerManagerStop:
     """stop() メソッドのテスト"""

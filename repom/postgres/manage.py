@@ -287,31 +287,80 @@ def stop():
         raise
 
 
-def ensure_running():
-    """PostgreSQL コンテナが未起動の場合、自動的に起動する
+def ensure_running(
+    *,
+    timeout_seconds: int = 30,
+    include_pgadmin: bool = True,
+) -> None:
+    """PostgreSQL (と enabled な場合は pgAdmin) コンテナの稼働を保証する。
 
-    DB 操作スクリプトから呼び出され、接続前にコンテナの起動を保証します。
-    docker コマンドが存在しない場合はエラーメッセージを表示して終了します。
+    すでに対象コンテナが running なら何もしない。未起動のサービスが
+    あれば docker-compose.yml を生成し、PostgresManager.start() で起動する。
+
+    DB 操作スクリプト / fast-domain lifespan の双方から呼び出される
+    上位エントリポイントとして設計されている:
+
+    - docker コマンドが見つからない場合は ``RuntimeError`` を投げる
+    - readiness check (`wait_for_service`) のタイムアウトを ``timeout_seconds``
+      で受け取り、fast-domain の lifespan 設定値などをそのまま渡せる
+    - ``include_pgadmin`` で pgAdmin を同時に保証するかを切り替えられる
+      (CLI から呼ぶ場合は True のままで OK、fast-domain も既定 True)
+
+    Args:
+        timeout_seconds: readiness check の最大待機秒数 (デフォルト 30)。
+            ``PostgresManager.start(timeout_seconds=...)`` に伝搬する。
+        include_pgadmin: pgAdmin (``config.pgadmin.container.enabled`` が
+            True の場合) の起動も保証するか (デフォルト True)。
+
+    Raises:
+        RuntimeError: docker コマンドが見つからない、readiness が間に合わない、
+            または compose up に失敗した場合。
     """
     from repom._.docker_manager import DockerCommandExecutor
 
-    container_name = config.postgres.container.get_container_name()
+    postgres_container_name = config.postgres.container.get_container_name()
+    pgadmin_enabled = include_pgadmin and bool(
+        getattr(config.pgadmin.container, "enabled", False)
+    )
+    pgadmin_container_name = (
+        config.pgadmin.container.get_container_name() if pgadmin_enabled else None
+    )
 
     try:
-        if DockerCommandExecutor.is_container_running(container_name):
-            return
-    except FileNotFoundError:
-        print("\nエラー: docker コマンドが見つかりません。Docker Desktop をインストールしてください。")
-        sys.exit(1)
+        postgres_running = DockerCommandExecutor.is_container_running(
+            postgres_container_name
+        )
+        pgadmin_running = (
+            DockerCommandExecutor.is_container_running(pgadmin_container_name)
+            if pgadmin_enabled
+            else True
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "docker command not found. "
+            "Please install Docker Desktop: "
+            "https://www.docker.com/products/docker-desktop"
+        ) from exc
 
-    print(f"\n[PostgreSQL] コンテナ '{container_name}' が未起動のため、自動起動します...")
+    if postgres_running and pgadmin_running:
+        return
+
+    status_parts = [f"postgres={'up' if postgres_running else 'down'}"]
+    if pgadmin_enabled:
+        status_parts.append(f"pgadmin={'up' if pgadmin_running else 'down'}")
+    print(
+        f"\n[PostgreSQL] auto-start ({', '.join(status_parts)}); "
+        "generating compose and starting containers..."
+    )
+
     try:
-        start()
-    except SystemExit:
-        raise
-    except Exception as e:
-        print(f"\nエラー: PostgreSQL の自動起動に失敗しました: {e}")
-        sys.exit(1)
+        generate()
+        manager = PostgresManager()
+        manager.start(timeout_seconds=timeout_seconds)
+    except (TimeoutError, SystemExit) as exc:
+        raise RuntimeError(
+            f"Failed to start PostgreSQL via Docker: {exc}"
+        ) from exc
 
 
 def remove():

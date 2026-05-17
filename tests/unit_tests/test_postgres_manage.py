@@ -391,3 +391,164 @@ class TestDirectorySeparation:
         redis_content = redis_compose.read_text()
         assert "postgres" not in redis_content.lower()
         assert "pgadmin" not in redis_content.lower()
+
+
+class TestPostgresEnsureRunning:
+    """ensure_running() の単体テスト"""
+
+    def _patch_config(self, *, pgadmin_enabled: bool):
+        """`repom.postgres.manage.config` の MagicMock 差し替えを返す"""
+        mock_config = MagicMock()
+        mock_config.postgres.container.get_container_name.return_value = "repom_postgres"
+        mock_config.pgadmin.container.enabled = pgadmin_enabled
+        mock_config.pgadmin.container.get_container_name.return_value = "repom_pgadmin"
+        return mock_config
+
+    def test_returns_when_postgres_and_pgadmin_running(self):
+        """postgres と pgAdmin の両方が起動済みなら何もしない"""
+        from repom.postgres import manage
+
+        with patch.object(manage, "config", self._patch_config(pgadmin_enabled=True)):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                return_value=True,
+            ) as is_running:
+                with patch.object(manage, "generate") as generate:
+                    with patch.object(manage, "PostgresManager") as manager_cls:
+                        manage.ensure_running()
+
+        assert is_running.call_count == 2
+        generate.assert_not_called()
+        manager_cls.assert_not_called()
+
+    def test_returns_when_postgres_running_and_pgadmin_disabled(self):
+        """pgAdmin が無効なら postgres の状態だけで判定する"""
+        from repom.postgres import manage
+
+        with patch.object(manage, "config", self._patch_config(pgadmin_enabled=False)):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                return_value=True,
+            ) as is_running:
+                with patch.object(manage, "generate") as generate:
+                    with patch.object(manage, "PostgresManager") as manager_cls:
+                        manage.ensure_running()
+
+        is_running.assert_called_once_with("repom_postgres")
+        generate.assert_not_called()
+        manager_cls.assert_not_called()
+
+    def test_starts_when_postgres_down(self):
+        """postgres が未起動なら generate + manager.start(timeout) を呼ぶ"""
+        from repom.postgres import manage
+
+        manager_instance = MagicMock()
+        with patch.object(manage, "config", self._patch_config(pgadmin_enabled=False)):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                return_value=False,
+            ):
+                with patch.object(manage, "generate") as generate:
+                    with patch.object(
+                        manage, "PostgresManager", return_value=manager_instance
+                    ):
+                        manage.ensure_running(timeout_seconds=42)
+
+        generate.assert_called_once_with()
+        manager_instance.start.assert_called_once_with(timeout_seconds=42)
+
+    def test_starts_when_only_pgadmin_down(self):
+        """postgres は up でも pgAdmin が down なら起動処理に入る"""
+        from repom.postgres import manage
+
+        manager_instance = MagicMock()
+
+        def is_container_running(name):
+            return name == "repom_postgres"  # pgadmin は False
+
+        with patch.object(manage, "config", self._patch_config(pgadmin_enabled=True)):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                side_effect=is_container_running,
+            ):
+                with patch.object(manage, "generate") as generate:
+                    with patch.object(
+                        manage, "PostgresManager", return_value=manager_instance
+                    ):
+                        manage.ensure_running()
+
+        generate.assert_called_once_with()
+        manager_instance.start.assert_called_once_with(timeout_seconds=30)
+
+    def test_skips_pgadmin_check_when_include_pgadmin_false(self):
+        """include_pgadmin=False なら pgAdmin の起動有無を見ない"""
+        from repom.postgres import manage
+
+        with patch.object(manage, "config", self._patch_config(pgadmin_enabled=True)):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                return_value=True,
+            ) as is_running:
+                with patch.object(manage, "generate") as generate:
+                    with patch.object(manage, "PostgresManager") as manager_cls:
+                        manage.ensure_running(include_pgadmin=False)
+
+        is_running.assert_called_once_with("repom_postgres")
+        generate.assert_not_called()
+        manager_cls.assert_not_called()
+
+    def test_raises_runtime_error_when_docker_missing(self):
+        """docker コマンド不在は RuntimeError として伝搬する"""
+        import pytest
+
+        from repom.postgres import manage
+
+        with patch.object(manage, "config", self._patch_config(pgadmin_enabled=False)):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                side_effect=FileNotFoundError("docker not found"),
+            ):
+                with pytest.raises(RuntimeError, match="docker command not found"):
+                    manage.ensure_running()
+
+    def test_raises_runtime_error_on_timeout(self):
+        """manager.start() の TimeoutError は RuntimeError に正規化される"""
+        import pytest
+
+        from repom.postgres import manage
+
+        manager_instance = MagicMock()
+        manager_instance.start.side_effect = TimeoutError(
+            "PostgreSQL did not start within 30 seconds"
+        )
+        with patch.object(manage, "config", self._patch_config(pgadmin_enabled=False)):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                return_value=False,
+            ):
+                with patch.object(manage, "generate"):
+                    with patch.object(
+                        manage, "PostgresManager", return_value=manager_instance
+                    ):
+                        with pytest.raises(RuntimeError, match="Failed to start PostgreSQL"):
+                            manage.ensure_running()
+
+    def test_raises_runtime_error_on_system_exit(self):
+        """manager.start() の SystemExit も RuntimeError に正規化される"""
+        import pytest
+
+        from repom.postgres import manage
+
+        manager_instance = MagicMock()
+        manager_instance.start.side_effect = SystemExit(1)
+        with patch.object(manage, "config", self._patch_config(pgadmin_enabled=False)):
+            with patch(
+                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                return_value=False,
+            ):
+                with patch.object(manage, "generate"):
+                    with patch.object(
+                        manage, "PostgresManager", return_value=manager_instance
+                    ):
+                        with pytest.raises(RuntimeError, match="Failed to start PostgreSQL"):
+                            manage.ensure_running()

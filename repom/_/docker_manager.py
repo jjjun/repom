@@ -380,7 +380,7 @@ class DockerManager(ABC):
         init_dir.mkdir(parents=True, exist_ok=True)
         return init_dir
 
-    def start(self) -> None:
+    def start(self, timeout_seconds: int = 30) -> None:
         """コンテナを起動
 
         処理流れ:
@@ -388,6 +388,10 @@ class DockerManager(ABC):
         2. docker-compose up -d 実行
         3. wait_for_service() で起動待機
         4. ユーザーメッセージ表示
+
+        Args:
+            timeout_seconds: readiness check の最大待機秒数。
+                wait_for_service(max_retries=timeout_seconds) に渡される。
         """
         print()
         print_message("🐳", f"Starting {self.get_container_name()} container...")
@@ -413,7 +417,7 @@ class DockerManager(ABC):
         print_message("⏳", "Waiting for service to be ready...")
 
         try:
-            self.wait_for_service()
+            self.wait_for_service(max_retries=timeout_seconds)
             print_message("✅", f"{self.get_container_name()} is ready")
         except TimeoutError as e:
             print_message("❌", str(e))
