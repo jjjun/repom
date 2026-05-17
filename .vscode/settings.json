@@ -1,18 +1,17 @@
 {
   "editor.wordWrap": "on",
   "python.envFile": "${workspaceFolder}/.env",
+  "terminal.integrated.env.windows": {
+    "VIRTUAL_ENV_DISABLE_PROMPT": "1"
+  },
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
-      "source.organizeImports": "explicit"
+      "source.organizeImports": "never",
+      "source.organizeImports.ruff": "explicit"
     }
   },
-  "isort.enabled": false,
-  "ruff.enable": true,
-  "ruff.organizeImports": true,
-  "esbonio.sphinx.confDir": "${workspaceFolder}",
-  "esbonio.sphinx.buildDir": "${workspaceFolder}/_build",
   "workbench.colorCustomizations": {
     "tab.activeBackground": "#666666cc",
     "activityBar.activeBackground": "#fa1b49",
@@ -34,7 +33,6 @@
     "titleBar.inactiveForeground": "#e7e7e799"
   },
   "peacock.color": "#dd0531",
-  "makefile.configureOnOpen": false,
   "python.testing.pytestArgs": [
     "tests"
   ],
