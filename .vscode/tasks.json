@@ -6,7 +6,7 @@
     {
       "label": "🧪Pytest/benchmark",
       "type": "shell",
-      "command": "poetry run pytest --benchmark-columns=mean,rounds,iterations --benchmark-only -m run_benchmark",
+      "command": "uv run pytest --benchmark-columns=mean,rounds,iterations --benchmark-only -m run_benchmark",
       "group": {
         "kind": "none",
       },
@@ -15,7 +15,7 @@
     {
       "label": "🧪Pytest/all",
       "type": "shell",
-      "command": "poetry run pytest tests/unit_tests tests/behavior_tests",
+      "command": "uv run pytest tests/unit_tests tests/behavior_tests",
       "group": {
         "kind": "test"
       },
@@ -24,43 +24,43 @@
     {
       "label": "🧪Pytest/unit_tests",
       "type": "shell",
-      "command": "poetry run pytest tests/unit_tests",
+      "command": "uv run pytest tests/unit_tests",
       "group": {
         "kind": "test",
       },
       "problemMatcher": []
     },
     {
-      "label": "💾Poetry/db_create_master",
+      "label": "💾uv/db_create_master",
       "type": "shell",
-      "command": "poetry run db_create_master",
+      "command": "uv run db_create_master",
       "group": {
         "kind": "none",
       },
       "problemMatcher": []
     },
     {
-      "label": "💾Poetry/db_backup",
+      "label": "💾uv/db_backup",
       "type": "shell",
-      "command": "poetry run db_backup",
+      "command": "uv run db_backup",
       "group": {
         "kind": "none",
       },
       "problemMatcher": []
     },
     {
-      "label": "💾Poetry/db_create",
+      "label": "💾uv/db_create",
       "type": "shell",
-      "command": "$env:EXEC_ENV='dev'; poetry run db_create; $env:EXEC_ENV='prod'; poetry run db_create",
+      "command": "$env:EXEC_ENV='dev'; uv run db_create; $env:EXEC_ENV='prod'; uv run db_create",
       "group": {
         "kind": "none",
       },
       "problemMatcher": []
     },
     {
-      "label": "🔥Poetry/db_delete",
+      "label": "🔥uv/db_delete",
       "type": "shell",
-      "command": "poetry run db_delete",
+      "command": "uv run db_delete",
       "group": {
         "kind": "none",
       },
@@ -69,7 +69,7 @@
     {
       "label": "🤖Poetry/scaffold",
       "type": "shell",
-      "command": "poetry run scaffold",
+      "command": "uv run scaffold",
       "group": {
         "kind": "none",
       },
@@ -78,7 +78,7 @@
     {
       "label": "🧬Alembic/gen/migration_file",
       "type": "shell",
-      "command": "poetry run alembic revision --autogenerate -m 'comment'",
+      "command": "uv run alembic revision --autogenerate -m 'comment'",
       "group": {
         "kind": "none",
       },
@@ -87,7 +87,7 @@
     {
       "label": "🧬Alembic/migration/all",
       "type": "shell",
-      "command": "$env:EXEC_ENV='dev'; poetry run alembic upgrade head; $env:EXEC_ENV='prod'; poetry run alembic upgrade head",
+      "command": "$env:EXEC_ENV='dev'; uv run alembic upgrade head; $env:EXEC_ENV='prod'; uv run alembic upgrade head",
       "group": {
         "kind": "none",
       },

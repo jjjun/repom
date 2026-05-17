@@ -32,7 +32,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 優先度 | ステータス | ファイル |
 |----|---------| -------|-----------| ---------|
-
+| #058 | Poetry から uv へのパッケージマネージャ移行 | 中 | 🔴 未着手 | [active/058_migrate_from_poetry_to_uv.md](active/058_migrate_from_poetry_to_uv.md) |
 | #007 | Annotation Inheritance の実装検証 | 中 | 📝 調査待機中 | [active/007_annotation_inheritance_validation.md](active/007_annotation_inheritance_validation.md) |
 
 詳細は各ファイルを参照してください.
@@ -190,4 +190,4 @@ completed/
 └── 2024/
 ```
 
-最終更新: 2026-03-17
+最終更新: 2026-05-17
