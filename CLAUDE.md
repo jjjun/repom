@@ -170,12 +170,23 @@ version_locations = alembic/versions
 version_locations = %(here)s/alembic/versions
 ```
 
-## PostgreSQL Auto-Start
+## Docker Auto-Start (PostgreSQL / Redis)
 
 `db_type == 'postgres'` の場合、以下のスクリプトはコンテナ未起動時に自動起動します:
 - `db_create` / `db_delete` / `db_sync_master`
 
-共通関数: `repom.postgres.manage.ensure_running()`
+共通エントリポイント:
+
+- `repom.postgres.manage.ensure_running(*, timeout_seconds=30, include_pgadmin=True)`
+  - postgres と (`config.pgadmin.container.enabled` が True かつ `include_pgadmin=True` なら) pgAdmin の双方を保証する
+  - 失敗時は `RuntimeError` を投げる (CLI からは traceback、fast-domain lifespan からは捕捉)
+- `repom.redis.manage.ensure_running(*, timeout_seconds=30)`
+  - Redis コンテナのみを保証する
+  - 失敗時は `RuntimeError`
+
+`timeout_seconds` は `DockerManager.start(timeout_seconds=...)` 経由で
+`wait_for_service(max_retries=...)` に伝搬する。fast-domain のように
+lifespan 設定値で readiness 待機を制御したい場合に使う。
 
 ## Documentation Structure
 
