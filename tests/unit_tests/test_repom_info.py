@@ -36,16 +36,18 @@ class TestFormatSize:
 class TestGetDbFileInfo:
     """Tests for get_db_file_info function."""
 
+    @patch('repom.diagnostics.database_info.config_module.config')
     @patch('repom.scripts.repom_info.config')
-    def test_get_db_file_info_sqlite(self, mock_config, tmp_path):
+    def test_get_db_file_info_sqlite(self, mock_script_config, mock_database_config, tmp_path):
         """Test SQLite file info retrieval."""
         # Create a test database file
         db_file = tmp_path / "test.db"
         db_file.write_text("test data")
 
-        mock_config.db_type = 'sqlite'
-        mock_config.db_url = f'sqlite:///{db_file}'
-        mock_config.root_path = tmp_path
+        mock_script_config.db_type = 'sqlite'
+        mock_database_config.db_type = 'sqlite'
+        mock_database_config.db_url = f'sqlite:///{db_file}'
+        mock_database_config.root_path = tmp_path
 
         info = get_db_file_info()
 
@@ -54,14 +56,16 @@ class TestGetDbFileInfo:
         assert info['exists'] is True
         assert 'MB' in info['size_mb']
 
+    @patch('repom.diagnostics.database_info.config_module.config')
     @patch('repom.scripts.repom_info.config')
-    def test_get_db_file_info_not_exists(self, mock_config, tmp_path):
+    def test_get_db_file_info_not_exists(self, mock_script_config, mock_database_config, tmp_path):
         """Test SQLite file info when file doesn't exist."""
         db_file = tmp_path / "nonexistent.db"
 
-        mock_config.db_type = 'sqlite'
-        mock_config.db_url = f'sqlite:///{db_file}'
-        mock_config.root_path = tmp_path
+        mock_script_config.db_type = 'sqlite'
+        mock_database_config.db_type = 'sqlite'
+        mock_database_config.db_url = f'sqlite:///{db_file}'
+        mock_database_config.root_path = tmp_path
 
         info = get_db_file_info()
 
@@ -69,11 +73,13 @@ class TestGetDbFileInfo:
         assert info['exists'] is False
         assert info['size_mb'] == 'N/A'
 
+    @patch('repom.diagnostics.database_info.config_module.config')
     @patch('repom.scripts.repom_info.config')
-    def test_get_db_file_info_memory(self, mock_config):
+    def test_get_db_file_info_memory(self, mock_script_config, mock_database_config):
         """Test SQLite in-memory database."""
-        mock_config.db_type = 'sqlite'
-        mock_config.db_url = 'sqlite:///:memory:'
+        mock_script_config.db_type = 'sqlite'
+        mock_database_config.db_type = 'sqlite'
+        mock_database_config.db_url = 'sqlite:///:memory:'
 
         info = get_db_file_info()
 

@@ -2,7 +2,6 @@
 
 import os
 import sys
-from pathlib import Path
 from typing import Dict, List, Optional
 
 from sqlalchemy import text, create_engine
@@ -11,6 +10,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from repom.config import config
 from repom.database import Base
 from repom._.discovery import import_from_packages
+from repom.diagnostics.database_info import (
+    collect_database_info_sync,
+    format_size as _format_size,
+)
 
 
 def format_size(size_bytes: int) -> str:
@@ -22,7 +25,7 @@ def format_size(size_bytes: int) -> str:
     Returns:
         Formatted size string (e.g., "2.50 MB")
     """
-    return f"{size_bytes / (1024 * 1024):.2f} MB"
+    return _format_size(size_bytes, unit="mb")
 
 
 def get_db_file_info() -> Optional[Dict[str, any]]:
@@ -34,32 +37,22 @@ def get_db_file_info() -> Optional[Dict[str, any]]:
     if config.db_type != 'sqlite':
         return None
 
-    # Extract file path from db_url (e.g., "sqlite:///data/repom/db.dev.sqlite3")
-    db_url = str(config.db_url)
-    if db_url.startswith('sqlite:///:memory:'):
+    db_info = collect_database_info_sync()
+    if db_info.target == ':memory:':
         return {
             'file_path': ':memory:',
             'exists': True,
             'size_mb': 'N/A (in-memory)'
         }
-    elif db_url.startswith('sqlite:///'):
-        file_path = db_url.replace('sqlite:///', '', 1)
-    else:
-        return None
-
-    # Convert to absolute path
-    if not Path(file_path).is_absolute():
-        file_path = config.root_path / file_path
-    else:
-        file_path = Path(file_path)
-
-    exists = file_path.exists()
-    size_mb = format_size(file_path.stat().st_size) if exists else 'N/A'
 
     return {
-        'file_path': str(file_path),
-        'exists': exists,
-        'size_mb': size_mb
+        'file_path': db_info.target,
+        'exists': db_info.status == 'ok',
+        'size_mb': (
+            _format_size(db_info.size_bytes, unit="mb")
+            if db_info.status == 'ok'
+            else 'N/A'
+        )
     }
 
 
