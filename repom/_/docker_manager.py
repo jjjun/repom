@@ -25,7 +25,9 @@ import time
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, ClassVar, Optional
+
+from repom.config import config
 
 
 class DockerCommandExecutor:
@@ -312,6 +314,10 @@ class DockerManager(ABC):
     - is_running()
     """
 
+    SERVICE_NAME: ClassVar[str]
+    INIT_SUBDIR: ClassVar[str]
+    GENERATE_COMMAND: ClassVar[str]
+
     @abstractmethod
     def get_container_name(self) -> str:
         """コンテナ名を返す
@@ -321,7 +327,6 @@ class DockerManager(ABC):
         """
         pass
 
-    @abstractmethod
     def get_compose_file_path(self) -> Path:
         """docker-compose ファイルのパスを返す
 
@@ -331,7 +336,13 @@ class DockerManager(ABC):
         Raises:
             FileNotFoundError: compose ファイルが見つからない
         """
-        pass
+        compose_file = self.get_compose_dir() / "docker-compose.generated.yml"
+        if not compose_file.exists():
+            raise FileNotFoundError(
+                f"Compose file not found: {compose_file}\n"
+                f"Hint: Run 'uv run {self.GENERATE_COMMAND}' first"
+            )
+        return compose_file
 
     @abstractmethod
     def wait_for_service(self, max_retries: int = 30) -> None:
@@ -356,6 +367,18 @@ class DockerManager(ABC):
             コンテナ名（get_container_name() の値）
         """
         return self.get_container_name()
+
+    def get_compose_dir(self) -> Path:
+        """docker-compose.yml の保存先ディレクトリを取得"""
+        compose_dir = Path(config.data_path) / self.SERVICE_NAME
+        compose_dir.mkdir(parents=True, exist_ok=True)
+        return compose_dir
+
+    def get_init_dir(self) -> Path:
+        """初期化ファイルの保存先ディレクトリを取得"""
+        init_dir = self.get_compose_dir() / self.INIT_SUBDIR
+        init_dir.mkdir(parents=True, exist_ok=True)
+        return init_dir
 
     def start(self) -> None:
         """コンテナを起動

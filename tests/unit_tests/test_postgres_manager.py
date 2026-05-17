@@ -37,7 +37,7 @@ class TestPostgresManagerComposePath:
         manager = PostgresManager()
 
         # Mock get_compose_dir to return non-existent directory
-        with patch('repom.postgres.manage.get_compose_dir') as mock_dir:
+        with patch.object(manager, "get_compose_dir") as mock_dir:
             mock_dir.return_value = Path("/nonexistent/path")
 
             with pytest.raises(FileNotFoundError) as exc_info:
@@ -54,7 +54,7 @@ class TestPostgresManagerComposePath:
 
             manager = PostgresManager()
 
-            with patch('repom.postgres.manage.get_compose_dir') as mock_dir:
+            with patch.object(manager, "get_compose_dir") as mock_dir:
                 mock_dir.return_value = compose_dir
 
                 result = manager.get_compose_file_path()

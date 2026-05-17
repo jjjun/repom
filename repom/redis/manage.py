@@ -9,22 +9,19 @@
 
 import subprocess
 import sys
-from pathlib import Path
 
 from repom.config import config
 from repom._.docker_compose import DockerComposeGenerator, DockerService, DockerVolume
 from repom._ import docker_manager as dm
 
 
-def get_compose_dir() -> Path:
+def get_compose_dir():
     """docker-compose.yml の保存先ディレクトリを取得
 
     Returns:
         config.data_path/redis/ ディレクトリ（分離プロジェクト構造）
     """
-    compose_dir = Path(config.data_path) / "redis"
-    compose_dir.mkdir(parents=True, exist_ok=True)
-    return compose_dir
+    return RedisManager().get_compose_dir()
 
 
 class RedisManager(dm.DockerManager):
@@ -33,22 +30,16 @@ class RedisManager(dm.DockerManager):
     docker-compose による start/stop/remove は DockerManager 基盤クラスから継承
     """
 
+    SERVICE_NAME = "redis"
+    INIT_SUBDIR = "redis_init"
+    GENERATE_COMMAND = "redis_generate"
+
     def __init__(self):
         self.config = config
 
     def get_container_name(self) -> str:
         """Redis コンテナ名を返す"""
         return self.config.redis.container.get_container_name()
-
-    def get_compose_file_path(self) -> Path:
-        """compose ファイルのパスを返す"""
-        compose_file = get_compose_dir() / "docker-compose.generated.yml"
-        if not compose_file.exists():
-            raise FileNotFoundError(
-                f"Compose file not found: {compose_file}\n"
-                f"Hint: Run 'uv run redis_generate' first"
-            )
-        return compose_file
 
     def wait_for_service(self, max_retries: int = 30) -> None:
         """Redis の起動を待機（redis-cli ping による確認）"""
@@ -83,16 +74,13 @@ class RedisManager(dm.DockerManager):
         print()
 
 
-def get_init_dir() -> Path:
+def get_init_dir():
     """Redis 初期化ファイルのディレクトリを取得
 
     Returns:
         config.data_path/redis_init/ ディレクトリ
     """
-    compose_dir = get_compose_dir()
-    init_dir = compose_dir / "redis_init"
-    init_dir.mkdir(parents=True, exist_ok=True)
-    return init_dir
+    return RedisManager().get_init_dir()
 
 
 def generate_redis_conf() -> str:

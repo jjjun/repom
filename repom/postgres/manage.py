@@ -9,22 +9,19 @@
 import subprocess
 import sys
 import json
-from pathlib import Path
 
 from repom.config import config
 from repom._.docker_compose import DockerComposeGenerator, DockerService, DockerVolume
 from repom._ import docker_manager as dm
 
 
-def get_compose_dir() -> Path:
+def get_compose_dir():
     """docker-compose.yml の保存先ディレクトリを取得
 
     Returns:
         config.data_path/postgres/ ディレクトリ（分離プロジェクト構造）
     """
-    compose_dir = Path(config.data_path) / "postgres"
-    compose_dir.mkdir(parents=True, exist_ok=True)
-    return compose_dir
+    return PostgresManager().get_compose_dir()
 
 
 class PostgresManager(dm.DockerManager):
@@ -33,22 +30,16 @@ class PostgresManager(dm.DockerManager):
     docker-compose による start/stop/remove は DockerManager 基盤クラスから継承
     """
 
+    SERVICE_NAME = "postgres"
+    INIT_SUBDIR = "postgresql_init"
+    GENERATE_COMMAND = "postgres_generate"
+
     def __init__(self):
         self.config = config
 
     def get_container_name(self) -> str:
         """PostgreSQL コンテナ名を返す"""
         return self.config.postgres.container.get_container_name()
-
-    def get_compose_file_path(self) -> Path:
-        """compose ファイルのパスを返す"""
-        compose_file = get_compose_dir() / "docker-compose.generated.yml"
-        if not compose_file.exists():
-            raise FileNotFoundError(
-                f"Compose file not found: {compose_file}\n"
-                f"Hint: Run 'uv run postgres_generate' first"
-            )
-        return compose_file
 
     def wait_for_service(self, max_retries: int = 30) -> None:
         """PostgreSQL の起動を待機（pg_isready による確認）"""
@@ -97,16 +88,13 @@ class PostgresManager(dm.DockerManager):
             print(f"  Server: {self.config.postgres.container.get_container_name()}")
 
 
-def get_init_dir() -> Path:
+def get_init_dir():
     """PostgreSQL 初期化スクリプトのディレクトリを取得
 
     Returns:
         config.data_path/postgresql_init/ ディレクトリ
     """
-    compose_dir = get_compose_dir()
-    init_dir = compose_dir / "postgresql_init"
-    init_dir.mkdir(parents=True, exist_ok=True)
-    return init_dir
+    return PostgresManager().get_init_dir()
 
 
 def generate_pgadmin_servers_json() -> dict:

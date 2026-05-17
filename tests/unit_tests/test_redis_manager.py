@@ -37,7 +37,7 @@ class TestRedisManagerComposePath:
         manager = RedisManager()
 
         # Mock get_compose_dir to return non-existent directory
-        with patch('repom.redis.manage.get_compose_dir') as mock_dir:
+        with patch.object(manager, "get_compose_dir") as mock_dir:
             mock_dir.return_value = Path("/nonexistent/path")
 
             with pytest.raises(FileNotFoundError) as exc_info:
@@ -54,7 +54,7 @@ class TestRedisManagerComposePath:
 
             manager = RedisManager()
 
-            with patch('repom.redis.manage.get_compose_dir') as mock_dir:
+            with patch.object(manager, "get_compose_dir") as mock_dir:
                 mock_dir.return_value = compose_dir
 
                 result = manager.get_compose_file_path()
@@ -241,7 +241,7 @@ class TestRedisManagerInitDir:
         with TemporaryDirectory() as tmpdir:
             compose_dir = Path(tmpdir)
 
-            with patch('repom.redis.manage.get_compose_dir') as mock_compose_dir:
+            with patch('repom.redis.manage.RedisManager.get_compose_dir') as mock_compose_dir:
                 mock_compose_dir.return_value = compose_dir
 
                 from repom.redis.manage import get_init_dir
