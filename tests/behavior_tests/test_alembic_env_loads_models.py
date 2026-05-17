@@ -12,10 +12,25 @@ alembic current コマンドを実行して、env.py のロード処理が成功
 import subprocess
 import sys
 from pathlib import Path
+import os
 import pytest
 import tempfile
 import shutil
 import re
+
+
+def alembic_test_env():
+    env = os.environ.copy()
+    env["EXEC_ENV"] = "test"
+    env["DB_TYPE"] = "sqlite"
+    env.pop("CONFIG_HOOK", None)
+    return env
+
+
+def remove_file_based_test_db(project_root: Path):
+    test_db = project_root / "data" / "repom" / "repom_test.sqlite3"
+    if test_db.exists():
+        test_db.unlink()
 
 
 def test_alembic_env_loads_without_error():
@@ -41,7 +56,8 @@ def test_alembic_env_loads_without_error():
         cwd=project_root,
         capture_output=True,
         text=True,
-        timeout=10
+        timeout=10,
+        env=alembic_test_env(),
     )
 
     # 実行結果を確認
@@ -106,7 +122,8 @@ def test_alembic_revision_check_loads_without_error():
         cwd=project_root,
         capture_output=True,
         text=True,
-        timeout=10
+        timeout=10,
+        env=alembic_test_env(),
     )
 
     # エラーが発生しないことを確認
@@ -148,7 +165,8 @@ def test_alembic_commands_load_env_correctly(alembic_command):
         cwd=project_root,
         capture_output=True,
         text=True,
-        timeout=10
+        timeout=10,
+        env=alembic_test_env(),
     )
 
     # env.py のロードに失敗していないことを確認
@@ -182,15 +200,13 @@ def test_alembic_revision_autogenerate_works():
         SQLITE_USE_FILE_DB=1 を使用（test 環境のデフォルトは in-memory SQLite のため、
         subprocess 間でDB状態が保持されない）
     """
-    import os
-
     project_root = Path(__file__).parent.parent.parent
     versions_dir = project_root / "alembic" / "versions"
 
     # test 環境でファイルベースDB を使用（in-memory は subprocess 間で状態が保持されない）
-    test_env = os.environ.copy()
-    test_env["EXEC_ENV"] = "test"
+    test_env = alembic_test_env()
     test_env["SQLITE_USE_FILE_DB"] = "1"
+    remove_file_based_test_db(project_root)
 
     # 既存のマイグレーションファイルを一時バックアップ
     temp_backup_dir = tempfile.mkdtemp()
@@ -287,6 +303,7 @@ def test_alembic_revision_autogenerate_works():
             for file in Path(temp_backup_dir).glob("*.py"):
                 shutil.copy2(file, versions_dir)
         shutil.rmtree(temp_backup_dir)
+        remove_file_based_test_db(project_root)
 
 
 def test_alembic_upgrade_head_works():
@@ -310,7 +327,8 @@ def test_alembic_upgrade_head_works():
         cwd=project_root,
         capture_output=True,
         text=True,
-        timeout=30
+        timeout=30,
+        env=alembic_test_env(),
     )
 
     # コマンドが成功すること

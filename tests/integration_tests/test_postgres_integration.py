@@ -6,12 +6,12 @@ from sqlalchemy import text
 
 # PostgreSQL 統合テスト用に db_type を設定
 # EXEC_ENV='test' のまま（repom_test データベースに接続）
-config.db_type = 'postgres'
+POSTGRES_INTEGRATION_ENABLED = os.getenv('DB_TYPE') == 'postgres'
 
 
 @pytest.mark.skipif(
-    config.db_type != 'postgres',
-    reason="PostgreSQL integration tests require config.db_type='postgres' and running PostgreSQL container"
+    not POSTGRES_INTEGRATION_ENABLED,
+    reason="PostgreSQL integration tests require DB_TYPE=postgres and running PostgreSQL container"
 )
 class TestPostgreSQLIntegration:
     """PostgreSQL への実際の接続テスト"""
@@ -130,7 +130,7 @@ class TestPostgreSQLIntegration:
 
 
 @pytest.mark.skipif(
-    os.getenv('DB_TYPE') != 'postgres',
+    not POSTGRES_INTEGRATION_ENABLED,
     reason="PostgreSQL integration tests require DB_TYPE=postgres"
 )
 class TestPostgreSQLModelOperations:
@@ -186,5 +186,6 @@ def print_test_info():
 
 
 # テスト実行前に情報表示
-if config.db_type == 'postgres':
+if POSTGRES_INTEGRATION_ENABLED:
+    config.db_type = 'postgres'
     print_test_info()

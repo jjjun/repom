@@ -40,6 +40,24 @@ def pytest_configure(config):
     logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
 
 
+def pytest_collection_modifyitems(items):
+    """Run stable unit tests before behavior tests that intentionally clear mappers."""
+    order = {
+        'unit_tests': 0,
+        'behavior_tests': 1,
+        'integration_tests': 2,
+    }
+
+    def sort_key(item):
+        path_parts = set(item.path.parts)
+        for directory, priority in order.items():
+            if directory in path_parts:
+                return priority
+        return 3
+
+    items.sort(key=sort_key)
+
+
 @pytest.fixture(scope='session', autouse=True)
 def setup_database_tables():
     """
@@ -122,4 +140,3 @@ async_db_engine, async_db_test = create_async_test_fixtures()
 #   finally:
 #       clear_mappers()
 #       configure_mappers()
-
