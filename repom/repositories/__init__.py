@@ -10,6 +10,10 @@ Available Classes:
 """
 
 from repom.repositories._core import FilterParams
+from repom.repositories._introspection import (
+    create_repository_instance,
+    get_model_from_repository_class,
+)
 from repom.repositories._order_by import (
     build_order_by_query_depends,
     get_order_by_columns,
@@ -31,4 +35,6 @@ __all__ = [
     'get_order_by_default_value',
     'get_order_by_values',
     'VirtualColumnError',
+    'create_repository_instance',
+    'get_model_from_repository_class',
 ]
