@@ -13,32 +13,41 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def load_hook_function(hook_path: str) -> Optional[callable]:
+class ConfigHookLoadError(RuntimeError):
+    """Raised when CONFIG_HOOK points to an invalid hook."""
+
+
+def load_hook_function(hook_path: str):
     """フック関数を動的にロードする"""
+    # "module.path:function_name" 形式をパース
+    if ':' in hook_path:
+        module_path, function_name = hook_path.rsplit(':', 1)
+    else:
+        module_path = hook_path
+        function_name = 'hook_config'
+
+    # モジュールをインポート
     try:
-        # "module.path:function_name" 形式をパース
-        if ':' in hook_path:
-            module_path, function_name = hook_path.rsplit(':', 1)
-        else:
-            module_path = hook_path
-            function_name = 'hook_config'
-
-        # モジュールをインポート
         module = importlib.import_module(module_path)
+    except ImportError as exc:
+        raise ConfigHookLoadError(
+            f"Failed to import config hook module '{module_path}' from CONFIG_HOOK='{hook_path}': {exc}"
+        ) from exc
 
-        # 関数を取得
-        if hasattr(module, function_name):
-            return getattr(module, function_name)
-        else:
-            print(f"Warning: Function '{function_name}' not found in module '{module_path}'")
-            return None
+    # 関数を取得
+    if not hasattr(module, function_name):
+        raise ConfigHookLoadError(
+            f"Config hook function '{function_name}' was not found in module '{module_path}' "
+            f"(CONFIG_HOOK='{hook_path}')"
+        )
 
-    except ImportError as e:
-        print(f"Warning: Failed to import hook module '{module_path}': {e}")
-        return None
-    except Exception as e:
-        print(f"Warning: Error loading hook function: {e}")
-        return None
+    hook_function = getattr(module, function_name)
+    if not callable(hook_function):
+        raise ConfigHookLoadError(
+            f"Config hook target '{module_path}:{function_name}' is not callable "
+            f"(CONFIG_HOOK='{hook_path}')"
+        )
+    return hook_function
 
 
 def get_config_from_hook(config: dataclass) -> dataclass:
@@ -51,9 +60,6 @@ def get_config_from_hook(config: dataclass) -> dataclass:
 
     # フック関数をロード
     hook_function = load_hook_function(hook_path)
-    if hook_function is None:
-        return config
-
     config = hook_function(config)
     return config
 

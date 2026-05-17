@@ -510,6 +510,11 @@ class MinePyConfig(RepomConfig):
 CONFIG_HOOK=mine_py.config:get_repom_config
 ```
 
+`CONFIG_HOOK` に指定した module が import できない、関数が存在しない、または
+指定先が callable でない場合は、起動時に `ConfigHookLoadError` を送出して停止します。
+設定ミスを warning だけで無視しないため、CI/CD や外部プロジェクト連携では
+hook パスを明示的に検証してください。
+
 **用途例**:
 - モデル自動インポート対象の追加
 - 許可パッケージ prefix の制御
