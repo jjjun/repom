@@ -97,6 +97,23 @@ wheels = [
 ]
 
 [[package]]
+name = "basekit"
+version = "0.1.0"
+source = { editable = "../../../basekit" }
+dependencies = [
+    { name = "python-dotenv" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "python-dotenv", specifier = ">=1.0.0,<2.0.0" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.15.12,<0.16.0" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.4.22"
 source = { registry = "https://pypi.org/simple" }
@@ -743,9 +760,9 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "basekit" },
     { name = "inflect" },
     { name = "pydantic" },
-    { name = "python-dotenv" },
     { name = "sqlalchemy" },
 ]
 
@@ -787,10 +804,10 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.14.0,<2.0.0" },
     { name = "asyncpg", marker = "extra == 'async-all'", specifier = ">=0.31.0,<0.32.0" },
     { name = "asyncpg", marker = "extra == 'postgres-async'", specifier = ">=0.31.0,<0.32.0" },
+    { name = "basekit", editable = "../../../basekit" },
     { name = "inflect", specifier = ">=7.5.0,<8.0.0" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.3.4,<4.0.0" },
     { name = "pydantic", specifier = ">=2.13.4,<3.0.0" },
-    { name = "python-dotenv", specifier = ">=1.2.2,<2.0.0" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=7.4.0,<8.0.0" },
     { name = "sqlalchemy", specifier = ">=2.0.49,<3.0.0" },
 ]
