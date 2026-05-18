@@ -64,7 +64,7 @@ build-backend = "hatchling.build"
 packages = ["repom"]
 
 [tool.uv.sources]
-basekit = { path = "../../../basekit", editable = true }
+basekit = { git = "https://github.com/jjjun/basekit.git", rev = "ca97f2dba52120fa28c543678830d69b9ee608d9" }
 
 [tool.pytest.ini_options]
 addopts = [
