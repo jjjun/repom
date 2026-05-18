@@ -2,123 +2,148 @@
 
 ## 概要
 
-**CONFIG_HOOK** は、設定オブジェクトを起動時に差し替えるための仕組みです。
-環境変数で関数を指定するだけで、パッケージの設定を柔軟に変更できます。
-repom でもこの仕組みを採用していますが、フレームワークやパッケージに依存しません。
+`CONFIG_HOOK` は、repom の起動時に設定オブジェクトを外部プロジェクト側で差し替えるための仕組みです。
+hook の読み込み処理は `basekit.config_hook` が提供し、repom はその基盤を使って `RepomConfig` を適用します。
 
----
-
-## 目次
-
-- [基本的な使い方](#基本的な使い方)
-- [動作の仕組み](#動作の仕組み)
-- [トラブルシューティング](#トラブルシューティング)
-- [ベストプラクティス](#ベストプラクティス)
-- [関連ドキュメント](#関連ドキュメント)
+通常の利用では、外部プロジェクトで `RepomConfig` を継承した設定クラスを作り、`CONFIG_HOOK` に `module:function` 形式で hook 関数を指定します。
 
 ---
 
 ## 基本的な使い方
 
-### 1. hook 関数を定義
-
-設定オブジェクトを受け取り、変更して返す関数を用意します。
+### 1. hook 関数を定義する
 
 ```python
 # myapp/config.py
-def hook_config(config):
-    config.feature_flag = True
+from repom.config import RepomConfig
+
+
+class MyAppConfig(RepomConfig):
+    def __init__(self):
+        super().__init__()
+        self.db_name = "myapp"
+        self.model_locations = ["myapp.models"]
+        self.allowed_package_prefixes = {"myapp.", "repom."}
+
+
+def get_repom_config():
+    return MyAppConfig()
+```
+
+既存の `config` を受け取って変更する形も使えます。
+
+```python
+# myapp/config.py
+from repom.config import RepomConfig
+
+
+def hook_config(config: RepomConfig) -> RepomConfig:
+    config.db_type = "postgres"
+    config.db_name = "myapp"
+    config.model_locations = ["myapp.models"]
+    config.allowed_package_prefixes = {"myapp.", "repom."}
     return config
 ```
 
-### 2. 環境変数で指定
-
-`.env` または環境変数で hook 関数を指定します。
+### 2. 環境変数で指定する
 
 ```bash
 # .env
-CONFIG_HOOK=myapp.config:hook_config
+CONFIG_HOOK=myapp.config:get_repom_config
 ```
+
+PowerShell では次のように指定します。
 
 ```powershell
-$env:CONFIG_HOOK='myapp.config:hook_config'
+$env:CONFIG_HOOK='myapp.config:get_repom_config'
 ```
 
-### 3. 複数プロジェクトで Docker コンテナを分離する
+---
 
-同じマシン上で複数の repom ベースプロジェクトを開発する場合、Docker コンテナ名を分離する必要があります。
+## repom と basekit の責務
+
+- `basekit.config_hook`: `CONFIG_HOOK` の読み取り、hook 関数の import、エラー処理を提供します。
+- `repom.config.RepomConfig`: DB、モデル自動インポート、ログ、パスなど repom 固有の設定を提供します。
+- `repom._.config_hook`: 以前の互換 import でしたが、現在は削除されています。
+
+`ConfigHookLoadError` を直接扱う必要がある場合は、`basekit.config_hook` から import してください。
 
 ```python
-# fast_domain/config.py
+from basekit.config_hook import ConfigHookLoadError
+```
+
+---
+
+## よく使う設定例
+
+### モデル自動インポート
+
+```python
 from repom.config import RepomConfig
 
-class FastDomainConfig(RepomConfig):
+
+class MyAppConfig(RepomConfig):
     def __init__(self):
         super().__init__()
-        
-        # コンテナ名を設定
-        # container_name が Docker Compose プロジェクト名としても使われる
-        # volume_name は自動的に {container_name}_data になる
-        self.postgres.container.container_name = "fast_domain_postgres"
-        self.redis.container.container_name = "fast_domain_redis"
-        
-        # PostgreSQL ポートを変更してコンフリクトを回避
-        self.postgres.port = 5434
-        self.postgres.container.host_port = 5434
-        
-        # Redis ポートも変更
-        self.redis.port = 6381
+        self.model_locations = ["myapp.models", "myapp.modules.user"]
+        self.model_excluded_dirs = {"tests", "migrations", "__pycache__"}
+        self.allowed_package_prefixes = {"myapp.", "repom."}
+        self.model_import_strict = True
 
-def hook_config(config):
-    return FastDomainConfig()
+
+def get_repom_config():
+    return MyAppConfig()
 ```
 
-```bash
-# .env
-CONFIG_HOOK=fast_domain.config:hook_config
+### PostgreSQL を使う
+
+```python
+from repom.config import RepomConfig
+
+
+def get_repom_config():
+    config = RepomConfig()
+    config.db_type = "postgres"
+    config.db_name = "myapp"
+    config.postgres.user = "myapp"
+    config.postgres.password = "myapp_dev"
+    config.postgres.container.container_name = "myapp_postgres"
+    config.postgres.container.host_port = 5434
+    return config
 ```
 
-この設定により：
-- PostgreSQL コンテナ: `fast_domain_postgres` (ポート 5434)
-- PostgreSQL Volume: `fast_domain_postgres_data` (自動生成)
-- Redis コンテナ: `fast_domain_redis` (ポート 6381)
-- Redis Volume: `fast_domain_redis_data` (自動生成)
+### Redis / PostgreSQL コンテナ名を分ける
 
-複数プロジェクトが同時起動でき、コンテナの衝突が起きません。
+```python
+from repom.config import RepomConfig
 
----
 
-## 動作の仕組み
-
-### 初期化フロー
-
-```
-1. パッケージの設定モジュールが読み込まれる
-   ↓
-2. 設定オブジェクトが生成される
-   ↓
-3. CONFIG_HOOK の読み取り処理が呼ばれる
-   ↓
-4. 環境変数 CONFIG_HOOK を読み取る
-   ↓
-5. 指定された関数を動的にインポート
-   ↓
-6. 関数を実行して config を変更
-   ↓
-7. 変更後の config が返される
-   ↓
-8. 初期化が完了する
+def get_repom_config():
+    config = RepomConfig()
+    config.postgres.container.container_name = "myapp_postgres"
+    config.redis.container.container_name = "myapp_redis"
+    config.redis.port = 6381
+    config.redis.container.host_port = 6381
+    return config
 ```
 
 ---
 
-## トラブルシューティング
+## 動作フロー
 
-### Q1: CONFIG_HOOK が適用されない
+1. `repom.config` がデフォルトの `RepomConfig` を作成する
+2. `basekit.config_hook.get_config_from_hook()` が `CONFIG_HOOK` を読む
+3. `CONFIG_HOOK` が未設定ならデフォルト設定をそのまま返す
+4. `CONFIG_HOOK` が設定されていれば `module:function` を import する
+5. hook 関数を実行し、返された config を repom の実行時設定として使う
+6. 返却後に `config.init()` が呼ばれ、パス作成などの初期化が行われる
 
-**症状**: 環境変数を設定したのに、設定が反映されない
+---
 
-**確認方法**:
+## エラーと確認方法
+
+`CONFIG_HOOK` に指定した module が import できない、関数が存在しない、指定先が callable ではない場合、`basekit.config_hook.ConfigHookLoadError` が送出されます。
+設定ミスを warning だけで無視しないため、CI/CD や外部プロジェクト連携では hook パスを明示的に検証してください。
 
 ```python
 import os
@@ -126,94 +151,25 @@ import os
 print("CONFIG_HOOK:", os.getenv("CONFIG_HOOK"))
 ```
 
-**原因と対処**:
-
-1. **環境変数が設定されていない**
-   ```powershell
-   # 確認
-   echo $env:CONFIG_HOOK
-   
-   # 設定
-   $env:CONFIG_HOOK='mine_py.config:hook_config'
-   ```
-
-2. **.env ファイルが読み込まれていない**
-   ```python
-    from dotenv import load_dotenv
-    load_dotenv("/path/to/.env")
-   ```
-
-3. **関数のパスが間違っている**
-   ```bash
-   # 正しい: module.path:function_name
-   CONFIG_HOOK=mine_py.config:hook_config
-   
-   # 間違い: ファイルパスやスラッシュ
-   CONFIG_HOOK=mine_py/config.py:hook_config  # ❌
-   ```
-
-### Q2: ImportError が発生する
-
-**症状**: `ModuleNotFoundError: No module named 'mine_py'`
-
-**原因**: Python パスにモジュールが含まれていない
-
-**対処**:
-
-```python
-# プロジェクトルートを PYTHONPATH に追加
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-```
-
-または `pyproject.toml` で設定：
-
-```toml
-[tool.hatch.build.targets.wheel]
-packages = ["src/mine_py"]
-```
-
-### Q3: 設定が部分的にしか反映されない
-
-**症状**: 一部の設定だけが適用されている
-
-**原因**: hook 関数で `return config` を忘れている
-
-```python
-# ❌ 間違い: return を忘れている
-def hook_config(config):
-    config.feature_flag = True
-    # return config
-
-# ✅ 正しい
-def hook_config(config):
-    config.feature_flag = True
-    return config
-```
-
-### Q4: 関数が見つからない
-
-**症状**: `AttributeError: module 'mine_py.config' has no attribute 'hook_config'`
-
-**原因**: 関数名のスペルミス
+hook パスは Python の module path で指定します。ファイルパスではありません。
 
 ```bash
-# 環境変数の関数名と実際の関数名を確認
-CONFIG_HOOK=mine_py.config:hook_config
+# 正しい
+CONFIG_HOOK=myapp.config:get_repom_config
 
-# Python ファイル内
-def hook_config(config):  # ← 名前が一致しているか確認
-    ...
+# 間違い
+CONFIG_HOOK=myapp/config.py:get_repom_config
 ```
+
+---
 
 ## ベストプラクティス
 
 1. hook 関数は軽量に保つ
-2. 必ず `return config` を返す
-3. 機密情報は環境変数から取得する
-4. 変更は必要最小限に留める
+2. `RepomConfig` を継承したクラスを返すか、受け取った `config` を変更して返す
+3. モデル自動インポートを使う場合は `allowed_package_prefixes` を明示する
+4. 環境ごとの差分は `EXEC_ENV` を読んで最小限に分岐する
+5. `repom._.config_hook` は使わず、共通 hook API は `basekit.config_hook` を直接使う
 
 ---
 

@@ -537,9 +537,9 @@ db_engine, db_test = create_test_fixtures()
 
 ```python
 # myproject/config.py
-from repom.config import MineDbConfig
+from repom.config import RepomConfig
 
-class MyProjectConfig(MineDbConfig):
+class MyProjectConfig(RepomConfig):
     def __init__(self):
         super().__init__()
         # 自動インポートするパッケージを指定
@@ -834,11 +834,16 @@ def test_session_isolation(db_test):
 
 ```python
 # myproject/config.py
-class MyProjectConfig(MineDbConfig):
+from repom.config import RepomConfig
+
+class MyProjectConfig(RepomConfig):
     def __init__(self):
         super().__init__()
         self.model_locations = ['myproject.models']
         self.allowed_package_prefixes = {'myproject.', 'repom.'}
+
+def get_repom_config():
+    return MyProjectConfig()
 
 # .env
 CONFIG_HOOK=myproject.config:get_repom_config

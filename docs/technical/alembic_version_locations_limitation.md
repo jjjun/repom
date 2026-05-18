@@ -10,7 +10,9 @@ Alembic でマイグレーションファイルの保存場所を動的に制御
 
 ```python
 # 理想: config.py だけで制御したい
-class MinePyConfig(MineDbConfig):
+from repom.config import RepomConfig
+
+class MinePyConfig(RepomConfig):
     def __init__(self):
         super().__init__()
         self._alembic_versions_path = '/custom/path/versions'

@@ -227,11 +227,11 @@ class BaseRepository:
 
 ハイブリッド型パッケージは通常、`config_hook` を使ってプロジェクトごとに設定をカスタマイズできます。
 
-### repom の Config クラス
+### repom の RepomConfig クラス
 
 ```python
 # repom/config.py
-class MineDbConfig:
+class RepomConfig:
     @property
     def log_file_path(self) -> str:
         """ログファイルパス"""
@@ -244,9 +244,9 @@ class MineDbConfig:
 
 ```python
 # mine-py/src/mine_py/config.py
-from repom.config import MineDbConfig
+from repom.config import RepomConfig
 
-class MinePyConfig(MineDbConfig):
+class MinePyConfig(RepomConfig):
     def __init__(self):
         super().__init__()
         

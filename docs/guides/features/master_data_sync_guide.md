@@ -54,9 +54,9 @@ config.master_data_path  # => "C:/path/to/project/data_master"
 
 ```python
 # mine_py/config.py
-from repom.config import MineDbConfig
+from repom.config import RepomConfig
 
-class MinePyConfig(MineDbConfig):
+class MinePyConfig(RepomConfig):
     def __init__(self):
         super().__init__()
         # カスタムパスを指定
