@@ -1,6 +1,6 @@
 import pytest
 
-from repom._.config_hook import (
+from basekit.config_hook import (
     Config,
     ConfigHookLoadError,
     get_config_from_hook,

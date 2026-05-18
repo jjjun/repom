@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List, Set
 
-from repom._.config_hook import Config, get_config_from_hook
+from basekit.config_hook import Config, get_config_from_hook
 
 
 @dataclass
