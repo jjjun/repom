@@ -4,6 +4,8 @@
 
 repom は **汎用パッケージディスカバリーインフラ** ([discovery_guide.md](discovery_guide.md)) を使用して、SQLAlchemy モデルを自動的にインポートし、Alembic マイグレーションやデータベース作成時に `Base.metadata` に登録します。
 
+> **Note**: 汎用 discovery API の実体は `basekit.discovery` に移管済みです。repom の `load_models()` は引き続きこの仕組みを利用します。新しく汎用 discovery helper を直接使うコードでは `basekit.discovery` を import してください。
+
 **主な機能**:
 - 指定ディレクトリまたはパッケージから Python ファイルを再帰的に検索
 - SQLAlchemy モデルクラスを動的にインポート
@@ -63,7 +65,7 @@ auto_import_models(
 
 **使用例**:
 ```python
-from repom.utility import import_package_directory
+from basekit.discovery import import_package_directory
 
 # セキュリティ検証あり
 failures = import_package_directory(
@@ -108,7 +110,7 @@ import_package_directory(
 
 **使用例**:
 ```python
-from repom.utility import import_from_packages
+from basekit.discovery import import_from_packages
 from sqlalchemy.orm import configure_mappers
 
 # 複数パッケージをインポート + マッパー初期化
@@ -328,7 +330,7 @@ config.model_locations = ['untrusted_package.models']  # ValueError
 def load_models(context: Optional[str] = None) -> None:
     """モデルを読み込む（RepomConfig の設定に基づく）"""
     from repom.config import config
-    from repom.utility import import_from_packages
+    from basekit.discovery import import_from_packages
     from sqlalchemy.orm import configure_mappers
 
     if config.model_locations:
@@ -482,7 +484,7 @@ config.model_import_strict = True  # fail_on_error=True に設定される
 ```python
 # テスト用の設定
 def test_import_package_directory():
-    from repom.utility import import_package_directory
+    from basekit.discovery import import_package_directory
     
     # セキュリティ検証のテスト
     with pytest.raises(ValueError, match="Security"):

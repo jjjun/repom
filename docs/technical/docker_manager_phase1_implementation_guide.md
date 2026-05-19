@@ -1,6 +1,6 @@
 # Phase 1 実装設計書：Docker 管理基盤
 
-**対象**: `repom/_/docker_manager.py` の実装  
+**対象**: 当初は `repom/_/docker_manager.py` の実装。現行の汎用基盤は `basekit.docker_manager` に移管済み。
 **目標**: 共通基盤完成 + PostgreSQL 参考実装 + テスト  
 **期間**: 2-3日
 
@@ -246,7 +246,7 @@ def format_connection_info(
 
 ## 🏗️ ファイル構成
 
-### `repom/_/docker_manager.py` 構成
+### `basekit.docker_manager` 構成
 
 ```
 1. Imports (5-10 行)
@@ -407,7 +407,7 @@ def test_postgres_manager_error_handling():
 #    - 使用例
 #    - API リファレンス
 
-# 2. docs/technical/docker_manager_architecture.md
+# 2. docs/technical/docker_manager_phase1_implementation_guide.md
 #    - 設計思想
 #    - 拡張方法（MongoManager など）
 
@@ -466,7 +466,7 @@ GitHub Actions 環境で Docker が使える想定
 
 ## ✅ 完了条件（Phase 1）
 
-- [ ] `repom/_/docker_manager.py` 実装完了
+- [x] 汎用基盤を `basekit.docker_manager` として実装済み
 - [ ] Unit tests 15+ 個パス
 - [ ] PostgreSQL 既存機能全て動作確認
 - [ ] ドキュメント完成

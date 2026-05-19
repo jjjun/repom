@@ -192,7 +192,9 @@ print(f"⏳ Waiting for PostgreSQL to be ready...")
 
 ### 共通化後の推定行数
 
-#### 共通基盤（`repom/docker_manager.py`）
+#### 共通基盤（現行: `basekit.docker_manager`）
+
+この分析は当初 repom 内の共通化を前提に作成されたものですが、現在の汎用 Docker 管理基盤は `basekit.docker_manager` に移管済みです。repom 側の `PostgresManager` / `RedisManager` は public API を維持し、内部で basekit の基盤を利用します。
 
 | コンポーネント | 行数 | 説明 |
 |---------------|------|------|
@@ -209,7 +211,7 @@ print(f"⏳ Waiting for PostgreSQL to be ready...")
 #### PostgreSQL 簡潔版（`repom/postgres/manage.py`）
 
 ```python
-from repom.docker_manager import DockerManager, DockerCommandExecutor
+from basekit.docker_manager import DockerManager, DockerCommandExecutor
 
 class PostgresManager(DockerManager):
     def __init__(self, config: RepomConfig):
@@ -237,7 +239,7 @@ class PostgresManager(DockerManager):
 #### Redis 簡潔版（fast-domain）
 
 ```python
-from repom.docker_manager import DockerManager
+from basekit.docker_manager import DockerManager
 
 class RedisManager(DockerManager):
     def __init__(self, compose_dir: Path):
@@ -440,7 +442,7 @@ def test_negative_max_retries():
    
 2. ✅ コード行数削減
    - repom/postgres/manage.py: 355行 → 248行（-107, 30%）
-   - 共通基盤: repom/_/docker_manager.py （約300-400行）
+   - 共通基盤: basekit.docker_manager （約300-400行）
    
 3. ✅ 実 Docker テスト成功
    - 共通基盤テスト: 8個（docker-compose, readiness, status）
@@ -450,7 +452,7 @@ def test_negative_max_retries():
    
 4. ✅ ドキュメント整備完了
    - `docs/guides/features/docker_manager_guide.md` - 使用ガイド
-   - `docs/technical/docker_manager_architecture.md` - 設計ドキュメント
+   - `docs/technical/docker_manager_phase1_implementation_guide.md` - 設計ドキュメント
    - コード内 docstring（充実）
 ```
 

@@ -1,7 +1,9 @@
 ﻿# Docker Manager 繧ｬ繧､繝・
 
-**蟇ｾ雎｡**: 繝ｪ繝昴ず繝医Μ縺ｮ繧ｷ繧ｹ繝・Β繧堤炊隗｣縺励∝ｮｹ蝎ｨ邂｡逅・ｒ螳溯｣・☆繧矩幕逋ｺ閠・ 
+**蟇ｾ雎｡**: 繝ｪ繝昴ず繝医Μ縺ｮ繧ｷ繧ｹ繝・Β繧堤炊隗｣縺励∝ｮｹ蝎ｨ邂｡逅・ｒ螳溯｣・☆繧矩幕逋ｺ閠・
 **菴懈・譌･**: 2026-02-23
+
+> **Note**: Docker 管理の汎用基盤は `basekit.docker_manager` に移管済みです。repom は `repom.postgres.manage` / `repom.redis.manage` の public API を維持しつつ、内部で basekit の基盤を利用します。新しく汎用 Manager を定義する場合は `basekit.docker_manager` を直接 import してください。
 
 ---
 
@@ -56,9 +58,13 @@ from basekit import docker_manager as dm
 
 class MyServiceManager(dm.DockerManager):
     """My service 縺ｮ繧ｳ繝ｳ繝・リ邂｡逅・""
-    
-    def __init__(self, compose_dir: Path):
-        self.compose_dir = compose_dir
+
+    SERVICE_NAME = "my_service"
+    INIT_SUBDIR = "my_service_init"
+    GENERATE_COMMAND = "my_service_generate"
+
+    def __init__(self, data_path: Path):
+        super().__init__(data_path=data_path)
     
     def get_container_name(self) -> str:
         """繧ｳ繝ｳ繝・リ蜷阪ｒ霑斐☆"""
@@ -66,7 +72,7 @@ class MyServiceManager(dm.DockerManager):
     
     def get_compose_file_path(self) -> Path:
         """docker-compose.yml 縺ｮ繝代せ繧定ｿ斐☆"""
-        compose_file = self.compose_dir / "docker-compose.yml"
+        compose_file = self.get_compose_dir() / "docker-compose.yml"
         if not compose_file.exists():
             raise FileNotFoundError(f"Compose file not found: {compose_file}")
         return compose_file
@@ -100,8 +106,8 @@ from pathlib import Path
 from my_app.services import MyServiceManager
 
 # 蛻晄悄蛹・
-compose_dir = Path.cwd() / "infrastructure"
-manager = MyServiceManager(compose_dir)
+data_path = Path.cwd() / "data"
+manager = MyServiceManager(data_path)
 
 # 襍ｷ蜍・
 manager.start()
@@ -228,7 +234,7 @@ def get_container_name(self) -> str:
 **螳溯｣・ｾ・*:
 ```python
 def get_compose_file_path(self) -> Path:
-    compose_file = self.compose_dir / "docker-compose.yml"
+    compose_file = self.get_compose_dir() / "docker-compose.yml"
     if not compose_file.exists():
         raise FileNotFoundError(f"Compose file not found: {compose_file}")
     return compose_file
@@ -317,14 +323,18 @@ docker-compose 繧ｳ繝槭Φ繝峨ｒ螳溯｡後＠縺ｾ縺吶・
 
 ### PostgreSQL 縺ｮ萓・
 
-[repom/postgres/manage.py](../../repom/postgres/manage.py) 縺ｮ `PostgresManager` 繧貞盾辣ｧ縺励※縺上□縺輔＞縲・
+[repom/postgres/manage.py](../../../repom/postgres/manage.py) 縺ｮ `PostgresManager` 繧貞盾辣ｧ縺励※縺上□縺輔＞縲・
 
 ```python
-from repom import BaseRepository
-from repom.models import BaseModel
+from basekit import docker_manager as dm
 
-class PostgresManager(DockerManager):
+class PostgresManager(dm.DockerManager):
+    SERVICE_NAME = "postgres"
+    INIT_SUBDIR = "postgresql_init"
+    GENERATE_COMMAND = "postgres_generate"
+
     def __init__(self, config: RepomConfig):
+        super().__init__(data_path=config.data_path)
         self.config = config
     
     def get_container_name(self) -> str:
@@ -344,8 +354,12 @@ class PostgresManager(DockerManager):
 from basekit import docker_manager as dm
 
 class RedisManager(dm.DockerManager):
-    def __init__(self, compose_dir: Path):
-        self.compose_dir = compose_dir
+    SERVICE_NAME = "redis"
+    INIT_SUBDIR = "redis_init"
+    GENERATE_COMMAND = "redis_generate"
+
+    def __init__(self, data_path: Path):
+        super().__init__(data_path=data_path)
     
     def get_container_name(self) -> str:
         return "fast_domain_redis"
@@ -481,16 +495,15 @@ A: `get_compose_file_path()` 縺ｧ縺ｯ莉ｻ諢上・繝代せ繧定ｿ斐○
 ```python
 def get_compose_file_path(self) -> Path:
     env = os.getenv("COMPOSE_ENV", "dev")
-    return self.compose_dir / f"docker-compose.{env}.yml"
+    return self.get_compose_dir() / f"docker-compose.{env}.yml"
 ```
 
 ---
 
 ## 髢｢騾｣繝峨く繝･繝｡繝ｳ繝・
 
-- [Docker Manager 繧｢繝ｼ繧ｭ繝・け繝√Ε險ｭ險・(../technical/docker_manager_architecture.md)
-- [Docker Manager Phase 1 螳溯｣・ｨｭ險域嶌](../technical/docker_manager_phase1_implementation_guide.md)
-- [繧ｳ繝ｼ繝牙炎貂帛・譫疹(../technical/docker_manager_code_reduction_analysis.md)
+- [Docker Manager Phase 1 implementation guide](../../technical/docker_manager_phase1_implementation_guide.md)
+- [Docker Manager code reduction analysis](../../technical/docker_manager_code_reduction_analysis.md)
 
 ---
 
