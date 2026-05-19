@@ -173,6 +173,26 @@ CONFIG_HOOK=myapp/config.py:get_repom_config
 
 ---
 
+## 機能別 config モジュール
+
+`RepomConfig` は引き続き `repom.config` から import します。PostgreSQL、Redis、SQLite の個別設定クラスは機能別モジュールにも配置されています。
+
+```python
+from repom.postgres.config import PostgresConfig, PostgresContainerConfig
+from repom.redis.config import RedisConfig, RedisContainerConfig
+from repom.sqlite.config import SqliteConfig
+```
+
+後方互換のため、既存のトップレベル import もそのまま使えます。
+
+```python
+from repom.config import RepomConfig, RedisConfig, RedisContainerConfig
+```
+
+新しいコードでは、機能固有の設定だけを扱う場合は機能別モジュールから直接 import し、複数機能をまとめる設定では `RepomConfig` を使う方針を推奨します。
+
+---
+
 ## 関連ドキュメント
 
 - [README.md の設定概要](../../../README.md#環境変数)

@@ -115,7 +115,8 @@ class TestConfigIntegration:
     def test_redis_config_has_port(self):
         """redis config  port """
         assert hasattr(config.redis, 'port')
-        assert config.redis.port == 6379
+        assert isinstance(config.redis.port, int)
+        assert config.redis.port > 0
 
     def test_redis_container_config_has_methods(self):
         """redis container config """

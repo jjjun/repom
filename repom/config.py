@@ -8,220 +8,14 @@ from pathlib import Path
 from typing import Optional, List, Set
 
 from basekit.config_hook import Config, get_config_from_hook
-
-
-@dataclass
-class PostgresContainerConfig:
-    """PostgreSQL Docker コンテナ設定
-
-    Attributes:
-        container_name: コンテナ名（None の場合は repom_postgres）
-        host_port: ホスト側のポート番号（デフォルト: 5432）
-        volume_name: Volume名（None の場合は {container_name}_data）
-        image: PostgreSQL イメージ（デフォルト: postgres:16-alpine）
-
-    Example:
-        >>> container = PostgresContainerConfig(container_name="my_postgres")
-        >>> container.get_volume_name()
-        'my_postgres_data'
-    """
-    container_name: Optional[str] = field(default=None)
-    host_port: int = field(default=5432)
-    volume_name: Optional[str] = field(default=None)
-    image: str = field(default="postgres:16-alpine")
-
-    def get_container_name(self) -> str:
-        """コンテナ名を取得（デフォルト: repom_postgres）"""
-        return self.container_name or "repom_postgres"
-
-    def get_volume_name(self) -> str:
-        """Volume名を取得（デフォルト: {container_name}_data）"""
-        return self.volume_name or f"{self.get_container_name()}_data"
-
-
-@dataclass
-class PostgresConfig:
-    """PostgreSQL データベース設定
-
-    Attributes:
-        host: PostgreSQL ホスト名
-        port: PostgreSQL ポート番号
-        user: PostgreSQL ユーザー名
-        password: PostgreSQL パスワード
-        database: PostgreSQL データベース名 (None の場合は自動生成)
-        container: Docker コンテナ設定
-    """
-    host: str = field(default='localhost')
-    port: int = field(default=5432)
-    user: str = field(default='repom')
-    password: str = field(default='repom_dev')
-    database: Optional[str] = field(default=None)
-
-    # Docker コンテナ設定
-    container: PostgresContainerConfig = field(default_factory=PostgresContainerConfig)
-
-
-@dataclass
-class PgAdminContainerConfig:
-    """pgAdmin Docker コンテナ設定
-
-    Attributes:
-        container_name: コンテナ名（None の場合は repom_pgadmin）
-        host_port: ホスト側のポート番号（デフォルト: 5050）
-        volume_name: Volume名（None の場合は {container_name}_data）
-        image: pgAdmin イメージ（デフォルト: dpage/pgadmin4:latest）
-        enabled: pgAdmin サービスを有効化するか（デフォルト: False）
-
-    Example:
-        >>> container = PgAdminContainerConfig(container_name="my_pgadmin", enabled=True)
-        >>> container.get_volume_name()
-        'my_pgadmin_data'
-    """
-    container_name: Optional[str] = field(default=None)
-    host_port: int = field(default=5050)
-    volume_name: Optional[str] = field(default=None)
-    image: str = field(default="dpage/pgadmin4:latest")
-    enabled: bool = field(default=False)
-
-    def get_container_name(self) -> str:
-        """コンテナ名を取得（デフォルト: repom_pgadmin）"""
-        return self.container_name or "repom_pgadmin"
-
-    def get_volume_name(self) -> str:
-        """Volume名を取得（デフォルト: {container_name}_data）"""
-        return self.volume_name or f"{self.get_container_name()}_data"
-
-
-@dataclass
-class PgAdminConfig:
-    """pgAdmin 設定
-
-    Attributes:
-        email: 管理者メールアドレス
-        password: 管理者パスワード
-        container: Docker コンテナ設定
-    """
-    email: str = field(default="admin@example.com")
-    password: str = field(default="admin")
-    container: PgAdminContainerConfig = field(default_factory=PgAdminContainerConfig)
-
-
-@dataclass
-class RedisContainerConfig:
-    """Redis Docker コンテナ設定
-
-    Attributes:
-        container_name: コンテナ名（None の場合は repom_redis）
-        host_port: ホスト側のポート番号（デフォルト: 6379）
-        volume_name: Volume名（None の場合は {container_name}_data）
-        image: Redis イメージ（デフォルト: redis:7-alpine）
-
-    Example:
-        >>> container = RedisContainerConfig(container_name="my_redis")
-        >>> container.get_volume_name()
-        'my_redis_data'
-    """
-    container_name: Optional[str] = field(default=None)
-    host_port: int = field(default=6379)
-    volume_name: Optional[str] = field(default=None)
-    image: str = field(default="redis:7-alpine")
-
-    def get_container_name(self) -> str:
-        """コンテナ名を取得（デフォルト: repom_redis）"""
-        return self.container_name or "repom_redis"
-
-    def get_volume_name(self) -> str:
-        """Volume名を取得（デフォルト: {container_name}_data）"""
-        return self.volume_name or f"{self.get_container_name()}_data"
-
-
-@dataclass
-class RedisConfig:
-    """Redis 設定
-
-    Attributes:
-        host: Redis ホスト名
-        port: Redis ポート番号
-        password: Redis パスワード（オプション）
-        database: Redis データベース番号（デフォルト: 0）
-        container: Docker コンテナ設定
-    """
-    host: str = field(default='localhost')
-    port: int = field(default=6379)
-    password: Optional[str] = field(default=None)
-    database: int = field(default=0)
-
-    # Docker コンテナ設定
-    container: RedisContainerConfig = field(default_factory=RedisContainerConfig)
-
-
-@dataclass
-class SqliteConfig:
-    """SQLite データベース設定
-
-    Attributes:
-        db_path: データベース格納ディレクトリ (None の場合は data_path を使用)
-        use_in_memory_for_tests: テスト時に in-memory DB を使用するか
-
-    Note:
-        db_file は自動計算プロパティです。明示的に設定する場合のみ変更してください。
-        db_name を変更すると自動的に db_file も再計算されます。
-    """
-    db_path: Optional[str] = field(default=None)
-    use_in_memory_for_tests: bool = field(default=True)
-    _db_file: Optional[str] = field(default=None, init=False, repr=False)
-    _config: Optional["RepomConfig"] = field(default=None, init=False, repr=False)
-
-    def bind(self, config: "RepomConfig"):
-        """Bind parent config for computed properties."""
-        self._config = config
-
-    def get_default_db_file(self, exec_env: str) -> str:
-        """Get default SQLite DB file name by environment."""
-        prefix = self._config.db_name if self._config else "db"
-        if exec_env in ("test", "dev"):
-            return f"{prefix}_{exec_env}.sqlite3"
-        return f"{prefix}.sqlite3"
-
-    @property
-    def db_file(self) -> Optional[str]:
-        """データベースファイル名（自動計算プロパティ）
-
-        明示的に設定されている場合はそれを使用。
-        未設定の場合は db_name から自動計算。
-
-        これにより db_name を変更すると、自動的に db_file も再計算されます。
-        """
-        # 明示的に設定されている場合はそれを返す
-        if self._db_file is not None:
-            return self._db_file
-
-        # 未設定の場合は自動計算
-        if not self._config:
-            return None
-        return self.get_default_db_file(self._config.exec_env)
-
-    @db_file.setter
-    def db_file(self, value: Optional[str]):
-        """データベースファイル名を設定
-
-        None を設定すると、次回アクセス時に db_name から自動計算されます。
-        """
-        self._db_file = value
-
-    @property
-    def db_file_path(self) -> Optional[str]:
-        """db file full path (including file name)."""
-        if not self._config:
-            return None
-        db_path = self.db_path if self.db_path else self._config.data_path
-        if not db_path:
-            return None
-        # db_file は property なので自動計算される
-        db_file = self.db_file
-        if not db_file:
-            return None
-        return str(Path(db_path) / db_file)
+from repom.postgres.config import (
+    PgAdminConfig,
+    PgAdminContainerConfig,
+    PostgresConfig,
+    PostgresContainerConfig,
+)
+from repom.redis.config import RedisConfig, RedisContainerConfig
+from repom.sqlite.config import SqliteConfig
 
 
 @dataclass
@@ -642,3 +436,16 @@ config.root_path = str(Path(__file__).parent.parent)
 config = get_config_from_hook(config)
 
 config.init()
+
+
+__all__ = [
+    "PgAdminConfig",
+    "PgAdminContainerConfig",
+    "PostgresConfig",
+    "PostgresContainerConfig",
+    "RedisConfig",
+    "RedisContainerConfig",
+    "RepomConfig",
+    "SqliteConfig",
+    "config",
+]

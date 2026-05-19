@@ -32,7 +32,6 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 作成日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
-| #067 | `repom/config.py` を機能別ファイルに分割 | 2026-05-19 | 645 行の `repom/config.py` を fast-domain と同じスタイルで `repom/postgres/config.py` / `repom/redis/config.py` / `repom/sqlite/config.py` に分割し、`repom/config.py` は集約と再エクスポートに専念。後方互換は維持 | [active/067_split_config_by_feature.md](active/067_split_config_by_feature.md) |
 
 詳細は各ファイルを参照してください.
 
@@ -42,6 +41,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #067 | `repom/config.py` を機能別ファイルに分割 | 2026-05-19 | PostgreSQL/pgAdmin、Redis、SQLite の設定 dataclass を機能別 config モジュールへ移動し、`repom.config` から再エクスポートして後方互換を維持。直接 import と再エクスポートの単体テストを追加し、CONFIG_HOOK カスタマイズを許容する Redis 管理テストへ調整。854 tests passed | [completed/067_split_config_by_feature.md](completed/067_split_config_by_feature.md) |
 | #066 | `repom/_/` 共有ユーティリティを basekit へ移管 | 2026-05-19 | `discovery` / `docker_compose` / `docker_manager` を basekit に追加し、repom 側は `basekit.*` import へ移行。`DockerManager` は `data_path` 注入方式に変更し、旧 `repom/_/` モジュールと汎用テストを削除。basekit 32 tests、repom unit/behavior tests、ruff、`repom_info`、`postgres_generate`、`redis_generate` を確認 | [completed/066_move_shared_utilities_to_basekit.md](completed/066_move_shared_utilities_to_basekit.md) |
 | #007 | Annotation Inheritance の実装検証 | 2026-05-17 | 調査結果を Issue 文書へ反映し、`tests/unit_tests/test_annotation_inheritance.py` を追加（mixin 継承 / 多重継承 / `use_id=False` の組合せを検証）。4 tests passed。実装変更は不要と判断 | [completed/007_annotation_inheritance_validation.md](completed/007_annotation_inheritance_validation.md) |
 | #065 | `CLAUDE.md` のビルド/パッケージマネージャ記述更新（poetry → uv/hatchling） | 2026-05-17 | `CLAUDE.md` / `AGENTS.md` に hatchling build backend を明記し、CLAUDE/AGENTS/README/docs/guides に古い poetry 記述が残っていないことを確認 | [completed/065_update_claude_md_build_tooling.md](completed/065_update_claude_md_build_tooling.md) |
@@ -199,4 +199,4 @@ completed/
 └── 2024/
 ```
 
-最終更新: 2026-05-19（Issue #067 を active に追加）
+最終更新: 2026-05-19（Issue #067 を completed に移動）
