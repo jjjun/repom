@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/jj/Desktop/workspace_main/projects/basekit/src/basekit/**)"
+      "Read(//c/Users/jj/Desktop/workspace_main/projects/basekit/src/basekit/**)",
+      "Read(//c/Users/jj/Desktop/workspace_main/projects/fast-domain/src/fast_domain/**)"
     ]
   }
 }

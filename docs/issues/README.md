@@ -30,7 +30,9 @@ completed/     → 実装完了・コミット済み
 
 ## 🚧 実装予定・作業中の Issue
 
-現在 active な Issue はありません。
+| ID | タイトル | 作成日 | 概要 | ファイル |
+|----|---------|--------|------|---------|
+| #067 | `repom/config.py` を機能別ファイルに分割 | 2026-05-19 | 645 行の `repom/config.py` を fast-domain と同じスタイルで `repom/postgres/config.py` / `repom/redis/config.py` / `repom/sqlite/config.py` に分割し、`repom/config.py` は集約と再エクスポートに専念。後方互換は維持 | [active/067_split_config_by_feature.md](active/067_split_config_by_feature.md) |
 
 詳細は各ファイルを参照してください.
 
@@ -197,4 +199,4 @@ completed/
 └── 2024/
 ```
 
-最終更新: 2026-05-19（Issue #066 を completed へ移動）
+最終更新: 2026-05-19（Issue #067 を active に追加）
