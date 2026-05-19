@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Read(//c/Users/jj/Desktop/workspace_main/projects/basekit/src/basekit/**)",
-      "Read(//c/Users/jj/Desktop/workspace_main/projects/fast-domain/src/fast_domain/**)"
+      "Read(//c/Users/jj/Desktop/workspace_main/projects/fast-domain/src/fast_domain/**)",
+      "Bash(python3 -c \"from repom.postgres import generate\")",
+      "Bash(python3)",
+      "Bash(xargs wc -l)",
+      "Bash(xargs grep -l \"from repom.config import\")",
+      "Bash(ls \"c:/Users/jj/Desktop/workspace_main/projects/fast-domain\" \"c:/Users/jj/Desktop/workspace_main/projects/mine-py\" 2>/dev/null | head -30)",
+      "Read(//c/Users/jj/Desktop/workspace_main/projects/fast-domain/**)",
+      "Bash(grep -rn \"from repom\\\\|import repom\" \"c:/Users/jj/Desktop/workspace_main/projects/mine-py\" --include=\"*.py\" 2>/dev/null | grep -v \"__pycache__\\\\|\\\\.egg-info\\\\|/dist/\\\\|/htmlcov/\" | head -60)",
+      "Read(//c/Users/jj/Desktop/workspace_main/projects/mine-py/**)"
     ]
   }
 }

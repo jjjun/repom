@@ -32,6 +32,11 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 作成日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #072 | `postgres/manage.py` / `redis/manage.py` のモジュール関数 `get_compose_dir` / `get_init_dir` を削除 | 2026-05-19 | #062 で残した互換ラッパ関数を削除。fast-domain / mine-py どちらも未使用を確認済 | [active/072_drop_module_level_compose_init_dir_wrappers.md](active/072_drop_module_level_compose_init_dir_wrappers.md) |
+| #071 | `repom/config.py` の後方互換 re-export を削除 | 2026-05-19 | #067 で残した PostgresConfig/PgAdminConfig/RedisConfig/SqliteConfig 等の `__all__` 再エクスポートを削除。fast-domain / mine-py どちらも未使用を確認済 | [active/071_drop_repom_config_compat_reexports.md](active/071_drop_repom_config_compat_reexports.md) |
+| #070 | `db_backup` / `db_restore` の Docker/host fallback パターン共通化 | 2026-05-19 | PostgreSQL の「コンテナ起動中なら docker exec、停止中ならホスト CLI」分岐が backup/restore の 2 か所で重複。ディスパッチャを `_backup_utils.py` 等へ切り出して統合する提案 | [active/070_unify_docker_host_fallback_pattern.md](active/070_unify_docker_host_fallback_pattern.md) |
+| #069 | `repom/redis/__init__.py` の遅延 import `__getattr__` を削除 | 2026-05-19 | redis 側にだけある `__getattr__` で `generate/start/stop/...` を遅延 export する仕組みを削除。fast-domain / mine-py どちらも未使用を確認済 | [active/069_unify_postgres_redis_init_lazy_export.md](active/069_unify_postgres_redis_init_lazy_export.md) |
+| #068 | `format_size` / `get_backups` を `_backup_utils.py` へ集約 | 2026-05-19 | `db_restore.py` で定義された `format_size()` と、`db_backup.py` のインライン MB 計算、および `get_backups()` を共通ユーティリティへ移動して #063 の集約を完成させる | [active/068_consolidate_backup_format_size.md](active/068_consolidate_backup_format_size.md) |
 
 詳細は各ファイルを参照してください.
 
@@ -199,4 +204,4 @@ completed/
 └── 2024/
 ```
 
-最終更新: 2026-05-19（Issue #067 を completed に移動）
+最終更新: 2026-05-19（Issue #068〜#072 を active に追加、消費プロジェクト調査結果を反映）
