@@ -64,8 +64,7 @@ build-backend = "hatchling.build"
 packages = ["repom"]
 
 [tool.uv.sources]
-basekit = { git = "https://github.com/jjjun/basekit.git", rev = "ca97f2dba52120fa28c543678830d69b9ee608d9" }
-
+basekit = { git = "https://github.com/jjjun/basekit.git", rev = "ccdf6f3fbcfee5e0b93b27e294ea6507af408dc2" }
 [tool.pytest.ini_options]
 addopts = [
   "-vv",
@@ -94,3 +93,4 @@ filterwarnings = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["F403", "F405"]
+

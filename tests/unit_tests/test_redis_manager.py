@@ -1,4 +1,4 @@
-"""Tests for Redis Docker Manager integration"""
+﻿"""Tests for Redis Docker Manager integration"""
 
 import subprocess
 from pathlib import Path
@@ -166,7 +166,7 @@ class TestRedisManagerInheritance:
 
     def test_redis_manager_inherits_from_docker_manager(self):
         """Test RedisManager properly inherits from DockerManager"""
-        from repom._.docker_manager import DockerManager
+        from basekit.docker_manager import DockerManager
 
         manager = RedisManager()
         assert isinstance(manager, DockerManager)
@@ -263,7 +263,7 @@ class TestRedisDockerCompose:
         generator = generate_docker_compose()
 
         # Check generator has correct type
-        from repom._.docker_compose import DockerComposeGenerator
+        from basekit.docker_compose import DockerComposeGenerator
         assert isinstance(generator, DockerComposeGenerator)
 
     def test_docker_compose_yaml_content(self):
@@ -315,3 +315,6 @@ class TestRedisManagerErrorHandling:
 
             with pytest.raises(TimeoutError):
                 manager.wait_for_service(max_retries=1)
+
+
+

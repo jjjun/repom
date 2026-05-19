@@ -22,35 +22,35 @@ import pytest
 
 def test_type_checking_with_alphabetical_import_order():
     """
-    再現テスト: TYPE_CHECKING + アルファベット順インポートで名前解決エラー
+    : TYPE_CHECKING + 
 
-    ファイル構成:
-    - ani_video_item.py (a で始まる → 先にインポート)
-    - ani_video_user_status.py (u で始まる → 後でインポート)
+    :
+    - ani_video_item.py (a   )
+    - ani_video_user_status.py (u   )
 
-    問題:
-    - ani_video_item.py が先にインポートされる
-    - TYPE_CHECKING ブロック内で AniVideoUserStatusModel をインポート
-    - relationship で "AniVideoUserStatusModel" を参照
-    - しかし実行時には AniVideoUserStatusModel がまだインポートされていない
-    - SQLAlchemy の名前解決が失敗
+    :
+    - ani_video_item.py 
+    - TYPE_CHECKING  AniVideoUserStatusModel 
+    - relationship  "AniVideoUserStatusModel" 
+    -  AniVideoUserStatusModel 
+    - SQLAlchemy 
     """
     from sqlalchemy.orm import clear_mappers, configure_mappers
-    # 一時ディレクトリ作成
+    # 
     temp_dir = Path(tempfile.mkdtemp(prefix="test_models_"))
 
     try:
-        # テストモデルディレクトリを作成
+        # 
         models_dir = temp_dir / "test_models"
         models_dir.mkdir(parents=True)
 
-        # __init__.py を作成
+        # __init__.py 
         init_file = models_dir / "__init__.py"
         init_file.write_text("""
 # Empty init file - import_from_directory will skip this
 """, encoding='utf-8')
 
-        # ani_video_item.py を作成（a で始まる → 先にインポート）
+        # ani_video_item.py a   
         video_item_file = models_dir / "ani_video_item.py"
         video_item_file.write_text("""
 from typing import TYPE_CHECKING, List
@@ -73,7 +73,7 @@ class AniVideoItemModel(BaseModelAuto):
     )
 """, encoding='utf-8')
 
-        # ani_video_user_status.py を作成（u で始まる → 後でインポート）
+        # ani_video_user_status.py u   
         user_status_file = models_dir / "ani_video_user_status.py"
         user_status_file.write_text("""
 from typing import TYPE_CHECKING
@@ -96,44 +96,44 @@ class AniVideoUserStatusModel(BaseModelAuto):
     )
 """, encoding='utf-8')
 
-        # sys.path にディレクトリを追加
+        # sys.path 
         sys.path.insert(0, str(temp_dir))
 
         try:
-            # import_from_directory を実行
-            from repom._.discovery import import_from_directory
+            # import_from_directory 
+            from basekit.discovery import import_from_directory
 
-            # この時点で警告が発生するはず
+            # 
             # "expression 'AniVideoUserStatusModel' failed to locate a name"
             import_from_directory(
                 directory=models_dir,
                 base_package='test_models'
             )
 
-            # モデルがインポートされているか確認
+            # 
             test_models = sys.modules.get('test_models.ani_video_item')
             assert test_models is not None, "ani_video_item module should be imported"
 
-            # AniVideoItemModel が存在するか確認
+            # AniVideoItemModel 
             AniVideoItemModel = getattr(test_models, 'AniVideoItemModel', None)
             assert AniVideoItemModel is not None, "AniVideoItemModel should be imported"
 
-            # データベースを作成してマッパーが正しく動作するか確認
+            # 
             engine = create_engine("sqlite:///:memory:", echo=False)
 
-            # メタデータから全テーブルを作成
+            # 
             from repom.models.base_model import BaseModel
             BaseModel.metadata.create_all(engine)
 
-            # セッションを作成してオブジェクトを作成できるか確認
+            # 
             with Session(engine) as session:
-                # AniVideoItemModel を作成
+                # AniVideoItemModel 
                 video_item = AniVideoItemModel(title="Test Video")
                 session.add(video_item)
                 session.flush()
 
-                # user_statuses relationship にアクセスできるか
-                # もし名前解決が失敗していれば、ここでエラーになる
+                # user_statuses relationship 
+                # 
                 assert hasattr(video_item, 'user_statuses'), "user_statuses relationship should exist"
                 assert video_item.user_statuses == [], "user_statuses should be empty list"
 
@@ -141,10 +141,10 @@ class AniVideoUserStatusModel(BaseModelAuto):
             print("   (This means SQLAlchemy resolved the string references successfully)")
 
         except Exception as e:
-            # エラーメッセージを確認
+            # 
             error_msg = str(e)
 
-            # 予想されるエラーメッセージ
+            # 
             if "failed to locate a name" in error_msg.lower():
                 pytest.fail(
                     f"[NG] Name resolution failed as expected:\n{error_msg}\n\n"
@@ -152,48 +152,48 @@ class AniVideoUserStatusModel(BaseModelAuto):
                     "causes SQLAlchemy relationship string references to fail."
                 )
             else:
-                # 別のエラーの場合は再度raise
+                # raise
                 raise
 
     finally:
-        # クリーンアップ
+        # 
         if str(temp_dir) in sys.path:
             sys.path.remove(str(temp_dir))
 
-        # sys.modules からテストモジュールを削除
+        # sys.modules 
         modules_to_remove = [key for key in sys.modules.keys() if key.startswith('test_models')]
         for module in modules_to_remove:
             del sys.modules[module]
 
-        # 一時ディレクトリを削除
+        # 
         shutil.rmtree(temp_dir, ignore_errors=True)
-        # マッパークリーンアップ
+        # 
         clear_mappers()
         configure_mappers()
 
 
 def test_type_checking_with_manual_import_order():
     """
-    解決策のテスト: TYPE_CHECKING を外して実際にインポート
+    : TYPE_CHECKING 
 
-    このテストでは、TYPE_CHECKING を使わずに直接インポートすることで
-    問題が解決することを確認する
+    TYPE_CHECKING 
+    
     """
-    # 一時ディレクトリ作成
+    # 
     temp_dir = Path(tempfile.mkdtemp(prefix="test_models_fixed_"))
 
     try:
-        # テストモデルディレクトリを作成
+        # 
         models_dir = temp_dir / "test_models_fixed"
         models_dir.mkdir(parents=True)
 
-        # __init__.py を作成
+        # __init__.py 
         init_file = models_dir / "__init__.py"
         init_file.write_text("""
 # Empty init file
 """, encoding='utf-8')
 
-        # ani_video_item.py を作成（TYPE_CHECKING を使わない）
+        # ani_video_item.py TYPE_CHECKING 
         video_item_file = models_dir / "ani_video_item.py"
         video_item_file.write_text("""
 from typing import List
@@ -201,7 +201,7 @@ from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from repom.models.base_model_auto import BaseModelAuto
 
-# TYPE_CHECKING の外でインポート（実行時にも利用可能）
+# TYPE_CHECKING 
 from .ani_video_user_status import AniVideoUserStatusModel
 
 class AniVideoItemModel(BaseModelAuto):
@@ -216,14 +216,14 @@ class AniVideoItemModel(BaseModelAuto):
     )
 """, encoding='utf-8')
 
-        # ani_video_user_status.py を作成
+        # ani_video_user_status.py 
         user_status_file = models_dir / "ani_video_user_status.py"
         user_status_file.write_text("""
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from repom.models.base_model_auto import BaseModelAuto
 
-# 前方参照を使うので循環インポートは発生しない
+# 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .ani_video_item import AniVideoItemModel
@@ -240,59 +240,59 @@ class AniVideoUserStatusModel(BaseModelAuto):
     )
 """, encoding='utf-8')
 
-        # sys.path にディレクトリを追加
+        # sys.path 
         sys.path.insert(0, str(temp_dir))
 
         try:
-            # import_from_directory を実行
-            from repom._.discovery import import_from_directory
+            # import_from_directory 
+            from basekit.discovery import import_from_directory
 
-            # この時点では警告が発生しないはず
+            # 
             import_from_directory(
                 directory=models_dir,
                 base_package='test_models_fixed'
             )
 
-            # モデルがインポートされているか確認
+            # 
             test_models = sys.modules.get('test_models_fixed.ani_video_item')
             assert test_models is not None, "ani_video_item module should be imported"
 
-            # AniVideoItemModel が存在するか確認
+            # AniVideoItemModel 
             AniVideoItemModel = getattr(test_models, 'AniVideoItemModel', None)
             assert AniVideoItemModel is not None, "AniVideoItemModel should be imported"
 
-            # データベースを作成してマッパーが正しく動作するか確認
+            # 
             engine = create_engine("sqlite:///:memory:", echo=False)
 
-            # メタデータから全テーブルを作成
+            # 
             from repom.models.base_model import BaseModel
             BaseModel.metadata.create_all(engine)
 
-            # セッションを作成してオブジェクトを作成できるか確認
+            # 
             with Session(engine) as session:
-                # AniVideoItemModel を作成
+                # AniVideoItemModel 
                 video_item = AniVideoItemModel(title="Test Video Fixed")
                 session.add(video_item)
                 session.flush()
 
-                # user_statuses relationship にアクセスできるか
+                # user_statuses relationship 
                 assert hasattr(video_item, 'user_statuses'), "user_statuses relationship should exist"
                 assert video_item.user_statuses == [], "user_statuses should be empty list"
 
             print("Test passed: Relationships work correctly when imports are outside TYPE_CHECKING")
 
         finally:
-            # クリーンアップ
+            # 
             if str(temp_dir) in sys.path:
                 sys.path.remove(str(temp_dir))
 
-            # sys.modules からテストモジュールを削除
+            # sys.modules 
             modules_to_remove = [key for key in sys.modules.keys() if key.startswith('test_models_fixed')]
             for module in modules_to_remove:
                 del sys.modules[module]
 
     finally:
-        # 一時ディレクトリを削除
+        # 
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
@@ -309,3 +309,5 @@ if __name__ == '__main__':
     print("Test 2: Manual import order (Expected to work)")
     print("=" * 80)
     test_type_checking_with_manual_import_order()
+
+

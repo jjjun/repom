@@ -93,5 +93,14 @@
       },
       "problemMatcher": []
     },
+    {
+      "label": "uv/basekit/update-rev",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update_basekit_rev.ps1",
+      "group": {
+        "kind": "none"
+      },
+      "problemMatcher": []
+    },
   ]
 }

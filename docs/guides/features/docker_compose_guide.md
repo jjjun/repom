@@ -1,48 +1,48 @@
-# Docker Compose 基盤ガイド
+﻿# Docker Compose 蝓ｺ逶､繧ｬ繧､繝・
 
-このガイドでは、repom の汎用 Docker Compose 基盤を使って、カスタムな Docker 環境を構築する方法を説明します。
+縺薙・繧ｬ繧､繝峨〒縺ｯ縲〉epom 縺ｮ豎守畑 Docker Compose 蝓ｺ逶､繧剃ｽｿ縺｣縺ｦ縲√き繧ｹ繧ｿ繝縺ｪ Docker 迺ｰ蠅・ｒ讒狗ｯ峨☆繧区婿豕輔ｒ隱ｬ譏弱＠縺ｾ縺吶・
 
-## 📋 目次
+## 搭 逶ｮ谺｡
 
-- [概要](#概要)
-- [基本的な使い方](#基本的な使い方)
-- [実装例: Redis](#実装例-redis)
-- [実装例: MongoDB](#実装例-mongodb)
-- [API リファレンス](#api-リファレンス)
+- [讎りｦ‐(#讎りｦ・
+- [蝓ｺ譛ｬ逧・↑菴ｿ縺・婿](#蝓ｺ譛ｬ逧・↑菴ｿ縺・婿)
+- [螳溯｣・ｾ・ Redis](#螳溯｣・ｾ・redis)
+- [螳溯｣・ｾ・ MongoDB](#螳溯｣・ｾ・mongodb)
+- [API 繝ｪ繝輔ぃ繝ｬ繝ｳ繧ｹ](#api-繝ｪ繝輔ぃ繝ｬ繝ｳ繧ｹ)
 
 ---
 
-## 概要
+## 讎りｦ・
 
-`repom._/docker_compose.py` は、Docker Compose ファイルを動的に生成するための汎用基盤です。
+`basekit.docker_compose` is the shared Docker Compose generation utility now maintained in basekit.
 
-### 主な機能
+### 荳ｻ縺ｪ讖溯・
 
-- ✅ **型安全**: データクラスで設定を管理
-- ✅ **プロジェクト固有**: CONFIG_HOOK で設定をカスタマイズ
-- ✅ **動的生成**: 実行時に docker-compose.yml を生成
-- ✅ **拡張可能**: 任意の Docker サービスに対応
+- 笨・**蝙句ｮ牙・**: 繝・・繧ｿ繧ｯ繝ｩ繧ｹ縺ｧ險ｭ螳壹ｒ邂｡逅・
+- 笨・**繝励Ο繧ｸ繧ｧ繧ｯ繝亥崋譛・*: CONFIG_HOOK 縺ｧ險ｭ螳壹ｒ繧ｫ繧ｹ繧ｿ繝槭う繧ｺ
+- 笨・**蜍慕噪逕滓・**: 螳溯｡梧凾縺ｫ docker-compose.yml 繧堤函謌・
+- 笨・**諡｡蠑ｵ蜿ｯ閭ｽ**: 莉ｻ諢上・ Docker 繧ｵ繝ｼ繝薙せ縺ｫ蟇ｾ蠢・
 
-### 提供クラス
+### 謠蝉ｾ帙け繝ｩ繧ｹ
 
 ```python
-from repom._.docker_compose import (
-    DockerComposeGenerator,  # docker-compose.yml 生成器
-    DockerService,            # サービス定義
-    DockerVolume,             # Volume 定義
+from basekit.docker_compose import (
+    DockerComposeGenerator,  # docker-compose.yml 逕滓・蝎ｨ
+    DockerService,            # 繧ｵ繝ｼ繝薙せ螳夂ｾｩ
+    DockerVolume,             # Volume 螳夂ｾｩ
 )
 ```
 
 ---
 
-## 基本的な使い方
+## 蝓ｺ譛ｬ逧・↑菴ｿ縺・婿
 
-### Step 1: サービス設定を定義
+### Step 1: 繧ｵ繝ｼ繝薙せ險ｭ螳壹ｒ螳夂ｾｩ
 
 ```python
-from repom._.docker_compose import DockerService, DockerVolume
+from basekit.docker_compose import DockerService, DockerVolume
 
-# サービスを定義
+# 繧ｵ繝ｼ繝薙せ繧貞ｮ夂ｾｩ
 postgres_service = DockerService(
     name="postgres",
     image="postgres:16-alpine",
@@ -64,35 +64,35 @@ postgres_service = DockerService(
     }
 )
 
-# Volume を定義
+# Volume 繧貞ｮ夂ｾｩ
 data_volume = DockerVolume(name="postgres_data")
 ```
 
-### Step 2: 生成器で docker-compose.yml を生成
+### Step 2: 逕滓・蝎ｨ縺ｧ docker-compose.yml 繧堤函謌・
 
 ```python
-from repom._.docker_compose import DockerComposeGenerator
+from basekit.docker_compose import DockerComposeGenerator
 from pathlib import Path
 
-# 生成器を作成
+# 逕滓・蝎ｨ繧剃ｽ懈・
 generator = DockerComposeGenerator(version="3.8")
 generator.add_service(postgres_service)
 generator.add_volume(data_volume)
 
-# ファイルに書き込み
+# 繝輔ぃ繧､繝ｫ縺ｫ譖ｸ縺崎ｾｼ縺ｿ
 output_path = Path("data/my_project/docker-compose.generated.yml")
 generator.write_to_file(output_path)
 ```
 
-### Step 3: 文字列として取得（テスト用）
+### Step 3: 譁・ｭ怜・縺ｨ縺励※蜿門ｾ暦ｼ医ユ繧ｹ繝育畑・・
 
 ```python
-# YAML を文字列として取得
+# YAML 繧呈枚蟄怜・縺ｨ縺励※蜿門ｾ・
 yaml_content = generator.generate()
 print(yaml_content)
 ```
 
-出力例：
+蜃ｺ蜉帑ｾ具ｼ・
 ```yaml
 version: '3.8'
 
@@ -120,9 +120,9 @@ volumes:
 
 ---
 
-## 実装例: Redis
+## 螳溯｣・ｾ・ Redis
 
-### 1. Config に設定を追加
+### 1. Config 縺ｫ險ｭ螳壹ｒ霑ｽ蜉
 
 ```python
 # repom/config.py
@@ -130,7 +130,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class RedisContainerConfig:
-    """Redis Docker コンテナ設定"""
+    """Redis Docker 繧ｳ繝ｳ繝・リ險ｭ螳・""
     container_name: Optional[str] = field(default=None)
     host_port: int = field(default=6379)
     image: str = field(default="redis:7-alpine")
@@ -143,37 +143,37 @@ class RedisContainerConfig:
 
 @dataclass
 class RedisConfig:
-    """Redis 設定"""
+    """Redis 險ｭ螳・""
     host: str = field(default='localhost')
     port: int = field(default=6379)
     container: RedisContainerConfig = field(default_factory=RedisContainerConfig)
 
 class RepomConfig:
     def __init__(self):
-        # ... 既存の設定 ...
+        # ... 譌｢蟄倥・險ｭ螳・...
         self.redis = RedisConfig()
 ```
 
-### 2. manage.py を作成
+### 2. manage.py 繧剃ｽ懈・
 
 ```python
 # repom/scripts/redis/manage.py
 import subprocess
 from pathlib import Path
 from repom.config import config
-from repom._.docker_compose import DockerComposeGenerator, DockerService, DockerVolume
+from basekit.docker_compose import DockerComposeGenerator, DockerService, DockerVolume
 
 def get_compose_dir() -> Path:
-    """docker-compose.yml の保存先"""
+    """docker-compose.yml 縺ｮ菫晏ｭ伜・"""
     compose_dir = Path(config.data_path)
     compose_dir.mkdir(parents=True, exist_ok=True)
     return compose_dir
 
 def generate_docker_compose() -> DockerComposeGenerator:
-    """config から docker-compose.yml 生成器を作成"""
+    """config 縺九ｉ docker-compose.yml 逕滓・蝎ｨ繧剃ｽ懈・"""
     container = config.redis.container
     
-    # Redis サービスを定義
+    # Redis 繧ｵ繝ｼ繝薙せ繧貞ｮ夂ｾｩ
     redis_service = DockerService(
         name="redis",
         image=container.image,
@@ -190,10 +190,10 @@ def generate_docker_compose() -> DockerComposeGenerator:
         }
     )
     
-    # Docker Volume を定義
+    # Docker Volume 繧貞ｮ夂ｾｩ
     data_volume = DockerVolume(name=container.get_volume_name())
     
-    # 生成器を作成
+    # 逕滓・蝎ｨ繧剃ｽ懈・
     generator = DockerComposeGenerator()
     generator.add_service(redis_service)
     generator.add_volume(data_volume)
@@ -201,21 +201,21 @@ def generate_docker_compose() -> DockerComposeGenerator:
     return generator
 
 def generate():
-    """docker-compose.yml を生成"""
+    """docker-compose.yml 繧堤函謌・""
     generator = generate_docker_compose()
     compose_dir = get_compose_dir()
     output_path = compose_dir / "docker-compose.generated.yml"
     generator.write_to_file(output_path)
     
-    print(f"✅ Generated: {output_path}")
+    print(f"笨・Generated: {output_path}")
     print(f"   Container: {config.redis.container.get_container_name()}")
     print(f"   Port: {config.redis.container.host_port}")
 
 def start():
-    """Redis を起動"""
+    """Redis 繧定ｵｷ蜍・""
     generate()
     
-    print(f"🐳 Starting Redis container...")
+    print(f"正 Starting Redis container...")
     
     compose_dir = get_compose_dir()
     compose_file = compose_dir / "docker-compose.generated.yml"
@@ -226,12 +226,12 @@ def start():
     )
 
 def stop():
-    """Redis を停止"""
+    """Redis 繧貞●豁｢"""
     compose_dir = get_compose_dir()
     compose_file = compose_dir / "docker-compose.generated.yml"
     
     if not compose_file.exists():
-        print("⚠️  docker-compose.generated.yml が見つかりません")
+        print("笞・・ docker-compose.generated.yml 縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ")
         return
     
     subprocess.run(
@@ -241,7 +241,7 @@ def stop():
     )
 ```
 
-### 3. コマンドを追加
+### 3. 繧ｳ繝槭Φ繝峨ｒ霑ｽ蜉
 
 ```toml
 # pyproject.toml
@@ -251,28 +251,28 @@ redis_start = "repom.scripts.redis.manage:start"
 redis_stop = "repom.scripts.redis.manage:stop"
 ```
 
-### 4. CONFIG_HOOK でカスタマイズ
+### 4. CONFIG_HOOK 縺ｧ繧ｫ繧ｹ繧ｿ繝槭う繧ｺ
 
 ```python
 # mine_py/config.py
 def hook_config(config: RepomConfig) -> RepomConfig:
-    # Redis の設定もカスタマイズ
+    # Redis 縺ｮ險ｭ螳壹ｂ繧ｫ繧ｹ繧ｿ繝槭う繧ｺ
     config.redis.container.container_name = "mine_py_redis"
-    config.redis.container.host_port = 6380  # ポートをずらす
+    config.redis.container.host_port = 6380  # 繝昴・繝医ｒ縺壹ｉ縺・
     
     return config
 ```
 
 ---
 
-## 実装例: MongoDB
+## 螳溯｣・ｾ・ MongoDB
 
-### DockerService の定義
+### DockerService 縺ｮ螳夂ｾｩ
 
 ```python
-from repom._.docker_compose import DockerService, DockerVolume
+from basekit.docker_compose import DockerService, DockerVolume
 
-# MongoDB サービス
+# MongoDB 繧ｵ繝ｼ繝薙せ
 mongo_service = DockerService(
     name="mongodb",
     image="mongo:7",
@@ -295,29 +295,29 @@ mongo_service = DockerService(
     }
 )
 
-# Volume 定義
+# Volume 螳夂ｾｩ
 data_volume = DockerVolume(name="mongodb_data")
 config_volume = DockerVolume(name="mongodb_config")
 ```
 
 ---
 
-## API リファレンス
+## API 繝ｪ繝輔ぃ繝ｬ繝ｳ繧ｹ
 
 ### DockerService
 
-Docker サービスの設定を表すデータクラス
+Docker 繧ｵ繝ｼ繝薙せ縺ｮ險ｭ螳壹ｒ陦ｨ縺吶ョ繝ｼ繧ｿ繧ｯ繝ｩ繧ｹ
 
-**パラメータ**:
-- `name: str` - サービス名（必須）
-- `image: str` - Docker イメージ（必須）
-- `container_name: str` - コンテナ名（必須）
-- `ports: List[str]` - ポートマッピング（例: `["5432:5432"]`）
-- `environment: Dict[str, str]` - 環境変数
-- `volumes: List[str]` - Volume マッピング
-- `healthcheck: Optional[Dict]` - ヘルスチェック設定
+**繝代Λ繝｡繝ｼ繧ｿ**:
+- `name: str` - 繧ｵ繝ｼ繝薙せ蜷搾ｼ亥ｿ・茨ｼ・
+- `image: str` - Docker 繧､繝｡繝ｼ繧ｸ・亥ｿ・茨ｼ・
+- `container_name: str` - 繧ｳ繝ｳ繝・リ蜷搾ｼ亥ｿ・茨ｼ・
+- `ports: List[str]` - 繝昴・繝医・繝・ヴ繝ｳ繧ｰ・井ｾ・ `["5432:5432"]`・・
+- `environment: Dict[str, str]` - 迺ｰ蠅・､画焚
+- `volumes: List[str]` - Volume 繝槭ャ繝斐Φ繧ｰ
+- `healthcheck: Optional[Dict]` - 繝倥Ν繧ｹ繝√ぉ繝・け險ｭ螳・
 
-**例**:
+**萓・*:
 ```python
 service = DockerService(
     name="myservice",
@@ -332,81 +332,81 @@ service = DockerService(
 
 ### DockerVolume
 
-Docker Volume の設定を表すデータクラス
+Docker Volume 縺ｮ險ｭ螳壹ｒ陦ｨ縺吶ョ繝ｼ繧ｿ繧ｯ繝ｩ繧ｹ
 
-**パラメータ**:
-- `name: str` - Volume 名（必須）
-- `driver: str` - ドライバー（デフォルト: `"local"`）
+**繝代Λ繝｡繝ｼ繧ｿ**:
+- `name: str` - Volume 蜷搾ｼ亥ｿ・茨ｼ・
+- `driver: str` - 繝峨Λ繧､繝舌・・医ョ繝輔か繝ｫ繝・ `"local"`・・
 
-**例**:
+**萓・*:
 ```python
 volume = DockerVolume(name="my_data", driver="local")
 ```
 
 ### DockerComposeGenerator
 
-docker-compose.yml を生成するクラス
+docker-compose.yml 繧堤函謌舌☆繧九け繝ｩ繧ｹ
 
-**メソッド**:
-- `add_service(service: DockerService) -> self` - サービスを追加
-- `add_volume(volume: DockerVolume) -> self` - Volume を追加
-- `generate() -> str` - YAML 文字列を生成
-- `write_to_file(filepath: Path) -> None` - ファイルに書き込み
+**繝｡繧ｽ繝・ラ**:
+- `add_service(service: DockerService) -> self` - 繧ｵ繝ｼ繝薙せ繧定ｿｽ蜉
+- `add_volume(volume: DockerVolume) -> self` - Volume 繧定ｿｽ蜉
+- `generate() -> str` - YAML 譁・ｭ怜・繧堤函謌・
+- `write_to_file(filepath: Path) -> None` - 繝輔ぃ繧､繝ｫ縺ｫ譖ｸ縺崎ｾｼ縺ｿ
 
-**例**:
+**萓・*:
 ```python
 generator = DockerComposeGenerator(version="3.8")
 generator.add_service(my_service)
 generator.add_volume(my_volume)
 
-# ファイルに書き込み
+# 繝輔ぃ繧､繝ｫ縺ｫ譖ｸ縺崎ｾｼ縺ｿ
 generator.write_to_file(Path("docker-compose.yml"))
 
-# または文字列として取得
+# 縺ｾ縺溘・譁・ｭ怜・縺ｨ縺励※蜿門ｾ・
 yaml_content = generator.generate()
 ```
 
 ---
 
-## ベストプラクティス
+## 繝吶せ繝医・繝ｩ繧ｯ繝・ぅ繧ｹ
 
-### 1. CONFIG_HOOK でプロジェクト固有の設定を管理
+### 1. CONFIG_HOOK 縺ｧ繝励Ο繧ｸ繧ｧ繧ｯ繝亥崋譛峨・險ｭ螳壹ｒ邂｡逅・
 
 ```python
-# ❌ 悪い例: ハードコード
+# 笶・謔ｪ縺・ｾ・ 繝上・繝峨さ繝ｼ繝・
 container_name = "postgres"
 
-# ✅ 良い例: CONFIG_HOOK で動的に設定
+# 笨・濶ｯ縺・ｾ・ CONFIG_HOOK 縺ｧ蜍慕噪縺ｫ險ｭ螳・
 def hook_config(config: RepomConfig) -> RepomConfig:
     config.postgres.container.container_name = "my_project_postgres"
     config.postgres.container.host_port = 5433
     return config
 ```
 
-### 2. data/ 配下に保存
+### 2. data/ 驟堺ｸ九↓菫晏ｭ・
 
 ```python
-# ✅ 推奨: data/ 配下に保存
+# 笨・謗ｨ螂ｨ: data/ 驟堺ｸ九↓菫晏ｭ・
 compose_dir = Path(config.data_path)
 
-# ❌ 非推奨: scripts/ に保存（複数プロジェクトで衝突）
+# 笶・髱樊耳螂ｨ: scripts/ 縺ｫ菫晏ｭ假ｼ郁､・焚繝励Ο繧ｸ繧ｧ繧ｯ繝医〒陦晉ｪ・ｼ・
 compose_dir = Path(__file__).parent
 ```
 
-### 3. .generated サフィックスを使用
+### 3. .generated 繧ｵ繝輔ぅ繝・け繧ｹ繧剃ｽｿ逕ｨ
 
 ```python
-# ✅ 推奨: 動的生成ファイルであることを明示
+# 笨・謗ｨ螂ｨ: 蜍慕噪逕滓・繝輔ぃ繧､繝ｫ縺ｧ縺ゅｋ縺薙→繧呈・遉ｺ
 output_path = compose_dir / "docker-compose.generated.yml"
 
-# ❌ 非推奨: 手動編集と区別がつかない
+# 笶・髱樊耳螂ｨ: 謇句虚邱ｨ髮・→蛹ｺ蛻･縺後▽縺九↑縺・
 output_path = compose_dir / "docker-compose.yml"
 ```
 
-### 4. .gitignore に追加
+### 4. .gitignore 縺ｫ霑ｽ蜉
 
 ```gitignore
-# 動的生成ファイルは Git 管理外
+# 蜍慕噪逕滓・繝輔ぃ繧､繝ｫ縺ｯ Git 邂｡逅・､・
 data/*/docker-compose.generated.yml
 data/*/postgresql_init/
 data/*/redis_init/
@@ -414,20 +414,20 @@ data/*/redis_init/
 
 ---
 
-## トラブルシューティング
+## 繝医Λ繝悶Ν繧ｷ繝･繝ｼ繝・ぅ繝ｳ繧ｰ
 
-### 生成された YAML が不正
+### 逕滓・縺輔ｌ縺・YAML 縺御ｸ肴ｭ｣
 
 ```python
-# デバッグ: 生成内容を確認
+# 繝・ヰ繝・げ: 逕滓・蜀・ｮｹ繧堤｢ｺ隱・
 generator = generate_docker_compose()
 print(generator.generate())
 ```
 
-### パスが正しくない
+### 繝代せ縺梧ｭ｣縺励￥縺ｪ縺・
 
 ```python
-# デバッグ: パスを確認
+# 繝・ヰ繝・げ: 繝代せ繧堤｢ｺ隱・
 compose_dir = get_compose_dir()
 print(f"Compose dir: {compose_dir}")
 print(f"Exists: {compose_dir.exists()}")
@@ -435,13 +435,15 @@ print(f"Exists: {compose_dir.exists()}")
 
 ---
 
-## 関連ドキュメント
+## 髢｢騾｣繝峨く繝･繝｡繝ｳ繝・
 
-- **[PostgreSQL セットアップガイド](../postgresql/postgresql_setup_guide.md)**: PostgreSQL での実装例
-- **[Issue #038](../../issue/active/038_postgresql_container_customization.md)**: 基盤の設計背景
-- **[CONFIG_HOOK ガイド](config_hook_guide.md)**: 設定のカスタマイズ方法
+- **[PostgreSQL 繧ｻ繝・ヨ繧｢繝・・繧ｬ繧､繝云(../postgresql/postgresql_setup_guide.md)**: PostgreSQL 縺ｧ縺ｮ螳溯｣・ｾ・
+- **[Issue #038](../../issue/active/038_postgresql_container_customization.md)**: 蝓ｺ逶､縺ｮ險ｭ險郁レ譎ｯ
+- **[CONFIG_HOOK 繧ｬ繧､繝云(config_hook_guide.md)**: 險ｭ螳壹・繧ｫ繧ｹ繧ｿ繝槭う繧ｺ譁ｹ豕・
 
 ---
 
-**作成日**: 2026-02-22  
-**対象バージョン**: repom v0.1.0+
+**菴懈・譌･**: 2026-02-22  
+**蟇ｾ雎｡繝舌・繧ｸ繝ｧ繝ｳ**: repom v0.1.0+
+
+

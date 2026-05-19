@@ -12,7 +12,7 @@ This test suite verifies:
 
 import pytest
 from unittest.mock import patch, MagicMock
-from repom._.discovery import (
+from basekit.discovery import (
     import_package_directory,
     import_from_packages
 )
@@ -68,7 +68,7 @@ class TestImportPackageDirectory:
         assert len(failures) == 1
         assert 'is not a package' in failures[0].message
 
-    @patch('repom._.discovery.import_from_directory')
+    @patch('basekit.discovery.import_from_directory')
     def test_calls_import_from_directory_with_correct_params(self, mock_import_from_dir):
         """import_from_directory を正しいパラメータで呼び出す"""
         mock_import_from_dir.return_value = []
@@ -116,7 +116,7 @@ class TestImportFromPackages:
 
     def test_fail_on_error_true_raises_exception(self):
         """fail_on_error=True の場合、最初のエラーで例外を送出"""
-        from repom._.discovery import DiscoveryError
+        from basekit.discovery import DiscoveryError
 
         with pytest.raises(DiscoveryError):
             import_from_packages(
@@ -269,7 +269,7 @@ class TestLoadModelsIntegration:
             config.model_import_strict = True
 
             # DiscoveryError が発生することを確認
-            from repom._.discovery import DiscoveryError
+            from basekit.discovery import DiscoveryError
             with pytest.raises(DiscoveryError):
                 load_models()
         finally:
@@ -416,3 +416,4 @@ class TestRealWorldScenarios:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+

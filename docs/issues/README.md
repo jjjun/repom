@@ -30,9 +30,7 @@ completed/     → 実装完了・コミット済み
 
 ## 🚧 実装予定・作業中の Issue
 
-| ID | タイトル | ステータス | 概要 | ファイル |
-|----|---------|-----------|------|---------|
-| #066 | `repom/_/` 共有ユーティリティを basekit へ移管 | 🔴 未着手 | `discovery.py` / `docker_compose.py` / `docker_manager.py` を basekit に移管。docker_manager は `repom.config` 依存を切って `data_path` 注入方式へ再設計。互換性なし、import パス一括差し替え | [active/066_move_shared_utilities_to_basekit.md](active/066_move_shared_utilities_to_basekit.md) |
+現在 active な Issue はありません。
 
 詳細は各ファイルを参照してください.
 
@@ -42,6 +40,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #066 | `repom/_/` 共有ユーティリティを basekit へ移管 | 2026-05-19 | `discovery` / `docker_compose` / `docker_manager` を basekit に追加し、repom 側は `basekit.*` import へ移行。`DockerManager` は `data_path` 注入方式に変更し、旧 `repom/_/` モジュールと汎用テストを削除。basekit 32 tests、repom unit/behavior tests、ruff、`repom_info`、`postgres_generate`、`redis_generate` を確認 | [completed/066_move_shared_utilities_to_basekit.md](completed/066_move_shared_utilities_to_basekit.md) |
 | #007 | Annotation Inheritance の実装検証 | 2026-05-17 | 調査結果を Issue 文書へ反映し、`tests/unit_tests/test_annotation_inheritance.py` を追加（mixin 継承 / 多重継承 / `use_id=False` の組合せを検証）。4 tests passed。実装変更は不要と判断 | [completed/007_annotation_inheritance_validation.md](completed/007_annotation_inheritance_validation.md) |
 | #065 | `CLAUDE.md` のビルド/パッケージマネージャ記述更新（poetry → uv/hatchling） | 2026-05-17 | `CLAUDE.md` / `AGENTS.md` に hatchling build backend を明記し、CLAUDE/AGENTS/README/docs/guides に古い poetry 記述が残っていないことを確認 | [completed/065_update_claude_md_build_tooling.md](completed/065_update_claude_md_build_tooling.md) |
 | #064 | `BaseRepository` への bulk insert/update/delete ヘルパ追加 | 2026-05-17 | 同期/非同期リポジトリに `bulk_insert` / `bulk_update` / `bulk_delete` を追加。SoftDeletableMixin 対応モデルは一括論理削除し、ガイドと単体テストを更新。`tests/unit_tests` passed | [completed/064_baserepository_bulk_operations.md](completed/064_baserepository_bulk_operations.md) |
@@ -198,4 +197,4 @@ completed/
 └── 2024/
 ```
 
-最終更新: 2026-05-19（Issue #066 を active に追加）
+最終更新: 2026-05-19（Issue #066 を completed へ移動）

@@ -1,4 +1,4 @@
-"""Display repom configuration information."""
+﻿"""Display repom configuration information."""
 
 import os
 import sys
@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from repom.config import config
 from repom.database import Base
-from repom._.discovery import import_from_packages
+from basekit.discovery import import_from_packages
 from repom.diagnostics.database_info import (
     collect_database_info_sync,
     format_size as _format_size,
@@ -155,7 +155,7 @@ def test_redis_connection() -> str:
     try:
         import redis
 
-        # redis モジュールが利用可能なので、ConnectionError を参照できる
+        # redis 繝｢繧ｸ繝･繝ｼ繝ｫ縺悟茜逕ｨ蜿ｯ閭ｽ縺ｪ縺ｮ縺ｧ縲，onnectionError 繧貞盾辣ｧ縺ｧ縺阪ｋ
         try:
             r = redis.Redis(
                 host=config.redis.host,
@@ -164,7 +164,7 @@ def test_redis_connection() -> str:
                 socket_keepalive=True,
                 health_check_interval=1
             )
-            r.ping()  # PING コマンド実行
+            r.ping()  # PING 繧ｳ繝槭Φ繝牙ｮ溯｡・
             return "[OK] Connected"
         except redis.ConnectionError:
             return "[NG] Connection refused"
@@ -359,3 +359,4 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
+

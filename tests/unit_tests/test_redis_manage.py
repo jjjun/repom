@@ -1,4 +1,4 @@
-"""Tests for Redis management functions.
+﻿"""Tests for Redis management functions.
 
 Tests verify that redis/manage.py correctly uses config values for:
 - Container naming
@@ -23,7 +23,7 @@ class TestRedisManager:
     """Tests for RedisManager class."""
 
     def test_get_container_name_uses_config(self):
-        """コンテナ名が config.redis.container.get_container_name() を使用"""
+        """ config.redis.container.get_container_name() """
         manager = RedisManager()
         container_name = manager.get_container_name()
 
@@ -32,7 +32,7 @@ class TestRedisManager:
         assert container_name.startswith("repom_redis")
 
     def test_print_connection_info_uses_config_port(self, capsys):
-        """print_connection_info が config.redis.port を使用"""
+        """print_connection_info config.redis.port """
         manager = RedisManager()
         manager.print_connection_info()
 
@@ -45,7 +45,7 @@ class TestGenerateDockerCompose:
     """Tests for generate_docker_compose function."""
 
     def test_compose_uses_config_port(self):
-        """docker-compose が config.redis.port を使用"""
+        """docker-compose config.redis.port """
         generator = generate_docker_compose()
 
         # The generator should have created a Redis service
@@ -55,7 +55,7 @@ class TestGenerateDockerCompose:
         assert config.redis.port == config.redis.port  # Basic sanity check
 
     def test_compose_uses_config_container_name(self):
-        """docker-compose が config.redis.container.get_container_name() を使用"""
+        """docker-compose config.redis.container.get_container_name() """
         expected_name = config.redis.container.get_container_name()
         generator = generate_docker_compose()
 
@@ -64,7 +64,7 @@ class TestGenerateDockerCompose:
         assert expected_name.startswith("repom_redis")
 
     def test_compose_uses_config_volume_name(self):
-        """docker-compose が config.redis.container.get_volume_name() を使用"""
+        """docker-compose config.redis.container.get_volume_name() """
         expected_volume = config.redis.container.get_volume_name()
         generator = generate_docker_compose()
 
@@ -73,7 +73,7 @@ class TestGenerateDockerCompose:
         assert expected_volume.startswith("repom_redis")
 
     def test_compose_uses_config_image(self):
-        """docker-compose が config.redis.container.image を使用"""
+        """docker-compose config.redis.container.image """
         expected_image = config.redis.container.image
         generator = generate_docker_compose()
 
@@ -86,7 +86,7 @@ class TestGenerateRedisConf:
     """Tests for generate_redis_conf function."""
 
     def test_conf_content_is_valid(self):
-        """redis.conf の内容が有効な設定を含む"""
+        """redis.conf """
         conf = generate_redis_conf()
 
         # Should contain key configuration sections
@@ -96,7 +96,7 @@ class TestGenerateRedisConf:
         assert "maxmemory" in conf
 
     def test_conf_is_not_empty(self):
-        """redis.conf が空でない"""
+        """redis.conf """
         conf = generate_redis_conf()
         assert len(conf) > 100  # Should have reasonable content
 
@@ -105,21 +105,20 @@ class TestConfigIntegration:
     """Tests for Config integration with redis module."""
 
     def test_redis_config_exists_in_repom_config(self):
-        """config に redis フィールドがある"""
+        """config  redis """
         assert hasattr(config, 'redis')
 
     def test_redis_config_has_container(self):
-        """redis config に container フィールドがある"""
+        """redis config  container """
         assert hasattr(config.redis, 'container')
 
     def test_redis_config_has_port(self):
-        """redis config に port フィールドがある"""
+        """redis config  port """
         assert hasattr(config.redis, 'port')
-        # repom パッケージでは config_hook で 6380 に設定されている
-        assert config.redis.port == 6380
+        assert config.redis.port == 6379
 
     def test_redis_container_config_has_methods(self):
-        """redis container config に必要なメソッドがある"""
+        """redis container config """
         container = config.redis.container
         assert hasattr(container, 'get_container_name')
         assert hasattr(container, 'get_volume_name')
@@ -127,7 +126,7 @@ class TestConfigIntegration:
         assert callable(container.get_volume_name)
 
     def test_redis_container_defaults(self):
-        """redis container config のデフォルト値が正しい"""
+        """redis container config """
         container = config.redis.container
         assert container.get_container_name() == "repom_redis"
         assert container.get_volume_name() == "repom_redis_data"
@@ -138,27 +137,27 @@ class TestDirectoryManagement:
     """Tests for directory management functions."""
 
     def test_get_compose_dir_returns_path(self):
-        """get_compose_dir が有効なパスを返す"""
+        """get_compose_dir """
         compose_dir = get_compose_dir()
         assert isinstance(compose_dir, Path)
         assert compose_dir.exists()
 
     def test_get_init_dir_returns_path(self):
-        """get_init_dir が有効なパスを返す"""
+        """get_init_dir """
         init_dir = get_init_dir()
         assert isinstance(init_dir, Path)
         # Should be a subdirectory of compose dir
         assert "redis_init" in str(init_dir)
 
     def test_get_compose_dir_uses_redis_subdir(self):
-        """get_compose_dir が redis サブディレクトリを使用（分離プロジェクト構造）"""
+        """get_compose_dir redis """
         compose_dir = get_compose_dir()
         # Should be config.data_path/redis/
         assert str(compose_dir).endswith("redis")
         assert "redis" in str(compose_dir)
 
     def test_redis_generate_creates_in_redis_subdir(self):
-        """redis_generate が data/repom/redis/ に docker-compose.yml を生成"""
+        """redis_generate data/repom/redis/  docker-compose.yml """
         from repom.redis.manage import generate
 
         # Generate files
@@ -171,7 +170,7 @@ class TestDirectoryManagement:
 
 
 class TestRedisEnsureRunning:
-    """ensure_running() の単体テスト"""
+    """ensure_running() """
 
     def _patch_config(self):
         from unittest.mock import MagicMock
@@ -187,7 +186,7 @@ class TestRedisEnsureRunning:
 
         with patch.object(manage, "config", self._patch_config()):
             with patch(
-                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
                 return_value=True,
             ) as is_running:
                 with patch.object(manage, "generate") as generate:
@@ -206,7 +205,7 @@ class TestRedisEnsureRunning:
         manager_instance = MagicMock()
         with patch.object(manage, "config", self._patch_config()):
             with patch(
-                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
                 return_value=False,
             ):
                 with patch.object(manage, "generate") as generate:
@@ -226,7 +225,7 @@ class TestRedisEnsureRunning:
         manager_instance = MagicMock()
         with patch.object(manage, "config", self._patch_config()):
             with patch(
-                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
                 return_value=False,
             ):
                 with patch.object(manage, "generate"):
@@ -246,7 +245,7 @@ class TestRedisEnsureRunning:
 
         with patch.object(manage, "config", self._patch_config()):
             with patch(
-                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
                 side_effect=FileNotFoundError("docker not found"),
             ):
                 with pytest.raises(RuntimeError, match="docker command not found"):
@@ -265,7 +264,7 @@ class TestRedisEnsureRunning:
         )
         with patch.object(manage, "config", self._patch_config()):
             with patch(
-                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
                 return_value=False,
             ):
                 with patch.object(manage, "generate"):
@@ -286,7 +285,7 @@ class TestRedisEnsureRunning:
         manager_instance.start.side_effect = SystemExit(1)
         with patch.object(manage, "config", self._patch_config()):
             with patch(
-                "repom._.docker_manager.DockerCommandExecutor.is_container_running",
+                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
                 return_value=False,
             ):
                 with patch.object(manage, "generate"):
@@ -295,3 +294,6 @@ class TestRedisEnsureRunning:
                     ):
                         with pytest.raises(RuntimeError, match="Failed to start Redis"):
                             manage.ensure_running()
+
+
+

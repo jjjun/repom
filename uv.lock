@@ -99,7 +99,7 @@ wheels = [
 [[package]]
 name = "basekit"
 version = "0.1.0"
-source = { git = "https://github.com/jjjun/basekit.git?rev=ca97f2dba52120fa28c543678830d69b9ee608d9#ca97f2dba52120fa28c543678830d69b9ee608d9" }
+source = { git = "https://github.com/jjjun/basekit.git?rev=ccdf6f3fbcfee5e0b93b27e294ea6507af408dc2#ccdf6f3fbcfee5e0b93b27e294ea6507af408dc2" }
 dependencies = [
     { name = "python-dotenv" },
 ]
@@ -795,7 +795,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.14.0,<2.0.0" },
     { name = "asyncpg", marker = "extra == 'async-all'", specifier = ">=0.31.0,<0.32.0" },
     { name = "asyncpg", marker = "extra == 'postgres-async'", specifier = ">=0.31.0,<0.32.0" },
-    { name = "basekit", git = "https://github.com/jjjun/basekit.git?rev=ca97f2dba52120fa28c543678830d69b9ee608d9" },
+    { name = "basekit", git = "https://github.com/jjjun/basekit.git?rev=ccdf6f3fbcfee5e0b93b27e294ea6507af408dc2" },
     { name = "inflect", specifier = ">=7.5.0,<8.0.0" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.3.4,<4.0.0" },
     { name = "pydantic", specifier = ">=2.13.4,<3.0.0" },

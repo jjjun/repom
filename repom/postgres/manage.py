@@ -1,9 +1,9 @@
-"""PostgreSQL Docker 環境管理スクリプト
+﻿"""PostgreSQL Docker 
 
-使用方法:
-    uv run postgres_generate  # docker-compose.yml を生成
-    uv run postgres_start      # PostgreSQL を起動
-    uv run postgres_stop       # PostgreSQL を停止
+
+    uv run postgres_generate  # docker-compose.yml 
+    uv run postgres_start      # PostgreSQL 
+    uv run postgres_stop       # PostgreSQL 
 """
 
 import subprocess
@@ -11,23 +11,23 @@ import sys
 import json
 
 from repom.config import config
-from repom._.docker_compose import DockerComposeGenerator, DockerService, DockerVolume
-from repom._ import docker_manager as dm
+from basekit.docker_compose import DockerComposeGenerator, DockerService, DockerVolume
+from basekit import docker_manager as dm
 
 
 def get_compose_dir():
-    """docker-compose.yml の保存先ディレクトリを取得
+    """docker-compose.yml 
 
     Returns:
-        config.data_path/postgres/ ディレクトリ（分離プロジェクト構造）
+        config.data_path/postgres/ 
     """
     return PostgresManager().get_compose_dir()
 
 
 class PostgresManager(dm.DockerManager):
-    """PostgreSQL コンテナの管理（Docker Manager 基盤を使用）
+    """PostgreSQL ocker Manager 
 
-    docker-compose による start/stop/remove は DockerManager 基盤クラスから継承
+    docker-compose  start/stop/remove  DockerManager 
     """
 
     SERVICE_NAME = "postgres"
@@ -35,14 +35,15 @@ class PostgresManager(dm.DockerManager):
     GENERATE_COMMAND = "postgres_generate"
 
     def __init__(self):
+        super().__init__(data_path=config.data_path)
         self.config = config
 
     def get_container_name(self) -> str:
-        """PostgreSQL コンテナ名を返す"""
+        """PostgreSQL """
         return self.config.postgres.container.get_container_name()
 
     def wait_for_service(self, max_retries: int = 30) -> None:
-        """PostgreSQL の起動を待機（pg_isready による確認）"""
+        """PostgreSQL g_isready """
         container_name = self.get_container_name()
         user = self.config.postgres.user
 
@@ -66,9 +67,9 @@ class PostgresManager(dm.DockerManager):
         )
 
     def print_connection_info(self) -> None:
-        """PostgreSQL 接続情報を表示"""
+        """PostgreSQL """
         print()
-        print("📦 PostgreSQL Connection:")
+        print(" PostgreSQL Connection:")
         print("  Host: localhost")
         print(f"  Port: {self.config.postgres.container.host_port}")
         print(f"  User: {self.config.postgres.user}")
@@ -76,35 +77,35 @@ class PostgresManager(dm.DockerManager):
         db_name = self.config.db_name
         print(f"  Databases: {db_name}, {db_name}_dev, {db_name}_test")
 
-        # pgAdmin 情報を出力（有効な場合のみ）
+        # pgAdmin 
         if self.config.pgadmin.container.enabled:
             print()
-            print("🎨 pgAdmin Access:")
+            print(" pgAdmin Access:")
             print(f"  URL: http://localhost:{self.config.pgadmin.container.host_port}")
             print(f"  Email: {self.config.pgadmin.email}")
             print(f"  Password: {self.config.pgadmin.password}")
             print()
-            print("  ✅ PostgreSQL server auto-registered (servers.json)")
+            print("  PostgreSQL server auto-registered (servers.json)")
             print(f"  Server: {self.config.postgres.container.get_container_name()}")
 
 
 def get_init_dir():
-    """PostgreSQL 初期化スクリプトのディレクトリを取得
+    """PostgreSQL 
 
     Returns:
-        config.data_path/postgresql_init/ ディレクトリ
+        config.data_path/postgresql_init/ 
     """
     return PostgresManager().get_init_dir()
 
 
 def generate_pgadmin_servers_json() -> dict:
-    """pgAdmin サーバー設定ファイルの内容を生成
+    """pgAdmin 
 
-    config の値を使用して動的に生成します。
-    CONFIG_HOOK でカスタマイズされた値が反映されます。
+    config 
+    CONFIG_HOOK 
 
     Returns:
-        pgAdmin servers.json の内容（dict）
+        pgAdmin servers.json ict
     """
     db_dev = f"{config.db_name}_dev"
 
@@ -113,7 +114,7 @@ def generate_pgadmin_servers_json() -> dict:
             "1": {
                 "Name": config.postgres.container.get_container_name(),
                 "Group": "Servers",
-                "Host": "postgres",  # Docker network 内での URL
+                "Host": "postgres",  # Docker network  URL
                 "Port": 5432,
                 "Username": config.postgres.user,
                 "SSLMode": "prefer",
@@ -124,16 +125,16 @@ def generate_pgadmin_servers_json() -> dict:
 
 
 def generate_docker_compose() -> DockerComposeGenerator:
-    """config から docker-compose.yml 生成器を作成"""
+    """config  docker-compose.yml """
     pg = config.postgres
     container = pg.container
 
-    # init スクリプトのパスを取得
+    # init 
     init_dir = get_init_dir()
 
-    # PostgreSQL サービスを定義
-    # Note: POSTGRES_DB は省略（POSTGRES_USER と同名のDBが自動作成される）
-    # 実際の環境別DB (dev/test/prod) は init スクリプトで作成
+    # PostgreSQL 
+    # Note: POSTGRES_DB OSTGRES_USER DB
+    # DB (dev/test/prod)  init 
     postgres_service = DockerService(
         name="postgres",
         image=container.image,
@@ -152,22 +153,22 @@ def generate_docker_compose() -> DockerComposeGenerator:
             "interval": "5s",
             "timeout": "5s",
             "retries": 5,
-            "start_period": "30s",  # 初期化完了までの猶予時間
+            "start_period": "30s",  # 
         }
     )
 
-    # Docker Volume を定義
+    # Docker Volume 
     data_volume = DockerVolume(name=container.get_volume_name())
 
-    # 生成器を作成
+    # 
     generator = DockerComposeGenerator()
     generator.add_service(postgres_service)
     generator.add_volume(data_volume)
 
-    # pgAdmin サービスをオプショナルに追加
+    # pgAdmin 
     if config.pgadmin.container.enabled:
         pgadmin_container = config.pgadmin.container
-        # servers.json のパスを作成
+        # servers.json 
         servers_json_path = get_compose_dir() / "servers.json"
 
         pgadmin_service = DockerService(
@@ -197,15 +198,15 @@ def generate_docker_compose() -> DockerComposeGenerator:
 
 
 def generate_init_sql() -> str:
-    """環境別の DB 作成スクリプトを生成
+    """ DB 
 
-    config.db_name でカスタマイズ可能（環境サフィックス付与前のベース名）
-    デフォルト: repom → repom, repom_dev, repom_test を作成
+    config.db_name 
+     repom repom, repom_dev, repom_test 
 
     Note:
-        POSTGRES_USER と同名の DB は Docker が自動作成するため、
-        \\gexec パターンで重複エラーを回避します。
-        \\gexec は psql 固有の機能で、SELECT の結果を SQL として実行します。
+        POSTGRES_USER  DB  Docker 
+        \\gexec 
+        \\gexec  psql ELECT SQL 
     """
     base = config.db_name
     user = config.postgres.user
@@ -224,46 +225,46 @@ GRANT ALL PRIVILEGES ON DATABASE {base}_test TO {user};
 
 
 def generate():
-    """docker-compose.yml を生成（コマンドから呼び出し可能）"""
-    # 初期化スクリプトを生成
+    """docker-compose.yml """
+    # 
     init_dir = get_init_dir()
     init_sql = generate_init_sql()
     (init_dir / "01_init_databases.sql").write_text(init_sql, encoding="utf-8")
 
-    # docker-compose.yml を生成
+    # docker-compose.yml 
     generator = generate_docker_compose()
     compose_dir = get_compose_dir()
     output_path = compose_dir / "docker-compose.generated.yml"
     generator.write_to_file(output_path)
 
-    # pgAdmin servers.json を生成（有効な場合のみ）
+    # pgAdmin servers.json 
     if config.pgadmin.container.enabled:
         servers_json_path = compose_dir / "servers.json"
         servers_config = generate_pgadmin_servers_json()
         servers_json_path.write_text(json.dumps(servers_config, indent=2), encoding="utf-8")
-        print(f"✅ pgAdmin servers config: {servers_json_path}")
+        print(f"pgAdmin servers config: {servers_json_path}")
 
-    print(f"✅ Generated: {output_path}")
+    print(f"Generated: {output_path}")
     print(f"   Init SQL: {init_dir / '01_init_databases.sql'}")
-    print("\n📦 PostgreSQL Service:")
+    print("\n PostgreSQL Service:")
     print(f"   Container: {config.postgres.container.get_container_name()}")
     print(f"   Port: {config.postgres.container.host_port}")
     print(f"   Volume: {config.postgres.container.get_volume_name()}")
 
-    # pgAdmin 情報を出力（有効な場合のみ）
+    # pgAdmin 
     if config.pgadmin.container.enabled:
-        print("\n🎨 pgAdmin Service:")
+        print("\n pgAdmin Service:")
         print(f"   Container: {config.pgadmin.container.get_container_name()}")
         print(f"   Port: {config.pgadmin.container.host_port}")
         print(f"   Email: {config.pgadmin.email}")
         print(f"   Volume: {config.pgadmin.container.get_volume_name()}")
     else:
-        print("\n⚪ pgAdmin: Disabled (set config.pgadmin.container.enabled=True to enable)")
+        print("\n pgAdmin: Disabled (set config.pgadmin.container.enabled=True to enable)")
 
 
 def start():
-    """PostgreSQL を起動"""
-    # docker-compose.yml を生成
+    """PostgreSQL """
+    # docker-compose.yml 
     generate()
 
     manager = PostgresManager()
@@ -272,13 +273,13 @@ def start():
         manager.start()
         manager.print_connection_info()
     except TimeoutError as e:
-        print(f"❌ {e}")
+        print(f"{e}")
         print(f"Check logs: docker logs {manager.get_container_name()}")
         sys.exit(1)
 
 
 def stop():
-    """PostgreSQL を停止（コンテナ停止のみ、削除はしない）"""
+    """PostgreSQL """
     manager = PostgresManager()
 
     try:
@@ -292,31 +293,31 @@ def ensure_running(
     timeout_seconds: int = 30,
     include_pgadmin: bool = True,
 ) -> None:
-    """PostgreSQL (と enabled な場合は pgAdmin) コンテナの稼働を保証する。
+    """PostgreSQL ( enabled  pgAdmin) 
 
-    すでに対象コンテナが running なら何もしない。未起動のサービスが
-    あれば docker-compose.yml を生成し、PostgresManager.start() で起動する。
+    running 
+     docker-compose.yml ostgresManager.start() 
 
-    DB 操作スクリプト / fast-domain lifespan の双方から呼び出される
-    上位エントリポイントとして設計されている:
+    DB  / fast-domain lifespan 
+    :
 
-    - docker コマンドが見つからない場合は ``RuntimeError`` を投げる
-    - readiness check (`wait_for_service`) のタイムアウトを ``timeout_seconds``
-      で受け取り、fast-domain の lifespan 設定値などをそのまま渡せる
-    - ``include_pgadmin`` で pgAdmin を同時に保証するかを切り替えられる
-      (CLI から呼ぶ場合は True のままで OK、fast-domain も既定 True)
+    - docker  ``RuntimeError`` 
+    - readiness check (`wait_for_service`)  ``timeout_seconds``
+      ast-domain  lifespan 
+    - ``include_pgadmin``  pgAdmin 
+      (CLI  True  OKast-domain True)
 
     Args:
-        timeout_seconds: readiness check の最大待機秒数 (デフォルト 30)。
-            ``PostgresManager.start(timeout_seconds=...)`` に伝搬する。
-        include_pgadmin: pgAdmin (``config.pgadmin.container.enabled`` が
-            True の場合) の起動も保証するか (デフォルト True)。
+        timeout_seconds: readiness check  (30)
+            ``PostgresManager.start(timeout_seconds=...)`` 
+        include_pgadmin: pgAdmin (``config.pgadmin.container.enabled`` 
+            True  (True)
 
     Raises:
-        RuntimeError: docker コマンドが見つからない、readiness が間に合わない、
-            または compose up に失敗した場合。
+        RuntimeError: docker eadiness 
+             compose up 
     """
-    from repom._.docker_manager import DockerCommandExecutor
+    from basekit.docker_manager import DockerCommandExecutor
 
     postgres_container_name = config.postgres.container.get_container_name()
     pgadmin_enabled = include_pgadmin and bool(
@@ -364,7 +365,7 @@ def ensure_running(
 
 
 def remove():
-    """PostgreSQL コンテナとボリュームを削除（完全リセット）"""
+    """PostgreSQL """
     manager = PostgresManager()
 
     try:
@@ -391,3 +392,5 @@ if __name__ == "__main__":
         print(f"Unknown command: {command}")
         print("Usage: python manage.py [generate|start|stop|remove]")
         sys.exit(1)
+
+

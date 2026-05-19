@@ -1,11 +1,11 @@
 ﻿"""
-詳細調査: TYPE_CHECKING と auto_import_models の関係
+: TYPE_CHECKING  auto_import_models 
 
-このテストでは、以下を詳しく調査します:
-1. auto_import_models がどの順序でモデルをインポートするか
-2. TYPE_CHECKING ブロック内のインポートが実行時にどう扱われるか
-3. SQLAlchemy がいつ名前解決を行うか
-4. 実際にエラーが発生するケースは何か
+:
+1. auto_import_models 
+2. TYPE_CHECKING 
+3. SQLAlchemy 
+4. 
 """
 
 import sys
@@ -19,20 +19,20 @@ from sqlalchemy.orm import Session
 
 def test_inspect_import_order():
     """
-    import_from_directory のインポート順序を確認
+    import_from_directory 
     """
-    # 一時ディレクトリ作成
+    # 
     temp_dir = Path(tempfile.mkdtemp(prefix="test_order_"))
 
     try:
-        # テストモデルディレクトリを作成
+        # 
         models_dir = temp_dir / "test_order"
         models_dir.mkdir(parents=True)
 
         # __init__.py
         (models_dir / "__init__.py").write_text("", encoding='utf-8')
 
-        # 複数のファイルを作成してインポート順序を確認
+        # 
         files = [
             "a_model.py",
             "z_model.py",
@@ -53,11 +53,11 @@ class {filename[:-3].title().replace('_', '')}Model(BaseModelAuto):
     name: Mapped[str] = mapped_column(String(50))
 """, encoding='utf-8')
 
-        # sys.path に追加
+        # sys.path 
         sys.path.insert(0, str(temp_dir))
 
         try:
-            from repom._.discovery import import_from_directory
+            from basekit.discovery import import_from_directory
 
             print("\n=== Testing import order ===")
             import_from_directory(
@@ -66,10 +66,10 @@ class {filename[:-3].title().replace('_', '')}Model(BaseModelAuto):
             )
             print("=== Import complete ===\n")
 
-            # 期待される順序: a_model, b_model, m_model, z_model (アルファベット順)
+            # : a_model, b_model, m_model, z_model ()
 
         finally:
-            # クリーンアップ
+            # 
             if str(temp_dir) in sys.path:
                 sys.path.remove(str(temp_dir))
             modules_to_remove = [key for key in sys.modules.keys() if key.startswith('test_order')]
@@ -84,15 +84,15 @@ class {filename[:-3].title().replace('_', '')}Model(BaseModelAuto):
 
 def test_sqlalchemy_relationship_lazy_resolution():
     """
-    SQLAlchemy の relationship がいつ名前解決を行うかを確認
+    SQLAlchemy  relationship 
 
-    重要な発見:
-    - relationship() 呼び出し時には名前解決しない
-    - マッパー設定時（mapper configuration）に名前解決する
-    - マッパー設定は以下のタイミングで起こる:
-      1. 最初のクエリ実行時
-      2. metadata.create_all() 実行時
-      3. 明示的に configure_mappers() を呼び出した時
+    :
+    - relationship() 
+    - mapper configuration
+    - :
+      1. 
+      2. metadata.create_all() 
+      3.  configure_mappers() 
     """
     from sqlalchemy.orm import clear_mappers, configure_mappers
     temp_dir = Path(tempfile.mkdtemp(prefix="test_lazy_"))
@@ -103,7 +103,7 @@ def test_sqlalchemy_relationship_lazy_resolution():
 
         (models_dir / "__init__.py").write_text("", encoding='utf-8')
 
-        # Parent model (アルファベット順で先)
+        # Parent model ()
         (models_dir / "a_parent.py").write_text("""
 from typing import TYPE_CHECKING, List
 from sqlalchemy.orm import relationship, Mapped, mapped_column
@@ -119,7 +119,7 @@ class AParentModel(BaseModelAuto):
     __tablename__ = 'a_parents'
     name: Mapped[str] = mapped_column(String(50))
     
-    # この時点では ZChildModel は存在しない
+    #  ZChildModel 
     children: Mapped[List["ZChildModel"]] = relationship(
         back_populates="parent"
     )
@@ -127,7 +127,7 @@ class AParentModel(BaseModelAuto):
 print(">>> a_parent.py: AParentModel defined successfully")
 """, encoding='utf-8')
 
-        # Child model (アルファベット順で後)
+        # Child model ()
         (models_dir / "z_child.py").write_text("""
 from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, String
@@ -154,44 +154,44 @@ print(">>> z_child.py: ZChildModel defined successfully")
         sys.path.insert(0, str(temp_dir))
 
         try:
-            from repom._.discovery import import_from_directory
+            from basekit.discovery import import_from_directory
             from sqlalchemy.orm import configure_mappers
 
             print("\n" + "=" * 80)
-            print("STEP 1: import_from_directory (インポートのみ)")
+            print("STEP 1: import_from_directory ()")
             print("=" * 80)
             import_from_directory(
                 directory=models_dir,
                 base_package='test_lazy'
             )
-            print(">>> インポート完了: まだマッパー設定は行われていない")
+            print(">>> : ")
 
             print("\n" + "=" * 80)
-            print("STEP 2: configure_mappers() を明示的に呼び出す")
+            print("STEP 2: configure_mappers() ")
             print("=" * 80)
 
-            # この時点で名前解決が行われる
+            # 
             with warnings.catch_warnings(record=True) as w:
                 warnings.simplefilter("always")
                 configure_mappers()
 
                 if w:
-                    print("[WARN]️  警告が発生しました:")
+                    print("[WARN]  :")
                     for warning in w:
                         print(f"   {warning.category.__name__}: {warning.message}")
                 else:
-                    print("警告なし: 名前解決に成功")
+                    print(": ")
 
             print("\n" + "=" * 80)
-            print("STEP 3: データベース操作")
+            print("STEP 3: ")
             print("=" * 80)
 
-            # データベースを作成
+            # 
             engine = create_engine("sqlite:///:memory:", echo=False)
             from repom.models.base_model import BaseModel
             BaseModel.metadata.create_all(engine)
 
-            # モデルを取得
+            # 
             test_lazy = sys.modules.get('test_lazy.a_parent')
             AParentModel = getattr(test_lazy, 'AParentModel')
 
@@ -215,24 +215,24 @@ print(">>> z_child.py: ZChildModel defined successfully")
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
-        # マッパークリーンアップ
+        # 
         clear_mappers()
         configure_mappers()
 
 
 def test_actual_failure_scenario():
     """
-    実際にエラーが発生するシナリオを特定する
+    
 
-    仮説:
-    1. TYPE_CHECKING ブロック内のインポートは実行時に実行されない
-    2. しかし auto_import_models() が両方のファイルをインポートする
-    3. そのため、両方のクラスがグローバル名前空間に登録される
-    4. SQLAlchemy は文字列参照を registry から解決できる
+    :
+    1. TYPE_CHECKING 
+    2.  auto_import_models() 
+    3. 
+    4. SQLAlchemy  registry 
 
-    エラーが発生する条件:
-    - 一方のモデルファイルが auto_import_models() でインポートされない
-    - または、インポートに失敗する
+    :
+    -  auto_import_models() 
+    - 
     """
     from sqlalchemy.orm import clear_mappers, configure_mappers
     temp_dir = Path(tempfile.mkdtemp(prefix="test_failure_"))
@@ -257,20 +257,20 @@ class ParentModel(BaseModelAuto):
     __tablename__ = 'parents'
     name: Mapped[str] = mapped_column(String(50))
     
-    # ChildNotImportedModel は存在しないので、名前解決失敗するはず
+    # ChildNotImportedModel 
     children: Mapped[List["ChildNotImportedModel"]] = relationship()
 """, encoding='utf-8')
 
-        # child ファイルは作成しない（インポートされない）
+        # child 
 
         sys.path.insert(0, str(temp_dir))
 
         try:
-            from repom._.discovery import import_from_directory
+            from basekit.discovery import import_from_directory
             from sqlalchemy.orm import configure_mappers
 
             print("\n" + "=" * 80)
-            print("テスト: child ファイルが存在しない場合")
+            print(": child ")
             print("=" * 80)
 
             import_from_directory(
@@ -278,22 +278,22 @@ class ParentModel(BaseModelAuto):
                 base_package='test_failure'
             )
 
-            print(">>> import_from_directory 完了")
+            print(">>> import_from_directory ")
 
-            # マッパー設定時にエラーが発生するはず
-            print(">>> configure_mappers() を呼び出し...")
+            # 
+            print(">>> configure_mappers() ...")
 
             with warnings.catch_warnings(record=True) as w:
                 warnings.simplefilter("always")
 
                 try:
                     configure_mappers()
-                    print("configure_mappers() 成功（予想外）")
+                    print("configure_mappers() ")
                 except Exception as e:
-                    print(f"[NG] エラー発生（予想通り）: {type(e).__name__}: {e}")
+                    print(f"[NG] : {type(e).__name__}: {e}")
 
                 if w:
-                    print("[WARN]️  警告:")
+                    print("[WARN]  :")
                     for warning in w:
                         print(f"   {warning.message}")
 
@@ -308,7 +308,7 @@ class ParentModel(BaseModelAuto):
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
-        # マッパークリーンアップ
+        # 
         clear_mappers()
         configure_mappers()
 
@@ -328,3 +328,5 @@ if __name__ == '__main__':
     print("Test 3: Actual failure scenario")
     print("=" * 80)
     test_actual_failure_scenario()
+
+
