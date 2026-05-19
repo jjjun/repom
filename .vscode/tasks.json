@@ -94,7 +94,7 @@
       "problemMatcher": []
     },
     {
-      "label": "uv/basekit/update-rev",
+      "label": "🔄merge/basekit",
       "type": "shell",
       "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update_basekit_rev.ps1",
       "group": {
