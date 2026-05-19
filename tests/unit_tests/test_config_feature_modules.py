@@ -1,15 +1,8 @@
 """Feature-specific config module import tests."""
 
-from repom.config import (
-    PgAdminConfig,
-    PgAdminContainerConfig,
-    PostgresConfig,
-    PostgresContainerConfig,
-    RedisConfig,
-    RedisContainerConfig,
-    RepomConfig,
-    SqliteConfig,
-)
+import pytest
+
+from repom.config import RepomConfig
 from repom.postgres.config import (
     PgAdminConfig as DirectPgAdminConfig,
     PgAdminContainerConfig as DirectPgAdminContainerConfig,
@@ -21,14 +14,13 @@ from repom.redis.config import RedisContainerConfig as DirectRedisContainerConfi
 from repom.sqlite.config import SqliteConfig as DirectSqliteConfig
 
 
-def test_config_re_exports_feature_config_classes():
-    assert PostgresConfig is DirectPostgresConfig
-    assert PostgresContainerConfig is DirectPostgresContainerConfig
-    assert PgAdminConfig is DirectPgAdminConfig
-    assert PgAdminContainerConfig is DirectPgAdminContainerConfig
-    assert RedisConfig is DirectRedisConfig
-    assert RedisContainerConfig is DirectRedisContainerConfig
-    assert SqliteConfig is DirectSqliteConfig
+def test_config_no_longer_re_exports_feature_config_classes():
+    with pytest.raises(ImportError):
+        from repom.config import RedisContainerConfig  # noqa: F401
+
+    import repom.config as config_module
+
+    assert config_module.__all__ == ["RepomConfig", "config"]
 
 
 def test_repom_config_uses_feature_config_instances():

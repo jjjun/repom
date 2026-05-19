@@ -183,13 +183,7 @@ from repom.redis.config import RedisConfig, RedisContainerConfig
 from repom.sqlite.config import SqliteConfig
 ```
 
-後方互換のため、既存のトップレベル import もそのまま使えます。
-
-```python
-from repom.config import RepomConfig, RedisConfig, RedisContainerConfig
-```
-
-新しいコードでは、機能固有の設定だけを扱う場合は機能別モジュールから直接 import し、複数機能をまとめる設定では `RepomConfig` を使う方針を推奨します。
+Config 系クラスは機能別モジュールから直接 import します。複数機能をまとめる設定では `RepomConfig` を使います。
 
 ---
 

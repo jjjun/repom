@@ -32,8 +32,6 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 作成日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
-| #072 | `postgres/manage.py` / `redis/manage.py` のモジュール関数 `get_compose_dir` / `get_init_dir` を削除 | 2026-05-19 | #062 で残した互換ラッパ関数を削除。fast-domain / mine-py どちらも未使用を確認済 | [active/072_drop_module_level_compose_init_dir_wrappers.md](active/072_drop_module_level_compose_init_dir_wrappers.md) |
-| #071 | `repom/config.py` の後方互換 re-export を削除 | 2026-05-19 | #067 で残した PostgresConfig/PgAdminConfig/RedisConfig/SqliteConfig 等の `__all__` 再エクスポートを削除。fast-domain / mine-py どちらも未使用を確認済 | [active/071_drop_repom_config_compat_reexports.md](active/071_drop_repom_config_compat_reexports.md) |
 
 詳細は各ファイルを参照してください.
 
@@ -43,6 +41,8 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #072 | `postgres/manage.py` / `redis/manage.py` のモジュール関数 `get_compose_dir` / `get_init_dir` を削除 | 2026-05-19 | compose/init directory は Manager メソッド経由に統一し、module-level wrapper を削除。postgres/redis の生成処理とテストを Manager 経由へ更新し、削除 import が ImportError になることを確認。`tests/unit_tests` passed | [completed/072_drop_module_level_compose_init_dir_wrappers.md](completed/072_drop_module_level_compose_init_dir_wrappers.md) |
+| #071 | `repom/config.py` の後方互換 re-export を削除 | 2026-05-19 | `repom.config` から feature config classes の明示 import をできない形にし、`RepomConfig` 内部は private alias で保持。テストとガイドを feature module 直接 import へ更新し、fast-domain / mine-py 本体に影響なしを確認。`tests/unit_tests` passed | [completed/071_drop_repom_config_compat_reexports.md](completed/071_drop_repom_config_compat_reexports.md) |
 | #070 | `db_backup` / `db_restore` の Docker/host fallback パターン共通化 | 2026-05-19 | PostgreSQL の Docker/host 選択を `_backup_utils.run_postgres_via_docker_or_host()` に集約し、backup/restore の分岐を共通化。Docker 未導入時の host fallback も単体テストで確認。`tests/unit_tests` passed | [completed/070_unify_docker_host_fallback_pattern.md](completed/070_unify_docker_host_fallback_pattern.md) |
 | #069 | `repom/redis/__init__.py` の遅延 import `__getattr__` を削除 | 2026-05-19 | Redis package root の公開 API を config classes のみに統一し、manage 関数は `repom.redis.manage` から import する形へ整理。`from repom.redis import generate` が ImportError になる回帰テストを追加。`tests/unit_tests` passed | [completed/069_unify_postgres_redis_init_lazy_export.md](completed/069_unify_postgres_redis_init_lazy_export.md) |
 | #068 | `format_size` / `get_backups` を `_backup_utils.py` へ集約 | 2026-05-19 | `format_size()` と DB 種別別 `get_backups()` を `_backup_utils.py` に移し、`db_backup.py` のインライン MB 表示と `db_restore.py` の重複定義を削除。境界テストを追加。`tests/unit_tests` passed | [completed/068_consolidate_backup_format_size.md](completed/068_consolidate_backup_format_size.md) |

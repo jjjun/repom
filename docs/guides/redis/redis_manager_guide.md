@@ -364,7 +364,8 @@ print(config.redis.container.image)                  # redis:7-alpine
 
 ```python
 # mine_py/src/mine_py/config.py
-from repom.config import RepomConfig, RedisConfig, RedisContainerConfig
+from repom.config import RepomConfig
+from repom.redis.config import RedisConfig, RedisContainerConfig
 
 class MinePyConfig(RepomConfig):
     def __init__(self):

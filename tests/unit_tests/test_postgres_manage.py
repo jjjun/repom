@@ -13,7 +13,7 @@ class TestGenerateDockerComposePostgresOnly:
     """generate_docker_compose() - PostgreSQL gAdmin """
 
     @patch('repom.postgres.manage.config')
-    @patch('repom.postgres.manage.get_init_dir')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
     def test_postgres_only_service_generation(self, mock_get_init_dir, mock_config):
         """PostgreSQL """
         # Mock setup
@@ -57,7 +57,7 @@ class TestGenerateDockerComposePgAdminEnabled:
     """generate_docker_compose() - pgAdmin """
 
     @patch('repom.postgres.manage.config')
-    @patch('repom.postgres.manage.get_init_dir')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
     def test_postgres_and_pgadmin_service_generation(self, mock_get_init_dir, mock_config):
         """PostgreSQL  pgAdmin """
         # Mock setup
@@ -110,7 +110,7 @@ class TestGenerateDockerComposePgAdminEnabled:
         assert pgadmin_service.depends_on["postgres"]["condition"] == "service_healthy"
 
     @patch('repom.postgres.manage.config')
-    @patch('repom.postgres.manage.get_init_dir')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
     def test_pgadmin_yaml_generation(self, mock_get_init_dir, mock_config):
         """pgAdmin  YAML """
         # Mock setup
@@ -236,8 +236,8 @@ class TestDockerComposeFileGeneration:
     """Compose """
 
     @patch('repom.postgres.manage.config')
-    @patch('repom.postgres.manage.get_compose_dir')
-    @patch('repom.postgres.manage.get_init_dir')
+    @patch('repom.postgres.manage.PostgresManager.get_compose_dir')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
     def test_yaml_file_is_valid(self, mock_get_init_dir, mock_get_compose_dir, mock_config, tmp_path):
         """YAML """
         # Mock setup
@@ -346,9 +346,9 @@ class TestDirectorySeparation:
 
     def test_get_compose_dir_uses_postgres_subdir(self):
         """get_compose_dir postgres """
-        from repom.postgres.manage import get_compose_dir
+        from repom.postgres.manage import PostgresManager
 
-        compose_dir = get_compose_dir()
+        compose_dir = PostgresManager().get_compose_dir()
 
         # Should be config.data_path/postgres/
         assert str(compose_dir).endswith("postgres")
@@ -356,28 +356,28 @@ class TestDirectorySeparation:
 
     def test_postgres_generate_creates_in_postgres_subdir(self):
         """postgres_generate data/repom/postgres/  docker-compose.yml """
-        from repom.postgres.manage import generate, get_compose_dir
+        from repom.postgres.manage import PostgresManager, generate
 
         # Generate files
         generate()
 
         # Verify files are in postgres subdirectory
-        compose_file = get_compose_dir() / "docker-compose.generated.yml"
+        compose_file = PostgresManager().get_compose_dir() / "docker-compose.generated.yml"
         assert compose_file.exists()
         assert "postgres" in str(compose_file.parent)
 
     def test_postgres_redis_no_conflict(self):
         """postgres_generate  redis_generate """
-        from repom.postgres.manage import generate as postgres_generate, get_compose_dir as get_postgres_compose_dir
-        from repom.redis.manage import generate as redis_generate, get_compose_dir as get_redis_compose_dir
+        from repom.postgres.manage import PostgresManager, generate as postgres_generate
+        from repom.redis.manage import RedisManager, generate as redis_generate
 
         # Generate both
         postgres_generate()
         redis_generate()
 
         # Verify both files exist in their respective directories
-        postgres_compose = get_postgres_compose_dir() / "docker-compose.generated.yml"
-        redis_compose = get_redis_compose_dir() / "docker-compose.generated.yml"
+        postgres_compose = PostgresManager().get_compose_dir() / "docker-compose.generated.yml"
+        redis_compose = RedisManager().get_compose_dir() / "docker-compose.generated.yml"
 
         assert postgres_compose.exists()
         assert redis_compose.exists()
@@ -391,6 +391,16 @@ class TestDirectorySeparation:
         redis_content = redis_compose.read_text()
         assert "postgres" not in redis_content.lower()
         assert "pgadmin" not in redis_content.lower()
+
+    def test_module_level_directory_helpers_are_removed(self):
+        """module-level get_compose_dir/get_init_dir are no longer public."""
+        import pytest
+
+        with pytest.raises(ImportError):
+            from repom.postgres.manage import get_compose_dir  # noqa: F401
+
+        with pytest.raises(ImportError):
+            from repom.postgres.manage import get_init_dir  # noqa: F401
 
 
 class TestPostgresEnsureRunning:

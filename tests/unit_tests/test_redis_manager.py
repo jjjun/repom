@@ -244,9 +244,9 @@ class TestRedisManagerInitDir:
             with patch('repom.redis.manage.RedisManager.get_compose_dir') as mock_compose_dir:
                 mock_compose_dir.return_value = compose_dir
 
-                from repom.redis.manage import get_init_dir
+                from repom.redis.manage import RedisManager
 
-                init_dir = get_init_dir()
+                init_dir = RedisManager().get_init_dir()
 
                 assert init_dir.exists()
                 assert init_dir.name == "redis_init"

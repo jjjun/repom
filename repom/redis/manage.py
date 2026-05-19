@@ -15,15 +15,6 @@ from basekit.docker_compose import DockerComposeGenerator, DockerService, Docker
 from basekit import docker_manager as dm
 
 
-def get_compose_dir():
-    """docker-compose.yml 
-
-    Returns:
-        config.data_path/redis/ 
-    """
-    return RedisManager().get_compose_dir()
-
-
 class RedisManager(dm.DockerManager):
     """Redis ocker Manager 
 
@@ -75,15 +66,6 @@ class RedisManager(dm.DockerManager):
         print()
 
 
-def get_init_dir():
-    """Redis 
-
-    Returns:
-        config.data_path/redis_init/ 
-    """
-    return RedisManager().get_init_dir()
-
-
 def generate_redis_conf() -> str:
     """Redis 
 
@@ -116,13 +98,14 @@ loglevel notice
 
 def generate_docker_compose() -> DockerComposeGenerator:
     """config  docker-compose.yml """
+    manager = RedisManager()
     redis_port = config.redis.port
     container_name = config.redis.container.get_container_name()
     volume_name = config.redis.container.get_volume_name()
     image = config.redis.container.image
 
-    # init 
-    init_dir = get_init_dir()
+    # init
+    init_dir = manager.get_init_dir()
 
     # Redis 
     redis_service = DockerService(
@@ -156,14 +139,15 @@ def generate_docker_compose() -> DockerComposeGenerator:
 
 def generate():
     """docker-compose.yml  Redis """
-    # Redis 
-    init_dir = get_init_dir()
+    manager = RedisManager()
+    # Redis
+    init_dir = manager.get_init_dir()
     redis_conf = generate_redis_conf()
     (init_dir / "redis.conf").write_text(redis_conf, encoding="utf-8")
 
-    # docker-compose.yml 
+    # docker-compose.yml
     generator = generate_docker_compose()
-    compose_dir = get_compose_dir()
+    compose_dir = manager.get_compose_dir()
     output_path = compose_dir / "docker-compose.generated.yml"
     generator.write_to_file(output_path)
 

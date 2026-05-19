@@ -17,8 +17,6 @@ from repom.redis.manage import (
     RedisManager,
     generate_docker_compose,
     generate_redis_conf,
-    get_compose_dir,
-    get_init_dir,
 )
 
 
@@ -155,20 +153,20 @@ class TestDirectoryManagement:
 
     def test_get_compose_dir_returns_path(self):
         """get_compose_dir """
-        compose_dir = get_compose_dir()
+        compose_dir = RedisManager().get_compose_dir()
         assert isinstance(compose_dir, Path)
         assert compose_dir.exists()
 
     def test_get_init_dir_returns_path(self):
         """get_init_dir """
-        init_dir = get_init_dir()
+        init_dir = RedisManager().get_init_dir()
         assert isinstance(init_dir, Path)
         # Should be a subdirectory of compose dir
         assert "redis_init" in str(init_dir)
 
     def test_get_compose_dir_uses_redis_subdir(self):
         """get_compose_dir redis """
-        compose_dir = get_compose_dir()
+        compose_dir = RedisManager().get_compose_dir()
         # Should be config.data_path/redis/
         assert str(compose_dir).endswith("redis")
         assert "redis" in str(compose_dir)
@@ -181,9 +179,17 @@ class TestDirectoryManagement:
         generate()
 
         # Verify files are in redis subdirectory
-        compose_file = get_compose_dir() / "docker-compose.generated.yml"
+        compose_file = RedisManager().get_compose_dir() / "docker-compose.generated.yml"
         assert compose_file.exists()
         assert "redis" in str(compose_file.parent)
+
+    def test_module_level_directory_helpers_are_removed(self):
+        """module-level get_compose_dir/get_init_dir are no longer public."""
+        with pytest.raises(ImportError):
+            from repom.redis.manage import get_compose_dir  # noqa: F401
+
+        with pytest.raises(ImportError):
+            from repom.redis.manage import get_init_dir  # noqa: F401
 
 
 class TestRedisEnsureRunning:

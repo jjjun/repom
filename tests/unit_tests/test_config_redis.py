@@ -71,49 +71,49 @@ class TestRedisContainerConfig:
 
     def test_get_container_name_default(self):
         """デフォルト: repom_redis"""
-        from repom.config import RedisContainerConfig
+        from repom.redis.config import RedisContainerConfig
         container = RedisContainerConfig()
         assert container.get_container_name() == 'repom_redis'
 
     def test_get_container_name_custom(self):
         """カスタム値で上書き可能"""
-        from repom.config import RedisContainerConfig
+        from repom.redis.config import RedisContainerConfig
         container = RedisContainerConfig(container_name='my_redis')
         assert container.get_container_name() == 'my_redis'
 
     def test_get_volume_name_default(self):
         """デフォルト: repom_redis_data"""
-        from repom.config import RedisContainerConfig
+        from repom.redis.config import RedisContainerConfig
         container = RedisContainerConfig()
         assert container.get_volume_name() == 'repom_redis_data'
 
     def test_get_volume_name_custom(self):
         """カスタム値で上書き可能"""
-        from repom.config import RedisContainerConfig
+        from repom.redis.config import RedisContainerConfig
         container = RedisContainerConfig(volume_name='my_redis_data')
         assert container.get_volume_name() == 'my_redis_data'
 
     def test_host_port_default(self):
         """ホストポート デフォルト: 6379"""
-        from repom.config import RedisContainerConfig
+        from repom.redis.config import RedisContainerConfig
         container = RedisContainerConfig()
         assert container.host_port == 6379
 
     def test_host_port_setter(self):
         """ホストポート Setter で設定"""
-        from repom.config import RedisContainerConfig
+        from repom.redis.config import RedisContainerConfig
         container = RedisContainerConfig(host_port=6380)
         assert container.host_port == 6380
 
     def test_image_default(self):
         """イメージ デフォルト: redis:7-alpine"""
-        from repom.config import RedisContainerConfig
+        from repom.redis.config import RedisContainerConfig
         container = RedisContainerConfig()
         assert container.image == 'redis:7-alpine'
 
     def test_image_setter(self):
         """イメージ Setter で設定"""
-        from repom.config import RedisContainerConfig
+        from repom.redis.config import RedisContainerConfig
         container = RedisContainerConfig(image='redis:latest')
         assert container.image == 'redis:latest'
 

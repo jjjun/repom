@@ -1,8 +1,11 @@
 """PostgresContainerConfig の単体テスト"""
 
-from repom.config import (
-    PostgresContainerConfig, PostgresConfig, RepomConfig,
-    PgAdminContainerConfig, PgAdminConfig
+from repom.config import RepomConfig
+from repom.postgres.config import (
+    PgAdminConfig,
+    PgAdminContainerConfig,
+    PostgresConfig,
+    PostgresContainerConfig,
 )
 
 

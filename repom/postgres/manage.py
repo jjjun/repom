@@ -15,15 +15,6 @@ from basekit.docker_compose import DockerComposeGenerator, DockerService, Docker
 from basekit import docker_manager as dm
 
 
-def get_compose_dir():
-    """docker-compose.yml 
-
-    Returns:
-        config.data_path/postgres/ 
-    """
-    return PostgresManager().get_compose_dir()
-
-
 class PostgresManager(dm.DockerManager):
     """PostgreSQL ocker Manager 
 
@@ -89,15 +80,6 @@ class PostgresManager(dm.DockerManager):
             print(f"  Server: {self.config.postgres.container.get_container_name()}")
 
 
-def get_init_dir():
-    """PostgreSQL 
-
-    Returns:
-        config.data_path/postgresql_init/ 
-    """
-    return PostgresManager().get_init_dir()
-
-
 def generate_pgadmin_servers_json() -> dict:
     """pgAdmin 
 
@@ -126,11 +108,12 @@ def generate_pgadmin_servers_json() -> dict:
 
 def generate_docker_compose() -> DockerComposeGenerator:
     """config  docker-compose.yml """
+    manager = PostgresManager()
     pg = config.postgres
     container = pg.container
 
-    # init 
-    init_dir = get_init_dir()
+    # init
+    init_dir = manager.get_init_dir()
 
     # PostgreSQL 
     # Note: POSTGRES_DB OSTGRES_USER DB
@@ -168,8 +151,8 @@ def generate_docker_compose() -> DockerComposeGenerator:
     # pgAdmin 
     if config.pgadmin.container.enabled:
         pgadmin_container = config.pgadmin.container
-        # servers.json 
-        servers_json_path = get_compose_dir() / "servers.json"
+        # servers.json
+        servers_json_path = manager.get_compose_dir() / "servers.json"
 
         pgadmin_service = DockerService(
             name="pgadmin",
@@ -226,14 +209,15 @@ GRANT ALL PRIVILEGES ON DATABASE {base}_test TO {user};
 
 def generate():
     """docker-compose.yml """
-    # 
-    init_dir = get_init_dir()
+    manager = PostgresManager()
+    #
+    init_dir = manager.get_init_dir()
     init_sql = generate_init_sql()
     (init_dir / "01_init_databases.sql").write_text(init_sql, encoding="utf-8")
 
-    # docker-compose.yml 
+    # docker-compose.yml
     generator = generate_docker_compose()
-    compose_dir = get_compose_dir()
+    compose_dir = manager.get_compose_dir()
     output_path = compose_dir / "docker-compose.generated.yml"
     generator.write_to_file(output_path)
 

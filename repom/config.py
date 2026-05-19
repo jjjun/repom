@@ -9,13 +9,11 @@ from typing import Optional, List, Set
 
 from basekit.config_hook import Config, get_config_from_hook
 from repom.postgres.config import (
-    PgAdminConfig,
-    PgAdminContainerConfig,
-    PostgresConfig,
-    PostgresContainerConfig,
+    PgAdminConfig as _PgAdminConfig,
+    PostgresConfig as _PostgresConfig,
 )
-from repom.redis.config import RedisConfig, RedisContainerConfig
-from repom.sqlite.config import SqliteConfig
+from repom.redis.config import RedisConfig as _RedisConfig
+from repom.sqlite.config import SqliteConfig as _SqliteConfig
 
 
 @dataclass
@@ -29,10 +27,10 @@ class RepomConfig(Config):
     model_import_strict: bool = field(default=False, init=False, repr=False)
 
     # データベース設定 (機能別に分離)
-    postgres: PostgresConfig = field(default_factory=PostgresConfig)
-    pgadmin: PgAdminConfig = field(default_factory=PgAdminConfig)
-    redis: RedisConfig = field(default_factory=RedisConfig)
-    sqlite: SqliteConfig = field(default_factory=SqliteConfig)
+    postgres: _PostgresConfig = field(default_factory=_PostgresConfig)
+    pgadmin: _PgAdminConfig = field(default_factory=_PgAdminConfig)
+    redis: _RedisConfig = field(default_factory=_RedisConfig)
+    sqlite: _SqliteConfig = field(default_factory=_SqliteConfig)
 
     # データベースタイプ選択
     _db_type: Optional[str] = field(default=None, init=False, repr=False)
@@ -439,13 +437,6 @@ config.init()
 
 
 __all__ = [
-    "PgAdminConfig",
-    "PgAdminContainerConfig",
-    "PostgresConfig",
-    "PostgresContainerConfig",
-    "RedisConfig",
-    "RedisContainerConfig",
     "RepomConfig",
-    "SqliteConfig",
     "config",
 ]
