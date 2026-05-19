@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/jj/Desktop/workspace_main/projects/basekit/src/basekit/**)"
+    ]
+  }
+}

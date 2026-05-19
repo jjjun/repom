@@ -30,7 +30,9 @@ completed/     → 実装完了・コミット済み
 
 ## 🚧 実装予定・作業中の Issue
 
-現在 active な Issue はありません。
+| ID | タイトル | ステータス | 概要 | ファイル |
+|----|---------|-----------|------|---------|
+| #066 | `repom/_/` 共有ユーティリティを basekit へ移管 | 🔴 未着手 | `discovery.py` / `docker_compose.py` / `docker_manager.py` を basekit に移管。docker_manager は `repom.config` 依存を切って `data_path` 注入方式へ再設計。互換性なし、import パス一括差し替え | [active/066_move_shared_utilities_to_basekit.md](active/066_move_shared_utilities_to_basekit.md) |
 
 詳細は各ファイルを参照してください.
 
@@ -196,4 +198,4 @@ completed/
 └── 2024/
 ```
 
-最終更新: 2026-05-17（Issue #007 を completed へ移動）
+最終更新: 2026-05-19（Issue #066 を active に追加）
