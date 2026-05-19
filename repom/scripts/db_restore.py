@@ -19,53 +19,18 @@ import subprocess
 import gzip
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
+
+from repom.scripts._backup_utils import (
+    format_size,
+    get_backups,
+    run_postgres_via_docker_or_host,
+)
 
 logger = get_logger(__name__)
 
 
-def format_size(size_bytes: int) -> str:
-    """繝輔ぃ繧､繝ｫ繧ｵ繧､繧ｺ繧・MB 蠖｢蠑上〒繝輔か繝ｼ繝槭ャ繝・
-
-    Args:
-        size_bytes: 繝舌う繝亥腰菴阪・繝輔ぃ繧､繝ｫ繧ｵ繧､繧ｺ
-
-    Returns:
-        繝輔か繝ｼ繝槭ャ繝医＆繧後◆繧ｵ繧､繧ｺ譁・ｭ怜・ (e.g., "2.50 MB")
-    """
-    return f"{size_bytes / (1024 * 1024):.2f} MB"
-
-
-def get_backups(backup_dir: str) -> List[Path]:
-    """繝舌ャ繧ｯ繧｢繝・・繝輔ぃ繧､繝ｫ繧呈怙譁ｰ鬆・↓蜿門ｾ暦ｼ・B 繧ｿ繧､繝励↓蠢懊§縺ｦ繝輔ぅ繝ｫ繧ｿ繝ｪ繝ｳ繧ｰ・・
-
-    Args:
-        backup_dir: 繝舌ャ繧ｯ繧｢繝・・繝・ぅ繝ｬ繧ｯ繝医Μ繝代せ
-
-    Returns:
-        繝舌ャ繧ｯ繧｢繝・・繝輔ぃ繧､繝ｫ縺ｮ繝ｪ繧ｹ繝茨ｼ域怙譁ｰ鬆・∫樟蝨ｨ縺ｮ DB 繧ｿ繧､繝励・縺ｿ・・
-    """
-    if not os.path.exists(backup_dir):
-        return []
-
-    backup_path = Path(backup_dir)
-
-    # DB 繧ｿ繧､繝励↓蠢懊§縺ｦ繝舌ャ繧ｯ繧｢繝・・繝輔ぃ繧､繝ｫ繧呈､懷・
-    if config.db_type == 'sqlite':
-        backups = list(backup_path.glob("*.sqlite3"))
-    elif config.db_type == 'postgres':
-        backups = list(backup_path.glob("db_*.sql.gz"))
-    else:
-        logger.warning(f"Unknown db_type: {config.db_type}, showing all backups")
-        backups = list(backup_path.glob("*"))
-
-    # 譛譁ｰ鬆・↓繧ｽ繝ｼ繝茨ｼ井ｽ懈・譌･譎ゅ・髯埼・ｼ・
-    backups.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-
-    return backups
-
-
-def display_backups(backups: List[Path]) -> Optional[Path]:
+def display_backups(backups: list[Path]) -> Optional[Path]:
     """繝舌ャ繧ｯ繧｢繝・・荳隕ｧ繧定｡ｨ遉ｺ縺励√Θ繝ｼ繧ｶ繝ｼ縺ｫ驕ｸ謚槭＆縺帙ｋ
 
     Args:
@@ -306,18 +271,11 @@ def restore_postgresql(backup_file: Path):
     Args:
         backup_file: 繝ｪ繧ｹ繝医い蜈・・繝舌ャ繧ｯ繧｢繝・・繝輔ぃ繧､繝ｫ (.sql.gz)
     """
-    container_name = config.postgres.container.get_container_name()
-
-    # 繧ｳ繝ｳ繝・リ襍ｷ蜍慕｢ｺ隱・
-    if DockerCommandExecutor.is_container_running(container_name):
-        logger.info(f"Container {container_name} is running, using Docker exec")
-        restore_postgresql_via_docker(backup_file)
-    else:
-        logger.warning(
-            f"Container {container_name} is not running, falling back to host tools. "
-            f"Consider running 'uv run postgres_start' first."
-        )
-        restore_postgresql_via_host(backup_file)
+    run_postgres_via_docker_or_host(
+        via_docker=lambda: restore_postgresql_via_docker(backup_file),
+        via_host=lambda: restore_postgresql_via_host(backup_file),
+        operation="restore",
+    )
 
 
 def main():
@@ -330,7 +288,7 @@ def main():
         return
 
     # 繝舌ャ繧ｯ繧｢繝・・繝輔ぃ繧､繝ｫ繧貞叙蠕・
-    backups = get_backups(config.db_backup_path)
+    backups = get_backups(config.db_backup_path, config.db_type)
 
     if not backups:
         print(f"No backups found in {config.db_backup_path}")

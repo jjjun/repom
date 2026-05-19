@@ -7,7 +7,11 @@ import subprocess
 import gzip
 from datetime import datetime
 from pathlib import Path
-from repom.scripts._backup_utils import rotate_backups
+from repom.scripts._backup_utils import (
+    format_size,
+    rotate_backups,
+    run_postgres_via_docker_or_host,
+)
 
 # ロガーを取得
 logger = get_logger(__name__)
@@ -123,7 +127,7 @@ def backup_postgresql_via_host():
 
         # バックアップファイルサイズ確認
         file_size = backup_path.stat().st_size
-        logger.info(f"Backup file size: {file_size / (1024 * 1024):.2f} MB")
+        logger.info(f"Backup file size: {format_size(file_size)}")
 
         if file_size == 0:
             logger.error("Backup file is empty")
@@ -206,7 +210,7 @@ def backup_postgresql_via_docker():
 
         # バックアップファイルサイズ確認
         file_size = backup_path.stat().st_size
-        logger.info(f"Backup file size: {file_size / (1024 * 1024):.2f} MB")
+        logger.info(f"Backup file size: {format_size(file_size)}")
 
         if file_size == 0:
             logger.error("Backup file is empty")
@@ -245,18 +249,12 @@ def backup_postgresql():
     Docker コンテナが起動中の場合は docker exec を使用し、
     停止中の場合はホスト側の pg_dump にフォールバックします。
     """
-    container_name = config.postgres.container.get_container_name()
-
-    # コンテナ起動確認
-    if DockerCommandExecutor.is_container_running(container_name):
-        logger.info(f"Container {container_name} is running, using Docker exec")
-        backup_postgresql_via_docker()
-    else:
-        logger.warning(
-            f"Container {container_name} is not running, falling back to host pg_dump. "
-            f"Consider running 'uv run postgres_start' first."
-        )
-        backup_postgresql_via_host()
+    run_postgres_via_docker_or_host(
+        via_docker=backup_postgresql_via_docker,
+        via_host=backup_postgresql_via_host,
+        operation="backup",
+        host_tools="host pg_dump",
+    )
 
 
 def main():

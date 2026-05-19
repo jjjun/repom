@@ -34,9 +34,6 @@ completed/     → 実装完了・コミット済み
 |----|---------|--------|------|---------|
 | #072 | `postgres/manage.py` / `redis/manage.py` のモジュール関数 `get_compose_dir` / `get_init_dir` を削除 | 2026-05-19 | #062 で残した互換ラッパ関数を削除。fast-domain / mine-py どちらも未使用を確認済 | [active/072_drop_module_level_compose_init_dir_wrappers.md](active/072_drop_module_level_compose_init_dir_wrappers.md) |
 | #071 | `repom/config.py` の後方互換 re-export を削除 | 2026-05-19 | #067 で残した PostgresConfig/PgAdminConfig/RedisConfig/SqliteConfig 等の `__all__` 再エクスポートを削除。fast-domain / mine-py どちらも未使用を確認済 | [active/071_drop_repom_config_compat_reexports.md](active/071_drop_repom_config_compat_reexports.md) |
-| #070 | `db_backup` / `db_restore` の Docker/host fallback パターン共通化 | 2026-05-19 | PostgreSQL の「コンテナ起動中なら docker exec、停止中ならホスト CLI」分岐が backup/restore の 2 か所で重複。ディスパッチャを `_backup_utils.py` 等へ切り出して統合する提案 | [active/070_unify_docker_host_fallback_pattern.md](active/070_unify_docker_host_fallback_pattern.md) |
-| #069 | `repom/redis/__init__.py` の遅延 import `__getattr__` を削除 | 2026-05-19 | redis 側にだけある `__getattr__` で `generate/start/stop/...` を遅延 export する仕組みを削除。fast-domain / mine-py どちらも未使用を確認済 | [active/069_unify_postgres_redis_init_lazy_export.md](active/069_unify_postgres_redis_init_lazy_export.md) |
-| #068 | `format_size` / `get_backups` を `_backup_utils.py` へ集約 | 2026-05-19 | `db_restore.py` で定義された `format_size()` と、`db_backup.py` のインライン MB 計算、および `get_backups()` を共通ユーティリティへ移動して #063 の集約を完成させる | [active/068_consolidate_backup_format_size.md](active/068_consolidate_backup_format_size.md) |
 
 詳細は各ファイルを参照してください.
 
@@ -46,6 +43,9 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #070 | `db_backup` / `db_restore` の Docker/host fallback パターン共通化 | 2026-05-19 | PostgreSQL の Docker/host 選択を `_backup_utils.run_postgres_via_docker_or_host()` に集約し、backup/restore の分岐を共通化。Docker 未導入時の host fallback も単体テストで確認。`tests/unit_tests` passed | [completed/070_unify_docker_host_fallback_pattern.md](completed/070_unify_docker_host_fallback_pattern.md) |
+| #069 | `repom/redis/__init__.py` の遅延 import `__getattr__` を削除 | 2026-05-19 | Redis package root の公開 API を config classes のみに統一し、manage 関数は `repom.redis.manage` から import する形へ整理。`from repom.redis import generate` が ImportError になる回帰テストを追加。`tests/unit_tests` passed | [completed/069_unify_postgres_redis_init_lazy_export.md](completed/069_unify_postgres_redis_init_lazy_export.md) |
+| #068 | `format_size` / `get_backups` を `_backup_utils.py` へ集約 | 2026-05-19 | `format_size()` と DB 種別別 `get_backups()` を `_backup_utils.py` に移し、`db_backup.py` のインライン MB 表示と `db_restore.py` の重複定義を削除。境界テストを追加。`tests/unit_tests` passed | [completed/068_consolidate_backup_format_size.md](completed/068_consolidate_backup_format_size.md) |
 | #067 | `repom/config.py` を機能別ファイルに分割 | 2026-05-19 | PostgreSQL/pgAdmin、Redis、SQLite の設定 dataclass を機能別 config モジュールへ移動し、`repom.config` から再エクスポートして後方互換を維持。直接 import と再エクスポートの単体テストを追加し、CONFIG_HOOK カスタマイズを許容する Redis 管理テストへ調整。854 tests passed | [completed/067_split_config_by_feature.md](completed/067_split_config_by_feature.md) |
 | #066 | `repom/_/` 共有ユーティリティを basekit へ移管 | 2026-05-19 | `discovery` / `docker_compose` / `docker_manager` を basekit に追加し、repom 側は `basekit.*` import へ移行。`DockerManager` は `data_path` 注入方式に変更し、旧 `repom/_/` モジュールと汎用テストを削除。basekit 32 tests、repom unit/behavior tests、ruff、`repom_info`、`postgres_generate`、`redis_generate` を確認 | [completed/066_move_shared_utilities_to_basekit.md](completed/066_move_shared_utilities_to_basekit.md) |
 | #007 | Annotation Inheritance の実装検証 | 2026-05-17 | 調査結果を Issue 文書へ反映し、`tests/unit_tests/test_annotation_inheritance.py` を追加（mixin 継承 / 多重継承 / `use_id=False` の組合せを検証）。4 tests passed。実装変更は不要と判断 | [completed/007_annotation_inheritance_validation.md](completed/007_annotation_inheritance_validation.md) |

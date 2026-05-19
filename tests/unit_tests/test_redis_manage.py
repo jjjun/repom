@@ -9,7 +9,10 @@ Tests verify that redis/manage.py correctly uses config values for:
 
 from pathlib import Path
 
+import pytest
+
 from repom.config import config
+from repom.redis import RedisConfig, RedisContainerConfig
 from repom.redis.manage import (
     RedisManager,
     generate_docker_compose,
@@ -17,6 +20,19 @@ from repom.redis.manage import (
     get_compose_dir,
     get_init_dir,
 )
+
+
+def test_redis_package_exports_config_classes_only():
+    import repom.redis as redis
+
+    assert redis.RedisConfig is RedisConfig
+    assert redis.RedisContainerConfig is RedisContainerConfig
+    assert redis.__all__ == ["RedisConfig", "RedisContainerConfig"]
+
+
+def test_redis_package_no_longer_lazy_exports_manage_functions():
+    with pytest.raises(ImportError):
+        from repom.redis import generate  # noqa: F401
 
 
 class TestRedisManager:

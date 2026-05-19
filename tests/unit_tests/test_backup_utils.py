@@ -1,6 +1,14 @@
 from tests._init import *
 
-from repom.scripts._backup_utils import rotate_backups
+from unittest.mock import MagicMock
+
+from repom.scripts import _backup_utils
+from repom.scripts._backup_utils import (
+    format_size,
+    get_backups,
+    rotate_backups,
+    run_postgres_via_docker_or_host,
+)
 
 
 def _touch(path, mtime):
@@ -63,3 +71,96 @@ def test_rotate_backups_ignores_non_matching_files(tmp_path):
     assert removed == []
     assert matching.exists()
     assert ignored.exists()
+
+
+def test_format_size_formats_fixed_mb_values():
+    assert format_size(0) == "0.00 MB"
+    assert format_size(512) == "0.00 MB"
+    assert format_size(1024 * 1024) == "1.00 MB"
+    assert format_size(2.5 * 1024 * 1024) == "2.50 MB"
+
+
+def test_get_backups_returns_sqlite_backups_newest_first(tmp_path):
+    old = tmp_path / "app_20260101_000000.sqlite3"
+    new = tmp_path / "app_20260102_000000.sqlite3"
+    ignored = tmp_path / "db_20260102_000000.sql.gz"
+    _touch(old, 1)
+    _touch(new, 2)
+    _touch(ignored, 3)
+
+    assert get_backups(tmp_path, "sqlite") == [new, old]
+
+
+def test_get_backups_returns_postgres_backups_newest_first(tmp_path):
+    old = tmp_path / "db_20260101_000000.sql.gz"
+    new = tmp_path / "db_20260102_000000.sql.gz"
+    ignored = tmp_path / "app_20260102_000000.sqlite3"
+    _touch(old, 1)
+    _touch(new, 2)
+    _touch(ignored, 3)
+
+    assert get_backups(tmp_path, "postgres") == [new, old]
+
+
+def test_get_backups_returns_empty_for_missing_directory(tmp_path):
+    assert get_backups(tmp_path / "missing", "sqlite") == []
+
+
+def test_run_postgres_via_docker_or_host_uses_docker_when_container_running(monkeypatch):
+    via_docker = MagicMock()
+    via_host = MagicMock()
+
+    monkeypatch.setattr(
+        _backup_utils.DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(return_value=True),
+    )
+
+    run_postgres_via_docker_or_host(
+        via_docker=via_docker,
+        via_host=via_host,
+        operation="backup",
+    )
+
+    via_docker.assert_called_once_with()
+    via_host.assert_not_called()
+
+
+def test_run_postgres_via_docker_or_host_uses_host_when_container_stopped(monkeypatch):
+    via_docker = MagicMock()
+    via_host = MagicMock()
+
+    monkeypatch.setattr(
+        _backup_utils.DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(return_value=False),
+    )
+
+    run_postgres_via_docker_or_host(
+        via_docker=via_docker,
+        via_host=via_host,
+        operation="restore",
+    )
+
+    via_docker.assert_not_called()
+    via_host.assert_called_once_with()
+
+
+def test_run_postgres_via_docker_or_host_uses_host_when_docker_missing(monkeypatch):
+    via_docker = MagicMock()
+    via_host = MagicMock()
+
+    monkeypatch.setattr(
+        _backup_utils.DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(side_effect=FileNotFoundError("docker not found")),
+    )
+
+    run_postgres_via_docker_or_host(
+        via_docker=via_docker,
+        via_host=via_host,
+        operation="backup",
+    )
+
+    via_docker.assert_not_called()
+    via_host.assert_called_once_with()
