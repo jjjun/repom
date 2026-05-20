@@ -161,23 +161,6 @@ class RepomConfig(Config):
             return f"{base}_dev"
 
     @property
-    def redis_port(self) -> int:
-        """Redis ポート番号（デフォルト: 6379）
-
-        後方互換のためのショートカットです。
-        REDIS_PORT による上書きは apply_redis_env_overrides() が
-        config.redis.port に反映します。
-
-        使用例:
-            # デフォルト
-            config.redis_port => 6379
-
-            # 環境変数で指定
-            REDIS_PORT=6380
-        """
-        return self.redis.port
-
-    @property
     def db_url(self) -> Optional[str]:
         """データベースURL（SQLite/PostgreSQL 自動切り替え）
 

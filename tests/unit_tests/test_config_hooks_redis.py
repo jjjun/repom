@@ -23,7 +23,6 @@ def test_apply_redis_env_overrides_applies_port(monkeypatch):
     apply_redis_env_overrides(config)
 
     assert config.redis.port == 6381
-    assert config.redis_port == 6381
 
 
 def test_apply_redis_env_overrides_rejects_non_integer(monkeypatch):
@@ -61,7 +60,6 @@ def test_repom_config_singleton_applies_redis_port_env(monkeypatch):
 
     try:
         assert reloaded.config.redis.port == 6390
-        assert reloaded.config.redis_port == 6390
     finally:
         monkeypatch.delenv("REDIS_PORT", raising=False)
         importlib.reload(config_module)

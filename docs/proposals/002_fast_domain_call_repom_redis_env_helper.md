@@ -69,7 +69,7 @@ ownership stays in repom instead of being duplicated downstream.
 ## repom Follow-Up
 
 - [x] Add `repom.config_hooks.redis.apply_redis_env_overrides()`
-- [x] Make `RepomConfig.redis_port` return `self.redis.port`
+- [x] Remove `RepomConfig.redis_port`; use `config.redis.port`
 - [x] Apply the helper after `CONFIG_HOOK` in `repom.config`
 - [x] Document the helper in repom guides
 - [ ] Delete this proposal after fast-domain adopts or rejects the change
