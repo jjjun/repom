@@ -49,6 +49,6 @@ def hook_config(config: dataclass) -> dataclass:
         config.redis.port = 6380
         # config.redis.password = 'your_redis_password'  # 必要に応じて
 
-    apply_redis_env_overrides(config)
+        apply_redis_env_overrides(config)
 
     return config

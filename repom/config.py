@@ -5,12 +5,15 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Set
+from typing import List, Optional, Set
 
 from basekit.config_hook import Config, get_config_from_hook
+
 from repom.config_hooks.redis import apply_redis_env_overrides
 from repom.postgres.config import (
     PgAdminConfig as _PgAdminConfig,
+)
+from repom.postgres.config import (
     PostgresConfig as _PostgresConfig,
 )
 from repom.redis.config import RedisConfig as _RedisConfig
@@ -24,7 +27,9 @@ class RepomConfig(Config):
     # モデル自動インポート設定
     model_locations: List[str] = field(default_factory=list, init=False, repr=False)
     model_excluded_dirs: Set[str] = field(default_factory=set, init=False, repr=False)
-    allowed_package_prefixes: Set[str] = field(default_factory=lambda: {'repom.'}, init=False, repr=False)
+    allowed_package_prefixes: Set[str] = field(
+        default_factory=lambda: {"repom."}, init=False, repr=False
+    )
     model_import_strict: bool = field(default=False, init=False, repr=False)
 
     # データベース設定 (機能別に分離)
@@ -49,7 +54,7 @@ class RepomConfig(Config):
 
     # SQLAlchemy クエリログ設定
     _enable_sqlalchemy_echo: bool = field(default=False, init=False, repr=False)
-    _sqlalchemy_echo_level: str = field(default='INFO', init=False, repr=False)
+    _sqlalchemy_echo_level: str = field(default="INFO", init=False, repr=False)
 
     def __post_init__(self):
         """dataclassの初期化後に実行"""
@@ -67,10 +72,7 @@ class RepomConfig(Config):
         # db_file は property で自動計算されるため、ここでの初期化は不要
 
         if self.auto_create_dirs:
-            self._ensure_path_exists([
-                self.db_backup_path,
-                self.master_data_path
-            ])
+            self._ensure_path_exists([self.db_backup_path, self.master_data_path])
 
     @property
     def db_type(self) -> str:
@@ -92,12 +94,14 @@ class RepomConfig(Config):
         if self._db_type is not None:
             return self._db_type
 
-        return 'sqlite'
+        return "sqlite"
 
     @db_type.setter
     def db_type(self, value: str):
-        if value not in ('sqlite', 'postgres'):
-            raise ValueError(f"Invalid DB_TYPE: {value}. Must be 'sqlite' or 'postgres'.")
+        if value not in ("sqlite", "postgres"):
+            raise ValueError(
+                f"Invalid DB_TYPE: {value}. Must be 'sqlite' or 'postgres'."
+            )
         self._db_type = value
 
     @property
@@ -151,11 +155,11 @@ class RepomConfig(Config):
         base = self.db_name
         env = self.exec_env
 
-        if env == 'test':
+        if env == "test":
             return f"{base}_test"
-        elif env == 'dev':
+        elif env == "dev":
             return f"{base}_dev"
-        elif env == 'prod':
+        elif env == "prod":
             return base
         else:
             return f"{base}_dev"
@@ -197,7 +201,7 @@ class RepomConfig(Config):
             return self._db_url
 
         # PostgreSQL
-        if self.db_type == 'postgres':
+        if self.db_type == "postgres":
             return (
                 f"postgresql+psycopg://{self.postgres.user}:{self.postgres.password}"
                 f"@{self.postgres.host}:{self.postgres.port}/{self.postgres_db}"
@@ -206,15 +210,23 @@ class RepomConfig(Config):
         # SQLite: テスト環境では in-memory をデフォルトに
         # ただし SQLITE_USE_FILE_DB=1 が設定されている場合はファイルベースを使用
         # （subprocess 間で DB 状態を共有する必要がある場合などに使用）
-        use_file_db = os.environ.get('SQLITE_USE_FILE_DB', '').lower() in ('1', 'true', 'yes')
-        if self.exec_env == 'test' and self.sqlite.use_in_memory_for_tests and not use_file_db:
-            return 'sqlite:///:memory:'
+        use_file_db = os.environ.get("SQLITE_USE_FILE_DB", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if (
+            self.exec_env == "test"
+            and self.sqlite.use_in_memory_for_tests
+            and not use_file_db
+        ):
+            return "sqlite:///:memory:"
 
         # SQLite: 通常環境ではファイルベース
         db_path = self.sqlite.db_path if self.sqlite.db_path else self.data_path
         db_file = self.sqlite.db_file  # property で自動計算される
         if db_file:
-            return f'sqlite:///{db_path}/{db_file}'
+            return f"sqlite:///{db_path}/{db_file}"
         return None
 
     @db_url.setter
@@ -232,7 +244,7 @@ class RepomConfig(Config):
         if self._db_backup_path is not None:
             return self._db_backup_path
         if self.data_path:
-            base_backup_path = Path(self.data_path) / 'backups'
+            base_backup_path = Path(self.data_path) / "backups"
             return str(base_backup_path / self.db_type)
         return None
 
@@ -246,7 +258,7 @@ class RepomConfig(Config):
         if self._master_data_path is not None:
             return self._master_data_path
         if self.root_path:
-            return str(Path(self.root_path) / 'data_master')
+            return str(Path(self.root_path) / "data_master")
         return None
 
     @master_data_path.setter
@@ -310,7 +322,7 @@ class RepomConfig(Config):
 
     @sqlalchemy_echo_level.setter
     def sqlalchemy_echo_level(self, value: str):
-        if value not in ('INFO', 'DEBUG'):
+        if value not in ("INFO", "DEBUG"):
             raise ValueError(f"Invalid log level: {value}. Must be 'INFO' or 'DEBUG'.")
         self._sqlalchemy_echo_level = value
 
@@ -374,39 +386,41 @@ class RepomConfig(Config):
         - PostgreSQL: https://docs.sqlalchemy.org/en/20/dialects/postgresql.html
         """
         # PostgreSQL
-        if self.db_type == 'postgres':
+        if self.db_type == "postgres":
             return {
-                'pool_size': 10,
-                'max_overflow': 20,
-                'pool_timeout': 30,
-                'pool_recycle': 3600,
-                'pool_pre_ping': True,
+                "pool_size": 10,
+                "max_overflow": 20,
+                "pool_timeout": 30,
+                "pool_recycle": 3600,
+                "pool_pre_ping": True,
             }
 
         # SQLite :memory: DB の場合は、StaticPool を使用して単一接続を全スレッドで共有
-        is_memory_db = self.db_url and ':memory:' in self.db_url
+        is_memory_db = self.db_url and ":memory:" in self.db_url
 
         if is_memory_db:
             # :memory: DB 用の設定（StaticPool を使用）
             from sqlalchemy.pool import StaticPool
 
             kwargs = {
-                'poolclass': StaticPool,  # 単一接続を全スレッドで共有
-                'connect_args': {'check_same_thread': False},  # スレッド安全性チェックを無効化
+                "poolclass": StaticPool,  # 単一接続を全スレッドで共有
+                "connect_args": {
+                    "check_same_thread": False
+                },  # スレッド安全性チェックを無効化
             }
         else:
             # ファイルベース SQLite 用の完全な設定
             kwargs = {
-                'pool_size': 10,          # 接続プール数
-                'max_overflow': 20,       # 最大オーバーフロー接続数
-                'pool_timeout': 30,       # 接続待機タイムアウト（秒）
-                'pool_recycle': 3600,     # 接続の再利用時間（秒）
-                'pool_pre_ping': True,    # 接続前のpingチェック
+                "pool_size": 10,  # 接続プール数
+                "max_overflow": 20,  # 最大オーバーフロー接続数
+                "pool_timeout": 30,  # 接続待機タイムアウト（秒）
+                "pool_recycle": 3600,  # 接続の再利用時間（秒）
+                "pool_pre_ping": True,  # 接続前のpingチェック
             }
 
             # SQLite ファイルベースの場合は check_same_thread を無効化
-            if self.db_url and self.db_url.startswith('sqlite'):
-                kwargs['connect_args'] = {'check_same_thread': False}
+            if self.db_url and self.db_url.startswith("sqlite"):
+                kwargs["connect_args"] = {"check_same_thread": False}
 
         return kwargs
 
@@ -417,8 +431,6 @@ config.root_path = str(Path(__file__).parent.parent)
 
 # hook
 config = get_config_from_hook(config)
-
-apply_redis_env_overrides(config)
 
 config.init()
 
