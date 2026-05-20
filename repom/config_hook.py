@@ -1,6 +1,8 @@
 ﻿from dataclasses import dataclass
 from pathlib import Path
 
+from repom.config_hooks.redis import apply_redis_env_overrides
+
 
 def hook_config(config: dataclass) -> dataclass:
     """設定フック関数
@@ -46,5 +48,7 @@ def hook_config(config: dataclass) -> dataclass:
         config.redis.container.container_name = "repom_redis"
         config.redis.port = 6380
         # config.redis.password = 'your_redis_password'  # 必要に応じて
+
+    apply_redis_env_overrides(config)
 
     return config

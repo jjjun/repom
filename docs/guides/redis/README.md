@@ -52,6 +52,10 @@ uv run redis_stop
 REDIS_PORT=6380
 ```
 
+`REDIS_PORT` is applied by `repom.config_hooks.redis.apply_redis_env_overrides()`.
+The helper writes the parsed value to `config.redis.port`; `config.redis_port`
+is only a backward-compatible shortcut that returns the same field.
+
 ### config でのカスタマイズ
 
 RepomConfig の `redis` フィールドで詳細設定が可能です：

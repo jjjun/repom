@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, List, Set
 
 from basekit.config_hook import Config, get_config_from_hook
+from repom.config_hooks.redis import apply_redis_env_overrides
 from repom.postgres.config import (
     PgAdminConfig as _PgAdminConfig,
     PostgresConfig as _PostgresConfig,
@@ -163,7 +164,9 @@ class RepomConfig(Config):
     def redis_port(self) -> int:
         """Redis ポート番号（デフォルト: 6379）
 
-        環境変数 REDIS_PORT で上書き可能
+        後方互換のためのショートカットです。
+        REDIS_PORT による上書きは apply_redis_env_overrides() が
+        config.redis.port に反映します。
 
         使用例:
             # デフォルト
@@ -172,8 +175,7 @@ class RepomConfig(Config):
             # 環境変数で指定
             REDIS_PORT=6380
         """
-        from os import getenv
-        return int(getenv('REDIS_PORT', '6379'))
+        return self.redis.port
 
     @property
     def db_url(self) -> Optional[str]:
@@ -432,6 +434,8 @@ config.root_path = str(Path(__file__).parent.parent)
 
 # hook
 config = get_config_from_hook(config)
+
+apply_redis_env_overrides(config)
 
 config.init()
 
