@@ -7,7 +7,7 @@
 | ID | 003 |
 | Target project / package | fast-domain |
 | Type | migration |
-| Status | draft |
+| Status | implemented |
 | Created | 2026-05-22 |
 | Updated | 2026-05-22 |
 
@@ -84,7 +84,8 @@ values from local development, CI, and deployment secrets to win.
 - [x] Expand Redis runtime env helper
 - [x] Add SQLite runtime env helper
 - [x] Document helper call order in repom
-- [ ] Delete this proposal after fast-domain adopts or rejects the change
+- [x] fast-domain adopted the change
+- [ ] Delete this proposal if the team wants to remove implemented cross-repo notes
 
 ---
 
@@ -109,8 +110,16 @@ values from local development, CI, and deployment secrets to win.
 - fast-domain still needs an explicit hook/doc update because its defaults live
   outside this repository.
 
+### 2026-05-22 - fast-domain
+
+- fast-domain updated `fast_domain.config_hook:hook_config` to call the repom
+  database, PostgreSQL, pgAdmin, Redis, and SQLite runtime env override helpers
+  after local defaults.
+- fast-domain updated config hook docs and added `.env.example` entries for the
+  supported runtime env overrides.
+
 ---
 
 ## Decision
 
-Pending fast-domain follow-up.
+Implemented in fast-domain.
