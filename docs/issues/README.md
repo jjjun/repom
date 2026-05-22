@@ -32,6 +32,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 作成日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #073 | postgres / pgadmin の env override helper を `repom/config_hooks/` に追加 | 2026-05-22 | `apply_redis_env_overrides` と同じ薄さで `apply_postgres_env_overrides` / `apply_pgadmin_env_overrides` を追加。環境変数名は公式 Docker イメージ準拠（`POSTGRES_USER` / `PGADMIN_DEFAULT_EMAIL` 等）。`repom/config.py` の未使用 import 削除も含む | [active/073_postgres_pgadmin_env_override_hooks.md](active/073_postgres_pgadmin_env_override_hooks.md) |
 
 詳細は各ファイルを参照してください.
 
@@ -204,4 +205,4 @@ completed/
 └── 2024/
 ```
 
-最終更新: 2026-05-19（Issue #068〜#072 を active に追加、消費プロジェクト調査結果を反映）
+最終更新: 2026-05-22（Issue #073 を active に追加 — postgres/pgadmin の env override helper）
