@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Set
@@ -206,18 +205,12 @@ class RepomConfig(Config):
                 f"@{self.postgres.host}:{self.postgres.port}/{self.postgres_db}"
             )
 
-        # SQLite: テスト環境では in-memory をデフォルトに
-        # ただし SQLITE_USE_FILE_DB=1 が設定されている場合はファイルベースを使用
-        # （subprocess 間で DB 状態を共有する必要がある場合などに使用）
-        use_file_db = os.environ.get("SQLITE_USE_FILE_DB", "").lower() in (
-            "1",
-            "true",
-            "yes",
-        )
+        # SQLite: テスト環境では in-memory をデフォルトにする。
+        # ファイルベースが必要な場合は config.sqlite.use_in_memory_for_tests
+        # または repom.config_hooks.sqlite の env override helper で切り替える。
         if (
             self.exec_env == "test"
             and self.sqlite.use_in_memory_for_tests
-            and not use_file_db
         ):
             return "sqlite:///:memory:"
 

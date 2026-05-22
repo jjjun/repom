@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from repom.config_hooks._parsing import parse_port_env
+
 
 def apply_postgres_env_overrides(config: Any) -> None:
     """Apply PostgreSQL runtime overrides from environment variables.
@@ -29,15 +31,7 @@ def apply_postgres_env_overrides(config: Any) -> None:
     if raw_port is None:
         return
 
-    try:
-        port = int(raw_port)
-    except ValueError as exc:
-        raise ValueError("POSTGRES_PORT must be an integer") from exc
-
-    if not (0 < port < 65536):
-        raise ValueError("POSTGRES_PORT must be between 1 and 65535")
-
-    postgres.port = port
+    postgres.port = parse_port_env("POSTGRES_PORT", raw_port)
 
 
 __all__ = [

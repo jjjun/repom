@@ -49,11 +49,16 @@ uv run redis_stop
 
 ```bash
 # Redis ポートをカスタマイズ（デフォルト: 6379）
+REDIS_HOST=127.0.0.1
 REDIS_PORT=6380
+REDIS_PASSWORD=secret
+REDIS_DB=0
 ```
 
-`REDIS_PORT` is applied by `repom.config_hooks.redis.apply_redis_env_overrides()`.
-The helper writes the parsed value to `config.redis.port`.
+These values are applied by
+`repom.config_hooks.redis.apply_redis_env_overrides()`. The helper writes the
+parsed values to `config.redis.host`, `config.redis.port`,
+`config.redis.password`, and `config.redis.database`.
 
 ### config でのカスタマイズ
 

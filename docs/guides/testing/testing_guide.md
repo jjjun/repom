@@ -1,5 +1,24 @@
 ﻿# Testing Guide - repom
 
+## SQLite Runtime Env Overrides
+
+SQLite test database behavior can be adjusted through
+`repom.config_hooks.sqlite.apply_sqlite_env_overrides()` when the helper is
+called from `CONFIG_HOOK`.
+
+Supported variables:
+
+| Variable | Effect |
+|---|---|
+| `SQLITE_DB_PATH` | Sets `config.sqlite.db_path` |
+| `SQLITE_DB_FILE` | Sets `config.sqlite.db_file` |
+| `SQLITE_USE_IN_MEMORY_FOR_TESTS` | Boolean override for `config.sqlite.use_in_memory_for_tests` |
+| `SQLITE_USE_FILE_DB` | Compatibility shortcut that forces file-backed test DBs |
+
+For new config hooks, prefer `SQLITE_USE_IN_MEMORY_FOR_TESTS=false` over
+`SQLITE_USE_FILE_DB=1`. `SQLITE_USE_FILE_DB` remains supported for existing
+test and subprocess workflows.
+
 ## 概要
 
 repom は **Transaction Rollback パターン** と **インメモリDB** を採用し、高速かつ分離されたテスト環境を提供します。

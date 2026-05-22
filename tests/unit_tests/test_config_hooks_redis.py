@@ -7,13 +7,29 @@ from repom.config import RepomConfig
 from repom.config_hooks.redis import apply_redis_env_overrides
 
 
-def test_apply_redis_env_overrides_does_nothing_when_unset(monkeypatch):
-    monkeypatch.delenv("REDIS_PORT", raising=False)
+REDIS_ENV_NAMES = (
+    "REDIS_HOST",
+    "REDIS_PORT",
+    "REDIS_PASSWORD",
+    "REDIS_DB",
+)
+
+
+@pytest.fixture(autouse=True)
+def clear_redis_env(monkeypatch):
+    for name in REDIS_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_apply_redis_env_overrides_does_nothing_when_unset():
     config = RepomConfig()
 
     apply_redis_env_overrides(config)
 
+    assert config.redis.host == "localhost"
     assert config.redis.port == 6379
+    assert config.redis.password is None
+    assert config.redis.database == 0
 
 
 def test_apply_redis_env_overrides_applies_port(monkeypatch):
@@ -23,6 +39,44 @@ def test_apply_redis_env_overrides_applies_port(monkeypatch):
     apply_redis_env_overrides(config)
 
     assert config.redis.port == 6381
+
+
+@pytest.mark.parametrize(
+    ("env_name", "value", "attribute", "expected"),
+    [
+        ("REDIS_HOST", "redis.local", "host", "redis.local"),
+        ("REDIS_PASSWORD", "secret", "password", "secret"),
+        ("REDIS_DB", "2", "database", 2),
+    ],
+)
+def test_apply_redis_env_overrides_applies_connection_env(
+    monkeypatch,
+    env_name,
+    value,
+    attribute,
+    expected,
+):
+    monkeypatch.setenv(env_name, value)
+    config = RepomConfig()
+
+    apply_redis_env_overrides(config)
+
+    assert getattr(config.redis, attribute) == expected
+
+
+def test_apply_redis_env_overrides_applies_all_envs(monkeypatch):
+    monkeypatch.setenv("REDIS_HOST", "redis.local")
+    monkeypatch.setenv("REDIS_PORT", "6381")
+    monkeypatch.setenv("REDIS_PASSWORD", "secret")
+    monkeypatch.setenv("REDIS_DB", "2")
+    config = RepomConfig()
+
+    apply_redis_env_overrides(config)
+
+    assert config.redis.host == "redis.local"
+    assert config.redis.port == 6381
+    assert config.redis.password == "secret"
+    assert config.redis.database == 2
 
 
 def test_apply_redis_env_overrides_rejects_non_integer(monkeypatch):
@@ -42,6 +96,22 @@ def test_apply_redis_env_overrides_rejects_out_of_range(monkeypatch, value):
         apply_redis_env_overrides(config)
 
 
+def test_apply_redis_env_overrides_rejects_non_integer_db(monkeypatch):
+    monkeypatch.setenv("REDIS_DB", "invalid")
+    config = RepomConfig()
+
+    with pytest.raises(ValueError, match="REDIS_DB must be an integer"):
+        apply_redis_env_overrides(config)
+
+
+def test_apply_redis_env_overrides_rejects_negative_db(monkeypatch):
+    monkeypatch.setenv("REDIS_DB", "-1")
+    config = RepomConfig()
+
+    with pytest.raises(ValueError, match="REDIS_DB must be greater than or equal to 0"):
+        apply_redis_env_overrides(config)
+
+
 def test_apply_redis_env_overrides_ignores_config_without_redis(monkeypatch):
     @dataclass
     class ConfigWithoutRedis:
@@ -55,11 +125,18 @@ def test_apply_redis_env_overrides_ignores_config_without_redis(monkeypatch):
 def test_repom_config_singleton_applies_redis_port_env(monkeypatch):
     import repom.config as config_module
 
+    monkeypatch.setenv("REDIS_HOST", "env-redis")
     monkeypatch.setenv("REDIS_PORT", "6390")
+    monkeypatch.setenv("REDIS_PASSWORD", "env-secret")
+    monkeypatch.setenv("REDIS_DB", "3")
     reloaded = importlib.reload(config_module)
 
     try:
+        assert reloaded.config.redis.host == "env-redis"
         assert reloaded.config.redis.port == 6390
+        assert reloaded.config.redis.password == "env-secret"
+        assert reloaded.config.redis.database == 3
     finally:
-        monkeypatch.delenv("REDIS_PORT", raising=False)
+        for name in REDIS_ENV_NAMES:
+            monkeypatch.delenv(name, raising=False)
         importlib.reload(config_module)

@@ -41,6 +41,7 @@ completed/     → 実装完了・コミット済み
 
 | ID | タイトル | 完了日 | 概要 | ファイル |
 |----|---------|--------|------|---------|
+| #074 | runtime env override helper の対象拡張と利用プロジェクト向け提案 | 2026-05-22 | `apply_database_env_overrides` / `apply_sqlite_env_overrides` を追加し、Redis helper を `REDIS_HOST` / `REDIS_PASSWORD` / `REDIS_DB` 対応へ拡張。資料更新と fast-domain / mine-py 向け proposal を作成。`uv run pytest` passed | [completed/074_runtime_env_override_expansion.md](completed/074_runtime_env_override_expansion.md) |
 | #073 | postgres / pgadmin の env override helper を `repom/config_hooks/` に追加 | 2026-05-22 | `apply_postgres_env_overrides` / `apply_pgadmin_env_overrides` を追加し、公式 Docker env 名で接続・認証情報を上書き可能にした。repom 自身の `config_hook.py` に呼び出し例を追加し、`repom/config.py` の未使用 import も削除。`tests/unit_tests` passed | [completed/073_postgres_pgadmin_env_override_hooks.md](completed/073_postgres_pgadmin_env_override_hooks.md) |
 | #072 | `postgres/manage.py` / `redis/manage.py` のモジュール関数 `get_compose_dir` / `get_init_dir` を削除 | 2026-05-19 | compose/init directory は Manager メソッド経由に統一し、module-level wrapper を削除。postgres/redis の生成処理とテストを Manager 経由へ更新し、削除 import が ImportError になることを確認。`tests/unit_tests` passed | [completed/072_drop_module_level_compose_init_dir_wrappers.md](completed/072_drop_module_level_compose_init_dir_wrappers.md) |
 | #071 | `repom/config.py` の後方互換 re-export を削除 | 2026-05-19 | `repom.config` から feature config classes の明示 import をできない形にし、`RepomConfig` 内部は private alias で保持。テストとガイドを feature module 直接 import へ更新し、fast-domain / mine-py 本体に影響なしを確認。`tests/unit_tests` passed | [completed/071_drop_repom_config_compat_reexports.md](completed/071_drop_repom_config_compat_reexports.md) |
@@ -205,4 +206,4 @@ completed/
 └── 2024/
 ```
 
-最終更新: 2026-05-22（Issue #073 完了 — postgres/pgadmin の env override helper）
+最終更新: 2026-05-22（Issue #074 完了 — runtime env override helper 拡張）

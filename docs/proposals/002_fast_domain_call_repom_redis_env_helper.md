@@ -7,13 +7,18 @@
 | ID | 002 |
 | Target project / package | fast-domain |
 | Type | migration |
-| Status | draft |
+| Status | superseded |
 | Created | 2026-05-20 |
 | Updated | 2026-05-20 |
 
 ---
 
 ## Background
+
+Superseded by
+[`003_fast_domain_apply_runtime_env_overrides.md`](003_fast_domain_apply_runtime_env_overrides.md),
+which covers Redis plus the newer database, PostgreSQL, pgAdmin, and SQLite
+runtime override helpers.
 
 repom now owns Redis environment override handling through
 `repom.config_hooks.redis.apply_redis_env_overrides()`. The helper applies the

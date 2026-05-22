@@ -145,6 +145,25 @@ EXEC_ENV=dev
 
 # CONFIG_HOOK: 親プロジェクトから設定を注入する場合
 # CONFIG_HOOK=mine_py:hook_config
+
+# Runtime override helpers (call from CONFIG_HOOK when using external hooks)
+DB_TYPE=postgres
+REPOM_DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/app_dev
+SQLALCHEMY_ECHO=false
+SQLALCHEMY_ECHO_LEVEL=INFO
+POSTGRES_USER=repom
+POSTGRES_PASSWORD=repom_dev
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+PGADMIN_DEFAULT_EMAIL=admin@example.com
+PGADMIN_DEFAULT_PASSWORD=admin
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+SQLITE_DB_PATH=data
+SQLITE_DB_FILE=app_dev.sqlite3
+SQLITE_USE_IN_MEMORY_FOR_TESTS=true
 ```
 
 ### 初回セットアップの確認
@@ -522,6 +541,36 @@ hook パスを明示的に検証してください。
 - モデル自動インポート対象の追加
 - 許可パッケージ prefix の制御
 - テスト用 DB の切り替え
+
+### Runtime env override helpers
+
+`repom.config_hooks` provides small helpers for environment overrides. Use them
+at the end of a `CONFIG_HOOK` after project defaults are set:
+
+```python
+from repom.config_hooks.database import apply_database_env_overrides
+from repom.config_hooks.pgadmin import apply_pgadmin_env_overrides
+from repom.config_hooks.postgres import apply_postgres_env_overrides
+from repom.config_hooks.redis import apply_redis_env_overrides
+from repom.config_hooks.sqlite import apply_sqlite_env_overrides
+
+
+def hook_config(config):
+    # project defaults first
+    config.db_name = "myapp"
+
+    # env overrides last
+    apply_database_env_overrides(config)
+    apply_postgres_env_overrides(config)
+    apply_pgadmin_env_overrides(config)
+    apply_redis_env_overrides(config)
+    apply_sqlite_env_overrides(config)
+    return config
+```
+
+`REPOM_DATABASE_URL` takes precedence over `DATABASE_URL`. `SQLITE_USE_FILE_DB`
+is still supported for compatibility; new code should prefer
+`SQLITE_USE_IN_MEMORY_FOR_TESTS=false`.
 
 ---
 

@@ -301,10 +301,10 @@ REDIS_DB=0
 REDIS_PORT=6380 uv run redis_start
 ```
 
-`REDIS_PORT` is processed through
-`repom.config_hooks.redis.apply_redis_env_overrides()`. The helper validates
-that the value is an integer port between 1 and 65535, then writes it to
-`config.redis.port`.
+`REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, and `REDIS_DB` are processed
+through `repom.config_hooks.redis.apply_redis_env_overrides()`. The helper
+validates `REDIS_PORT` as an integer port between 1 and 65535 and validates
+`REDIS_DB` as a non-negative integer.
 
 #### その他の環境変数
 
