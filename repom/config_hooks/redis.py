@@ -7,7 +7,10 @@ from typing import Any
 
 
 def apply_redis_env_overrides(config: Any) -> None:
-    """Apply Redis runtime overrides from environment variables."""
+    """Apply Redis runtime overrides from environment variables.
+
+    Reads: REDIS_PORT.
+    """
     redis = getattr(config, "redis", None)
     if redis is None:
         return

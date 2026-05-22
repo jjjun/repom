@@ -9,7 +9,6 @@ from typing import List, Optional, Set
 
 from basekit.config_hook import Config, get_config_from_hook
 
-from repom.config_hooks.redis import apply_redis_env_overrides
 from repom.postgres.config import (
     PgAdminConfig as _PgAdminConfig,
 )
