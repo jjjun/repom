@@ -1,4 +1,4 @@
-﻿"""async test fixtures のテスト
+"""async test fixtures のテスト
 
 create_async_test_fixtures() によって作成される async_db_engine と
 async_db_test フィクスチャの動作を検証します。

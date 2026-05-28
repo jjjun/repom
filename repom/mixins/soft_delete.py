@@ -1,4 +1,4 @@
-﻿"""Soft delete functionality for SQLAlchemy models
+"""Soft delete functionality for SQLAlchemy models
 
 このモジュールは、SQLAlchemy モデルに論理削除機能を追加する Mixin を提供します。
 """

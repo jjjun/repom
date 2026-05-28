@@ -1,4 +1,4 @@
-﻿"""Display repom configuration information."""
+"""Display repom configuration information."""
 
 import os
 import sys
@@ -155,7 +155,7 @@ def test_redis_connection() -> str:
     try:
         import redis
 
-        # redis 繝｢繧ｸ繝･繝ｼ繝ｫ縺悟茜逕ｨ蜿ｯ閭ｽ縺ｪ縺ｮ縺ｧ縲，onnectionError 繧貞盾辣ｧ縺ｧ縺阪ｋ
+        # redis: connect and check the connection
         try:
             r = redis.Redis(
                 host=config.redis.host,
@@ -164,7 +164,7 @@ def test_redis_connection() -> str:
                 socket_keepalive=True,
                 health_check_interval=1
             )
-            r.ping()  # PING 繧ｳ繝槭Φ繝牙ｮ溯｡・
+            r.ping()  # send PING to verify the connection
             return "[OK] Connected"
         except redis.ConnectionError:
             return "[NG] Connection refused"

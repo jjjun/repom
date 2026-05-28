@@ -1,4 +1,4 @@
-﻿"""Redis Docker 
+"""Redis Docker 
 
 
     uv run redis_generate   # docker-compose.yml 

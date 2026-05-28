@@ -1,4 +1,4 @@
-﻿# fmt: off
+# fmt: off
 import os
 import sys
 import pytest

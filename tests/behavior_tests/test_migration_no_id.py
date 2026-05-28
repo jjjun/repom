@@ -1,4 +1,4 @@
-﻿"""Integration tests for Alembic migration generation with use_id=False models
+"""Integration tests for Alembic migration generation with use_id=False models
 
 このテストはAlembicのマイグレーションファイル生成を実際に行い、
 use_id=Falseのモデルに対してidカラムが生成されないことを確認します。

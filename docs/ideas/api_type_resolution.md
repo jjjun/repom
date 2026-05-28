@@ -1,4 +1,4 @@
-﻿# FastAPI/Flask での API 型解決
+# FastAPI/Flask での API 型解決
 
 ## ステータス
 - **段階**: アイディア

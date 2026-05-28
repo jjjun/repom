@@ -1,4 +1,4 @@
-﻿"""
+"""
 
 Issue #020: 
 https://github.com/repom/issues/020

@@ -1,4 +1,4 @@
-﻿from contextlib import contextmanager
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from collections.abc import Sequence
 from typing import Any, Callable, Type, TypeVar, Generic, Optional, List, Dict, Union, get_args

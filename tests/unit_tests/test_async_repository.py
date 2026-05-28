@@ -1,4 +1,4 @@
-﻿"""
+"""
 AsyncBaseRepository の非同期版テスト
 
 test_repository.py の全テストケースを非同期版に変換したもの。

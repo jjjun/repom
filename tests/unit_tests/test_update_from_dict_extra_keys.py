@@ -1,4 +1,4 @@
-﻿"""
+"""
 update_from_dict() が余計なキー（モデルに存在しないキー）と読み取り専用プロパティを正しく処理することを確認
 """
 from sqlalchemy import String, Integer, ForeignKey

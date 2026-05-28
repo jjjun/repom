@@ -1,4 +1,4 @@
-﻿"""Tests for Redis Docker Manager integration"""
+"""Tests for Redis Docker Manager integration"""
 
 import subprocess
 from pathlib import Path

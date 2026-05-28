@@ -1,4 +1,4 @@
-﻿from enum import Enum as PyEnum
+from enum import Enum as PyEnum
 from typing import Literal
 
 import pytest

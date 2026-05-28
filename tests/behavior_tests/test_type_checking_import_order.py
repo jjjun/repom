@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test for TYPE_CHECKING import order issue with auto_import_models
 
 This test reproduces the issue described in:

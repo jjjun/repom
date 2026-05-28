@@ -1,4 +1,4 @@
-﻿# Issue #010: BaseModel への UUID サポート追加
+# Issue #010: BaseModel への UUID サポート追加
 
 **ステータス**: ✅ 完了
 

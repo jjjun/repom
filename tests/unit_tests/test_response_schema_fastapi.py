@@ -1,4 +1,4 @@
-﻿"""FastAPI integration tests for get_response_schema
+"""FastAPI integration tests for get_response_schema
 
 このテストファイルは実際のFastAPIアプリケーションを起動し、
 get_response_schema()で生成されたスキーマがresponse_modelとして

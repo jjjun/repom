@@ -1,4 +1,4 @@
-﻿"""Tests for BaseModelAuto.get_create_schema and server_default handling"""
+"""Tests for BaseModelAuto.get_create_schema and server_default handling"""
 
 from typing import Optional
 

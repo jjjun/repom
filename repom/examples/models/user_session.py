@@ -1,4 +1,4 @@
-﻿"""
+"""
 User session model without id column.
 Uses composite primary key (user_id, session_token) instead.
 

@@ -1,4 +1,4 @@
-﻿# Testing Guide - repom
+# Testing Guide - repom
 
 ## SQLite Runtime Env Overrides
 

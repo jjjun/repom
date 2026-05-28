@@ -1,4 +1,4 @@
-﻿"""
+"""
 AsyncBaseRepository の options パラメータ（eager loading）のテスト
 
 test_repository_options.py の全テストケースを非同期版に変換したもの。

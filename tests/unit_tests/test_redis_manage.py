@@ -1,4 +1,4 @@
-﻿"""Tests for Redis management functions.
+"""Tests for Redis management functions.
 
 Tests verify that redis/manage.py correctly uses config values for:
 - Container naming

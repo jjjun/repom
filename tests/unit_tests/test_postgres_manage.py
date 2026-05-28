@@ -1,4 +1,4 @@
-﻿"""PostgreSQL manage.py 
+"""PostgreSQL manage.py 
 
 DockerService, Volume  docker-compose.yml 
 """

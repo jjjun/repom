@@ -1,4 +1,4 @@
-﻿"""BaseModelAuto の Response スキーマ生成機能をテスト"""
+"""BaseModelAuto の Response スキーマ生成機能をテスト"""
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import Optional

@@ -1,4 +1,4 @@
-﻿"""Tests for BaseModel with use_id=False"""
+"""Tests for BaseModel with use_id=False"""
 
 from tests._init import *
 from sqlalchemy import String, Date, Time, inspect

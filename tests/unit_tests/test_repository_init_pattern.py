@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test different repository initialization patterns
 """
 import pytest

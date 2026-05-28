@@ -1,4 +1,4 @@
-﻿"""
+"""
 BaseRepository の options パラメータ（eager loading）のテスト
 
 N+1 問題を解決するための joinedload, selectinload などの

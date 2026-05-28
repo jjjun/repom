@@ -1,4 +1,4 @@
-﻿import json
+import json
 from sqlalchemy.types import TypeDecorator, TEXT
 from typing import Any, Optional, Union
 

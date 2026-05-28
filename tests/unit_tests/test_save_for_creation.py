@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test to verify if save() method can be used for entity creation (not just updates)
 """
 import pytest

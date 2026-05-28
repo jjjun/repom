@@ -1,4 +1,4 @@
-﻿# SoftDelete ガイド（論理削除）
+# SoftDelete ガイド（論理削除）
 
 **目的**: repom の論理削除（SoftDelete）機能を理解する
 

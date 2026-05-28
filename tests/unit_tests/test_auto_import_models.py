@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for discovery-based model import functions and configuration integration.
 
 This test suite verifies:

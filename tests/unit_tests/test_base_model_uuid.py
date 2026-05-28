@@ -1,4 +1,4 @@
-﻿"""Tests for BaseModel UUID support
+"""Tests for BaseModel UUID support
 
 BaseModel の use_uuid=True パラメータによる UUID 主キーのサポートをテスト。
 

@@ -1,4 +1,4 @@
-﻿from tests._init import *
+from tests._init import *
 from typing import List, Type, Optional
 from datetime import datetime, date as date_type
 from sqlalchemy.orm import Mapped, mapped_column

@@ -1,4 +1,4 @@
-﻿"""
+"""
 マルチスレッド環境での :memory: DB アクセステスト
 
 FastAPI の starlette.concurrency.run_in_threadpool を模倣して、

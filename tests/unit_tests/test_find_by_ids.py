@@ -1,4 +1,4 @@
-﻿"""find_by_ids() メソッドのテスト
+"""find_by_ids() メソッドのテスト
 
 BaseRepository.find_by_ids() の機能をテストします。
 N+1 問題を解決するための一括取得メソッドです。

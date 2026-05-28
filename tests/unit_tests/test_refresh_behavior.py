@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test to verify if refresh() is needed after commit for AutoDateTime fields.
 
 This test verifies the claim in the mine-py issue document:

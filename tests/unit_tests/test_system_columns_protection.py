@@ -1,4 +1,4 @@
-﻿"""システムカラムの保護とupdated_atの自動更新をテスト"""
+"""システムカラムの保護とupdated_atの自動更新をテスト"""
 import pytest
 from datetime import datetime
 from time import sleep

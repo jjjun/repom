@@ -1,4 +1,4 @@
-﻿"""Mock config hook - simulates mine-py's hook_config function."""
+"""Mock config hook - simulates mine-py's hook_config function."""
 from pathlib import Path
 from dataclasses import dataclass
 

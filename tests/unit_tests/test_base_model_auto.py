@@ -1,4 +1,4 @@
-﻿"""Tests for BaseModelAuto with use_id フラグ"""
+"""Tests for BaseModelAuto with use_id フラグ"""
 
 from tests._init import *
 from sqlalchemy import String, Integer, Date, Time, inspect

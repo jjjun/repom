@@ -1,4 +1,4 @@
-﻿"""repom.models - SQLAlchemy model base classes
+"""repom.models - SQLAlchemy model base classes
 
 このモジュールは、SQLAlchemy モデルの基底クラスを提供します。
 

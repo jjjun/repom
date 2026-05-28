@@ -1,4 +1,4 @@
-﻿"""Tests for get_response_schema with forward references (前方参照のテスト)
+"""Tests for get_response_schema with forward references (前方参照のテスト)
 
 このテストファイルは、FastAPIのresponse_modelでの実際の使用シナリオを想定して、
 前方参照の解決が正しく行われることを検証します。

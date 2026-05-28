@@ -1,4 +1,4 @@
-﻿"""test migration with version_locations
+"""test migration with version_locations
 
 Revision ID: 444134efd1f3
 Revises: 

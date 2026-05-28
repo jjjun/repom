@@ -1,4 +1,4 @@
-﻿"""
+"""
 database.py のユニットテスト（同期 API）
 
 DatabaseManager の同期セッション管理機能を検証します。

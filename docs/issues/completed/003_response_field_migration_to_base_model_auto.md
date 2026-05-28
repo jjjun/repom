@@ -1,4 +1,4 @@
-﻿# Issue #3: response_field 機能を BaseModelAuto に移行
+# Issue #3: response_field 機能を BaseModelAuto に移行
 
 ## Status
 - **Created**: 2025-11-14

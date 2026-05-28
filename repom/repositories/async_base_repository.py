@@ -1,4 +1,4 @@
-﻿"""
+"""
 Async Repository Pattern for repom.
 
 Provides AsyncBaseRepository for asynchronous database operations.

@@ -1,4 +1,4 @@
-﻿"""論理削除機能のテスト
+"""論理削除機能のテスト
 
 SoftDeletableMixin と BaseRepository の論理削除機能をテストします。
 

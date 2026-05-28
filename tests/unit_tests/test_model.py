@@ -1,4 +1,4 @@
-﻿from tests._init import *
+from tests._init import *
 from sqlalchemy import inspect
 from datetime import datetime
 

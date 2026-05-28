@@ -1,4 +1,4 @@
-﻿from tests._init import *
+from tests._init import *
 from sqlalchemy import Integer
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.custom_types.JSONEncoded import JSONEncoded

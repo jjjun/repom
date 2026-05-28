@@ -1,4 +1,4 @@
-﻿# Issue #007: Annotation Inheritance の実装検証
+# Issue #007: Annotation Inheritance の実装検証
 
 ## ステータス
 - **段階**: 完了

@@ -1,4 +1,4 @@
-﻿"""PostgreSQL Docker 
+"""PostgreSQL Docker 
 
 
     uv run postgres_generate  # docker-compose.yml 

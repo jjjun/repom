@@ -1,4 +1,4 @@
-﻿from dataclasses import dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
 from repom.config_hooks.database import apply_database_env_overrides

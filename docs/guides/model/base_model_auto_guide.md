@@ -1,4 +1,4 @@
-﻿# BaseModelAuto 完全ガイド
+# BaseModelAuto 完全ガイド
 
 **このドキュメントについて**: repom パッケージの BaseModelAuto によるスキーマ自動生成機能の完全ガイドです。SQLAlchemy モデルから Pydantic スキーマを自動生成し、FastAPI での開発を効率化します。
 

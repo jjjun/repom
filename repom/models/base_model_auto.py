@@ -1,4 +1,4 @@
-﻿"""自動スキーマ生成機能を持つ BaseModel 拡張
+"""自動スキーマ生成機能を持つ BaseModel 拡張
 
 このモジュールは、SQLAlchemy の mapped_column 定義から FastAPI の Pydantic スキーマを
 自動生成する機能を提供します。

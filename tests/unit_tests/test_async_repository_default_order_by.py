@@ -1,4 +1,4 @@
-﻿"""
+"""
 AsyncBaseRepository の default_order_by のテスト
 
 order_by=None および空文字が渡された場合に default_order_by が

@@ -1,4 +1,4 @@
-﻿# AsyncBaseRepository ガイド
+# AsyncBaseRepository ガイド
 
 **目的**: repom の `AsyncBaseRepository` による非同期データアクセスパターンを理解する
 

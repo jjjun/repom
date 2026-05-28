@@ -1,4 +1,4 @@
-﻿# Issue #018: Repository Default Eager Loading Options Support
+# Issue #018: Repository Default Eager Loading Options Support
 
 ## Status
 - **Created**: 2025-12-27

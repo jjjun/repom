@@ -1,4 +1,4 @@
-﻿"""
+"""
 Research: Can we control migration file location programmatically in env.py?
 
 Based on Alembic source code investigation:

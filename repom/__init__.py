@@ -1,4 +1,4 @@
-﻿"""repom - SQLAlchemy foundation package
+"""repom - SQLAlchemy foundation package
 
 このパッケージは、SQLAlchemy を使ったデータアクセス層の基盤を提供します。
 

@@ -1,4 +1,4 @@
-﻿"""
+"""
 create_test_fixtures を使ったマルチスレッドアクセステスト
 
 このテストは、実際のテストで使用される create_test_fixtures が

@@ -1,4 +1,4 @@
-﻿from sqlalchemy.types import TypeDecorator, JSON
+from sqlalchemy.types import TypeDecorator, JSON
 from sqlalchemy import func
 import json
 

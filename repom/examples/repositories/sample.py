@@ -1,4 +1,4 @@
-﻿from typing import Optional, List
+from typing import Optional, List
 from repom.examples.models.sample import SampleModel
 from repom import BaseRepository, FilterParams
 from repom.database import get_db_session

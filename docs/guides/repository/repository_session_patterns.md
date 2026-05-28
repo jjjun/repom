@@ -1,4 +1,4 @@
-﻿# Repository セッション管理パターンガイド
+# Repository セッション管理パターンガイド
 
 **目的**: BaseRepository でのセッション管理の仕組みと推奨パターンを理解する
 

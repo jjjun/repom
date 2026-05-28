@@ -1,4 +1,4 @@
-﻿from tests._init import *
+from tests._init import *
 from typing import List, Optional
 
 from sqlalchemy import Integer, String, desc, inspect

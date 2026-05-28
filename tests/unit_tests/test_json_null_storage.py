@@ -1,4 +1,4 @@
-﻿from tests._init import *
+from tests._init import *
 from typing import Any
 from sqlalchemy import Integer, text
 from sqlalchemy.orm import Mapped, mapped_column

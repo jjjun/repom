@@ -1,4 +1,4 @@
-﻿import os
+import os
 import inflect
 import unicodedata
 from typing import Optional
