@@ -1,209 +1,157 @@
-﻿# Issue Tracker - repom
+# Issue Tracker
 
-このディレクトリは、プロジェクトの改善提案と課題管理のためのドキュメントを格納します。
+`docs/issues/` is the local issue system for this repository. It is also the
+reference specification that `issuekit` enforces across all consuming repos.
 
-## ディレクトリ構造
+Do not confuse this local tracker with GitHub Issues.
 
+## Quick Start For Agents
+
+Before creating, completing, or reorganizing issues, run:
+
+```bash
+issuekit info
 ```
+
+After changing issue files, run:
+
+```bash
+issuekit generate-indexes
+issuekit validate
+```
+
+Prefer the completion command when closing an active issue:
+
+```bash
+issuekit complete <id> --summary "Completed scope." --verification "issuekit validate"
+```
+
+Do not hand-edit files under `docs/issues/indexes/`.
+
+## Language And Encoding
+
+All issue files must be written in English using ASCII characters only. This
+applies to frontmatter, headings, body text, progress notes, completion notes,
+summaries, and verification notes. This keeps issue files readable across
+shells, editors, and AI agents.
+
+## Directory Layout
+
+```text
 docs/issues/
-├── README.md              # このファイル、Issue 管理のインデックス
-├── active/                # 実装予定・作業中の Issue
-│   └── XXX_*.md          # Issue（着手前または作業中）
-└── completed/             # 完了・解決済み Issue
-    ├── 001_*.md          # Issue #1（完了済）
-    ├── 002_*.md          # Issue #2（完了済）
-    └── 003_*.md          # Issue #3（完了済）
+  README.md                  # this specification
+  active/                    # open, planned, investigating, or in-progress issues
+  completed/                 # completed issue source files
+  indexes/                   # generated issue indexes; never edit by hand
+    active.md
+    completed-recent.md
+    completed-001-099.md
+    ...
 ```
 
-## Issue ライフサイクル
+`README.md` does not contain the full issue table. Generated indexes are split
+so the system stays usable as completed issues grow.
 
+## Issue Metadata
+
+New issues must use YAML frontmatter. This ASCII frontmatter is the source of
+truth for scripts and agents.
+
+```yaml
+---
+id: 1
+status: active
+priority: medium
+created: 2026-05-28
+completed:
+title: Short issue title
+---
 ```
-active/        → 実装予定・作業中（着手前 + 進行中）
-    ↓
-completed/     → 実装完了・コミット済み
+
+Allowed `status` values: `active`, `planned`, `investigating`, `in_progress`,
+`completed`.
+
+Allowed `priority` values: `high`, `medium`, `low`.
+
+## Issue Lifecycle
+
+```text
+active/      -> active, planned, investigating, or in_progress
+completed/   -> completed
 ```
 
-### 番号ルール（重要）
+Move an issue to `completed/` only when the requested scope is genuinely done.
+If meaningful work remains, keep the issue active or create a follow-up issue
+and reference it from the completed issue.
 
-- `active/` のファイル名は Issue ID を維持する（例: `037_config_display_command.md`）
-- `completed/` へ移動する際も **ファイル名は変更しない**（例: `037_config_display_command.md`）
+## Creating A New Issue
 
-## 🚧 実装予定・作業中の Issue
+1. Run `issuekit info`.
+2. Use the reported next issue id.
+3. Create `docs/issues/active/NNN_slug.md` with a snake_case slug.
+4. Fill in the template below in English ASCII. Frontmatter is required.
+5. Run `issuekit generate-indexes`.
+6. Run `issuekit validate`.
 
-| ID | タイトル | 作成日 | 概要 | ファイル |
-|----|---------|--------|------|---------|
+The `NNN` id must be unique across both `active/` and `completed/`.
 
-詳細は各ファイルを参照してください.
+## Completing An Issue
 
----
+Prefer `issuekit complete <id> --summary "..." --verification "..."`. It updates
+frontmatter, appends completion notes, moves the file from `active/` to
+`completed/`, regenerates indexes, and validates the tracker.
 
-## 📋 完了済み Issue
-
-| ID | タイトル | 完了日 | 概要 | ファイル |
-|----|---------|--------|------|---------|
-| #074 | runtime env override helper の対象拡張と利用プロジェクト向け提案 | 2026-05-22 | `apply_database_env_overrides` / `apply_sqlite_env_overrides` を追加し、Redis helper を `REDIS_HOST` / `REDIS_PASSWORD` / `REDIS_DB` 対応へ拡張。資料更新と fast-domain / mine-py 向け proposal を作成。`uv run pytest` passed | [completed/074_runtime_env_override_expansion.md](completed/074_runtime_env_override_expansion.md) |
-| #073 | postgres / pgadmin の env override helper を `repom/config_hooks/` に追加 | 2026-05-22 | `apply_postgres_env_overrides` / `apply_pgadmin_env_overrides` を追加し、公式 Docker env 名で接続・認証情報を上書き可能にした。repom 自身の `config_hook.py` に呼び出し例を追加し、`repom/config.py` の未使用 import も削除。`tests/unit_tests` passed | [completed/073_postgres_pgadmin_env_override_hooks.md](completed/073_postgres_pgadmin_env_override_hooks.md) |
-| #072 | `postgres/manage.py` / `redis/manage.py` のモジュール関数 `get_compose_dir` / `get_init_dir` を削除 | 2026-05-19 | compose/init directory は Manager メソッド経由に統一し、module-level wrapper を削除。postgres/redis の生成処理とテストを Manager 経由へ更新し、削除 import が ImportError になることを確認。`tests/unit_tests` passed | [completed/072_drop_module_level_compose_init_dir_wrappers.md](completed/072_drop_module_level_compose_init_dir_wrappers.md) |
-| #071 | `repom/config.py` の後方互換 re-export を削除 | 2026-05-19 | `repom.config` から feature config classes の明示 import をできない形にし、`RepomConfig` 内部は private alias で保持。テストとガイドを feature module 直接 import へ更新し、fast-domain / mine-py 本体に影響なしを確認。`tests/unit_tests` passed | [completed/071_drop_repom_config_compat_reexports.md](completed/071_drop_repom_config_compat_reexports.md) |
-| #070 | `db_backup` / `db_restore` の Docker/host fallback パターン共通化 | 2026-05-19 | PostgreSQL の Docker/host 選択を `_backup_utils.run_postgres_via_docker_or_host()` に集約し、backup/restore の分岐を共通化。Docker 未導入時の host fallback も単体テストで確認。`tests/unit_tests` passed | [completed/070_unify_docker_host_fallback_pattern.md](completed/070_unify_docker_host_fallback_pattern.md) |
-| #069 | `repom/redis/__init__.py` の遅延 import `__getattr__` を削除 | 2026-05-19 | Redis package root の公開 API を config classes のみに統一し、manage 関数は `repom.redis.manage` から import する形へ整理。`from repom.redis import generate` が ImportError になる回帰テストを追加。`tests/unit_tests` passed | [completed/069_unify_postgres_redis_init_lazy_export.md](completed/069_unify_postgres_redis_init_lazy_export.md) |
-| #068 | `format_size` / `get_backups` を `_backup_utils.py` へ集約 | 2026-05-19 | `format_size()` と DB 種別別 `get_backups()` を `_backup_utils.py` に移し、`db_backup.py` のインライン MB 表示と `db_restore.py` の重複定義を削除。境界テストを追加。`tests/unit_tests` passed | [completed/068_consolidate_backup_format_size.md](completed/068_consolidate_backup_format_size.md) |
-| #067 | `repom/config.py` を機能別ファイルに分割 | 2026-05-19 | PostgreSQL/pgAdmin、Redis、SQLite の設定 dataclass を機能別 config モジュールへ移動し、`repom.config` から再エクスポートして後方互換を維持。直接 import と再エクスポートの単体テストを追加し、CONFIG_HOOK カスタマイズを許容する Redis 管理テストへ調整。854 tests passed | [completed/067_split_config_by_feature.md](completed/067_split_config_by_feature.md) |
-| #066 | `repom/_/` 共有ユーティリティを basekit へ移管 | 2026-05-19 | `discovery` / `docker_compose` / `docker_manager` を basekit に追加し、repom 側は `basekit.*` import へ移行。`DockerManager` は `data_path` 注入方式に変更し、旧 `repom/_/` モジュールと汎用テストを削除。basekit 32 tests、repom unit/behavior tests、ruff、`repom_info`、`postgres_generate`、`redis_generate` を確認 | [completed/066_move_shared_utilities_to_basekit.md](completed/066_move_shared_utilities_to_basekit.md) |
-| #007 | Annotation Inheritance の実装検証 | 2026-05-17 | 調査結果を Issue 文書へ反映し、`tests/unit_tests/test_annotation_inheritance.py` を追加（mixin 継承 / 多重継承 / `use_id=False` の組合せを検証）。4 tests passed。実装変更は不要と判断 | [completed/007_annotation_inheritance_validation.md](completed/007_annotation_inheritance_validation.md) |
-| #065 | `CLAUDE.md` のビルド/パッケージマネージャ記述更新（poetry → uv/hatchling） | 2026-05-17 | `CLAUDE.md` / `AGENTS.md` に hatchling build backend を明記し、CLAUDE/AGENTS/README/docs/guides に古い poetry 記述が残っていないことを確認 | [completed/065_update_claude_md_build_tooling.md](completed/065_update_claude_md_build_tooling.md) |
-| #064 | `BaseRepository` への bulk insert/update/delete ヘルパ追加 | 2026-05-17 | 同期/非同期リポジトリに `bulk_insert` / `bulk_update` / `bulk_delete` を追加。SoftDeletableMixin 対応モデルは一括論理削除し、ガイドと単体テストを更新。`tests/unit_tests` passed | [completed/064_baserepository_bulk_operations.md](completed/064_baserepository_bulk_operations.md) |
-| #063 | `db_backup.py` の SQLite/PostgreSQL ローテーション処理の共通化 | 2026-05-17 | `rotate_backups()` を `repom/scripts/_backup_utils.py` に切り出し、SQLite/PostgreSQL(host/docker)のバックアップローテーションを共通化。境界条件の単体テストを追加。`tests/unit_tests` passed | [completed/063_unify_backup_rotation_logic.md](completed/063_unify_backup_rotation_logic.md) |
-| #062 | postgres/redis Manager の compose_dir/init_dir/compose_file_path 共通化 | 2026-05-17 | `DockerManager` に compose/init directory と generated compose file 解決を集約。postgres/redis はサービス固有の定数を宣言し、公開モジュール関数は互換ラッパとして維持。関連 107 tests passed | [completed/062_postgres_redis_compose_dir_unification.md](completed/062_postgres_redis_compose_dir_unification.md) |
-| #061 | `repom/scripts/repom_info.py` の未使用 import (`text`) 除去 | 2026-05-17 | 調査の結果、`text` は PostgreSQL 接続確認の `conn.execute(text("SELECT 1"))` で使用中。変更不要として完了 | [completed/061_remove_unused_text_import.md](completed/061_remove_unused_text_import.md) |
-| #060 | `BaseStaticModel` の利用状況確認と deprecation/削除判断 | 2026-05-17 | repom 内と既知外部プロジェクトで `repom.models.BaseStaticModel` の実利用なしを確認し、`repom.models` export と `base_static.py` を削除。875 tests passed | [completed/060_basestaticmodel_usage_review.md](completed/060_basestaticmodel_usage_review.md) |
-| #059 | `repom/scripts/tmp/` 投資調査スクリプトの削除 | 2026-05-17 | `repom/scripts/tmp/` 配下の調査用スクリプト 4 件を削除。参照は Issue 本文のみであることを確認 | [completed/059_remove_scripts_tmp_artifacts.md](completed/059_remove_scripts_tmp_artifacts.md) |
-| #058 | Poetry から uv へのパッケージマネージャ移行 | 2026-05-17 | `uv.lock` 生成、`poetry.lock` 削除、VSCode タスク・ドキュメント・ソース内コマンド例を `uv` に更新。`repom_info` の Windows cp932 非互換表示を ASCII 化し、875 tests passing、`uv build` 成功 | [completed/058_migrate_from_poetry_to_uv.md](completed/058_migrate_from_poetry_to_uv.md) |
-| #057 | ログのアクティブファイルを日付付き形式に固定する | 2026-05-05 | `DateNamedDailyFileHandler` を新設し `make_timed_rotating_handler()` が日付付き active file (`main_YYYY-MM-DD.log`) を直接開くよう変更。fast-domain でも repom handler を使うよう移行完了。9 passed (repom), 16 passed (fast-domain) | [completed/057_logging_active_daily_file_handler.md](completed/057_logging_active_daily_file_handler.md) |
-| #056 | docker_manager テストの絵文字エンコードエラー（Windows cp932） | 2026-05-05 | `conftest.py` に UTF-8 reconfigure 追加、`print_message()` にフォールバック追加。831 passed, 10 skipped | [completed/056_docker_manager_emoji_unicode_test_failure.md](completed/056_docker_manager_emoji_unicode_test_failure.md) |
-| #055 | AutoDateTime のタイムゾーン非対応による naive datetime 返却 | 2026-04-22 | `AutoDateTime` を timezone-aware 実装へ更新（`DateTime(timezone=True)` + bind/result の UTC 補完）。`BaseModel` の `updated_at` 自動更新を UTC aware 化。関連 unit test 更新/追加後、`tests/unit_tests` で 831 passed, 10 skipped を確認。fast-domain 側の実運用確認も完了 | [completed/055_autodatetime_timezone_awareness.md](completed/055_autodatetime_timezone_awareness.md) |
-| #054 | ガイド・テスト内の private API 利用残存の整理 | 2026-03-19 | Phase 1: 利用者向けガイド4本の `_db_manager` private API 利用を public API に統一。Phase 2 Round 1: テストファイル4本の `_db_manager` import・呼び出しを `get_reusable_sync_transaction()`/`get_standalone_async_transaction()` 等 public API に全面置換。63 passed | [completed/054_private_api_usage_residual_audit.md](completed/054_private_api_usage_residual_audit.md) |
-| #053 | task/CLI 向け sync transaction public API の追加 | 2026-03-19 | `get_reusable_sync_transaction()` を追加し、FastAPI Depends 用 generator API と with 文向け API の契約を明確化。`test_database.py` に契約/commit/rollback/lifecycle テストを追加し、`tests/unit_tests` と `tests/behavior_tests` の回帰を確認。利用ガイドも public API 推奨に更新 | [completed/053_sync_transaction_public_api_for_task_cli.md](completed/053_sync_transaction_public_api_for_task_cli.md) |
-| #051 | `order_by` OpenAPI introspection と FastAPI helper の追加 | 2026-03-17 | introspection API（`get_order_by_columns`/`get_order_by_values`/`get_order_by_default_value`）と FastAPI helper（`build_order_by_query_depends`）を実装。canonical formに統一（bare column廃止）、`VirtualColumnError`導入、16件の unit test 全パス、利用ガイド追加 | [completed/051_order_by_openapi_introspection.md](completed/051_order_by_openapi_introspection.md) |
-| #052 | virtual_order_columns — JOIN 先・集計列のソート公式サポート | 2026-03-17 | virtual_order_columns を公式サポートとして実装。`get_order_by_columns()`/OpenAPI enum への virtual 列反映、`VirtualColumnError` 導入、`QueryBuilderMixin.virtual_order_columns` 追加、関連 unit tests 追加、`order_by` ガイドの常用化を実施 | [completed/052_virtual_order_columns.md](completed/052_virtual_order_columns.md) |
-| #050 | バックアップディレクトリの DB タイプ別分離 | 2026-02-25 | config.db_backup_path を DB タイプ別サブディレクトリに変更（data/repom/backups/sqlite/, postgres/）、db_restore.py に DB タイプフィルタリング追加、PostgreSQL 環境で SQLite バックアップが表示されない問題を解決、誤選択リスクゼロ | [completed/050_separate_backup_by_db_type.md](completed/050_separate_backup_by_db_type.md) |
-| #049 | Docker コンテナベースの pg_dump/pg_restore 実装 | 2026-02-25 | DockerCommandExecutor.exec_command() 実装（stdin サポート）、db_backup.py Docker exec 対応（backup_postgresql_via_docker + auto-detection）、db_restore.py Docker exec 対応（restore_postgresql_via_docker + auto-detection）、ホスト pg_dump 不要でバックアップ・リストア実行可能、フォールバック機能で後方互換性 100% 維持 | [completed/049_docker_based_pg_dump_restore.md](completed/049_docker_based_pg_dump_restore.md) |
-| #048 | PostgreSQL スクリプト対応（db_backup, repom_info） | 2026-02-24 | db_backup.py PostgreSQL 対応（pg_dump + gzip）、db_restore.py 新規作成（対話的リストア）、repom_info.py PostgreSQL コンテナ情報表示、SQLite バックアップ後方互換性 100% 維持、754 行実装、30/31 tests passing | [completed/048_postgresql_script_support.md](completed/048_postgresql_script_support.md) || #047 | DB名プレフィックスのカスタマイズ対応 | 2026-02-24 | RepomConfig に db_name プロパティ追加、PostgreSQL/SQLite の DB 名プレフィックスをカスタマイズ可能に、環境別サフィックス統一（_prod 廃止）、753 tests passing | [completed/047_db_name_prefix_customization.md](completed/047_db_name_prefix_customization.md) || #046 | volume_name のデフォルト値を container_name から自動生成 | 2026-02-24 | get_volume_name() を修正し volume_name が None の場合は {container_name}_data を返すように変更、3 ContainerConfig クラス対応、config_hook.py から冗長な volume_name 設定削除、58 テストパス | [completed/046_volume_name_derived_from_container_name.md](completed/046_volume_name_derived_from_container_name.md) |
-| #045 | Docker Compose プロジェクト名を container_name ベースに簡素化 | 2026-02-24 | config.project_name 廃止、get_project_name() が get_container_name() を返すように変更、orphan warning 解消、Docker Desktop GUI での個別管理可能、52 テストパス、ドキュメント更新 | [completed/045_service_specific_compose_project_names.md](completed/045_service_specific_compose_project_names.md) |
-| #044 | Compose プロジェクト名の config 対応 | 2026-02-24 | Config に project_name プロパティ追加（**Issue #045 で廃止**）、Docker Compose に -p オプション実装 | [completed/044_compose_project_name_config.md](completed/044_compose_project_name_config.md) |
-| #043 | Docker Compose プロジェクト名の分離 | 2026-02-23 | 分離プロジェクト構造実装、redis/manage.py + postgres/manage.py の get_compose_dir() 修正（各サービス用サブディレクトリ作成）、5 単体テスト追加、orphan warning 削除、Docker Desktop UI でプロジェクト分離表示、784 tests passing（779 → 784）、README.md Docker 構造ドキュメント追加 | [completed/043_docker_compose_project_separation.md](completed/043_docker_compose_project_separation.md) |
-| #042 | Redis 設定管理と repom_info 統合 | 2026-02-23 | RedisConfig + RedisContainerConfig 実装（PostgreSQL パターン適用）、redis/manage.py config 統合、repom_info.py Redis 対応、test_config_redis.py 148 行テスト、test_redis_manage.py 15 テスト追加、779 tests passing（764 → 779）、Docker config 管理統一、オプション依存対応 | [completed/042_redis_config_and_repom_info_integration.md](completed/042_redis_config_and_repom_info_integration.md) |
-| #041 | Redis Docker 統合（repom） | 2026-02-23 | RedisManager 実装（Docker 管理基盤継承）、docker-compose.yml + redis.conf 自動生成、CLI コマンド統合（redis_generate/start/stop/remove）、22 単体テスト（745 total passing）、Redis Manager ガイド作成（284行）、db 関連処理の一元管理を実現 | [completed/041_redis_docker_integration.md](completed/041_redis_docker_integration.md) |
-| #040 | Docker 管理操作の統一基盤 | 2026-02-23 | DockerManager 抽象基盤実装（300+ 行）、PostgresManager 継承、共有ユーティリティ（DockerCommandExecutor など）、52 単体テスト（40 docker_manager + 12 postgres_manager）、コード削減（repom/postgres/manage.py: 355行→276行, 22.3%削減）、将来の Redis/MongoDB/Elasticsearch 統合準備完了 | [completed/040_docker_management_base_infrastructure.md](completed/040_docker_management_base_infrastructure.md) |
-| #036 | Alembic セットアップとリセットユーティリティの実装 | 2026-02-04 | AlembicSetup/AlembicReset/AlembicTemplates実装、alembic_init/alembic_reset CLIスクリプト、path_separator設定追加、test_migration_no_id.pyリファクタリング（139行削減）、13単体テスト全パス、ドキュメント整備完了、deprecation warning解消 | [completed/036_alembic_setup_and_reset_utilities.md](completed/036_alembic_setup_and_reset_utilities.md) |
-| #039 | MagicMock 生成ディレクトリの配置改善 | 2026-02-23 | mock_config.data_path を data/repom/ に固定し、MagicMock ディレクトリ生成を防止。Unit/Behavior テスト全パス | [completed/039_magicmock_artifact_path.md](completed/039_magicmock_artifact_path.md) |
-| #038 | PostgreSQL コンテナ設定のカスタマイズ対応 | 2026-02-23 | 汎用 Docker Compose 基盤実装（repom/_.docker_compose.py）、PostgreSQL コンテナ設定（PostgresContainerConfig、host_port/volume_name/container_name カスタマイズ対応）、pgAdmin オプショナル統合（Phase 6）、docker-compose.generated.yml 動的生成、環境別DB自動作成、postgres_generate/postgres_start/postgres_stop コマンド実装、Unit tests 15+追加、671 tests passing | [completed/038_postgresql_container_customization.md](completed/038_postgresql_container_customization.md) |
-| #037 | Config Display Command (repom_info) | 2026-02-23 | repom_info 実装、Poetry scripts/README 反映、単体テスト追加、db_type 表記統一 | [completed/037_config_display_command.md](completed/037_config_display_command.md) |
-| #035 | テストアーキテクチャの複雑性（親Issue） | 2026-02-04 | 全サブIssue完了：Issue #034 (autouse削除)、Issue #035 (fixture分離)、Issue #036 (scope見直し・見送り)、Phase 1-2完了、複雑な条件分岐削除、601 tests passing、可読性・メンテナンス性・拡張性向上達成 | [completed/035_test_architecture_complexity.md](completed/035_test_architecture_complexity.md) |
-| #034 | SQLite/PostgreSQL Fixture 分離 | 2026-02-04 | setup_repom_db_tables を setup_sqlite_tables + setup_postgres_tables に分離、複雑な条件分岐削除、重複 fixture 削除（40行→11行）、3ファイル更新、66個の Unicode 絵文字を ASCII 置換、601 tests passing | [completed/034_separate_sqlite_postgres_fixtures.md](completed/034_separate_sqlite_postgres_fixtures.md) |
-| #033 | autouse=True の削除 | 2026-02-04 | setup_repom_db_tables/setup_postgres_tables から autouse=True を削除、明示的フィクスチャ依存、test_skip_on_exception セッション修正、574 unit tests passing、603 total tests passing、パフォーマンス向上 | [completed/033_remove_autouse_from_fixtures.md](completed/033_remove_autouse_from_fixtures.md) |
-| #032 | PostgreSQL 統合テストの EXEC_ENV 修正 | 2026-02-04 | EXEC_ENV='test' へ修正、repom_test 接続、config_hook.py 警告修正、PostgreSQL 6/6 tests passing、603 tests passing | [completed/032_postgresql_test_env_correction.md](completed/032_postgresql_test_env_correction.md) |
-| #030 | テストの独立性と隔離性の改善 | 2026-02-03 | Phase 1: isolated_mapper_registry 削除（Issue #029）、Phase 3: test_migration_no_id.py 順序依存解消、モデル関数スコープ化、try-finally クリーンアップ、全テスト順序非依存達成 | [completed/030_test_independence_improvements.md](completed/030_test_independence_improvements.md) |
-| #029 | isolated_mapper_registry から tests/fixtures/models への移行 | 2026-02-02 | isolated_mapper_registry 完全削除（~100行）、tests/fixtures/models/ (User, Post, Parent, Child) 新規提供、360行のドキュメント削減、シンプルな直接クリーンアップパターン採用、428 tests passing | [completed/029_migrate_from_isolated_mapper_to_fixtures_models.md](completed/029_migrate_from_isolated_mapper_to_fixtures_models.md) |
-| #027 | PostgreSQL 設定統合 | 2026-02-01 | config.db_type による PostgreSQL/SQLite 切り替え、engine_kwargs 自動設定、Unit 25 + Integration 7 テスト全パス、環境変数削除 (Issue #028 Part 1) | [completed/027_postgresql_config_integration.md](completed/027_postgresql_config_integration.md) |
-| #026 | PostgreSQL Docker セットアップスクリプト | 2026-02-01 | Docker Compose構成、postgres_start/stop コマンド、環境別DB自動作成、セットアップガイド作成、全テスト成功 | [completed/026_postgresql_docker_setup.md](completed/026_postgresql_docker_setup.md) |
-| #025 | 汎用パッケージディスカバリーインフラの実装 | 2026-01-31 | repom._.discovery実装、フレームワーク非依存、post_import_hookパターン、discovery_guide.md作成、573テスト全パス | [completed/025_generic_package_discovery_infrastructure.md](completed/025_generic_package_discovery_infrastructure.md) |
-| #022 | isolated_mapper_registry の設計改善 | 2026-02-02 | 検討の結果、実装せず。最終的に isolated_mapper_registry を完全削除（Issue #029）。通常テストは tests/fixtures/models/ を使用するガイドラインを作成。 | [completed/022_isolated_mapper_registry_improvement.md](completed/022_isolated_mapper_registry_improvement.md) |
-| #021 | テスト間のマッパークリア干渉問題 | 2026-01-28 | テスト関数内ローカルモデル再定義、clear_mappers()影響回避、順序依存テスト全パス | [completed/021_test_mapper_clear_interference.md](completed/021_test_mapper_clear_interference.md) |
-| #020 | 循環参照警告の解決（マッパー遅延初期化） | 2026-01-28 | auto_import_models_from_list()にconfigure_mappers()遅延実装、循環参照解決、518テスト全パス | [completed/020_circular_import_mapper_configuration.md](completed/020_circular_import_mapper_configuration.md) |
-| #019 | テストのフィクスチャ化によるコード品質向上 | 2025-12-28 | 3ファイルリファクタリング、181行削減、31テスト全パス、0.33秒 | [completed/019_refactor_tests_to_use_fixtures.md](completed/019_refactor_tests_to_use_fixtures.md) |
-| #018 | Repository Default Eager Loading Options Support | 2025-12-28 | default_options機能実装、同期/非同期対応、N+1問題解決、包括的テスト完備 | [completed/018_repository_default_eager_loading_options.md](completed/018_repository_default_eager_loading_options.md) |
-| #017 | server_default カラムの Create スキーマ必須化問題 | 2025-12-27 | server_default 対応修正、バグ修正（優先度）、9テスト追加、442テスト全パス | [completed/017_server_default_create_schema_mismatch.md](completed/017_server_default_create_schema_mismatch.md) |
-| #016 | クエリ構築機能のMixin化によるコード一貫性向上 | 2025-12-26 | QueryBuilderMixin作成、両リポジトリ約25行削減、409テスト全パス | [completed/016_extract_query_builder_to_mixin.md](completed/016_extract_query_builder_to_mixin.md) |
-| #015 | 論理削除機能のMixin化によるコード可読性向上 | 2025-12-26 | SoftDeleteRepositoryMixin作成、base_repository約150行削減、テスト全パス | [completed/015_extract_soft_delete_to_mixin.md](completed/015_extract_soft_delete_to_mixin.md) |
-| #001 | FastAPI Depends互換性修正 | 2025-12-25 | @contextmanager削除、generator protocol復元、15テスト全パス | [completed/001_fastapi_depends_fix.md](completed/001_fastapi_depends_fix.md) |
-| #014 | repom への論理削除（Soft Delete）機能追加 | 2025-12-10 | SoftDeletableMixin、BaseRepository拡張、22テスト全パス | [completed/014_soft_delete_feature.md](completed/014_soft_delete_feature.md) |
-| #013 | マスターデータ同期コマンドの追加 | 2025-11-19 | db_sync_master コマンド、Upsert 操作、12テスト全パス | [completed/013_master_data_sync_command.md](completed/013_master_data_sync_command.md) |
-| #012 | ロギング機能の追加 | 2025-01-XX | ハイブリッドアプローチロギング、CLI/アプリ対応、6テスト全パス | [completed/012_add_logging_support.md](completed/012_add_logging_support.md) |
-| #011 | セッション管理ユーティリティの追加 | 2025-11-18 | トランザクション管理機能、FastAPI/CLI対応、13テスト全パス | [completed/011_session_management_utilities.md](completed/011_session_management_utilities.md) |
-| #010 | BaseModel への UUID サポート追加 | 2025-11-18 | UUID 主キーサポート、BaseRepository 互換、17テスト全パス | [completed/010_add_uuid_support_to_base_model.md](completed/010_add_uuid_support_to_base_model.md) |
-| #009 | テストインフラストラクチャの改善 | 2025-11-16 | Transaction Rollback パターン実装、9倍高速化達成 | [completed/009_test_infrastructure_improvement.md](completed/009_test_infrastructure_improvement.md) |
-| #008 | Alembic マイグレーションファイルの保存場所制御 | 2025-11-16 | version_locations の一元管理、外部プロジェクト対応 | [completed/008_alembic_migration_path_conflict.md](completed/008_alembic_migration_path_conflict.md) |
-| #006 | SQLAlchemy 2.0 スタイルへの移行 | 2025-11-15 | Mapped[] + mapped_column() 移行、型安全性向上 | [completed/006_migrate_to_sqlalchemy_2_0_style.md](completed/006_migrate_to_sqlalchemy_2_0_style.md) |
-| #005 | 柔軟な auto_import_models 設定 | 2025-11-15 | 複数モデルディレクトリ対応、セキュリティ検証実装 | [completed/005_flexible_auto_import_models.md](completed/005_flexible_auto_import_models.md) |
-| #003 | response_field 機能を BaseModelAuto に移行 | 2025-11-15 | スキーマ生成一元化、ドキュメント整備 | [completed/003_response_field_migration_to_base_model_auto.md](completed/003_response_field_migration_to_base_model_auto.md) |
-| #002 | SQLAlchemy カラム継承制約による use_id 設計の課題 | 2025-11-14 | 複合主キー対応、抽象クラス制約解決 | [completed/002_sqlalchemy_column_inheritance_constraint.md](completed/002_sqlalchemy_column_inheritance_constraint.md) |
-| #001 | get_response_schema() の前方参照改善 | 2025-11-14 | 前方参照自動解決、エラーメッセージ改善 | [completed/001_get_response_schema_forward_refs_improvement.md](completed/001_get_response_schema_forward_refs_improvement.md) |
-
-詳細は各ファイルを参照してください。
-
----
-
-## 新しい Issue の作成
-
-新しい Issue を作成する際は:
-
-1. **Active 段階**: `active/XXX_issue_name.md` にファイル作成
-2. **完了**: 完了時に `completed/NNN_issue_name.md` へ移動（連番付与）
-
-完了済み Issue には連番（001, 002, 003...）を付与してください。
-
----
-
-## 🔧 Issue テンプレート
-
-新しい Issue を追加する際は、以下のフォーマットを使用してください：
+## Issue Template
 
 ```markdown
-# Issue #N: [タイトル]
-
-**ステータス**: 🔴 未着手 / 🟡 提案中 / 🟢 進行中 / ✅ 完了
-
-**作成日**: YYYY-MM-DD
-
-**優先度**: 高 / 中 / 低
-
-## 問題の説明
-
-[現状の問題点を説明]
-
-## 提案される解決策
-
-[解決策の提案]
-
-## 影響範囲
-
-- 影響を受けるファイル
-- 影響を受ける機能
-
-## 実装計画
-
-1. ステップ1
-2. ステップ2
-3. ...
-
-## テスト計画
-
-[テスト戦略とテストケースの説明]
-
-## 関連リソース
-
-- 関連ファイル
-- 参考資料
-```
-
+---
+id: N
+status: active
+priority: medium
+created: YYYY-MM-DD
+completed:
+title: Short issue title
 ---
 
-## 🎯 Issue 管理の方針
+# Issue #N: Short issue title
 
-### Issue の作成
-- 改善提案、バグ報告、機能追加リクエストなどを Issue として管理
-- 1つの Issue につき1つのマークダウンファイルを作成
-- ファイル名は `[issue_name].md` の形式（スネークケース推奨）
+## Problem
 
-### ステータス管理
-- 🔴 **未着手**: Issue が提起されたが作業開始していない
-- 🟡 **提案中**: 設計や調査中
-- 🟢 **進行中**: 実装作業中
-- ✅ **完了**: 実装、テスト、ドキュメント化が完了
+Describe the current problem.
 
-### 優先度
-- **高**: 重大な問題、ブロッカー
-- **中**: 重要だが緊急ではない
-- **低**: 改善提案、将来的な機能
+## Proposed Solution
 
----
+Describe the proposed solution.
 
-## 📝 Issue の更新
+## Impact
 
-Issue の進捗があった場合は、該当ファイルを更新し、この README.md の一覧も更新してください。
+- Affected file or module
+- Affected behavior
 
----
+## Implementation Plan
 
-## 📝 よくある質問
+1. Step
+2. Step
 
-### Q: issue/ の completed/ が肥大化したら？
+## Test Plan
 
-**A**: 年ごとにディレクトリを分ける：
-```
-completed/
-├── 2025/
-└── 2024/
+- Verification command or manual check
+
+## Related Resources
+
+- Related file or issue
 ```
 
-最終更新: 2026-05-22（Issue #074 完了 — runtime env override helper 拡張）
+## Validation Rules
+
+`issuekit validate` checks:
+
+- every issue filename starts with a numeric id
+- issue ids are unique across `active/` and `completed/`
+- generated index files exist and match current issue files
+- generated files contain the generated-file marker
+- frontmatter ids match filenames
+- frontmatter status and priority use allowed ASCII values
+- frontmatter has `created` and `title`
+- completed issues use `status: completed`; active issues do not
+- issue files contain only ASCII characters

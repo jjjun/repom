@@ -94,3 +94,8 @@ filterwarnings = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["F403", "F405"]
 
+
+[tool.issuekit]
+recent_count = 30
+ascii_id_threshold = 76
+issues_dir = "docs/issues"
