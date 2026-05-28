@@ -262,7 +262,14 @@ Proposal files are temporary. Delete them after the target project has accepted,
 
 ## Issue Management (AI Agent Rule)
 
-When an issue is completed:
-- Keep the file name unchanged (issue ID stays the same).
-- Move the file from `docs/issues/active/` to `docs/issues/completed/`.
-- Update `docs/issues/README.md` to move the entry from active to completed.
+Manage local issues with the `issuekit` CLI (the spec is `docs/issues/README.md`).
+
+- Status and next id: `issuekit info` (or the VS Code task `issue: info`).
+- After changing issues: `issuekit generate-indexes` and `issuekit validate`.
+- To complete: `issuekit complete <id> --summary "..." --verification "..."`.
+
+Rules:
+- Issue files are English ASCII only (frontmatter and body).
+- `docs/issues/indexes/` is generated; never edit it by hand, and do not paste a completed-issue table back into the README.
+- Get the next id from `issuekit info`; do not count by hand.
+- Write files as UTF-8 without a BOM and with LF; a pre-commit hook runs `issuekit check-encoding`.

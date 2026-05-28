@@ -102,5 +102,16 @@
       },
       "problemMatcher": []
     },
+    {
+      "label": "issue: info",
+      "type": "shell",
+      "command": "issuekit info",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
   ]
 }

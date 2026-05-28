@@ -196,8 +196,9 @@ docs/
 ├── ideas/          # 機能提案
 ├── proposals/      # 外部プロジェクトへの一時提案書
 ├── technical/      # 実装詳細・制約の調査
-└── issue/
-    ├── README.md   # Issue インデックス（必ず更新）
+└── issues/
+    ├── README.md   # 規約 (issuekit が参照)
+    ├── indexes/    # 生成インデックス（手編集しない）
     ├── active/     # 対応中の Issue
     └── completed/  # 完了済み Issue（NNN_name.md）
 ```
@@ -215,10 +216,13 @@ docs/
 
 ## Issue Management
 
-Issue が完了したら:
-1. `docs/issues/active/XXX_name.md` → `docs/issues/completed/NNN_name.md` に移動（連番付与）
-2. `docs/issues/README.md` を更新（active から completed セクションへ移動）
-3. コミット: `docs(issue): Complete issue #NNN - [title]`
+ローカル issue は `issuekit` CLI で管理する (規約は `docs/issues/README.md`)。
+
+- 状態確認・次の id: `issuekit info` (VS Code タスク `issue: info` でも可)
+- issue 変更後: `issuekit generate-indexes` と `issuekit validate`
+- 完了時: `issuekit complete <id> --summary "..." --verification "..."`
+- issue ファイルは英語 ASCII のみ。`docs/issues/indexes/` は生成物（手編集しない）。README に完了 issue 表を書き戻さない。
+- ファイルは UTF-8 (BOM なし) / LF。pre-commit (`issuekit check-encoding`) が検査する。
 
 完了トリガーワード: 「完了」「終わった」「解決しました」「done」「complete」
 
