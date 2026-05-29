@@ -105,15 +105,22 @@ uv sync
 # 3. （オプション）PostgreSQL サポートを追加
 uv sync --extra postgres
 
-# 4. データベースを作成
+# 4. 環境変数ファイルをセットアップ
+cp .env.example .env
+# .env を開いて必要に応じて値を編集（デフォルトのままでも動作します）
+
+# 5. データベースを作成
 uv run db_create
 
-# 5. マイグレーションを適用（必要な場合）
+# 6. マイグレーションを適用（必要な場合）
 uv run alembic upgrade head
 
-# 6. テストを実行して動作確認
+# 7. テストを実行して動作確認
 uv run pytest tests/unit_tests
 ```
+
+> **Note**: `.env` は git で管理されません（`.gitignore` で除外済み）。
+> `.env.example` がテンプレートです。機密情報（パスワード等）は `.env` にのみ記載してください。
 
 ### Optional Dependencies
 
@@ -136,35 +143,37 @@ uv sync --extra async-all
 uv sync --extra postgres --extra async
 ```
 
-### 環境変数の設定（オプション）
+### 環境変数の設定
+
+`.env.example` をコピーして `.env` を作成し、必要に応じて値を編集してください：
 
 ```bash
-# .envファイルを作成（オプション）
-# EXEC_ENV: 実行環境（dev/test/prod）デフォルトは'dev'
-EXEC_ENV=dev
-
-# CONFIG_HOOK: 親プロジェクトから設定を注入する場合
-# CONFIG_HOOK=mine_py:hook_config
-
-# Runtime override helpers (call from CONFIG_HOOK when using external hooks)
-DB_TYPE=postgres
-REPOM_DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/app_dev
-SQLALCHEMY_ECHO=false
-SQLALCHEMY_ECHO_LEVEL=INFO
-POSTGRES_USER=repom
-POSTGRES_PASSWORD=repom_dev
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-PGADMIN_DEFAULT_EMAIL=admin@example.com
-PGADMIN_DEFAULT_PASSWORD=admin
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=
-REDIS_DB=0
-SQLITE_DB_PATH=data
-SQLITE_DB_FILE=app_dev.sqlite3
-SQLITE_USE_IN_MEMORY_FOR_TESTS=true
+cp .env.example .env
 ```
+
+| 変数名 | 説明 | デフォルト |
+|---|---|---|
+| `EXEC_ENV` | 実行環境（`dev` / `test` / `prod`） | `dev` |
+| `CONFIG_HOOK` | 外部プロジェクトからの設定フック（`module:callable`） | `repom.config_hook:hook_config` |
+| `DB_TYPE` | DBエンジン（`sqlite` / `postgres`） | `sqlite` |
+| `REPOM_DATABASE_URL` | PostgreSQL使用時の接続URL | — |
+| `POSTGRES_USER` | PostgreSQL ユーザー名 | `repom` |
+| `POSTGRES_PASSWORD` | PostgreSQL パスワード | — |
+| `POSTGRES_HOST` | PostgreSQL ホスト | `localhost` |
+| `POSTGRES_PORT` | PostgreSQL ポート | `5432` |
+| `PGADMIN_DEFAULT_EMAIL` | pgAdmin ログインメール | — |
+| `PGADMIN_DEFAULT_PASSWORD` | pgAdmin パスワード | — |
+| `REDIS_HOST` | Redis ホスト | `localhost` |
+| `REDIS_PORT` | Redis ポート | `6379` |
+| `REDIS_PASSWORD` | Redis パスワード | （空） |
+| `REDIS_DB` | Redis DB インデックス | `0` |
+| `SQLITE_DB_PATH` | SQLite データディレクトリ | `data` |
+| `SQLITE_DB_FILE` | SQLite ファイル名 | `app_dev.sqlite3` |
+| `SQLITE_USE_IN_MEMORY_FOR_TESTS` | テスト時にインメモリDBを使う | `true` |
+| `SQLALCHEMY_ECHO` | SQLAlchemy のクエリログ出力 | `false` |
+| `SQLALCHEMY_ECHO_LEVEL` | クエリログのログレベル | `INFO` |
+
+> **Note**: `.env` は `.gitignore` で除外されています。機密情報（パスワード等）は `.env` にのみ記載し、`.env.example` には含めないでください。
 
 ### 初回セットアップの確認
 
