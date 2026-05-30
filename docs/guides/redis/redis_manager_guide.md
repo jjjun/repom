@@ -363,6 +363,9 @@ print(config.redis.db)             # 0
 print(config.redis.container.get_container_name())  # repom_redis
 print(config.redis.container.get_volume_name())      # repom_redis_data (container_name から自動生成)
 print(config.redis.container.image)                  # redis:7-alpine
+
+# Credential rotation:
+# Existing Redis volumes need redis_rotate_password; see credential_rotation.md.
 ```
 
 **外部プロジェクトでのカスタマイズ**:

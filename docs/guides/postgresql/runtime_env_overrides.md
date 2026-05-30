@@ -36,3 +36,8 @@ Supported variables:
 `POSTGRES_PORT` is validated as an integer port between 1 and 65535. These env
 variables affect repom's runtime config and generated compose files when the
 helpers are called before `postgres_generate` / `postgres_start`.
+
+For existing Docker volumes, changing environment variables alone does not
+change initialized PostgreSQL roles or pgAdmin users. Use
+[credential_rotation.md](credential_rotation.md) for data-preserving rotation
+steps.

@@ -111,6 +111,24 @@ class TestRedisManagerWaitForService:
             manager.wait_for_service(max_retries=3)
             assert mock_run.call_count == 3
 
+    def test_wait_for_service_authenticates_when_password_is_set(self):
+        """Test wait_for_service uses REDISCLI_AUTH for password-protected Redis."""
+        manager = RedisManager()
+
+        with patch.object(manager.config.redis, "password", "secret"):
+            with patch.object(subprocess, 'run') as mock_run:
+                mock_run.return_value = MagicMock(
+                    returncode=0,
+                    stdout="PONG\n"
+                )
+
+                manager.wait_for_service(max_retries=2)
+
+        command = mock_run.call_args.args[0]
+        assert "-e" in command
+        assert "REDISCLI_AUTH=secret" in command
+        assert command[-1] == "ping"
+
 
 class TestRedisManagerConnectionInfo:
     """Test connection info printing"""
@@ -159,6 +177,14 @@ class TestRedisManagerGenerate:
         assert "Persistence" in config
         assert "Snapshots" in config
         assert "Memory" in config
+
+    def test_generate_redis_conf_with_password(self):
+        """Test generate_redis_conf includes requirepass when configured."""
+        from repom.redis.manage import generate_redis_conf
+
+        config = generate_redis_conf(password="secret")
+
+        assert 'requirepass "secret"' in config
 
 
 class TestRedisManagerInheritance:
@@ -286,6 +312,18 @@ class TestRedisDockerCompose:
         assert f"{config.redis.port}:6379" in yaml_content
         assert "healthcheck:" in yaml_content
         assert "redis-cli" in yaml_content
+
+    def test_docker_compose_authenticates_healthcheck_when_password_is_set(self):
+        """Test docker-compose healthcheck authenticates when password is set."""
+        from repom.redis import manage
+
+        with patch.object(manage.config.redis, "password", "secret"):
+            generator = manage.generate_docker_compose()
+
+        yaml_content = generator.generate()
+
+        assert "REDIS_PASSWORD: secret" in yaml_content
+        assert "$$REDIS_PASSWORD" in yaml_content
 
 
 class TestRedisManagerErrorHandling:

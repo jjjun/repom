@@ -114,6 +114,18 @@ class TestGenerateRedisConf:
         conf = generate_redis_conf()
         assert len(conf) > 100  # Should have reasonable content
 
+    def test_conf_includes_requirepass_when_password_is_configured(self):
+        """redis.conf includes requirepass when Redis password is set."""
+        conf = generate_redis_conf(password="secret")
+
+        assert 'requirepass "secret"' in conf
+
+    def test_conf_omits_requirepass_when_password_is_empty(self):
+        """redis.conf keeps unauthenticated Redis behavior by default."""
+        conf = generate_redis_conf(password="")
+
+        assert "requirepass" not in conf
+
 
 class TestConfigIntegration:
     """Tests for Config integration with redis module."""
