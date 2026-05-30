@@ -36,8 +36,8 @@ def test_password_only_postgres_plan_masks_password():
     result = rotate_postgres_credentials(plan, dry_run=True)
 
     assert len(result.commands) == 1
-    assert "ALTER ROLE" in result.commands[0][-1]
-    assert "new-secret" in result.commands[0][-1]
+    assert "-c" not in result.commands[0]
+    assert "new-secret" not in " ".join(result.commands[0])
     assert "new-secret" not in result.masked_output[0]
     assert "***" in result.masked_output[0]
 
@@ -77,6 +77,8 @@ def test_postgres_rotation_executes_structured_commands_with_pgpassword():
     command = runner.call_args.args[0]
     kwargs = runner.call_args.kwargs
     assert command[:4] == ("docker", "exec", "-i", "repom_postgres")
+    assert "new-secret" not in " ".join(command)
+    assert kwargs["input"] == 'ALTER ROLE "repom" WITH PASSWORD \'new-secret\';'
     assert kwargs["env"]["PGPASSWORD"] == "old-secret"
     assert kwargs["check"] is True
 

@@ -1,6 +1,6 @@
 """Tests for Redis credential helpers."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from repom.redis.credentials import (
     RedisCredentialRotationPlan,
@@ -77,3 +77,40 @@ def test_redis_rotation_executes_with_stdin():
     assert kwargs["input"] == "CONFIG SET requirepass new-secret\n"
     assert kwargs["check"] is True
     assert kwargs["capture_output"] is True
+
+
+def test_redis_plan_from_config_does_not_infer_old_password():
+    mock_config = MagicMock()
+    mock_config.redis.password = "configured-final-secret"
+    mock_config.redis.container.get_container_name.return_value = "repom_redis"
+
+    with patch("repom.redis.credentials.config", mock_config):
+        plan = RedisCredentialRotationPlan.from_config(
+            new_password="configured-final-secret",
+        )
+
+    assert plan.old_password is None
+    assert plan.new_password == "configured-final-secret"
+
+
+def test_redis_rotation_from_unauthenticated_omits_rediscli_auth():
+    plan = RedisCredentialRotationPlan(
+        new_password="new-secret",
+        container_name="repom_redis",
+    )
+
+    result = rotate_redis_password(plan, dry_run=True)
+
+    assert "REDISCLI_AUTH" not in " ".join(result.command)
+
+
+def test_redis_rotation_uses_auth_only_when_old_password_is_explicit():
+    plan = RedisCredentialRotationPlan(
+        old_password="old-secret",
+        new_password="new-secret",
+        container_name="repom_redis",
+    )
+
+    result = rotate_redis_password(plan, dry_run=True)
+
+    assert "REDISCLI_AUTH=old-secret" in result.command

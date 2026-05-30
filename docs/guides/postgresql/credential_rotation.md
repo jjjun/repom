@@ -41,7 +41,9 @@ old role.
 ## pgAdmin
 
 repom uses pgAdmin's supported `setup.py update-user --password` path inside the
-container. Dry-run first:
+container. pgAdmin's command accepts the new password as a command argument, so
+the masked repom output does not prevent short-lived process-argument exposure
+while the command runs. Dry-run first:
 
 ```bash
 uv run pgadmin_rotate_password --new-password "new-password"
@@ -65,11 +67,13 @@ uv run postgres_start
 ```
 
 This fallback removes pgAdmin's own saved UI state, but it does not remove the
-PostgreSQL data volume.
+PostgreSQL data volume. It is also the lower exposure path when passing the
+new pgAdmin password through `setup.py update-user --password` is not acceptable.
 
 ## Notes
 
 - Rotation output masks passwords.
 - PostgreSQL execution uses `PGPASSWORD` for the current password instead of
-  embedding it in the command line.
+  embedding it in the command line, and sends SQL through stdin so the new
+  password is not placed in the `psql` process arguments.
 - Review dry-run output before passing `--execute`.

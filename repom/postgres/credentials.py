@@ -204,7 +204,11 @@ def build_postgres_psql_command(
     plan: PostgresCredentialRotationPlan,
     step: SqlStep,
 ) -> tuple[str, ...]:
-    """Build a structured docker/psql command for one SQL step."""
+    """Build a structured docker/psql command for one SQL step.
+
+    SQL is sent through stdin by ``rotate_postgres_credentials`` so new
+    passwords do not appear in process arguments.
+    """
 
     container_name = plan.container_name or config.postgres.container.get_container_name()
     return (
@@ -219,8 +223,6 @@ def build_postgres_psql_command(
         plan.current_user,
         "-d",
         step.database,
-        "-c",
-        step.sql,
     )
 
 
@@ -243,8 +245,8 @@ def rotate_postgres_credentials(
         env = os.environ.copy()
         if plan.current_password:
             env["PGPASSWORD"] = plan.current_password
-        for command in commands:
-            runner(command, check=True, text=True, env=env)
+        for command, step in zip(commands, steps):
+            runner(command, check=True, text=True, env=env, input=step.sql)
 
     return CredentialRotationResult(
         dry_run=dry_run,

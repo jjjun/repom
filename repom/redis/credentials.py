@@ -28,7 +28,7 @@ class RedisCredentialRotationPlan:
         old_password: str | None = None,
     ) -> "RedisCredentialRotationPlan":
         return cls(
-            old_password=old_password or config.redis.password,
+            old_password=old_password,
             new_password=new_password,
             container_name=config.redis.container.get_container_name(),
         )
@@ -62,8 +62,9 @@ def build_redis_cli_command(
 ) -> tuple[str, ...]:
     """Build a docker exec redis-cli command.
 
-    When a password is supplied it is passed through REDISCLI_AUTH so it does
-    not appear in the command arguments.
+    When a password is supplied it is passed through REDISCLI_AUTH. This keeps
+    redis-cli invocation consistent, but the docker exec environment argument
+    can still be visible through host process inspection.
     """
 
     command = ["docker", "exec", "-i"]

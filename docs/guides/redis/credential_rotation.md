@@ -30,7 +30,7 @@ REDISCLI_AUTH="new-password" redis-cli -p 6379
 Dry-run the runtime password change:
 
 ```bash
-uv run redis_rotate_password --new-password "new-password" --old-password "old-password"
+uv run redis_rotate_password --new-password "new-password"
 ```
 
 Execute it:
@@ -38,15 +38,24 @@ Execute it:
 ```bash
 uv run redis_rotate_password \
   --new-password "new-password" \
-  --old-password "old-password" \
   --execute
 ```
 
-If Redis currently has no password, omit `--old-password`.
+If Redis already has a password, pass it explicitly:
+
+```bash
+uv run redis_rotate_password \
+  --old-password "old-password" \
+  --new-password "new-password" \
+  --execute
+```
 
 After execution, repom regenerates `redis.conf` with the new password so the
 setting survives restart. The runtime command passes the old password through
-`REDISCLI_AUTH` and sends the new password through stdin.
+`REDISCLI_AUTH` only when `--old-password` is supplied, and sends the new
+password through stdin. `REDISCLI_AUTH` is passed through `docker exec -e`, so
+the old password can still be visible through host process inspection while the
+command runs.
 
 ## Notes
 
