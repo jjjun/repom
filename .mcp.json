@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "issuekit": {
+      "command": "issuekit-mcp",
+      "args": []
+    }
+  }
+}

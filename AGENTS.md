@@ -273,3 +273,13 @@ Rules:
 - `docs/issues/indexes/` is generated; never edit it by hand, and do not paste a completed-issue table back into the README.
 - Get the next id from `issuekit info`; do not count by hand.
 - Write files as UTF-8 without a BOM and with LF; a pre-commit hook runs `issuekit check-encoding`.
+
+## Handoff protocol
+
+This repo uses the issuekit two-agent handoff. For the current steps, run
+`issuekit protocol --agent codex` for codex or `issuekit protocol --agent claude`
+for claude, or read the issuekit MCP server instructions / `get_protocol` tool.
+
+Do not copy the steps here; issuekit is the source of truth. Launch codex or
+Claude Code from the repo root so the MCP server resolves the correct
+`docs/issues/` directory.
