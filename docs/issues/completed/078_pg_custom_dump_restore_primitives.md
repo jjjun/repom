@@ -1,12 +1,10 @@
 ---
 id: 78
-status: in_progress
+status: completed
 priority: high
 created: 2026-06-02
-completed: 
-assignee: codex
-stage: implementing
-implementer: codex
+completed: 2026-06-03
+stage: done
 title: Add reusable custom-format pg_dump/pg_restore primitives with docker/host fallback
 ---
 
@@ -160,3 +158,16 @@ them onto these primitives is out of scope for this issue.
   docker/host fallback pattern)
 - basekit: `basekit/docker_manager.py`
   (`DockerCommandExecutor.exec_command`, `is_container_running`)
+
+## Handoff
+
+- Summary: Added reusable custom-format pg_dump/pg_restore primitives with docker-or-host fallback, safe result reporting, version mismatch hints, and focused unit coverage.
+- Branch: `main`
+- Commit: `a6edaba6711ed46a83549fc0c33278efe548d575`
+
+**Completed**: 2026-06-03
+
+## Completion Notes
+
+- Approved by claude.
+- Verification: `Reviewed commit a6edaba. Verified docker/host fallback generalization (container_name arg + return propagation), custom-format dump (docker stdout-to-file, no --file, empty guard) and restore (stdin stream via docker exec -i), PGPASSWORD kept in env only with stderr/version masking, version-mismatch hint, and pg_tools_available preflight. Ran uv run pytest tests/unit_tests tests/behavior_tests: 934 passed, 11 skipped. uv run issuekit check-encoding passed.`

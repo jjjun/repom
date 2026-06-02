@@ -10,7 +10,9 @@
       "Bash(ls \"c:/Users/jj/Desktop/workspace_main/projects/fast-domain\" \"c:/Users/jj/Desktop/workspace_main/projects/mine-py\" 2>/dev/null | head -30)",
       "Read(//c/Users/jj/Desktop/workspace_main/projects/fast-domain/**)",
       "Bash(grep -rn \"from repom\\\\|import repom\" \"c:/Users/jj/Desktop/workspace_main/projects/mine-py\" --include=\"*.py\" 2>/dev/null | grep -v \"__pycache__\\\\|\\\\.egg-info\\\\|/dist/\\\\|/htmlcov/\" | head -60)",
-      "Read(//c/Users/jj/Desktop/workspace_main/projects/mine-py/**)"
+      "Read(//c/Users/jj/Desktop/workspace_main/projects/mine-py/**)",
+      "PowerShell(uv run issuekit info)",
+      "Bash(find / -name \"docker_manager.py\" -path \"*basekit*\" 2>/dev/null | head -5)"
     ]
   }
 }
