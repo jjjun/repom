@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Callable
+from typing import Callable, TypeVar
 
 from basekit.docker_manager import DockerCommandExecutor
 
@@ -7,6 +7,7 @@ from repom.config import config
 from repom.logging import get_logger
 
 logger = get_logger(__name__)
+T = TypeVar("T")
 
 
 def format_size(size_bytes: int) -> str:
@@ -50,30 +51,30 @@ def rotate_backups(backup_dir: Path, glob_pattern: str, max_keep: int) -> list[P
 
 def run_postgres_via_docker_or_host(
     *,
-    via_docker: Callable[[], None],
-    via_host: Callable[[], None],
+    via_docker: Callable[[], T],
+    via_host: Callable[[], T],
     operation: str,
     host_tools: str = "host tools",
-) -> None:
+    container_name: str | None = None,
+) -> T:
     """Run a PostgreSQL operation via Docker when available, otherwise host tools."""
-    container_name = config.postgres.container.get_container_name()
+    resolved_container_name = container_name or config.postgres.container.get_container_name()
 
     try:
-        is_running = DockerCommandExecutor.is_container_running(container_name)
+        is_running = DockerCommandExecutor.is_container_running(resolved_container_name)
     except FileNotFoundError:
         logger.warning(
-            f"docker command not found while checking container {container_name}; "
+            f"docker command not found while checking container {resolved_container_name}; "
             f"falling back to {host_tools} for PostgreSQL {operation}."
         )
-        via_host()
-        return
+        return via_host()
 
     if is_running:
-        logger.info(f"Container {container_name} is running, using Docker exec")
-        via_docker()
-    else:
-        logger.warning(
-            f"Container {container_name} is not running, falling back to {host_tools}. "
-            f"Consider running 'uv run postgres_start' first."
-        )
-        via_host()
+        logger.info(f"Container {resolved_container_name} is running, using Docker exec")
+        return via_docker()
+
+    logger.warning(
+        f"Container {resolved_container_name} is not running, falling back to {host_tools}. "
+        f"Consider running 'uv run postgres_start' first."
+    )
+    return via_host()

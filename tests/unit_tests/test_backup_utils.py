@@ -107,7 +107,7 @@ def test_get_backups_returns_empty_for_missing_directory(tmp_path):
 
 
 def test_run_postgres_via_docker_or_host_uses_docker_when_container_running(monkeypatch):
-    via_docker = MagicMock()
+    via_docker = MagicMock(return_value="docker-result")
     via_host = MagicMock()
 
     monkeypatch.setattr(
@@ -116,19 +116,20 @@ def test_run_postgres_via_docker_or_host_uses_docker_when_container_running(monk
         MagicMock(return_value=True),
     )
 
-    run_postgres_via_docker_or_host(
+    result = run_postgres_via_docker_or_host(
         via_docker=via_docker,
         via_host=via_host,
         operation="backup",
     )
 
+    assert result == "docker-result"
     via_docker.assert_called_once_with()
     via_host.assert_not_called()
 
 
 def test_run_postgres_via_docker_or_host_uses_host_when_container_stopped(monkeypatch):
     via_docker = MagicMock()
-    via_host = MagicMock()
+    via_host = MagicMock(return_value="host-result")
 
     monkeypatch.setattr(
         _backup_utils.DockerCommandExecutor,
@@ -136,19 +137,20 @@ def test_run_postgres_via_docker_or_host_uses_host_when_container_stopped(monkey
         MagicMock(return_value=False),
     )
 
-    run_postgres_via_docker_or_host(
+    result = run_postgres_via_docker_or_host(
         via_docker=via_docker,
         via_host=via_host,
         operation="restore",
     )
 
+    assert result == "host-result"
     via_docker.assert_not_called()
     via_host.assert_called_once_with()
 
 
 def test_run_postgres_via_docker_or_host_uses_host_when_docker_missing(monkeypatch):
     via_docker = MagicMock()
-    via_host = MagicMock()
+    via_host = MagicMock(return_value="host-result")
 
     monkeypatch.setattr(
         _backup_utils.DockerCommandExecutor,
@@ -156,11 +158,31 @@ def test_run_postgres_via_docker_or_host_uses_host_when_docker_missing(monkeypat
         MagicMock(side_effect=FileNotFoundError("docker not found")),
     )
 
-    run_postgres_via_docker_or_host(
+    result = run_postgres_via_docker_or_host(
         via_docker=via_docker,
         via_host=via_host,
         operation="backup",
     )
 
+    assert result == "host-result"
     via_docker.assert_not_called()
     via_host.assert_called_once_with()
+
+
+def test_run_postgres_via_docker_or_host_accepts_explicit_container_name(monkeypatch):
+    is_running = MagicMock(return_value=True)
+    monkeypatch.setattr(
+        _backup_utils.DockerCommandExecutor,
+        "is_container_running",
+        is_running,
+    )
+
+    result = run_postgres_via_docker_or_host(
+        via_docker=lambda: "docker-result",
+        via_host=lambda: "host-result",
+        operation="backup",
+        container_name="custom-postgres",
+    )
+
+    assert result == "docker-result"
+    is_running.assert_called_once_with("custom-postgres")
