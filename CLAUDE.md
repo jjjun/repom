@@ -194,7 +194,6 @@ lifespan 設定値で readiness 待機を制御したい場合に使う。
 docs/
 ├── guides/         # 使い方ガイド（testing, repository, model など）
 ├── ideas/          # 機能提案
-├── proposals/      # 外部プロジェクトへの一時提案書
 ├── technical/      # 実装詳細・制約の調査
 └── issues/
     ├── README.md   # 規約 (issuekit が参照)
@@ -226,15 +225,13 @@ docs/
 
 完了トリガーワード: 「完了」「終わった」「解決しました」「done」「complete」
 
-## Proposal Management
+## Cross-Project Proposals
 
-repom 側だけでは完結できず、外部プロジェクト・外部パッケージ側の変更が必要な場合は `docs/proposals/` を使う。
+repom 側だけでは完結できず、外部プロジェクト・外部パッケージ側の変更が必要な場合は issuekit のクロスプロジェクト提案を使う。
 
-1. `docs/proposals/` 直下の `.md` を確認する
-2. `README.md` と `_template.md` を除いた既存 proposal の最大番号 + 1 を採番する
-3. `docs/proposals/_template.md` を `docs/proposals/NNN_<target>_<slug>.md` にコピーする
-4. 提案先で必要な変更、repom 側だけでは解決できない理由、repom 側の後続作業を記録する
-5. repom 側で実装できる範囲は proposal 作成後も続けて対応する
+- 送信: `issuekit propose --to <repo>` で対象リポジトリの `docs/issues/incoming/` に提案を送る
+- 受信: `issuekit incoming` で確認し、採用するなら `issuekit adopt <file>` で `docs/issues/active/` の issue にする
+- 手順とフォーマットは `issuekit protocol` を参照する
 
 `docs/ideas/` は repom 内の機能アイデア、`docs/issues/` は repom 内の実装タスクに使う。
 
