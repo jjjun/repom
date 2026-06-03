@@ -5,7 +5,7 @@ priority: medium
 created: 2026-06-03
 completed:
 assignee: codex
-stage: implementing
+stage: review
 implementer: codex
 origin: mine-py#237@54556aa4
 title: Add generic ManyToManyMixin to repom.mixins
@@ -132,3 +132,9 @@ applied during the port:
 ## Related Resources
 
 - Origin: `mine-py#237@54556aa4`
+
+## Handoff
+
+- Summary: Added ManyToManyMixin with SQLAlchemy 2.0 select-based target/link handling, exported it from repom.mixins, and covered create/link/no-op/remove behavior with unit tests. Dropped the unused required_fields parameter per triage.
+- Branch: `main`
+- Commit: `15ef8edc31f810fa6abd64f0be95473bf6acfe2d`
