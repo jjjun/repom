@@ -88,3 +88,4 @@ tests/test_local.py
 
 # keep empty directories
 !.gitkeep
+issuekit.local.toml
