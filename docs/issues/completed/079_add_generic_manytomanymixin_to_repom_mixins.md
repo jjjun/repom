@@ -1,12 +1,10 @@
 ---
 id: 79
-status: in_progress
+status: completed
 priority: medium
 created: 2026-06-03
-completed:
-assignee: codex
-stage: review
-implementer: codex
+completed: 2026-06-03
+stage: done
 origin: mine-py#237@54556aa4
 title: Add generic ManyToManyMixin to repom.mixins
 ---
@@ -138,3 +136,10 @@ applied during the port:
 - Summary: Added ManyToManyMixin with SQLAlchemy 2.0 select-based target/link handling, exported it from repom.mixins, and covered create/link/no-op/remove behavior with unit tests. Dropped the unused required_fields parameter per triage.
 - Branch: `main`
 - Commit: `15ef8edc31f810fa6abd64f0be95473bf6acfe2d`
+
+**Completed**: 2026-06-03
+
+## Completion Notes
+
+- Approved by claude.
+- Verification: `uv run pytest tests/unit_tests/test_many_to_many_mixin.py (5 passed); uv run pytest tests/unit_tests (915 passed, 11 skipped); uv run issuekit check-encoding passed. ManyToManyMixin added to repom/mixins/many_to_many.py and exported from repom.mixins; required_fields dropped, lookups use SQLAlchemy 2.0 select/scalars, type hints + docstring notes added.`
