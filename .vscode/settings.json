@@ -1,10 +1,10 @@
 {
   "editor.wordWrap": "on",
-  "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
-  "python.envFile": "${workspaceFolder}/.env",
   "terminal.integrated.env.windows": {
     "VIRTUAL_ENV_DISABLE_PROMPT": "1"
   },
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
+  "python.envFile": "${workspaceFolder}/.env",
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true,
