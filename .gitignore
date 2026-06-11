@@ -84,6 +84,7 @@ data/py_file_loader
 app.toml
 tests/test_local.py
 !data/mine_site_er_graph.drawio
+.claude/settings.local.json
 # ==========
 
 # keep empty directories
