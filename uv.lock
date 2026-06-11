@@ -99,7 +99,7 @@ wheels = [
 [[package]]
 name = "basekit"
 version = "0.1.0"
-source = { git = "https://github.com/jjjun/basekit.git?branch=main#d8385309cf6e9f957c6d278b905b9646ebb26ce9" }
+source = { git = "https://github.com/jjjun/basekit.git?branch=main#f0335afec1db82f947aec308799ee6919819dc92" }
 dependencies = [
     { name = "python-dotenv" },
 ]
