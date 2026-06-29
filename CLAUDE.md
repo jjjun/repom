@@ -215,13 +215,15 @@ docs/
 
 ## Issue Management
 
-ローカル issue は `issuekit` CLI で管理する (規約は `docs/issues/README.md`)。
+issue は issuekit API (`project = "repom"`) で管理する。ローカルの
+`docs/issues/{active,completed,indexes}` は廃止済み。手順・コマンドの正本は
+`issuekit protocol --role <role>` (または MCP `get_protocol`) と
+`docs/issues/README.md`。
 
-- 状態確認・次の id: `issuekit info` (VS Code タスク `issue: info` でも可)
-- issue 変更後: `issuekit generate-indexes` と `issuekit validate`
-- 完了時: `issuekit complete <id> --summary "..." --verification "..."`
-- issue ファイルは英語 ASCII のみ。`docs/issues/indexes/` は生成物（手編集しない）。README に完了 issue 表を書き戻さない。
-- ファイルは UTF-8 (BOM なし) / LF。pre-commit (`issuekit check-encoding`) が検査する。
+- 状態確認: `issuekit info` / `issuekit queue`
+- 起票 (送る): `issuekit author --title "..." --body-file FILE --priority <high|medium|low> --agent <name>` (id はサーバ採番 `repom#<id>`)
+- ライフサイクル: author -> claim (`claim_next_task` / `issuekit implement`) -> `submit_for_review` -> `approve` / `request_changes`
+- issue 本文は英語 ASCII。ファイルは UTF-8 (BOM なし) / LF (pre-commit `issuekit check-encoding`)。
 
 完了トリガーワード: 「完了」「終わった」「解決しました」「done」「complete」
 
@@ -230,10 +232,10 @@ docs/
 repom 側だけでは完結できず、外部プロジェクト・外部パッケージ側の変更が必要な場合は issuekit のクロスプロジェクト提案を使う。
 
 - 送信: `issuekit propose --to <repo>` で対象リポジトリの `docs/issues/incoming/` に提案を送る
-- 受信: `issuekit incoming` で確認し、採用するなら `issuekit adopt <file>` で `docs/issues/active/` の issue にする
+- 受信: `issuekit incoming` で確認し、採用するなら `issuekit adopt <file>` で API の issue にする
 - 手順とフォーマットは `issuekit protocol` を参照する
 
-`docs/ideas/` は repom 内の機能アイデア、`docs/issues/` は repom 内の実装タスクに使う。
+`docs/ideas/` は repom 内の機能アイデア、issue は issuekit API (`project = "repom"`) で管理する (`docs/issues/` はクロスプロジェクト提案の受信箱のみ)。
 
 ## Development Guidelines
 
@@ -249,5 +251,5 @@ This repo uses the issuekit two-agent handoff. For the current steps, run
 for claude, or read the issuekit MCP server instructions / `get_protocol` tool.
 
 Do not copy the steps here; issuekit is the source of truth. Launch codex or
-Claude Code from the repo root so the MCP server resolves the correct
-`docs/issues/` directory.
+Claude Code from the repo root so the MCP server resolves the repo configuration
+(the `project` key and API settings).

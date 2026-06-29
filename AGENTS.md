@@ -247,27 +247,25 @@ db_engine, db_test = create_test_fixtures(
 Use issuekit cross-project proposals when work in repom reveals that another project or package must change before the overall goal can be completed.
 
 - `docs/ideas/` is for repom's own feature ideas.
-- `docs/issues/` is for repom implementation tasks; `docs/issues/incoming/` is the inbox for proposals from other repos.
+- Issues live in the issuekit API (`project = "repom"`); `docs/issues/incoming/` is the inbox for proposals from other repos.
 - Targets include `mine-py`, `fast-domain`, `mine-js-monorepo`, or `py_cr_wrapper`.
 
 To propose a change:
 - Send: `issuekit propose --to <repo>` writes into the target repo's `docs/issues/incoming/`.
-- Receive: `issuekit incoming` lists inbound proposals; `issuekit adopt <file>` turns one into a local `docs/issues/active/` issue.
+- Receive: `issuekit incoming` lists inbound proposals; `issuekit adopt <file>` turns one into an API issue.
 - See `issuekit protocol` for the full flow and format.
 
 ## Issue Management (AI Agent Rule)
 
-Manage local issues with the `issuekit` CLI (the spec is `docs/issues/README.md`).
+Issues live in the issuekit API (`project = "repom"`); there is no local
+`docs/issues/{active,completed,indexes}` tracker. The workflow steps are owned by
+issuekit (the spec is `docs/issues/README.md`): run `issuekit protocol --role <role>`
+or the MCP `get_protocol` tool.
 
-- Status and next id: `issuekit info` (or the VS Code task `issue: info`).
-- After changing issues: `issuekit generate-indexes` and `issuekit validate`.
-- To complete: `issuekit complete <id> --summary "..." --verification "..."`.
-
-Rules:
-- Issue files are English ASCII only (frontmatter and body).
-- `docs/issues/indexes/` is generated; never edit it by hand, and do not paste a completed-issue table back into the README.
-- Get the next id from `issuekit info`; do not count by hand.
-- Write files as UTF-8 without a BOM and with LF; a pre-commit hook runs `issuekit check-encoding`.
+- Inspect: `issuekit info` / `issuekit queue`.
+- Author (send): `issuekit author --title "..." --body-file FILE --priority <high|medium|low> --agent <name>`; the API allocates the id (`repom#<id>`). Do not create files or count ids by hand.
+- Lifecycle: author -> claim (`claim_next_task` or `issuekit implement <id> --agent <name>`) -> `submit_for_review` -> `approve` / `request_changes`.
+- Issue text is English ASCII; files are UTF-8 (no BOM) / LF (pre-commit `issuekit check-encoding`).
 
 ## Handoff protocol
 
@@ -276,5 +274,5 @@ This repo uses the issuekit two-agent handoff. For the current steps, run
 for claude, or read the issuekit MCP server instructions / `get_protocol` tool.
 
 Do not copy the steps here; issuekit is the source of truth. Launch codex or
-Claude Code from the repo root so the MCP server resolves the correct
-`docs/issues/` directory.
+Claude Code from the repo root so the MCP server resolves the repo configuration
+(the `project` key and API settings).
