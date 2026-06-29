@@ -99,6 +99,7 @@ filterwarnings = [
 
 
 [tool.issuekit]
+project = "repom"
 recent_count = 30
 ascii_id_threshold = 76
 issues_dir = "docs/issues"
