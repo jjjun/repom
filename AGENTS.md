@@ -247,20 +247,19 @@ db_engine, db_test = create_test_fixtures(
 Use issuekit cross-project proposals when work in repom reveals that another project or package must change before the overall goal can be completed.
 
 - `docs/ideas/` is for repom's own feature ideas.
-- Issues live in the issuekit API (`project = "repom"`); `docs/issues/incoming/` is the inbox for proposals from other repos.
+- Issues live in the issuekit API (`project = "repom"`); inbound proposals arrive in the API proposal inbox (`issuekit incoming`).
 - Targets include `mine-py`, `fast-domain`, `mine-js-monorepo`, or `py_cr_wrapper`.
 
 To propose a change:
-- Send: `issuekit propose --to <repo>` writes into the target repo's `docs/issues/incoming/`.
-- Receive: `issuekit incoming` lists inbound proposals; `issuekit adopt <file>` turns one into an API issue.
+- Send: `issuekit propose --to <project>` posts to the target project's API proposal inbox.
+- Receive: `issuekit incoming` lists inbound proposals; `issuekit adopt <id>` turns one into an API issue.
 - See `issuekit protocol` for the full flow and format.
 
 ## Issue Management (AI Agent Rule)
 
 Issues live in the issuekit API (`project = "repom"`); there is no local
 `docs/issues/{active,completed,indexes}` tracker. The workflow steps are owned by
-issuekit (the spec is `docs/issues/README.md`): run `issuekit protocol --role <role>`
-or the MCP `get_protocol` tool.
+issuekit: run `issuekit protocol --role <role>` or the MCP `get_protocol` tool.
 
 - Inspect: `issuekit info` / `issuekit queue`.
 - Author (send): `issuekit author --title "..." --body-file FILE --priority <high|medium|low> --agent <name>`; the API allocates the id (`repom#<id>`). Do not create files or count ids by hand.

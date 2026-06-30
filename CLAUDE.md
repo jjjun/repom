@@ -217,8 +217,7 @@ docs/
 
 issue は issuekit API (`project = "repom"`) で管理する。ローカルの
 `docs/issues/{active,completed,indexes}` は廃止済み。手順・コマンドの正本は
-`issuekit protocol --role <role>` (または MCP `get_protocol`) と
-`docs/issues/README.md`。
+`issuekit protocol --role <role>` (または MCP `get_protocol`)。
 
 - 状態確認: `issuekit info` / `issuekit queue`
 - 起票 (送る): `issuekit author --title "..." --body-file FILE --priority <high|medium|low> --agent <name>` (id はサーバ採番 `repom#<id>`)
@@ -231,11 +230,11 @@ issue は issuekit API (`project = "repom"`) で管理する。ローカルの
 
 repom 側だけでは完結できず、外部プロジェクト・外部パッケージ側の変更が必要な場合は issuekit のクロスプロジェクト提案を使う。
 
-- 送信: `issuekit propose --to <repo>` で対象リポジトリの `docs/issues/incoming/` に提案を送る
-- 受信: `issuekit incoming` で確認し、採用するなら `issuekit adopt <file>` で API の issue にする
+- 送信: `issuekit propose --to <repo>` で対象プロジェクトの API 提案受信箱に送る
+- 受信: `issuekit incoming` で確認し、採用するなら `issuekit adopt <id>` で API の issue にする
 - 手順とフォーマットは `issuekit protocol` を参照する
 
-`docs/ideas/` は repom 内の機能アイデア、issue は issuekit API (`project = "repom"`) で管理する (`docs/issues/` はクロスプロジェクト提案の受信箱のみ)。
+`docs/ideas/` は repom 内の機能アイデア、issue とクロスプロジェクト提案は issuekit API (`project = "repom"`) で管理する。
 
 ## Development Guidelines
 
