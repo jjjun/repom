@@ -11,6 +11,7 @@ POSTGRES_ENV_NAMES = (
     "POSTGRES_PASSWORD",
     "POSTGRES_HOST",
     "POSTGRES_PORT",
+    "POSTGRES_HOST_PORT",
 )
 
 
@@ -29,6 +30,16 @@ def test_apply_postgres_env_overrides_does_nothing_when_unset():
     assert config.postgres.password == "repom_dev"
     assert config.postgres.host == "localhost"
     assert config.postgres.port == 5432
+    assert config.postgres.container.host_port == 5432
+
+
+def test_apply_postgres_env_overrides_keeps_existing_host_port_when_unset():
+    config = RepomConfig()
+    config.postgres.container.host_port = 5433
+
+    apply_postgres_env_overrides(config)
+
+    assert config.postgres.container.host_port == 5433
 
 
 @pytest.mark.parametrize(
@@ -60,6 +71,7 @@ def test_apply_postgres_env_overrides_applies_all_envs(monkeypatch):
     monkeypatch.setenv("POSTGRES_PASSWORD", "secret")
     monkeypatch.setenv("POSTGRES_HOST", "postgres")
     monkeypatch.setenv("POSTGRES_PORT", "15432")
+    monkeypatch.setenv("POSTGRES_HOST_PORT", "5455")
     config = RepomConfig()
 
     apply_postgres_env_overrides(config)
@@ -68,6 +80,19 @@ def test_apply_postgres_env_overrides_applies_all_envs(monkeypatch):
     assert config.postgres.password == "secret"
     assert config.postgres.host == "postgres"
     assert config.postgres.port == 15432
+    assert config.postgres.container.host_port == 5455
+
+
+def test_apply_postgres_env_overrides_applies_host_port_without_connection_port(
+    monkeypatch,
+):
+    monkeypatch.setenv("POSTGRES_HOST_PORT", "5455")
+    config = RepomConfig()
+
+    apply_postgres_env_overrides(config)
+
+    assert config.postgres.port == 5432
+    assert config.postgres.container.host_port == 5455
 
 
 def test_apply_postgres_env_overrides_rejects_non_integer_port(monkeypatch):
@@ -75,6 +100,14 @@ def test_apply_postgres_env_overrides_rejects_non_integer_port(monkeypatch):
     config = RepomConfig()
 
     with pytest.raises(ValueError, match="POSTGRES_PORT must be an integer"):
+        apply_postgres_env_overrides(config)
+
+
+def test_apply_postgres_env_overrides_rejects_non_integer_host_port(monkeypatch):
+    monkeypatch.setenv("POSTGRES_HOST_PORT", "invalid")
+    config = RepomConfig()
+
+    with pytest.raises(ValueError, match="POSTGRES_HOST_PORT must be an integer"):
         apply_postgres_env_overrides(config)
 
 
@@ -90,6 +123,21 @@ def test_apply_postgres_env_overrides_rejects_out_of_range_port(
         apply_postgres_env_overrides(config)
 
 
+@pytest.mark.parametrize("value", ["0", "70000"])
+def test_apply_postgres_env_overrides_rejects_out_of_range_host_port(
+    monkeypatch,
+    value,
+):
+    monkeypatch.setenv("POSTGRES_HOST_PORT", value)
+    config = RepomConfig()
+
+    with pytest.raises(
+        ValueError,
+        match="POSTGRES_HOST_PORT must be between 1 and 65535",
+    ):
+        apply_postgres_env_overrides(config)
+
+
 def test_repom_config_singleton_applies_postgres_env(monkeypatch):
     import repom.config as config_module
 
@@ -97,6 +145,7 @@ def test_repom_config_singleton_applies_postgres_env(monkeypatch):
     monkeypatch.setenv("POSTGRES_PASSWORD", "env_password")
     monkeypatch.setenv("POSTGRES_HOST", "env-postgres")
     monkeypatch.setenv("POSTGRES_PORT", "15432")
+    monkeypatch.setenv("POSTGRES_HOST_PORT", "5455")
     reloaded = importlib.reload(config_module)
 
     try:
@@ -104,6 +153,7 @@ def test_repom_config_singleton_applies_postgres_env(monkeypatch):
         assert reloaded.config.postgres.password == "env_password"
         assert reloaded.config.postgres.host == "env-postgres"
         assert reloaded.config.postgres.port == 15432
+        assert reloaded.config.postgres.container.host_port == 5455
     finally:
         for name in POSTGRES_ENV_NAMES:
             monkeypatch.delenv(name, raising=False)
