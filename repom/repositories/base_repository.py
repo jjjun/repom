@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from collections.abc import Sequence
 from typing import Any, Callable, Type, TypeVar, Generic, Optional, List, Dict, Union, get_args
-from sqlalchemy import ColumnElement, and_, delete, select, true, update
+from sqlalchemy import ColumnElement, and_, delete, func, select, true, update
 from sqlalchemy.orm import Session, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 from repom.database import get_db_session
@@ -509,16 +509,15 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
         Returns:
             int: 一致するレコード数
         """
+        query = select(func.count()).select_from(self.model)
+        all_filters = list(filters) if filters else []
+        if self._has_soft_delete() and not include_deleted:
+            all_filters.append(self.model.deleted_at.is_(None))
+
+        if all_filters:
+            query = query.where(and_(*all_filters))
         with self._session_scope() as session:
-            query = session.query(self.model)
-
-            all_filters = list(filters) if filters else []
-            if self._has_soft_delete() and not include_deleted:
-                all_filters.append(self.model.deleted_at.is_(None))
-
-            if all_filters:
-                query = query.filter(and_(*all_filters))
-            return query.count()
+            return session.execute(query).scalar()
 
     def count_by_params(self, params: Optional[FilterParams] = None, include_deleted: bool = False) -> int:
         filters = self._build_filters(params)

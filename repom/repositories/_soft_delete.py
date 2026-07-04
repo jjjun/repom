@@ -45,7 +45,7 @@ class SoftDeleteRepositoryMixin(Generic[T]):
             )
 
         with self._session_scope() as session:
-            item = self.get_by_id(id, include_deleted=False)
+            item = self._get_by_id_in_session(session, id, include_deleted=False)
             if not item:
                 return False
 
@@ -83,7 +83,7 @@ class SoftDeleteRepositoryMixin(Generic[T]):
             )
 
         with self._session_scope() as session:
-            item = self.get_by_id(id, include_deleted=True)
+            item = self._get_by_id_in_session(session, id, include_deleted=True)
             if not item or not item.is_deleted:
                 return False
 
@@ -126,7 +126,8 @@ class SoftDeleteRepositoryMixin(Generic[T]):
 
         with self._session_scope() as session:
             try:
-                session.delete(item)
+                managed_item = session.merge(item)
+                session.delete(managed_item)
                 session.commit()
                 logger.warning(
                     f"Permanently deleted: {self.model.__name__} id={id}"
@@ -135,6 +136,14 @@ class SoftDeleteRepositoryMixin(Generic[T]):
             except SQLAlchemyError:
                 session.rollback()
                 raise
+
+    def _get_by_id_in_session(self, session, id: int, include_deleted: bool = False) -> Optional[T]:
+        filters = [self.model.id == id]
+        if self._has_soft_delete() and not include_deleted:
+            filters.append(self.model.deleted_at.is_(None))
+
+        query = select(self.model).where(and_(*filters)).limit(1)
+        return session.execute(query).scalars().first()
 
     def find_deleted(self, filters: Optional[List[Callable]] = None, **kwargs) -> List[T]:
         """削除済みレコードのみ取得
@@ -233,7 +242,7 @@ class AsyncSoftDeleteRepositoryMixin(Generic[T]):
             )
 
         async with self._session_scope() as session:
-            item = await self.get_by_id(id, include_deleted=False)
+            item = await self._get_by_id_in_session(session, id, include_deleted=False)
             if not item:
                 return False
 
@@ -271,7 +280,7 @@ class AsyncSoftDeleteRepositoryMixin(Generic[T]):
             )
 
         async with self._session_scope() as session:
-            item = await self.get_by_id(id, include_deleted=True)
+            item = await self._get_by_id_in_session(session, id, include_deleted=True)
             if not item or not item.is_deleted:
                 return False
 
@@ -314,7 +323,8 @@ class AsyncSoftDeleteRepositoryMixin(Generic[T]):
 
         async with self._session_scope() as session:
             try:
-                await session.delete(item)
+                managed_item = await session.merge(item)
+                await session.delete(managed_item)
                 await session.commit()
                 logger.warning(
                     f"Permanently deleted: {self.model.__name__} id={id}"
@@ -323,6 +333,15 @@ class AsyncSoftDeleteRepositoryMixin(Generic[T]):
             except SQLAlchemyError:
                 await session.rollback()
                 raise
+
+    async def _get_by_id_in_session(self, session, id: int, include_deleted: bool = False) -> Optional[T]:
+        filters = [self.model.id == id]
+        if self._has_soft_delete() and not include_deleted:
+            filters.append(self.model.deleted_at.is_(None))
+
+        query = select(self.model).where(and_(*filters)).limit(1)
+        result = await session.execute(query)
+        return result.scalars().first()
 
     async def find_deleted(self, filters: Optional[List[Callable]] = None, **kwargs) -> List[T]:
         """削除済みレコードのみ取得

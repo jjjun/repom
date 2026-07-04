@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.models.base_model_auto import BaseModelAuto
-from repom.repositories import BaseRepository
+from repom.repositories import AsyncBaseRepository, BaseRepository
 from repom.mixins import SoftDeletableMixin
 
 
@@ -291,6 +291,97 @@ class TestRepositoryPermanentDelete:
 
         assert data['repo'].permanent_delete(item_id) is True
         assert data['repo'].get_by_id(item_id) is None
+
+
+class TestRepositoryInternalSessionSoftDelete:
+    def test_soft_delete_persists_without_explicit_session(self):
+        repo = BaseRepository(SoftDeleteTestModel)
+        item = repo.save(SoftDeleteTestModel(name="internal_soft_delete"))
+        item_id = item.id
+
+        assert repo.soft_delete(item_id) is True
+
+        verify_repo = BaseRepository(SoftDeleteTestModel)
+        assert verify_repo.get_by_id(item_id) is None
+        deleted_item = verify_repo.get_by_id(item_id, include_deleted=True)
+        assert deleted_item is not None
+        assert deleted_item.is_deleted is True
+
+        assert verify_repo.permanent_delete(item_id) is True
+
+    def test_restore_persists_without_explicit_session(self):
+        repo = BaseRepository(SoftDeleteTestModel)
+        item = repo.save(SoftDeleteTestModel(name="internal_restore"))
+        item_id = item.id
+
+        assert repo.soft_delete(item_id) is True
+        assert repo.restore(item_id) is True
+
+        verify_repo = BaseRepository(SoftDeleteTestModel)
+        restored_item = verify_repo.get_by_id(item_id)
+        assert restored_item is not None
+        assert restored_item.is_deleted is False
+        assert restored_item.deleted_at is None
+
+        assert verify_repo.permanent_delete(item_id) is True
+
+    def test_permanent_delete_persists_without_explicit_session(self):
+        repo = BaseRepository(SoftDeleteTestModel)
+        item = repo.save(SoftDeleteTestModel(name="internal_permanent_delete"))
+        item_id = item.id
+
+        assert repo.soft_delete(item_id) is True
+        assert repo.permanent_delete(item_id) is True
+
+        verify_repo = BaseRepository(SoftDeleteTestModel)
+        assert verify_repo.get_by_id(item_id, include_deleted=True) is None
+
+
+class TestAsyncRepositoryInternalSessionSoftDelete:
+    @pytest.mark.asyncio
+    async def test_soft_delete_persists_without_explicit_session(self):
+        repo = AsyncBaseRepository(SoftDeleteTestModel)
+        item = await repo.save(SoftDeleteTestModel(name="async_internal_soft_delete"))
+        item_id = item.id
+
+        assert await repo.soft_delete(item_id) is True
+
+        verify_repo = AsyncBaseRepository(SoftDeleteTestModel)
+        assert await verify_repo.get_by_id(item_id) is None
+        deleted_item = await verify_repo.get_by_id(item_id, include_deleted=True)
+        assert deleted_item is not None
+        assert deleted_item.is_deleted is True
+
+        assert await verify_repo.permanent_delete(item_id) is True
+
+    @pytest.mark.asyncio
+    async def test_restore_persists_without_explicit_session(self):
+        repo = AsyncBaseRepository(SoftDeleteTestModel)
+        item = await repo.save(SoftDeleteTestModel(name="async_internal_restore"))
+        item_id = item.id
+
+        assert await repo.soft_delete(item_id) is True
+        assert await repo.restore(item_id) is True
+
+        verify_repo = AsyncBaseRepository(SoftDeleteTestModel)
+        restored_item = await verify_repo.get_by_id(item_id)
+        assert restored_item is not None
+        assert restored_item.is_deleted is False
+        assert restored_item.deleted_at is None
+
+        assert await verify_repo.permanent_delete(item_id) is True
+
+    @pytest.mark.asyncio
+    async def test_permanent_delete_persists_without_explicit_session(self):
+        repo = AsyncBaseRepository(SoftDeleteTestModel)
+        item = await repo.save(SoftDeleteTestModel(name="async_internal_permanent_delete"))
+        item_id = item.id
+
+        assert await repo.soft_delete(item_id) is True
+        assert await repo.permanent_delete(item_id) is True
+
+        verify_repo = AsyncBaseRepository(SoftDeleteTestModel)
+        assert await verify_repo.get_by_id(item_id, include_deleted=True) is None
 
 
 class TestFindDeleted:
