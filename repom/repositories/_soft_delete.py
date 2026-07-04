@@ -12,7 +12,42 @@ T = TypeVar('T')
 logger = logging.getLogger(__name__)
 
 
-class SoftDeleteRepositoryMixin(Generic[T]):
+class _SoftDeleteQueryBuilder(Generic[T]):
+    """論理削除系メソッドのクエリ構築を担う同期/非同期共通ヘルパー.
+
+    ``find_deleted`` / ``find_deleted_before`` / ``_get_by_id_in_session`` は
+    クエリ構築部分が同期/非同期で完全に一致し、実行時の ``await`` の有無だけが
+    異なります。ここでクエリを組み立て、各 Mixin は実行のみを行います。
+    """
+
+    def _get_by_id_query(self, id: int, include_deleted: bool = False):
+        """ID 指定で 1 件取得するクエリを構築する。"""
+        filters = [self.model.id == id]
+        if self._has_soft_delete() and not include_deleted:
+            filters.append(self.model.deleted_at.is_(None))
+
+        return select(self.model).where(and_(*filters)).limit(1)
+
+    def _find_deleted_query(self, filters: Optional[List[Callable]] = None, **kwargs):
+        """削除済みレコードのみを取得するクエリを構築する。"""
+        all_filters = list(filters) if filters else []
+        all_filters.append(self.model.deleted_at.isnot(None))
+
+        query = select(self.model).where(and_(*all_filters))
+        return self.set_find_option(query, **kwargs)
+
+    def _find_deleted_before_query(self, before_date: datetime, **kwargs):
+        """指定日時より前に削除されたレコードを取得するクエリを構築する。"""
+        filters = [
+            self.model.deleted_at.isnot(None),
+            self.model.deleted_at < before_date,
+        ]
+
+        query = select(self.model).where(and_(*filters))
+        return self.set_find_option(query, **kwargs)
+
+
+class SoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
     """論理削除機能を提供する同期版リポジトリ Mixin.
 
     BaseRepository と組み合わせて使用します。
@@ -138,11 +173,7 @@ class SoftDeleteRepositoryMixin(Generic[T]):
                 raise
 
     def _get_by_id_in_session(self, session, id: int, include_deleted: bool = False) -> Optional[T]:
-        filters = [self.model.id == id]
-        if self._has_soft_delete() and not include_deleted:
-            filters.append(self.model.deleted_at.is_(None))
-
-        query = select(self.model).where(and_(*filters)).limit(1)
+        query = self._get_by_id_query(id, include_deleted=include_deleted)
         return session.execute(query).scalars().first()
 
     def find_deleted(self, filters: Optional[List[Callable]] = None, **kwargs) -> List[T]:
@@ -165,11 +196,7 @@ class SoftDeleteRepositoryMixin(Generic[T]):
         if not self._has_soft_delete():
             return []
 
-        all_filters = list(filters) if filters else []
-        all_filters.append(self.model.deleted_at.isnot(None))
-
-        query = select(self.model).where(and_(*all_filters))
-        query = self.set_find_option(query, **kwargs)
+        query = self._find_deleted_query(filters, **kwargs)
         with self._session_scope() as session:
             return session.execute(query).scalars().all()
 
@@ -198,18 +225,12 @@ class SoftDeleteRepositoryMixin(Generic[T]):
         if not self._has_soft_delete():
             return []
 
-        filters = [
-            self.model.deleted_at.isnot(None),
-            self.model.deleted_at < before_date
-        ]
-
-        query = select(self.model).where(and_(*filters))
-        query = self.set_find_option(query, **kwargs)
+        query = self._find_deleted_before_query(before_date, **kwargs)
         with self._session_scope() as session:
             return session.execute(query).scalars().all()
 
 
-class AsyncSoftDeleteRepositoryMixin(Generic[T]):
+class AsyncSoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
     """論理削除機能を提供する非同期版リポジトリ Mixin.
 
     AsyncBaseRepository と組み合わせて使用します。
@@ -335,11 +356,7 @@ class AsyncSoftDeleteRepositoryMixin(Generic[T]):
                 raise
 
     async def _get_by_id_in_session(self, session, id: int, include_deleted: bool = False) -> Optional[T]:
-        filters = [self.model.id == id]
-        if self._has_soft_delete() and not include_deleted:
-            filters.append(self.model.deleted_at.is_(None))
-
-        query = select(self.model).where(and_(*filters)).limit(1)
+        query = self._get_by_id_query(id, include_deleted=include_deleted)
         result = await session.execute(query)
         return result.scalars().first()
 
@@ -363,11 +380,7 @@ class AsyncSoftDeleteRepositoryMixin(Generic[T]):
         if not self._has_soft_delete():
             return []
 
-        all_filters = list(filters) if filters else []
-        all_filters.append(self.model.deleted_at.isnot(None))
-
-        query = select(self.model).where(and_(*all_filters))
-        query = self.set_find_option(query, **kwargs)
+        query = self._find_deleted_query(filters, **kwargs)
         async with self._session_scope() as session:
             result = await session.execute(query)
             return result.scalars().all()
@@ -397,13 +410,7 @@ class AsyncSoftDeleteRepositoryMixin(Generic[T]):
         if not self._has_soft_delete():
             return []
 
-        filters = [
-            self.model.deleted_at.isnot(None),
-            self.model.deleted_at < before_date
-        ]
-
-        query = select(self.model).where(and_(*filters))
-        query = self.set_find_option(query, **kwargs)
+        query = self._find_deleted_before_query(before_date, **kwargs)
         async with self._session_scope() as session:
             result = await session.execute(query)
             return result.scalars().all()

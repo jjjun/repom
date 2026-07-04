@@ -1,15 +1,15 @@
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from collections.abc import Sequence
-from typing import Any, Callable, Type, TypeVar, Generic, Optional, List, Dict, Union
+from typing import Any, Callable, TypeVar, Generic, Optional, List, Dict, Union
 from sqlalchemy import ColumnElement, and_, delete, func, select, true, update
 from sqlalchemy.orm import Session, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 from repom.database import get_db_session
-from repom.repositories._core import has_soft_delete, FilterParams
+from repom.repositories._core import FilterParams
+from repom.repositories._repository_base import RepositoryBase
 from repom.repositories._soft_delete import SoftDeleteRepositoryMixin
 from repom.repositories._query_builder import QueryBuilderMixin
-from repom.repositories._introspection import resolve_repository_model
 import logging
 
 T = TypeVar('T')
@@ -18,75 +18,33 @@ T = TypeVar('T')
 logger = logging.getLogger(__name__)
 
 
-class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic[T]):
+class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic[T]):
     """同期版ベースリポジトリ
 
+    - RepositoryBase により同期/非同期共通のメンバー（__init__、session、
+      _has_soft_delete、_bulk_filters、モデル推論）を継承
     - SoftDeleteRepositoryMixin により論理削除機能を提供
     - QueryBuilderMixin によりクエリ構築機能を提供（同期/非同期共通の実装）
+
+    Example:
+        # 明示的な model 指定（従来の方法）
+        repo = BaseRepository(User, session=db_session)
+
+        # __init__ を省略した子クラスで自動推論
+        class UserRepository(BaseRepository[User]):
+            pass
+
+        repo = UserRepository(session=db_session)  # User が自動推論される
     """
 
-    def __init__(self, model: Optional[Type[T]] = None, session: Optional[Session] = None):
-        """
-        BaseRepositoryの初期化
-
-        Args:
-            model (Type[T], optional): モデルクラス. 省略時は型パラメータから自動推論される.
-            session (Session, optional): データベースセッション. Defaults to None (get_db_session() を使用).
-
-        Raises:
-            TypeError: model が推論できない場合、または Session が model に渡された場合
-
-        Example:
-            # 明示的な model 指定（従来の方法）
-            repo = BaseRepository(User, session=db_session)
-
-            # __init__ を省略した子クラスで自動推論
-            class UserRepository(BaseRepository[User]):
-                pass
-
-            repo = UserRepository(session=db_session)  # User が自動推論される
-        """
-        # Session が model 引数に渡された場合の検出（位置引数で渡された場合）
-        # scoped_session も含めてチェック
-        if isinstance(model, (Session, scoped_session)):
-            raise TypeError(
-                "Session object was passed as 'model' parameter. "
-                "This usually happens when __init__ is omitted and repo_class(session) is called. "
-                "Please use 'session' parameter: repo_class(session=session) or define __init__ explicitly."
-            )
-
-        # model が明示的に指定されていない場合、型パラメータから推論
-        if model is None:
-            model = self._infer_model_from_type_params()
-
-        self.model = model
-        self._session_override = session
-        self._scoped_session: Optional[Session] = None
-        self.default_options: List = []  # デフォルトの eager loading options
-
-    @classmethod
-    def _infer_model_from_type_params(cls) -> Type[T]:
-        """Infer the model class from the repository generic parameter."""
-        try:
-            return resolve_repository_model(cls)
-        except TypeError:
-            raise TypeError(
-                f"Could not infer model type for {cls.__name__}. "
-                f"Please either:\n"
-                f"1. Specify model explicitly: {cls.__name__}(model=YourModel, session=...)\n"
-                f"2. Define class as: class {cls.__name__}(BaseRepository[YourModel])\n"
-                f"3. Override __init__ and call super().__init__(YourModel, session)"
-            ) from None
-
-    @property
-    def session(self) -> Optional[Session]:
-        """明示的に渡されたセッション（またはスコープ内の内部セッション）を返却"""
-        return self._session_override or self._scoped_session
-
-    @session.setter
-    def session(self, session: Optional[Session]) -> None:
-        """明示的セッションを設定（None でリセット）"""
-        self._session_override = session
+    # RepositoryBase.__init__ のセッション種別ガード設定
+    _session_reject_types = (Session, scoped_session)
+    _session_reject_message = (
+        "Session object was passed as 'model' parameter. "
+        "This usually happens when __init__ is omitted and repo_class(session) is called. "
+        "Please use 'session' parameter: repo_class(session=session) or define __init__ explicitly."
+    )
+    _repository_base_name = "BaseRepository"
 
     @contextmanager
     def _session_scope(self) -> Session:
@@ -105,14 +63,6 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
                 session.expunge_all()
             self._scoped_session = None
             session_generator.close()
-
-    def _has_soft_delete(self) -> bool:
-        """モデルが SoftDeletableMixin を持つか確認
-
-        Returns:
-            bool: deleted_at カラムが存在する場合 True
-        """
-        return has_soft_delete(self.model)
 
     def get_by(
         self,
@@ -379,17 +329,6 @@ class BaseRepository(SoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic
                     session.rollback()
                 raise
         return rowcount
-
-    def _bulk_filters(self, filter_by: dict | None) -> list[ColumnElement]:
-        if not filter_by:
-            return []
-
-        filters = []
-        for column_name, value in filter_by.items():
-            if not hasattr(self.model, column_name):
-                raise AttributeError(f"Column '{column_name}' does not exist on {self.model.__name__}")
-            filters.append(getattr(self.model, column_name) == value)
-        return filters
 
     def remove(self, instance: T) -> None:
         """

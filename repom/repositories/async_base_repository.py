@@ -24,15 +24,15 @@ Example:
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from collections.abc import Sequence
-from typing import Any, Callable, Type, TypeVar, Generic, Optional, List, Dict, Union
+from typing import Any, Callable, TypeVar, Generic, Optional, List, Dict, Union
 from sqlalchemy import ColumnElement, and_, delete, select, true, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 from repom.database import get_async_db_session
-from repom.repositories._core import has_soft_delete, FilterParams
+from repom.repositories._core import FilterParams
+from repom.repositories._repository_base import RepositoryBase
 from repom.repositories._soft_delete import AsyncSoftDeleteRepositoryMixin
 from repom.repositories._query_builder import QueryBuilderMixin
-from repom.repositories._introspection import resolve_repository_model
 import logging
 
 T = TypeVar('T')
@@ -41,77 +41,36 @@ T = TypeVar('T')
 logger = logging.getLogger(__name__)
 
 
-class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic[T]):
+class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T], Generic[T]):
     """非同期版のベースリポジトリ
 
     BaseRepository と同じ機能を非同期で提供します。
-    すべてのメソッドは async def で定義されています。
+    すべての I/O メソッドは async def で定義されています。
+    同期/非同期共通のメンバー（__init__、session、_has_soft_delete、
+    _bulk_filters、モデル推論）は RepositoryBase から継承します。
 
     Attributes:
         allowed_order_columns: ソート可能なカラムのホワイトリスト（サブクラスで拡張可能、同期/非同期共通）
+
+    Example:
+        # 明示的な model 指定（従来の方法）
+        repo = AsyncBaseRepository(User, session=async_session)
+
+        # __init__ を省略した子クラスで自動推論
+        class UserRepository(AsyncBaseRepository[User]):
+            pass
+
+        repo = UserRepository(session=async_session)  # User が自動推論される
     """
 
-    def __init__(self, model: Optional[Type[T]] = None, session: Optional[AsyncSession] = None):
-        """AsyncBaseRepository の初期化
-
-        Args:
-            model (Type[T], optional): モデルクラス. 省略時は型パラメータから自動推論される.
-            session (AsyncSession, optional): 非同期データベースセッション. Defaults to None (get_async_db_session() を使用).
-
-        Raises:
-            TypeError: model が推論できない場合、または Session が model に渡された場合
-
-        Example:
-            # 明示的な model 指定（従来の方法）
-            repo = AsyncBaseRepository(User, session=async_session)
-
-            # __init__ を省略した子クラスで自動推論
-            class UserRepository(AsyncBaseRepository[User]):
-                pass
-
-            repo = UserRepository(session=async_session)  # User が自動推論される
-        """
-        # AsyncSession が model 引数に渡された場合の検出（位置引数で渡された場合）
-        # async_scoped_session も含めてチェック
-        if isinstance(model, (AsyncSession, async_scoped_session)):
-            raise TypeError(
-                "AsyncSession object was passed as 'model' parameter. "
-                "This usually happens when __init__ is omitted and repo_class(session) is called. "
-                "Please use 'session' parameter: repo_class(session=session) or define __init__ explicitly."
-            )
-
-        # model が明示的に指定されていない場合、型パラメータから推論
-        if model is None:
-            model = self._infer_model_from_type_params()
-
-        self.model = model
-        self._session_override = session
-        self._scoped_session: Optional[AsyncSession] = None
-        self.default_options: List = []  # デフォルトの eager loading options
-
-    @classmethod
-    def _infer_model_from_type_params(cls) -> Type[T]:
-        """Infer the model class from the repository generic parameter."""
-        try:
-            return resolve_repository_model(cls)
-        except TypeError:
-            raise TypeError(
-                f"Could not infer model type for {cls.__name__}. "
-                f"Please either:\n"
-                f"1. Specify model explicitly: {cls.__name__}(model=YourModel, session=...)\n"
-                f"2. Define class as: class {cls.__name__}(AsyncBaseRepository[YourModel])\n"
-                f"3. Override __init__ and call super().__init__(YourModel, session)"
-            ) from None
-
-    @property
-    def session(self) -> Optional[AsyncSession]:
-        """明示的に渡されたセッション（またはスコープ内の内部セッション）を返却"""
-        return self._session_override or self._scoped_session
-
-    @session.setter
-    def session(self, session: Optional[AsyncSession]) -> None:
-        """明示的セッションを設定（None でリセット）"""
-        self._session_override = session
+    # RepositoryBase.__init__ のセッション種別ガード設定
+    _session_reject_types = (AsyncSession, async_scoped_session)
+    _session_reject_message = (
+        "AsyncSession object was passed as 'model' parameter. "
+        "This usually happens when __init__ is omitted and repo_class(session) is called. "
+        "Please use 'session' parameter: repo_class(session=session) or define __init__ explicitly."
+    )
+    _repository_base_name = "AsyncBaseRepository"
 
     @asynccontextmanager
     async def _session_scope(self) -> AsyncSession:
@@ -130,14 +89,6 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
                 session.expunge_all()
             self._scoped_session = None
             await session_generator.aclose()
-
-    def _has_soft_delete(self) -> bool:
-        """モデルが SoftDeletableMixin を持つか確認
-
-        Returns:
-            bool: deleted_at カラムが存在する場合 True
-        """
-        return has_soft_delete(self.model)
 
     async def get_by(
         self,
@@ -406,17 +357,6 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
                     await session.rollback()
                 raise
         return rowcount
-
-    def _bulk_filters(self, filter_by: dict | None) -> list[ColumnElement]:
-        if not filter_by:
-            return []
-
-        filters = []
-        for column_name, value in filter_by.items():
-            if not hasattr(self.model, column_name):
-                raise AttributeError(f"Column '{column_name}' does not exist on {self.model.__name__}")
-            filters.append(getattr(self.model, column_name) == value)
-        return filters
 
     async def remove(self, instance: T) -> None:
         """インスタンスを削除
