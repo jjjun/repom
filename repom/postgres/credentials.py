@@ -258,7 +258,13 @@ def rotate_postgres_credentials(
 def build_pgadmin_update_password_command(
     plan: PgAdminCredentialRotationPlan,
 ) -> tuple[str, ...]:
-    """Build the supported pgAdmin setup.py password update command."""
+    """Build the supported pgAdmin setup.py password update command.
+
+    pgAdmin documents ``setup.py update-user`` with ``--password`` as a command
+    argument and does not document a stdin or environment-variable password
+    input. The new password is therefore visible to host process-list readers
+    while this short-lived command runs.
+    """
 
     container_name = plan.container_name or config.pgadmin.container.get_container_name()
     return (

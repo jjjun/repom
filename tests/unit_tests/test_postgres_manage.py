@@ -178,17 +178,17 @@ class TestGenerateInitSql:
 
         sql = generate_init_sql()
 
-        #  CREATE DATABASE gexec 
-        assert "'CREATE DATABASE repom'" in sql
-        assert "'CREATE DATABASE repom_dev'" in sql
-        assert "'CREATE DATABASE repom_test'" in sql
+        #  CREATE DATABASE gexec
+        assert "'CREATE DATABASE \"repom\"'" in sql
+        assert "'CREATE DATABASE \"repom_dev\"'" in sql
+        assert "'CREATE DATABASE \"repom_test\"'" in sql
         # IF NOT EXISTS 
         assert "WHERE NOT EXISTS" in sql
         assert "pg_database" in sql
         # GRANT  DB 
-        assert "GRANT ALL PRIVILEGES ON DATABASE repom TO repom;" in sql
-        assert "GRANT ALL PRIVILEGES ON DATABASE repom_dev TO repom;" in sql
-        assert "GRANT ALL PRIVILEGES ON DATABASE repom_test TO repom;" in sql
+        assert 'GRANT ALL PRIVILEGES ON DATABASE "repom" TO "repom";' in sql
+        assert 'GRANT ALL PRIVILEGES ON DATABASE "repom_dev" TO "repom";' in sql
+        assert 'GRANT ALL PRIVILEGES ON DATABASE "repom_test" TO "repom";' in sql
 
     @patch('repom.postgres.manage.config')
     def test_custom_database_names(self, mock_config):
@@ -201,14 +201,14 @@ class TestGenerateInitSql:
 
         sql = generate_init_sql()
 
-        #  CREATE DATABASE gexec 
-        assert "'CREATE DATABASE mine_py'" in sql
-        assert "'CREATE DATABASE mine_py_dev'" in sql
-        assert "'CREATE DATABASE mine_py_test'" in sql
+        #  CREATE DATABASE gexec
+        assert "'CREATE DATABASE \"mine_py\"'" in sql
+        assert "'CREATE DATABASE \"mine_py_dev\"'" in sql
+        assert "'CREATE DATABASE \"mine_py_test\"'" in sql
         # GRANT  DB 
-        assert "GRANT ALL PRIVILEGES ON DATABASE mine_py TO mine_py;" in sql
-        assert "GRANT ALL PRIVILEGES ON DATABASE mine_py_dev TO mine_py;" in sql
-        assert "GRANT ALL PRIVILEGES ON DATABASE mine_py_test TO mine_py;" in sql
+        assert 'GRANT ALL PRIVILEGES ON DATABASE "mine_py" TO "mine_py";' in sql
+        assert 'GRANT ALL PRIVILEGES ON DATABASE "mine_py_dev" TO "mine_py";' in sql
+        assert 'GRANT ALL PRIVILEGES ON DATABASE "mine_py_test" TO "mine_py";' in sql
 
     @patch('repom.postgres.manage.config')
     def test_environment_prefixing_in_sql(self, mock_config):
@@ -221,15 +221,34 @@ class TestGenerateInitSql:
 
         sql = generate_init_sql()
 
-        #  CREATE DATABASE gexec 
-        assert "'CREATE DATABASE project'" in sql
-        assert "'CREATE DATABASE project_dev'" in sql
-        assert "'CREATE DATABASE project_test'" in sql
+        #  CREATE DATABASE gexec
+        assert "'CREATE DATABASE \"project\"'" in sql
+        assert "'CREATE DATABASE \"project_dev\"'" in sql
+        assert "'CREATE DATABASE \"project_test\"'" in sql
 
         #  GRANT 
-        assert "GRANT ALL PRIVILEGES ON DATABASE project TO user;" in sql
-        assert "GRANT ALL PRIVILEGES ON DATABASE project_dev TO user;" in sql
-        assert "GRANT ALL PRIVILEGES ON DATABASE project_test TO user;" in sql
+        assert 'GRANT ALL PRIVILEGES ON DATABASE "project" TO "user";' in sql
+        assert 'GRANT ALL PRIVILEGES ON DATABASE "project_dev" TO "user";' in sql
+        assert 'GRANT ALL PRIVILEGES ON DATABASE "project_test" TO "user";' in sql
+
+    @patch('repom.postgres.manage.config')
+    def test_hostile_database_and_user_names_are_quoted(self, mock_config):
+        """Identifiers and literals are quoted in generated init SQL."""
+        mock_config.data_path = DATA_PATH
+        mock_config.db_name = "app-db'oops"
+        mock_config.postgres.user = 'app"user'
+
+        from repom.postgres.manage import generate_init_sql
+
+        sql = generate_init_sql()
+
+        assert "CREATE DATABASE \"app-db''oops\"" in sql
+        assert "datname = 'app-db''oops'" in sql
+        assert (
+            'GRANT ALL PRIVILEGES ON DATABASE "app-db\'oops" TO "app""user";'
+            in sql
+        )
+        assert "-- app-db'oops" not in sql
 
 
 class TestDockerComposeFileGeneration:
@@ -287,6 +306,60 @@ class TestDockerComposeFileGeneration:
         assert "POSTGRES_PASSWORD: repom_dev" in yaml_content
         # Note: POSTGRES_DB DB init 
         assert "POSTGRES_DB" not in yaml_content
+
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.PostgresManager.get_compose_dir')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
+    def test_generate_stdout_does_not_include_passwords(
+        self,
+        mock_get_init_dir,
+        mock_get_compose_dir,
+        mock_config,
+        tmp_path,
+        capsys,
+    ):
+        """postgres_generate output does not print raw secrets."""
+        mock_init_dir = tmp_path / "init"
+        mock_init_dir.mkdir()
+        mock_get_init_dir.return_value = mock_init_dir
+
+        mock_compose_dir = tmp_path / "compose"
+        mock_compose_dir.mkdir()
+        mock_get_compose_dir.return_value = mock_compose_dir
+
+        mock_pg_config = MagicMock()
+        mock_pg_config.user = "repom"
+        mock_pg_config.password = "postgres-secret"
+        mock_pg_container = MagicMock()
+        mock_pg_container.get_container_name.return_value = "repom_postgres"
+        mock_pg_container.get_volume_name.return_value = "repom_postgres_data"
+        mock_pg_container.image = "postgres:16-alpine"
+        mock_pg_container.host_port = 5432
+        mock_pg_config.container = mock_pg_container
+
+        mock_pgadmin_container = MagicMock()
+        mock_pgadmin_container.enabled = True
+        mock_pgadmin_container.get_container_name.return_value = "repom_pgadmin"
+        mock_pgadmin_container.get_volume_name.return_value = "repom_pgadmin_data"
+        mock_pgadmin_container.image = "dpage/pgadmin4:latest"
+        mock_pgadmin_container.host_port = 5050
+        mock_pgadmin_config = MagicMock()
+        mock_pgadmin_config.email = "admin@example.com"
+        mock_pgadmin_config.password = "pgadmin-secret"
+        mock_pgadmin_config.container = mock_pgadmin_container
+
+        mock_config.db_name = "repom"
+        mock_config.postgres = mock_pg_config
+        mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
+
+        from repom.postgres.manage import generate
+
+        generate()
+
+        captured = capsys.readouterr()
+        assert "postgres-secret" not in captured.out
+        assert "pgadmin-secret" not in captured.out
 
 
 class TestPgAdminServersJson:

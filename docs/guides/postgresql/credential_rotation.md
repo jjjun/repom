@@ -41,9 +41,10 @@ old role.
 ## pgAdmin
 
 repom uses pgAdmin's supported `setup.py update-user --password` path inside the
-container. pgAdmin's command accepts the new password as a command argument, so
-the masked repom output does not prevent short-lived process-argument exposure
-while the command runs. Dry-run first:
+container. The pgAdmin user-management documentation describes password updates
+with `--password` and does not document a stdin or environment-variable input
+for this value, so the masked repom output does not prevent short-lived
+process-argument exposure while the command runs. Dry-run first:
 
 ```bash
 uv run pgadmin_rotate_password --new-password "new-password"

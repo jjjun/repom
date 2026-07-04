@@ -102,6 +102,31 @@ class TestPostgresManagerConnectionInfo:
         # Port should be in output
         assert str(manager.config.postgres.container.host_port) in captured.out
 
+    def test_print_connection_info_masks_passwords(self, capsys):
+        """Test print_connection_info does not print raw passwords."""
+        mock_config = MagicMock()
+        mock_config.data_path = Path("data") / "repom"
+        mock_config.db_name = "repom"
+        mock_config.postgres.user = "repom"
+        mock_config.postgres.password = "postgres-secret"
+        mock_config.postgres.container.host_port = 5432
+        mock_config.postgres.container.get_container_name.return_value = (
+            "repom_postgres"
+        )
+        mock_config.pgadmin.email = "admin@example.com"
+        mock_config.pgadmin.password = "pgadmin-secret"
+        mock_config.pgadmin.container.enabled = True
+        mock_config.pgadmin.container.host_port = 5050
+
+        with patch("repom.postgres.manage.config", mock_config):
+            manager = PostgresManager()
+            manager.print_connection_info()
+
+        captured = capsys.readouterr()
+        assert "postgres-secret" not in captured.out
+        assert "pgadmin-secret" not in captured.out
+        assert captured.out.count("Password: ***") == 2
+
 
 class TestPostgresManagerInheritance:
     """Test inheritance from DockerManager"""

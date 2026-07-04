@@ -13,6 +13,7 @@ import json
 import subprocess
 
 from repom.config import config
+from repom.postgres.credentials import mask_secret, quote_identifier, quote_literal
 from basekit.docker_compose import (
     DockerComposeGenerator,
     DockerService,
@@ -78,7 +79,11 @@ class PostgresManager(DockerManager):
         print("  Host: localhost")
         print(f"  Port: {self.config.postgres.container.host_port}")
         print(f"  User: {self.config.postgres.user}")
-        print(f"  Password: {self.config.postgres.password}")
+        postgres_password = mask_secret(
+            self.config.postgres.password,
+            (self.config.postgres.password,),
+        )
+        print(f"  Password: {postgres_password}")
         db_name = self.config.db_name
         print(f"  Databases: {db_name}, {db_name}_dev, {db_name}_test")
 
@@ -87,7 +92,11 @@ class PostgresManager(DockerManager):
             print(" pgAdmin Access:")
             print(f"  URL: http://localhost:{self.config.pgadmin.container.host_port}")
             print(f"  Email: {self.config.pgadmin.email}")
-            print(f"  Password: {self.config.pgadmin.password}")
+            pgadmin_password = mask_secret(
+                self.config.pgadmin.password,
+                (self.config.pgadmin.password,),
+            )
+            print(f"  Password: {pgadmin_password}")
             print()
             print("  PostgreSQL server auto-registered (servers.json)")
             print(f"  Server: {self.config.postgres.container.get_container_name()}")
@@ -181,17 +190,32 @@ def generate_init_sql() -> str:
 
     base = config.db_name
     user = config.postgres.user
+    databases = (base, f"{base}_dev", f"{base}_test")
+    create_lines = []
+    grant_lines = []
+    quoted_user = quote_identifier(user)
+    for database in databases:
+        create_database_sql = f"CREATE DATABASE {quote_identifier(database)}"
+        create_lines.append(
+            "SELECT "
+            f"{quote_literal(create_database_sql)} "
+            "WHERE NOT EXISTS "
+            f"(SELECT FROM pg_database WHERE datname = {quote_literal(database)})"
+            "\\gexec"
+        )
+        grant_lines.append(
+            "GRANT ALL PRIVILEGES ON DATABASE "
+            f"{quote_identifier(database)} TO {quoted_user};"
+        )
+    create_sql = "\n".join(create_lines)
+    grant_sql = "\n".join(grant_lines)
 
-    return f"""-- {base} project databases
+    return f"""-- Project databases
 -- Use \\gexec pattern to handle "IF NOT EXISTS" (PostgreSQL doesn't have CREATE DATABASE IF NOT EXISTS)
 
-SELECT 'CREATE DATABASE {base}' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{base}')\\gexec
-SELECT 'CREATE DATABASE {base}_dev' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{base}_dev')\\gexec
-SELECT 'CREATE DATABASE {base}_test' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{base}_test')\\gexec
+{create_sql}
 
-GRANT ALL PRIVILEGES ON DATABASE {base} TO {user};
-GRANT ALL PRIVILEGES ON DATABASE {base}_dev TO {user};
-GRANT ALL PRIVILEGES ON DATABASE {base}_test TO {user};
+{grant_sql}
 """
 
 
