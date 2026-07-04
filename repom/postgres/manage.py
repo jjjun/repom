@@ -1,25 +1,36 @@
-"""PostgreSQL Docker 
+"""PostgreSQL container management commands.
 
-
-    uv run postgres_generate  # docker-compose.yml 
-    uv run postgres_start      # PostgreSQL 
-    uv run postgres_stop       # PostgreSQL 
+Console scripts:
+    uv run postgres_generate
+    uv run postgres_start
+    uv run postgres_stop
+    uv run postgres_remove
 """
 
-import subprocess
-import sys
+from __future__ import annotations
+
 import json
+import subprocess
 
 from repom.config import config
-from basekit.docker_compose import DockerComposeGenerator, DockerService, DockerVolume
-from basekit import docker_manager as dm
+from basekit.docker_compose import (
+    DockerComposeGenerator,
+    DockerService,
+    DockerVolume,
+)
+from basekit.docker_manager import DockerCommandExecutor, DockerManager
+from repom.docker_service import (
+    ensure_running as ensure_container_service_running,
+    remove_service,
+    start_service,
+    stop_service,
+)
+
+COMPOSE_FILENAME = "docker-compose.generated.yml"
 
 
-class PostgresManager(dm.DockerManager):
-    """PostgreSQL ocker Manager 
-
-    docker-compose  start/stop/remove  DockerManager 
-    """
+class PostgresManager(DockerManager):
+    """Container manager for the repom PostgreSQL service."""
 
     SERVICE_NAME = "postgres"
     INIT_SUBDIR = "postgresql_init"
@@ -30,11 +41,13 @@ class PostgresManager(dm.DockerManager):
         self.config = config
 
     def get_container_name(self) -> str:
-        """PostgreSQL """
+        """Return the configured PostgreSQL container name."""
+
         return self.config.postgres.container.get_container_name()
 
     def wait_for_service(self, max_retries: int = 30) -> None:
-        """PostgreSQL g_isready """
+        """Wait until the PostgreSQL readiness command succeeds in the container."""
+
         container_name = self.get_container_name()
         user = self.config.postgres.user
 
@@ -45,20 +58,21 @@ class PostgresManager(dm.DockerManager):
                     capture_output=True,
                     text=True,
                     timeout=2,
-                    check=False
+                    check=False,
                 )
                 return result.returncode == 0
             except Exception:
                 return False
 
-        dm.DockerCommandExecutor.wait_for_readiness(
+        DockerCommandExecutor.wait_for_readiness(
             check_postgres_ready,
             max_retries=max_retries,
-            service_name="PostgreSQL"
+            service_name="PostgreSQL",
         )
 
     def print_connection_info(self) -> None:
-        """PostgreSQL """
+        """Print local PostgreSQL and pgAdmin connection details."""
+
         print()
         print(" PostgreSQL Connection:")
         print("  Host: localhost")
@@ -68,7 +82,6 @@ class PostgresManager(dm.DockerManager):
         db_name = self.config.db_name
         print(f"  Databases: {db_name}, {db_name}_dev, {db_name}_test")
 
-        # pgAdmin 
         if self.config.pgadmin.container.enabled:
             print()
             print(" pgAdmin Access:")
@@ -81,14 +94,8 @@ class PostgresManager(dm.DockerManager):
 
 
 def generate_pgadmin_servers_json() -> dict:
-    """pgAdmin 
+    """Build the pgAdmin servers.json structure from the active config."""
 
-    config 
-    CONFIG_HOOK 
-
-    Returns:
-        pgAdmin servers.json ict
-    """
     db_dev = f"{config.db_name}_dev"
 
     return {
@@ -96,28 +103,24 @@ def generate_pgadmin_servers_json() -> dict:
             "1": {
                 "Name": config.postgres.container.get_container_name(),
                 "Group": "Servers",
-                "Host": "postgres",  # Docker network  URL
+                "Host": "postgres",
                 "Port": 5432,
                 "Username": config.postgres.user,
                 "SSLMode": "prefer",
-                "MaintenanceDB": db_dev
+                "MaintenanceDB": db_dev,
             }
         }
     }
 
 
 def generate_docker_compose() -> DockerComposeGenerator:
-    """config  docker-compose.yml """
+    """Generate a compose model for PostgreSQL and optional pgAdmin."""
+
     manager = PostgresManager()
     pg = config.postgres
     container = pg.container
-
-    # init
     init_dir = manager.get_init_dir()
 
-    # PostgreSQL 
-    # Note: POSTGRES_DB OSTGRES_USER DB
-    # DB (dev/test/prod)  init 
     postgres_service = DockerService(
         name="postgres",
         image=container.image,
@@ -136,22 +139,16 @@ def generate_docker_compose() -> DockerComposeGenerator:
             "interval": "5s",
             "timeout": "5s",
             "retries": 5,
-            "start_period": "30s",  # 
-        }
+            "start_period": "30s",
+        },
     )
 
-    # Docker Volume 
-    data_volume = DockerVolume(name=container.get_volume_name())
-
-    # 
     generator = DockerComposeGenerator()
     generator.add_service(postgres_service)
-    generator.add_volume(data_volume)
+    generator.add_volume(DockerVolume(name=container.get_volume_name()))
 
-    # pgAdmin 
     if config.pgadmin.container.enabled:
         pgadmin_container = config.pgadmin.container
-        # servers.json
         servers_json_path = manager.get_compose_dir() / "servers.json"
 
         pgadmin_service = DockerService(
@@ -169,28 +166,19 @@ def generate_docker_compose() -> DockerComposeGenerator:
             ],
             depends_on={
                 "postgres": {
-                    "condition": "service_healthy"
+                    "condition": "service_healthy",
                 }
-            }
+            },
         )
-        pgadmin_volume = DockerVolume(name=pgadmin_container.get_volume_name())
         generator.add_service(pgadmin_service)
-        generator.add_volume(pgadmin_volume)
+        generator.add_volume(DockerVolume(name=pgadmin_container.get_volume_name()))
 
     return generator
 
 
 def generate_init_sql() -> str:
-    """ DB 
+    """Generate SQL that creates the project PostgreSQL databases."""
 
-    config.db_name 
-     repom repom, repom_dev, repom_test 
-
-    Note:
-        POSTGRES_USER  DB  Docker 
-        \\gexec 
-        \\gexec  psql ELECT SQL 
-    """
     base = config.db_name
     user = config.postgres.user
 
@@ -208,24 +196,25 @@ GRANT ALL PRIVILEGES ON DATABASE {base}_test TO {user};
 
 
 def generate():
-    """docker-compose.yml """
+    """Write PostgreSQL compose and initialization files."""
+
     manager = PostgresManager()
-    #
     init_dir = manager.get_init_dir()
     init_sql = generate_init_sql()
     (init_dir / "01_init_databases.sql").write_text(init_sql, encoding="utf-8")
 
-    # docker-compose.yml
     generator = generate_docker_compose()
     compose_dir = manager.get_compose_dir()
-    output_path = compose_dir / "docker-compose.generated.yml"
+    output_path = compose_dir / COMPOSE_FILENAME
     generator.write_to_file(output_path)
 
-    # pgAdmin servers.json 
     if config.pgadmin.container.enabled:
         servers_json_path = compose_dir / "servers.json"
         servers_config = generate_pgadmin_servers_json()
-        servers_json_path.write_text(json.dumps(servers_config, indent=2), encoding="utf-8")
+        servers_json_path.write_text(
+            json.dumps(servers_config, indent=2),
+            encoding="utf-8",
+        )
         print(f"pgAdmin servers config: {servers_json_path}")
 
     print(f"Generated: {output_path}")
@@ -235,7 +224,6 @@ def generate():
     print(f"   Port: {config.postgres.container.host_port}")
     print(f"   Volume: {config.postgres.container.get_volume_name()}")
 
-    # pgAdmin 
     if config.pgadmin.container.enabled:
         print("\n pgAdmin Service:")
         print(f"   Container: {config.pgadmin.container.get_container_name()}")
@@ -247,29 +235,15 @@ def generate():
 
 
 def start():
-    """PostgreSQL """
-    # docker-compose.yml 
-    generate()
+    """Generate files and start PostgreSQL."""
 
-    manager = PostgresManager()
-
-    try:
-        manager.start()
-        manager.print_connection_info()
-    except TimeoutError as e:
-        print(f"{e}")
-        print(f"Check logs: docker logs {manager.get_container_name()}")
-        sys.exit(1)
+    start_service(PostgresManager, generate)
 
 
 def stop():
-    """PostgreSQL """
-    manager = PostgresManager()
+    """Stop PostgreSQL."""
 
-    try:
-        manager.stop()
-    except SystemExit:
-        raise
+    stop_service(PostgresManager)
 
 
 def ensure_running(
@@ -277,104 +251,36 @@ def ensure_running(
     timeout_seconds: int = 30,
     include_pgadmin: bool = True,
 ) -> None:
-    """PostgreSQL ( enabled  pgAdmin) 
+    """Ensure PostgreSQL, and optionally pgAdmin, are running.
 
-    running 
-     docker-compose.yml ostgresManager.start() 
-
-    DB  / fast-domain lifespan 
-    :
-
-    - docker  ``RuntimeError`` 
-    - readiness check (`wait_for_service`)  ``timeout_seconds``
-      ast-domain  lifespan 
-    - ``include_pgadmin``  pgAdmin 
-      (CLI  True  OKast-domain True)
+    This helper is intended for application lifespan hooks. It generates the
+    compose files and starts containers when any required container is down.
 
     Args:
-        timeout_seconds: readiness check  (30)
-            ``PostgresManager.start(timeout_seconds=...)`` 
-        include_pgadmin: pgAdmin (``config.pgadmin.container.enabled`` 
-            True  (True)
+        timeout_seconds: Number of seconds to wait for readiness.
+        include_pgadmin: Include pgAdmin in the running-container check when
+            the pgAdmin container is enabled in config.
 
     Raises:
-        RuntimeError: docker eadiness 
-             compose up 
+        RuntimeError: The container runtime is unavailable or startup fails.
     """
-    from basekit.docker_manager import DockerCommandExecutor
 
-    postgres_container_name = config.postgres.container.get_container_name()
-    pgadmin_enabled = include_pgadmin and bool(
-        getattr(config.pgadmin.container, "enabled", False)
+    container_names = {
+        "postgres": config.postgres.container.get_container_name(),
+    }
+    if include_pgadmin and bool(getattr(config.pgadmin.container, "enabled", False)):
+        container_names["pgadmin"] = config.pgadmin.container.get_container_name()
+
+    ensure_container_service_running(
+        PostgresManager,
+        container_names,
+        generate,
+        "PostgreSQL",
+        timeout_seconds,
     )
-    pgadmin_container_name = (
-        config.pgadmin.container.get_container_name() if pgadmin_enabled else None
-    )
-
-    try:
-        postgres_running = DockerCommandExecutor.is_container_running(
-            postgres_container_name
-        )
-        pgadmin_running = (
-            DockerCommandExecutor.is_container_running(pgadmin_container_name)
-            if pgadmin_enabled
-            else True
-        )
-    except FileNotFoundError as exc:
-        raise RuntimeError(
-            "docker command not found. "
-            "Please install Docker Desktop: "
-            "https://www.docker.com/products/docker-desktop"
-        ) from exc
-
-    if postgres_running and pgadmin_running:
-        return
-
-    status_parts = [f"postgres={'up' if postgres_running else 'down'}"]
-    if pgadmin_enabled:
-        status_parts.append(f"pgadmin={'up' if pgadmin_running else 'down'}")
-    print(
-        f"\n[PostgreSQL] auto-start ({', '.join(status_parts)}); "
-        "generating compose and starting containers..."
-    )
-
-    try:
-        generate()
-        manager = PostgresManager()
-        manager.start(timeout_seconds=timeout_seconds)
-    except (TimeoutError, SystemExit) as exc:
-        raise RuntimeError(
-            f"Failed to start PostgreSQL via Docker: {exc}"
-        ) from exc
 
 
 def remove():
-    """PostgreSQL """
-    manager = PostgresManager()
+    """Remove PostgreSQL containers and volumes."""
 
-    try:
-        manager.remove()
-    except SystemExit:
-        raise
-
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python manage.py [generate|start|stop|remove]")
-        sys.exit(1)
-
-    command = sys.argv[1]
-    if command == "generate":
-        generate()
-    elif command == "start":
-        start()
-    elif command == "stop":
-        stop()
-    elif command == "remove":
-        remove()
-    else:
-        print(f"Unknown command: {command}")
-        print("Usage: python manage.py [generate|start|stop|remove]")
-        sys.exit(1)
-
-
+    remove_service(PostgresManager)
