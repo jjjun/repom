@@ -31,6 +31,11 @@ class UuidModel(BaseModel, use_uuid=True, use_created_at=True, use_updated_at=Tr
     name: Mapped[str] = mapped_column(String(100))
 
 
+class UuidModelChild(UuidModel):
+    """UUID model subclass that reuses the parent table."""
+    pass
+
+
 class IntIdModel(BaseModel, use_id=True):
     """従来の INTEGER id を使用するモデル"""
     __tablename__ = 'int_id_models'
@@ -112,6 +117,16 @@ def test_uuid_is_unique_for_each_instance():
     assert model1.id != model2.id
     assert model2.id != model3.id
     assert model1.id != model3.id
+
+
+def test_uuid_model_subclass_reuses_uuid_setup_without_duplicate_id():
+    """UUID setup should not add another id column for table-sharing subclasses."""
+    model = UuidModelChild(name='Child')
+
+    assert isinstance(model.id, str)
+    assert len(model.id) == 36
+    assert UuidModelChild.__table__ is UuidModel.__table__
+    assert [column.key for column in UuidModelChild.__mapper__.columns].count('id') == 1
 
 
 # ========================================

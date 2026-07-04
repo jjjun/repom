@@ -1,5 +1,5 @@
-import json
 import uuid
+from functools import wraps
 from sqlalchemy import Integer, String, event, inspect
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime, timezone
@@ -8,6 +8,36 @@ from repom.custom_types.AutoDateTime import AutoDateTime
 
 # センチネル値（パラメータが指定されていないことを示す）
 _UNSET = object()
+
+
+_SUBCLASS_FLAG_DEFAULTS = (
+    ('use_uuid', False),
+    ('use_id', True),
+    ('use_created_at', False),
+    ('use_updated_at', False),
+)
+
+
+def _resolve_subclass_flag(cls, name, value, default):
+    resolved = getattr(cls, name, default) if value is _UNSET else value
+    setattr(cls, name, resolved)
+    return resolved
+
+
+def _ensure_uuid_init(cls):
+    if getattr(cls.__init__, '_repom_uuid_init_wrapper', False):
+        return
+
+    original_init = cls.__init__
+
+    @wraps(original_init)
+    def __init__(self, *args, **kwargs):
+        if 'id' not in kwargs:
+            kwargs['id'] = str(uuid.uuid4())
+        original_init(self, *args, **kwargs)
+
+    __init__._repom_uuid_init_wrapper = True
+    cls.__init__ = __init__
 
 
 class BaseModel(Base):
@@ -67,10 +97,14 @@ class BaseModel(Base):
         super().__init_subclass__(**kwargs)
 
         # パラメータが指定されていない場合は親クラスの値を継承、なければデフォルト値を使用
-        if use_uuid is _UNSET:
-            cls.use_uuid = getattr(cls, 'use_uuid', False)
-        else:
-            cls.use_uuid = use_uuid
+        flag_values = {
+            'use_uuid': use_uuid,
+            'use_id': use_id,
+            'use_created_at': use_created_at,
+            'use_updated_at': use_updated_at,
+        }
+        for flag_name, default in _SUBCLASS_FLAG_DEFAULTS:
+            _resolve_subclass_flag(cls, flag_name, flag_values[flag_name], default)
 
         # use_uuid=True の場合、use_id は自動的に False になる
         if cls.use_uuid:
@@ -81,28 +115,14 @@ class BaseModel(Base):
                     "どちらか一方のみを True に設定してください。"
                 )
             cls.use_id = False
-        else:
-            # use_uuid=False の場合、use_id のデフォルト動作
-            if use_id is _UNSET:
-                cls.use_id = getattr(cls, 'use_id', True)
-            else:
-                cls.use_id = use_id
-
-        if use_created_at is _UNSET:
-            cls.use_created_at = getattr(cls, 'use_created_at', False)
-        else:
-            cls.use_created_at = use_created_at
-
-        if use_updated_at is _UNSET:
-            cls.use_updated_at = getattr(cls, 'use_updated_at', False)
-        else:
-            cls.use_updated_at = use_updated_at
 
         # 重要: 抽象クラス（__tablename__ がない）にはカラムを追加しない
         # 具象クラス（__tablename__ がある）のみカラムを追加する
         # これにより、中間の抽象クラスで use_id=False を指定しても、
         # そのサブクラスで use_id=True を指定できるようになる
-        if not hasattr(cls, '__tablename__'):
+        # Inherited __tablename__ belongs to a parent mapped class; do not
+        # add dynamic columns again for subclasses that do not declare a table.
+        if '__tablename__' not in cls.__dict__:
             # 抽象クラスなので、カラムを追加せずに終了
             return
 
@@ -113,26 +133,18 @@ class BaseModel(Base):
         # 具象クラスのみ、use_id または use_uuid が True の場合に id カラムを追加
         # SQLAlchemy 2.0 スタイル: mapped_column() + 型ヒント
         if cls.use_uuid:
-            # UUID 主キー（VARCHAR 36, ハイフン付き）
-            # default は DB レベル、Python レベルでは __init__ で生成
+            # Constructor-time generation makes ids available before flush.
+            # The mapped_column default is a Python-side SQLAlchemy fallback,
+            # not a database server default.
             cls.id: Mapped[str] = mapped_column(
                 String(36),
                 primary_key=True,
-                default=lambda: str(uuid.uuid4())  # DB レベルのデフォルト
+                default=lambda: str(uuid.uuid4())
             )
             # 動的に追加されたカラムの型ヒントを __annotations__ に登録
             cls.__annotations__['id'] = Mapped[str]
 
-            # __init__ をオーバーライドして UUID を自動生成
-            original_init = cls.__init__
-
-            def __init__(self, *args, **kwargs):
-                # id が指定されていない場合、UUID を自動生成
-                if 'id' not in kwargs:
-                    kwargs['id'] = str(uuid.uuid4())
-                original_init(self, *args, **kwargs)
-            cls.__init__ = __init__
-
+            _ensure_uuid_init(cls)
         elif cls.use_id:
             # 自動採番 id（INTEGER）
             cls.id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -151,10 +163,6 @@ class BaseModel(Base):
 
     def to_dict(self):
         return {c.key: getattr(self, c.key) for c in inspect(self).mapper.column_attrs}
-
-    def to_json(self):
-        # default=str は datetime などを文字列に変換するため
-        return json.dumps(self.to_dict(), default=str)
 
     def update_from_dict(self, data: dict, exclude_fields: list = None) -> bool:
         """
