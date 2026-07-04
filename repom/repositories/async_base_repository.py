@@ -24,7 +24,7 @@ Example:
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from collections.abc import Sequence
-from typing import Any, Callable, Type, TypeVar, Generic, Optional, List, Dict, Union, get_args
+from typing import Any, Callable, Type, TypeVar, Generic, Optional, List, Dict, Union
 from sqlalchemy import ColumnElement, and_, delete, select, true, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_scoped_session
 from sqlalchemy.exc import SQLAlchemyError
@@ -32,6 +32,7 @@ from repom.database import get_async_db_session
 from repom.repositories._core import has_soft_delete, FilterParams
 from repom.repositories._soft_delete import AsyncSoftDeleteRepositoryMixin
 from repom.repositories._query_builder import QueryBuilderMixin
+from repom.repositories._introspection import resolve_repository_model
 import logging
 
 T = TypeVar('T')
@@ -90,34 +91,17 @@ class AsyncBaseRepository(AsyncSoftDeleteRepositoryMixin[T], QueryBuilderMixin[T
 
     @classmethod
     def _infer_model_from_type_params(cls) -> Type[T]:
-        """型パラメータからモデルクラスを推論
-
-        Returns:
-            Type[T]: 推論されたモデルクラス
-
-        Raises:
-            TypeError: モデルを推論できない場合
-        """
-        # __orig_bases__ から Generic[T] の型引数を取得
-        if hasattr(cls, '__orig_bases__'):
-            for base in cls.__orig_bases__:
-                # Generic の型引数を取得
-                args = get_args(base)
-                if args and len(args) > 0:
-                    # 最初の型引数をモデルとして使用
-                    potential_model = args[0]
-                    # TypeVar でない実際のクラスかチェック
-                    if not isinstance(potential_model, TypeVar):
-                        return potential_model
-
-        # 推論できない場合はエラー
-        raise TypeError(
-            f"Could not infer model type for {cls.__name__}. "
-            f"Please either:\n"
-            f"1. Specify model explicitly: {cls.__name__}(model=YourModel, session=...)\n"
-            f"2. Define class as: class {cls.__name__}(AsyncBaseRepository[YourModel])\n"
-            f"3. Override __init__ and call super().__init__(YourModel, session)"
-        )
+        """Infer the model class from the repository generic parameter."""
+        try:
+            return resolve_repository_model(cls)
+        except TypeError:
+            raise TypeError(
+                f"Could not infer model type for {cls.__name__}. "
+                f"Please either:\n"
+                f"1. Specify model explicitly: {cls.__name__}(model=YourModel, session=...)\n"
+                f"2. Define class as: class {cls.__name__}(AsyncBaseRepository[YourModel])\n"
+                f"3. Override __init__ and call super().__init__(YourModel, session)"
+            ) from None
 
     @property
     def session(self) -> Optional[AsyncSession]:

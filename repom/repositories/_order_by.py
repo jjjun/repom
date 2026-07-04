@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import inspect
 from enum import Enum
-from typing import Optional, Type, get_args
+from typing import Optional, Type
 
 from sqlalchemy.inspection import inspect as sa_inspect
 from sqlalchemy.orm.exc import UnmappedClassError
+
+from repom.repositories._introspection import resolve_repository_model
 
 
 class VirtualColumnError(ValueError):
@@ -24,15 +26,12 @@ class VirtualColumnError(ValueError):
 
 def get_repository_model_class(repository_class: type) -> Type:
     """Resolve the SQLAlchemy model class from a repository class."""
-    if hasattr(repository_class, "__orig_bases__"):
-        for base in repository_class.__orig_bases__:
-            args = get_args(base)
-            if args:
-                return args[0]
-
-    raise TypeError(
-        f"Could not extract model from repository class {repository_class.__name__}"
-    )
+    try:
+        return resolve_repository_model(repository_class)
+    except TypeError:
+        raise TypeError(
+            f"Could not extract model from repository class {repository_class.__name__}"
+        ) from None
 
 
 def get_order_by_columns(repository_class: type) -> list[str]:
