@@ -12,7 +12,7 @@ def apply_postgres_env_overrides(config: Any) -> None:
     """Apply PostgreSQL runtime overrides from environment variables.
 
     Reads: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT,
-    POSTGRES_HOST_PORT.
+    POSTGRES_HOST_PORT, REPOM_POSTGRES_DB.
     """
     postgres = config.postgres
 
@@ -27,6 +27,10 @@ def apply_postgres_env_overrides(config: Any) -> None:
     host = os.getenv("POSTGRES_HOST")
     if host is not None:
         postgres.host = host
+
+    database = os.getenv("REPOM_POSTGRES_DB")
+    if database is not None:
+        postgres.database = database
 
     raw_port = os.getenv("POSTGRES_PORT")
     if raw_port is not None:
