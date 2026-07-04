@@ -12,6 +12,7 @@ POSTGRES_ENV_NAMES = (
     "POSTGRES_HOST",
     "POSTGRES_PORT",
     "POSTGRES_HOST_PORT",
+    "REPOM_POSTGRES_DB",
 )
 
 
@@ -48,6 +49,7 @@ def test_apply_postgres_env_overrides_keeps_existing_host_port_when_unset():
         ("POSTGRES_USER", "app_user", "user", "app_user"),
         ("POSTGRES_PASSWORD", "secret", "password", "secret"),
         ("POSTGRES_HOST", "db.local", "host", "db.local"),
+        ("REPOM_POSTGRES_DB", "repom_env_1", "database", "repom_env_1"),
         ("POSTGRES_PORT", "15432", "port", 15432),
     ],
 )
@@ -72,6 +74,7 @@ def test_apply_postgres_env_overrides_applies_all_envs(monkeypatch):
     monkeypatch.setenv("POSTGRES_HOST", "postgres")
     monkeypatch.setenv("POSTGRES_PORT", "15432")
     monkeypatch.setenv("POSTGRES_HOST_PORT", "5455")
+    monkeypatch.setenv("REPOM_POSTGRES_DB", "repom_env_1")
     config = RepomConfig()
 
     apply_postgres_env_overrides(config)
@@ -81,6 +84,30 @@ def test_apply_postgres_env_overrides_applies_all_envs(monkeypatch):
     assert config.postgres.host == "postgres"
     assert config.postgres.port == 15432
     assert config.postgres.container.host_port == 5455
+    assert config.postgres.database == "repom_env_1"
+
+
+def test_apply_postgres_env_overrides_pins_postgres_database_name(monkeypatch):
+    monkeypatch.setenv("REPOM_POSTGRES_DB", "repom_env_1")
+    config = RepomConfig(exec_env="test")
+    config.db_type = "postgres"
+    config.db_name = "myapp"
+
+    apply_postgres_env_overrides(config)
+
+    assert config.postgres_db == "repom_env_1"
+    assert config.db_url.endswith("/repom_env_1")
+
+
+def test_apply_postgres_env_overrides_does_not_affect_sqlite_test_url(monkeypatch):
+    monkeypatch.setenv("REPOM_POSTGRES_DB", "repom_env_1")
+    config = RepomConfig(exec_env="test")
+
+    apply_postgres_env_overrides(config)
+
+    assert config.db_type == "sqlite"
+    assert config.postgres_db == "repom_env_1"
+    assert config.db_url == "sqlite:///:memory:"
 
 
 def test_apply_postgres_env_overrides_applies_host_port_without_connection_port(
@@ -146,6 +173,7 @@ def test_repom_config_singleton_applies_postgres_env(monkeypatch):
     monkeypatch.setenv("POSTGRES_HOST", "env-postgres")
     monkeypatch.setenv("POSTGRES_PORT", "15432")
     monkeypatch.setenv("POSTGRES_HOST_PORT", "5455")
+    monkeypatch.setenv("REPOM_POSTGRES_DB", "repom_env_1")
     reloaded = importlib.reload(config_module)
 
     try:
@@ -154,6 +182,7 @@ def test_repom_config_singleton_applies_postgres_env(monkeypatch):
         assert reloaded.config.postgres.host == "env-postgres"
         assert reloaded.config.postgres.port == 15432
         assert reloaded.config.postgres.container.host_port == 5455
+        assert reloaded.config.postgres.database == "repom_env_1"
     finally:
         for name in POSTGRES_ENV_NAMES:
             monkeypatch.delenv(name, raising=False)
