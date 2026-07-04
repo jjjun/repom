@@ -60,6 +60,35 @@ logger = get_logger(__name__)
 T = TypeVar('T')
 
 
+async def _run_shielded(awaitable) -> None:
+    """Run *awaitable* to completion even if the surrounding task is cancelled.
+
+    Async session cleanup (rollback / commit / close) must always finish so the
+    checked-out DB connection is returned to the pool. ``asyncio.CancelledError``
+    is a ``BaseException``, so a cancellation delivered while awaiting cleanup
+    would otherwise abort it and leak the connection until the process restarts.
+
+    The awaitable is wrapped in ``asyncio.shield`` and awaited in a loop: a
+    cancellation of the outer task does not cancel the shielded task, so we keep
+    waiting until it finishes and then re-raise ``CancelledError`` to preserve
+    cancellation semantics.
+    """
+    task = asyncio.ensure_future(awaitable)
+    pending_cancel: Optional[asyncio.CancelledError] = None
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError as exc:
+            if task.done():
+                # The shielded cleanup itself was cancelled; propagate.
+                raise
+            # The outer task was cancelled while cleanup is still running.
+            # Remember the cancellation and keep waiting for cleanup to finish.
+            pending_cancel = exc
+    if pending_cancel is not None:
+        raise pending_cancel
+
+
 class _ContextManagerIterable(Generic[T]):
     """Adapter to allow generator delegation to context managers."""
 
@@ -373,12 +402,12 @@ class DatabaseManager:
         session = factory()
         try:
             yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
+            await _run_shielded(session.commit())
+        except BaseException:
+            await _run_shielded(session.rollback())
             raise
         finally:
-            await session.close()
+            await _run_shielded(session.close())
 
     @asynccontextmanager
     async def get_async_transaction(self) -> AsyncGenerator[AsyncSession, None]:
@@ -400,13 +429,15 @@ class DatabaseManager:
         factory = await self.get_async_session_factory()
         session = factory()
         try:
-            async with session.begin():
-                yield session
-        except Exception:
-            await session.rollback()
+            await _run_shielded(session.begin())
+            yield session
+            await _run_shielded(session.commit())
+        except BaseException:
+            if session.in_transaction():
+                await _run_shielded(session.rollback())
             raise
         finally:
-            await session.close()
+            await _run_shielded(session.close())
 
     @asynccontextmanager
     async def get_standalone_async_transaction(self) -> AsyncGenerator[AsyncSession, None]:

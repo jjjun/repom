@@ -12,6 +12,11 @@ DATABASE_ENV_NAMES = (
     "DB_TYPE",
     "SQLALCHEMY_ECHO",
     "SQLALCHEMY_ECHO_LEVEL",
+    "SQLALCHEMY_POOL_SIZE",
+    "SQLALCHEMY_MAX_OVERFLOW",
+    "SQLALCHEMY_POOL_TIMEOUT",
+    "SQLALCHEMY_POOL_RECYCLE",
+    "SQLALCHEMY_POOL_PRE_PING",
 )
 
 
@@ -113,6 +118,61 @@ def test_apply_database_env_overrides_rejects_invalid_sqlalchemy_echo_level(
     config = RepomConfig()
 
     with pytest.raises(ValueError, match="Invalid log level"):
+        apply_database_env_overrides(config)
+
+
+def test_apply_database_env_overrides_applies_pool_settings(monkeypatch):
+    monkeypatch.setenv("SQLALCHEMY_POOL_SIZE", "5")
+    monkeypatch.setenv("SQLALCHEMY_MAX_OVERFLOW", "7")
+    monkeypatch.setenv("SQLALCHEMY_POOL_TIMEOUT", "15")
+    monkeypatch.setenv("SQLALCHEMY_POOL_RECYCLE", "1800")
+    monkeypatch.setenv("SQLALCHEMY_POOL_PRE_PING", "false")
+    config = RepomConfig()
+
+    apply_database_env_overrides(config)
+
+    assert config.db_pool_size == 5
+    assert config.db_max_overflow == 7
+    assert config.db_pool_timeout == 15
+    assert config.db_pool_recycle == 1800
+    assert config.db_pool_pre_ping is False
+
+
+def test_apply_database_env_overrides_pool_defaults_when_unset():
+    config = RepomConfig()
+
+    apply_database_env_overrides(config)
+
+    assert config.db_pool_size == 10
+    assert config.db_max_overflow == 20
+    assert config.db_pool_timeout == 30
+    assert config.db_pool_recycle == 3600
+    assert config.db_pool_pre_ping is True
+
+
+def test_apply_database_env_overrides_rejects_non_integer_pool_size(monkeypatch):
+    monkeypatch.setenv("SQLALCHEMY_POOL_SIZE", "many")
+    config = RepomConfig()
+
+    with pytest.raises(ValueError, match="SQLALCHEMY_POOL_SIZE must be an integer"):
+        apply_database_env_overrides(config)
+
+
+def test_apply_database_env_overrides_rejects_invalid_pool_size_value(monkeypatch):
+    monkeypatch.setenv("SQLALCHEMY_POOL_SIZE", "0")
+    config = RepomConfig()
+
+    with pytest.raises(ValueError, match="db_pool_size"):
+        apply_database_env_overrides(config)
+
+
+def test_apply_database_env_overrides_rejects_invalid_pool_pre_ping(monkeypatch):
+    monkeypatch.setenv("SQLALCHEMY_POOL_PRE_PING", "sometimes")
+    config = RepomConfig()
+
+    with pytest.raises(
+        ValueError, match="SQLALCHEMY_POOL_PRE_PING must be a boolean value"
+    ):
         apply_database_env_overrides(config)
 
 

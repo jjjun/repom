@@ -54,6 +54,13 @@ class RepomConfig(Config):
     _enable_sqlalchemy_echo: bool = field(default=False, init=False, repr=False)
     _sqlalchemy_echo_level: str = field(default="INFO", init=False, repr=False)
 
+    # SQLAlchemy 接続プール設定
+    _db_pool_size: int = field(default=10, init=False, repr=False)
+    _db_max_overflow: int = field(default=20, init=False, repr=False)
+    _db_pool_timeout: int = field(default=30, init=False, repr=False)
+    _db_pool_recycle: int = field(default=3600, init=False, repr=False)
+    _db_pool_pre_ping: bool = field(default=True, init=False, repr=False)
+
     def __post_init__(self):
         """dataclassの初期化後に実行"""
         self.init()
@@ -319,6 +326,83 @@ class RepomConfig(Config):
         self._sqlalchemy_echo_level = value
 
     @property
+    def db_pool_size(self) -> int:
+        """接続プールに保持する接続数（デフォルト: 10, 1 以上）
+
+        engine_kwargs の pool_size に渡される。PostgreSQL とファイルベース
+        SQLite の QueuePool で有効。:memory: SQLite（StaticPool）では無視される。
+
+        環境変数 SQLALCHEMY_POOL_SIZE で上書き可能。
+        """
+        return self._db_pool_size
+
+    @db_pool_size.setter
+    def db_pool_size(self, value: int):
+        if value <= 0:
+            raise ValueError(f"Invalid db_pool_size: {value}. Must be greater than 0.")
+        self._db_pool_size = value
+
+    @property
+    def db_max_overflow(self) -> int:
+        """pool_size を超えて作成可能な追加接続数（デフォルト: 20, 0 以上）
+
+        環境変数 SQLALCHEMY_MAX_OVERFLOW で上書き可能。
+        """
+        return self._db_max_overflow
+
+    @db_max_overflow.setter
+    def db_max_overflow(self, value: int):
+        if value < 0:
+            raise ValueError(
+                f"Invalid db_max_overflow: {value}. Must be greater than or equal to 0."
+            )
+        self._db_max_overflow = value
+
+    @property
+    def db_pool_timeout(self) -> int:
+        """接続待機タイムアウト秒数（デフォルト: 30, 0 以上）
+
+        環境変数 SQLALCHEMY_POOL_TIMEOUT で上書き可能。
+        """
+        return self._db_pool_timeout
+
+    @db_pool_timeout.setter
+    def db_pool_timeout(self, value: int):
+        if value < 0:
+            raise ValueError(
+                f"Invalid db_pool_timeout: {value}. Must be greater than or equal to 0."
+            )
+        self._db_pool_timeout = value
+
+    @property
+    def db_pool_recycle(self) -> int:
+        """接続の再利用時間秒数（デフォルト: 3600, -1 以上）
+
+        -1 で無効化。環境変数 SQLALCHEMY_POOL_RECYCLE で上書き可能。
+        """
+        return self._db_pool_recycle
+
+    @db_pool_recycle.setter
+    def db_pool_recycle(self, value: int):
+        if value < -1:
+            raise ValueError(
+                f"Invalid db_pool_recycle: {value}. Must be greater than or equal to -1."
+            )
+        self._db_pool_recycle = value
+
+    @property
+    def db_pool_pre_ping(self) -> bool:
+        """接続前の ping チェック（デフォルト: True）
+
+        環境変数 SQLALCHEMY_POOL_PRE_PING で上書き可能。
+        """
+        return self._db_pool_pre_ping
+
+    @db_pool_pre_ping.setter
+    def db_pool_pre_ping(self, value: bool):
+        self._db_pool_pre_ping = value
+
+    @property
     def engine_kwargs(self) -> dict:
         """create_engine に渡す追加パラメータ（DB種別対応）
 
@@ -380,11 +464,11 @@ class RepomConfig(Config):
         # PostgreSQL
         if self.db_type == "postgres":
             return {
-                "pool_size": 10,
-                "max_overflow": 20,
-                "pool_timeout": 30,
-                "pool_recycle": 3600,
-                "pool_pre_ping": True,
+                "pool_size": self.db_pool_size,
+                "max_overflow": self.db_max_overflow,
+                "pool_timeout": self.db_pool_timeout,
+                "pool_recycle": self.db_pool_recycle,
+                "pool_pre_ping": self.db_pool_pre_ping,
             }
 
         # SQLite :memory: DB の場合は、StaticPool を使用して単一接続を全スレッドで共有
@@ -403,11 +487,11 @@ class RepomConfig(Config):
         else:
             # ファイルベース SQLite 用の完全な設定
             kwargs = {
-                "pool_size": 10,  # 接続プール数
-                "max_overflow": 20,  # 最大オーバーフロー接続数
-                "pool_timeout": 30,  # 接続待機タイムアウト（秒）
-                "pool_recycle": 3600,  # 接続の再利用時間（秒）
-                "pool_pre_ping": True,  # 接続前のpingチェック
+                "pool_size": self.db_pool_size,  # 接続プール数
+                "max_overflow": self.db_max_overflow,  # 最大オーバーフロー接続数
+                "pool_timeout": self.db_pool_timeout,  # 接続待機タイムアウト（秒）
+                "pool_recycle": self.db_pool_recycle,  # 接続の再利用時間（秒）
+                "pool_pre_ping": self.db_pool_pre_ping,  # 接続前のpingチェック
             }
 
             # SQLite ファイルベースの場合は check_same_thread を無効化

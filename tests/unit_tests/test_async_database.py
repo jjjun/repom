@@ -14,10 +14,16 @@ from repom.database import (
     convert_to_async_uri,
     DatabaseManager,
 )
+import asyncio
 import os
 import pytest
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    AsyncEngine,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 # CRITICAL: Set EXEC_ENV before importing repom modules
 os.environ['EXEC_ENV'] = 'test'
@@ -540,6 +546,116 @@ class TestStandaloneAsyncTransaction:
         async with get_standalone_async_transaction() as session:
             assert isinstance(session, AsyncSession)
             assert hasattr(session, 'execute')
+
+
+class TestShieldedCleanup:
+    """_run_shielded と非同期セッションのキャンセル耐性テスト"""
+
+    @pytest.mark.asyncio
+    async def test_run_shielded_completes_when_outer_cancelled(self):
+        """外側のタスクがキャンセルされてもクリーンアップは完了し、
+        その後 CancelledError が伝播することを確認"""
+        from repom.database import _run_shielded
+
+        started = asyncio.Event()
+        state = {"finished": False}
+
+        async def cleanup():
+            started.set()
+            await asyncio.sleep(0.05)
+            state["finished"] = True
+
+        async def runner():
+            await _run_shielded(cleanup())
+
+        task = asyncio.ensure_future(runner())
+        await started.wait()
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        # クリーンアップは中断されず最後まで走り切る
+        assert state["finished"] is True
+
+    @staticmethod
+    def _build_pooled_manager(db_file):
+        """pool_size=1 / max_overflow=0 の実プール付き async manager を構築"""
+        engine = create_async_engine(
+            f"sqlite+aiosqlite:///{db_file}",
+            pool_size=1,
+            max_overflow=0,
+            pool_timeout=1,
+        )
+        manager = DatabaseManager()
+        manager._async_engine = engine
+        manager._async_session_factory = async_sessionmaker(
+            engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autocommit=False,
+            autoflush=False,
+        )
+        return manager, engine
+
+    @pytest.mark.asyncio
+    async def test_async_session_returns_connection_on_cancel(self, tmp_path):
+        """get_async_session の本体がキャンセルされても接続がプールに返却される。
+
+        pool_size=1 / max_overflow=0 なので、接続が漏れると次のチェックアウトが
+        タイムアウトする。返却されていれば後続のセッションが成功する。
+        """
+        manager, engine = self._build_pooled_manager(tmp_path / "cancel_session.sqlite3")
+        entered = asyncio.Event()
+
+        async def use_session():
+            async with manager.get_async_session() as session:
+                await session.execute(text("SELECT 1"))
+                entered.set()
+                await asyncio.sleep(5)  # ここでキャンセルされる
+
+        task = asyncio.ensure_future(use_session())
+        await entered.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        try:
+            # 接続が返却されていれば timeout せずにチェックアウトできる
+            async with manager.get_async_session() as session:
+                result = await session.execute(text("SELECT 1"))
+                assert result.scalar() == 1
+            assert engine.pool.checkedout() == 0
+        finally:
+            await manager.dispose_async()
+
+    @pytest.mark.asyncio
+    async def test_async_transaction_returns_connection_on_cancel(self, tmp_path):
+        """get_async_transaction でも同様に接続が返却される。"""
+        manager, engine = self._build_pooled_manager(
+            tmp_path / "cancel_transaction.sqlite3"
+        )
+        entered = asyncio.Event()
+
+        async def use_transaction():
+            async with manager.get_async_transaction() as session:
+                await session.execute(text("SELECT 1"))
+                entered.set()
+                await asyncio.sleep(5)  # ここでキャンセルされる
+
+        task = asyncio.ensure_future(use_transaction())
+        await entered.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        try:
+            async with manager.get_async_session() as session:
+                result = await session.execute(text("SELECT 1"))
+                assert result.scalar() == 1
+            assert engine.pool.checkedout() == 0
+        finally:
+            await manager.dispose_async()
 
 
 if __name__ == "__main__":
