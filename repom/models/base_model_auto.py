@@ -108,9 +108,22 @@ class BaseModelAuto(BaseModel):
     __abstract__ = True
 
     # スキーマキャッシュ
-    _create_schemas: Dict[str, Type[Any]] = {}
-    _update_schemas: Dict[str, Type[Any]] = {}
-    _response_schemas: Dict[str, Type[Any]] = {}
+    _create_schemas: WeakKeyDictionary[type, Dict[tuple[Any, ...], Type[Any]]] = WeakKeyDictionary()
+    _update_schemas: WeakKeyDictionary[type, Dict[tuple[Any, ...], Type[Any]]] = WeakKeyDictionary()
+    _response_schemas: WeakKeyDictionary[type, Dict[tuple[Any, ...], Type[Any]]] = WeakKeyDictionary()
+
+    @classmethod
+    def _get_schema_cache(
+        cls,
+        cache: WeakKeyDictionary[type, Dict[tuple[Any, ...], Type[Any]]]
+    ) -> Dict[tuple[Any, ...], Type[Any]]:
+        if cls not in cache:
+            cache[cls] = {}
+        return cache[cls]
+
+    @staticmethod
+    def _exclude_fields_cache_key(exclude_fields: Optional[List[str]]) -> tuple[str, ...]:
+        return tuple(sorted(set(exclude_fields or [])))
 
     @classmethod
     def response_field(cls, **fields):
@@ -222,15 +235,14 @@ class BaseModelAuto(BaseModel):
             schema_name = f"{cls.__name__.replace('Model', '')}Create"
 
         # キャッシュキー
-        cache_key = f"{cls.__name__}::{schema_name}"
-        if validator_mixin:
-            cache_key += f"::{validator_mixin.__name__}"
+        exclude_fields_key = cls._exclude_fields_cache_key(exclude_fields)
+        cache_key = (schema_name, validator_mixin, exclude_fields_key)
+        schema_cache = cls._get_schema_cache(cls._create_schemas)
 
-        if cache_key in cls._create_schemas:
-            return cls._create_schemas[cache_key]
+        if cache_key in schema_cache:
+            return schema_cache[cache_key]
 
-        exclude_fields = exclude_fields or []
-        exclude_fields = set(exclude_fields)
+        exclude_fields = set(exclude_fields_key)
 
         field_definitions = {}
 
@@ -300,7 +312,7 @@ class BaseModelAuto(BaseModel):
             )
 
         # キャッシュに保存
-        cls._create_schemas[cache_key] = schema
+        schema_cache[cache_key] = schema
         return schema
 
     @classmethod
@@ -326,15 +338,14 @@ class BaseModelAuto(BaseModel):
             schema_name = f"{cls.__name__.replace('Model', '')}Update"
 
         # キャッシュキー
-        cache_key = f"{cls.__name__}::{schema_name}"
-        if validator_mixin:
-            cache_key += f"::{validator_mixin.__name__}"
+        exclude_fields_key = cls._exclude_fields_cache_key(exclude_fields)
+        cache_key = (schema_name, validator_mixin, exclude_fields_key)
+        schema_cache = cls._get_schema_cache(cls._update_schemas)
 
-        if cache_key in cls._update_schemas:
-            return cls._update_schemas[cache_key]
+        if cache_key in schema_cache:
+            return schema_cache[cache_key]
 
-        exclude_fields = exclude_fields or []
-        exclude_fields = set(exclude_fields)
+        exclude_fields = set(exclude_fields_key)
 
         field_definitions = {}
 
@@ -379,7 +390,7 @@ class BaseModelAuto(BaseModel):
             )
 
         # キャッシュに保存
-        cls._update_schemas[cache_key] = schema
+        schema_cache[cache_key] = schema
         return schema
 
     @classmethod
@@ -518,12 +529,12 @@ class BaseModelAuto(BaseModel):
             schema_name = f"{cls.__name__.replace('Model', '')}Response"
 
         # キャッシュキー（forward_refsも含める）
-        cache_key = f"{cls.__name__}::{schema_name}"
-        if forward_refs:
-            cache_key += f"::{','.join(sorted(forward_refs.keys()))}"
+        forward_refs_key = tuple(sorted(forward_refs.keys())) if forward_refs else ()
+        cache_key = (schema_name, forward_refs_key)
+        schema_cache = cls._get_schema_cache(cls._response_schemas)
 
-        if cache_key in cls._response_schemas:
-            return cls._response_schemas[cache_key]
+        if cache_key in schema_cache:
+            return schema_cache[cache_key]
 
         # フィールド定義を収集
         field_definitions = {}
@@ -588,7 +599,7 @@ class BaseModelAuto(BaseModel):
                 raise SchemaGenerationError("\n".join(error_lines)) from e
 
         # キャッシュに保存
-        cls._response_schemas[cache_key] = schema
+        schema_cache[cache_key] = schema
         return schema
 
     @classmethod
