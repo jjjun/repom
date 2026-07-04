@@ -126,6 +126,63 @@ class BaseModelAuto(BaseModel):
         return tuple(sorted(set(exclude_fields or [])))
 
     @classmethod
+    def _build_schema(
+        cls,
+        schema_type: str,
+        schema_name: str,
+        validator_mixin: Type,
+        exclude_fields: Optional[List[str]],
+        field_builder: Callable[[Any, Dict, Type, Dict], tuple[Any, Any]],
+    ) -> Type[PydanticBaseModel]:
+        exclude_fields_key = cls._exclude_fields_cache_key(exclude_fields)
+        cache_key = (schema_name, validator_mixin, exclude_fields_key)
+        cache_by_type = {
+            'create': cls._create_schemas,
+            'update': cls._update_schemas,
+        }
+        schema_cache = cls._get_schema_cache(cache_by_type[schema_type])
+
+        if cache_key in schema_cache:
+            return schema_cache[cache_key]
+
+        excluded_field_names = set(exclude_fields_key)
+        field_definitions = {}
+
+        for column in inspect(cls).mapper.column_attrs:
+            col = column.columns[0]
+
+            if col.name in excluded_field_names:
+                continue
+
+            if cls._should_exclude_from_schema(col, schema_type):
+                continue
+
+            info = col.info or {}
+            python_type = cls._get_python_type(col)
+            field_kwargs = cls._build_field_kwargs(col, info)
+            field_definitions[col.name] = field_builder(
+                col,
+                info,
+                python_type,
+                field_kwargs,
+            )
+
+        if validator_mixin:
+            schema = create_model(
+                schema_name,
+                __base__=(PydanticBaseModel, validator_mixin),
+                **field_definitions
+            )
+        else:
+            schema = create_model(
+                schema_name,
+                **field_definitions
+            )
+
+        schema_cache[cache_key] = schema
+        return schema
+
+    @classmethod
     def response_field(cls, **fields):
         """
         デコレータ: to_dict()で追加されるフィールドを宣言
@@ -216,104 +273,41 @@ class BaseModelAuto(BaseModel):
         validator_mixin: Type = None,
         exclude_fields: Optional[List[str]] = None
     ) -> Type[PydanticBaseModel]:
-        """Column の info メタデータから Create スキーマを自動生成
-
-        Args:
-            schema_name: スキーマ名（省略時は {ModelName}Create）
-            validator_mixin: バリデーターMixinクラス（オプション）
-            exclude_fields: 除外するフィールド名のリスト
-
-        Returns:
-            Pydantic BaseModel クラス
-
-        使用例:
-            FinRecurringPaymentCreate = FinRecurringPaymentModel.get_create_schema(
-                validator_mixin=FinRecurringPaymentValidatorMixin
-            )
-        """
+        """Generate a Pydantic create schema from SQLAlchemy column metadata."""
         if schema_name is None:
             schema_name = f"{cls.__name__.replace('Model', '')}Create"
 
-        # キャッシュキー
-        exclude_fields_key = cls._exclude_fields_cache_key(exclude_fields)
-        cache_key = (schema_name, validator_mixin, exclude_fields_key)
-        schema_cache = cls._get_schema_cache(cls._create_schemas)
-
-        if cache_key in schema_cache:
-            return schema_cache[cache_key]
-
-        exclude_fields = set(exclude_fields_key)
-
-        field_definitions = {}
-
-        for column in inspect(cls).mapper.column_attrs:
-            col = column.columns[0]
-
-            # 手動除外リストをチェック
-            if col.name in exclude_fields:
-                continue
-
-            # 自動除外ルールをチェック
-            if cls._should_exclude_from_schema(col, 'create'):
-                continue
-
-            # info メタデータを取得
-            info = col.info or {}
-
-            # Python型を取得
-            python_type = cls._get_python_type(col)
-
-            # Field パラメータを構築
-            field_kwargs = cls._build_field_kwargs(col, info)
-
-            # 必須/任意の判定とデフォルト値の組み立て
+        def build_create_field(col, info, python_type, field_kwargs):
             is_required = cls._is_required_for_create(col, info)
-            default_value = cls._get_default_value(col, for_create=True)
+            default_value = cls._get_default_value(col)
 
             if is_required:
-                field_definitions[col.name] = (python_type, Field(**field_kwargs))
-                continue
+                return python_type, Field(**field_kwargs)
 
-            # client-side default がある場合は優先（server_default より優先度高い）
             if default_value is not None:
-                field_definitions[col.name] = (
+                return (
                     python_type,
                     Field(default=default_value, **field_kwargs)
                 )
-                continue
 
-            # server_default のみがある場合（client-side default がない）
             if col.server_default is not None:
-                # DB サーバー側で値が補完されるため、非 NULL カラムでも入力不要とする
-                field_definitions[col.name] = (
+                return (
                     Optional[python_type],
                     Field(default=None, **field_kwargs)
                 )
-                continue
 
-            # nullable または info で任意指定の場合は Optional + default=None
-            field_definitions[col.name] = (
+            return (
                 Optional[python_type],
                 Field(default=None, **field_kwargs)
             )
 
-        # スキーマ生成
-        if validator_mixin:
-            # Mixin との多重継承（create_model を使用）
-            schema = create_model(
-                schema_name,
-                __base__=(PydanticBaseModel, validator_mixin),
-                **field_definitions
-            )
-        else:
-            schema = create_model(
-                schema_name,
-                **field_definitions
-            )
-
-        # キャッシュに保存
-        schema_cache[cache_key] = schema
-        return schema
+        return cls._build_schema(
+            'create',
+            schema_name,
+            validator_mixin,
+            exclude_fields,
+            build_create_field,
+        )
 
     @classmethod
     def get_update_schema(
@@ -322,76 +316,23 @@ class BaseModelAuto(BaseModel):
         validator_mixin: Type = None,
         exclude_fields: Optional[List[str]] = None
     ) -> Type[PydanticBaseModel]:
-        """Column の info メタデータから Update スキーマを自動生成
-
-        Update スキーマは全フィールドを Optional にします。
-
-        Args:
-            schema_name: スキーマ名（省略時は {ModelName}Update）
-            validator_mixin: バリデーターMixinクラス（オプション）
-            exclude_fields: 除外するフィールド名のリスト
-
-        Returns:
-            Pydantic BaseModel クラス
-        """
+        """Generate a Pydantic update schema from SQLAlchemy column metadata."""
         if schema_name is None:
             schema_name = f"{cls.__name__.replace('Model', '')}Update"
 
-        # キャッシュキー
-        exclude_fields_key = cls._exclude_fields_cache_key(exclude_fields)
-        cache_key = (schema_name, validator_mixin, exclude_fields_key)
-        schema_cache = cls._get_schema_cache(cls._update_schemas)
-
-        if cache_key in schema_cache:
-            return schema_cache[cache_key]
-
-        exclude_fields = set(exclude_fields_key)
-
-        field_definitions = {}
-
-        for column in inspect(cls).mapper.column_attrs:
-            col = column.columns[0]
-
-            # 手動除外リストをチェック
-            if col.name in exclude_fields:
-                continue
-
-            # 自動除外ルールをチェック
-            if cls._should_exclude_from_schema(col, 'update'):
-                continue
-
-            # info メタデータを取得
-            info = col.info or {}
-
-            # Python型を取得
-            python_type = cls._get_python_type(col)
-
-            # Field パラメータを構築
-            field_kwargs = cls._build_field_kwargs(col, info)
-
-            # Update では全フィールドを Optional にする
-            field_definitions[col.name] = (
+        def build_update_field(col, info, python_type, field_kwargs):
+            return (
                 Optional[python_type],
                 Field(default=None, **field_kwargs)
             )
 
-        # スキーマ生成
-        if validator_mixin:
-            # Mixin との多重継承（create_model を使用）
-            schema = create_model(
-                schema_name,
-                __base__=(PydanticBaseModel, validator_mixin),
-                **field_definitions
-            )
-        else:
-            schema = create_model(
-                schema_name,
-                **field_definitions
-            )
-
-        # キャッシュに保存
-        schema_cache[cache_key] = schema
-        return schema
+        return cls._build_schema(
+            'update',
+            schema_name,
+            validator_mixin,
+            exclude_fields,
+            build_update_field,
+        )
 
     @classmethod
     def _get_python_type(cls, col) -> Type:
@@ -456,34 +397,13 @@ class BaseModelAuto(BaseModel):
         return True
 
     @classmethod
-    def _get_default_value(cls, col, for_create: bool = True):
-        """フィールドのデフォルト値を取得
-
-        Args:
-            col: SQLAlchemy Column
-            for_create: Create用の場合True、Update用の場合False
-
-        Returns:
-            デフォルト値（利用可能な場合）または None
-        """
-        if not for_create:
-            # Update では全て None
-            return None
-
-        # Column にデフォルト値がある場合
+    def _get_default_value(cls, col):
+        """Return a usable client-side column default value, if one exists."""
         if col.default is not None:
             if callable(col.default.arg):
-                # callable の場合は実行しない（例: datetime.now）
-                # Pydantic の default_factory を使うべきだが、ここでは None を返す
                 return None
-            else:
-                return col.default.arg
+            return col.default.arg
 
-        # server_default は DB 側で補完されるため、入力値は None で良い
-        if col.server_default is not None:
-            return None
-
-        # その他（デフォルトなし）は None を返す（必須判定は別メソッドで実施）
         return None
 
     @classmethod

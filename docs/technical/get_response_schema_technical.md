@@ -563,8 +563,14 @@ schema = MyModel.get_response_schema()
 
 ### Inspect Registry
 
+`get_extra_fields_debug()` is kept as a diagnostic helper for tests and
+troubleshooting. It reads the lazy `_EXTRA_FIELDS_REGISTRY`, so call
+`get_response_schema()` first when you need to inspect fields registered from
+`@response_field`.
+
 ```python
 # Check what's in the registry
+schema = MyModel.get_response_schema()
 extra_fields = MyModel.get_extra_fields_debug()
 print(f"Extra fields: {extra_fields}")
 ```
