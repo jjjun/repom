@@ -99,6 +99,7 @@ filterwarnings = [
 
 
 [tool.issuekit]
+worker_accept_directed = true
 project = "repom"
 recent_count = 30
 ascii_id_threshold = 76
