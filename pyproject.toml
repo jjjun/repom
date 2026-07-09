@@ -48,15 +48,21 @@ redis_rotate_password = "repom.redis.manage:main_rotate_password"
 
 [dependency-groups]
 dev = [
+  "pip-audit>=2.9,<3",
   "pytest>=8.4.2,<10.0.0",
   "pytest-sqlalchemy>=0.3.0,<0.4.0",
   "pytest-benchmark>=5.1.0,<6.0.0",
   "pytest-asyncio>=0.24.0,<2.0.0",
   "aiosqlite>=0.22.1,<0.23.0",
-  "fastapi>=0.136.1,<0.137.0",
+  "fastapi>=0.137.0,<1.0.0",
   "httpx>=0.28.1,<0.29.0",
   "requests>=2.33.1,<3.0.0",
   "ruff>=0.15.13",
+]
+
+[tool.uv]
+constraint-dependencies = [
+  "starlette>=1.3.1",
 ]
 
 [build-system]
