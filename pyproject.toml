@@ -99,6 +99,7 @@ filterwarnings = [
 
 
 [tool.issuekit]
+disabled_agents = ["kimi"]
 worker_accept_directed = true
 project = "repom"
 recent_count = 30
