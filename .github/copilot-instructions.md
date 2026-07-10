@@ -15,7 +15,7 @@ This is **repom** - a shared SQLAlchemy foundation package for Python projects.
 - Always work within transaction contexts using `db_session`
 
 ### Testing
-- Run tests with: `poetry run pytest tests/unit_tests`
+- Run tests with: `uv run pytest tests/unit_tests`
 - Use fixtures from `tests/db_test_fixtures.py`
 - Test scope: `function` (default), `module`, or `session`
 
@@ -25,18 +25,18 @@ This is **repom** - a shared SQLAlchemy foundation package for Python projects.
 - Database files: `db.dev.sqlite3`, `db.test.sqlite3`, `db.sqlite3`
 
 ### Commands
-- Always use `poetry run` prefix for commands
-- Migration: `poetry run alembic upgrade head`
-- DB creation: `poetry run db_create`
-- Tests: `poetry run pytest tests/unit_tests`
+- Always use `uv run` prefix for commands
+- Migration: `uv run alembic upgrade head`
+- DB creation: `uv run db_create`
+- Tests: `uv run pytest tests/unit_tests`
 
 ## VS Code Tasks Available
 
-- `⭐Pytest/unit_tests` - Run unit tests
+- `🧪Pytest/unit_tests` - Run unit tests
 - `🧪Pytest/all` - Run all tests
-- `🤖Poetry/scaffold` - Scaffold new models
-- `💾Poetry/db_backup` - Backup database
-- `Alembic/migration/all` - Run migrations for all environments
+- `🤖uv/scaffold` - Scaffold new models
+- `💾uv/db_backup` - Backup database
+- `🧬Alembic/migration/all` - Run migrations for all environments
 
 ## Common Patterns
 
@@ -67,7 +67,7 @@ items = repo.get_by(name="example")
 
 - This is a **shared package** - keep it framework-agnostic
 - App-specific models should be in consuming projects
-- Always test changes with `poetry run pytest`
+- Always test changes with `uv run pytest`
 - Keep dependencies minimal
 
 ## 📚 重要なドキュメントファイル
@@ -133,7 +133,10 @@ items = repo.get_by(name="example")
 
 ### Issue Tracking
 
-- **docs/issue/README.md**: Issue 管理システムの使い方
+- Issues live in the **issuekit API** (`project = "repom"`); there is no local
+  `docs/issue` / `docs/issues` tracker.
+- Run `issuekit protocol --role <role>` (or the MCP `get_protocol` tool) for the
+  authoritative workflow steps.
 
 ---
 
@@ -174,7 +177,7 @@ items = repo.get_by(name="example")
 ```
 1. README.md のトラブルシューティングセクションを確認
 2. 問題が複雑な場合は docs/technical/ を参照
-3. Issue として記録 (docs/issue/)
+3. Issue として記録 (issuekit author)
 ```
 
 ## 📚 Documentation Structure & AI Workflow
@@ -183,15 +186,13 @@ items = repo.get_by(name="example")
 
 ```
 docs/
-├── issue/              # Problem tracking and resolution
-│   ├── README.md      # Issue index (MUST update when moving files)
-│   ├── completed/     # ✅ Resolved issues (XXX_name.md with sequential numbering)
-│   ├── in_progress/   # 🚧 Active work
-│   └── backlog/       # 📝 Planned issues
-├── research/           # 🔬 Technical investigation and feasibility studies
+├── guides/             # 📘 Usage guides (testing, repository, model, ...)
 ├── ideas/              # 💡 Feature proposals and enhancement ideas
-└── technical/          # 📖 API references and implementation guides
+└── technical/          # 📖 Implementation details and constraint investigations
 ```
+
+Issue tracking is **not** file-based: issues live in the issuekit API
+(`project = "repom"`), not under `docs/`.
 
 ### 🤖 AI Agent Collaborative Workflow
 
@@ -200,32 +201,20 @@ docs/
 1. **Clarify & Confirm**
    - Ask clarifying questions to fully understand the issue
    - Confirm scope, expected behavior, and actual behavior
-   - Get user approval before creating documentation
 
-2. **Create Issue File**
-   ```markdown
-   # Choose location based on urgency:
-   # - Immediate work: docs/issue/in_progress/XXX_issue_name.md
-   # - Future work: docs/issue/backlog/XXX_issue_name.md
-   # Use descriptive snake_case naming
-   ```
+2. **Author the Issue via issuekit**
+   - `issuekit author --title "..." --body-file FILE --priority <high|medium|low> --agent <name>`
+   - The API allocates the id (`repom#<id>`); do not create files or number ids by hand.
+   - Issue text is English ASCII.
 
-3. **Update Issue Index**
-   - Add entry to `docs/issue/README.md` in appropriate section
-   - Include status, overview, and file path
+3. **Work Through the Lifecycle**
+   - author -> claim (`claim_next_task` or `issuekit implement <id> --agent <name>`)
+     -> `submit_for_review` -> `approve` / `request_changes`.
+   - Implement the solution, run tests, and validate the fix.
 
-4. **Work Together**
-   - Implement solution collaboratively
-   - Update issue file with progress and findings
-   - Run tests and validate fix
-
-5. **Mark as Complete** (when user confirms "完了" / "done" / "finished")
-   - **AUTOMATICALLY** move file: `in_progress/XXX_*.md` → `completed/NNN_*.md`
-   - Assign sequential number (001, 002, 003...)
-   - **AUTOMATICALLY** update `docs/issue/README.md`:
-     * Remove from "🚧 作業中の Issue"
-     * Add to "📋 完了済み Issue" with summary
-   - Commit with message: `docs(issue): Complete issue #NNN - [title]`
+4. **Complete via issuekit**
+   - Reviewer `approve` completes the issue; `request_changes` returns it to the
+     implementer. There is no manual file move or index update.
 
 #### When User Proposes a Feature Idea
 
@@ -265,26 +254,25 @@ docs/
    - Reference related idea or issue files
    - Update issue files to reference research
 
-### 📋 Issue Lifecycle (Automated)
+### 📋 Issue Lifecycle (issuekit API)
 
 ```
 User reports problem
     ↓
 AI confirms understanding
     ↓
-Create: backlog/XXX_name.md OR in_progress/XXX_name.md
+issuekit author --title "..." --body-file FILE --priority <...> --agent <name>
     ↓
-Update: docs/issue/README.md (add to appropriate section)
+claim (claim_next_task / issuekit implement <id> --agent <name>)
     ↓
 Work on solution together (testing, debugging, implementing)
     ↓
-User says "完了" / "done" / "finished"
+submit_for_review
     ↓
-AI AUTOMATICALLY:
-  1. Move: in_progress/XXX_name.md → completed/NNN_name.md
-  2. Update: docs/issue/README.md (move entry to completed section)
-  3. Commit: "docs(issue): Complete issue #NNN - [title]"
+Reviewer: approve (completes) / request_changes (returns to implementer)
 ```
+
+See `issuekit protocol --role <role>` for the authoritative steps.
 
 ### 💡 Idea Lifecycle
 
@@ -297,24 +285,24 @@ Create: docs/ideas/feature_name.md
     ↓
 Evaluate feasibility
     ↓
-If needs research → docs/research/topic.md
-If ready → docs/issue/backlog/XXX_name.md
+If needs investigation → docs/technical/topic.md
+If ready → issuekit author (new active issue)
 ```
 
-### 🔄 Automatic Completion Triggers
+### 🔄 Completion Triggers
 
-When user says any of these phrases, **AUTOMATICALLY** complete the issue:
+When the user says any of these phrases, drive the issue to completion through
+issuekit (submit for review, then approve):
 - "完了しました" / "完了した" / "完了です"
 - "終わりました" / "終わった"
 - "This issue is done" / "This is complete"
 - "Issue完了" / "これで完了"
 - "解決しました" / "解決した"
 
-**Automatic Actions:**
-1. Move file to `completed/` with next sequential number
-2. Update `docs/issue/README.md` (remove from in_progress, add to completed)
-3. Git commit with descriptive message
-4. Confirm completion to user
+**Actions:**
+1. `submit_for_review` the implementing issue.
+2. Reviewer `approve` completes it (or `request_changes` to iterate).
+3. Confirm completion to the user.
 
 ### 📝 Documentation Templates
 
@@ -348,15 +336,15 @@ When user says any of these phrases, **AUTOMATICALLY** complete the issue:
 
 **Idea Template**: Use template from `docs/ideas/README.md`
 
-**Research Template**: Use guidelines from `docs/research/README.md`
+**Technical Investigation**: Write findings under `docs/technical/`
 
 ### 🎯 Best Practices for AI Agents
 
 1. **Always confirm** before creating documentation
-2. **Update indexes** (README.md files) when moving/creating files
-3. **Use sequential numbering** for completed issues (001, 002, ...)
-4. **Link related documents** (issue ↔ research ↔ technical)
+2. **Track issues in issuekit** (`project = "repom"`), not in local files
+3. **Let the API allocate ids** (`repom#<id>`); never number issues by hand
+4. **Link related documents** (idea ↔ technical guide)
 5. **Commit frequently** with descriptive messages
 6. **Ask clarifying questions** rather than making assumptions
-7. **Validate with tests** before marking issues complete
-8. **Automatically handle completion** when user confirms issue is done
+7. **Validate with tests** before submitting for review
+8. **Drive completion through issuekit** when the user confirms an issue is done

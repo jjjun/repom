@@ -88,8 +88,6 @@ markers = [
   "model: mark a test as related to model functionality",
   "repo: mark a test as related to repo functionality",
   "query: mark a test as related to query functionality",
-  "yt: mark a test as related to yt functionality",
-  "ani_wiki: mark a test as related to ani_wiki functionality",
 ]
 
 filterwarnings = [
@@ -110,5 +108,4 @@ worker_accept_directed = true
 project = "repom"
 recent_count = 30
 ascii_id_threshold = 76
-issues_dir = "docs/issues"
 default_reviewer = "auto"

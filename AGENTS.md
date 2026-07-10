@@ -35,8 +35,7 @@ repom/
 ├── alembic/                  # Database migration files
 ├── data/                     # SQLite databases for each environment
 ├── docs/                     # Documentation and usage notes
-├── pyproject.toml           # uv configuration
-├── pytest.ini              # Pytest configuration
+├── pyproject.toml           # uv + pytest configuration ([tool.pytest.ini_options])
 └── alembic.ini             # Alembic configuration
 ```
 
@@ -164,9 +163,9 @@ repom uses **Transaction Rollback** approach for fast, isolated testing:
 - Automatic rollback after each test ensures clean state
 
 **Performance**:
-- Old approach (DB recreation): ~30s for 195 tests
-- Transaction Rollback: ~3s for 195 tests
-- **9x speedup achieved**
+- Old approach (DB recreation): full-suite runs took ~30s
+- Transaction Rollback: ~3s for the same suite
+- **~9x speedup achieved**
 
 **Implementation**:
 ```python
@@ -182,13 +181,13 @@ db_engine, db_test = create_test_fixtures()
 
 ### Running Tests
 ```bash
-# All tests (195 tests, ~5s)
+# All tests
 uv run pytest
 
-# Unit tests only (187 tests, ~3s)
+# Unit tests only
 uv run pytest tests/unit_tests
 
-# Behavior tests only (8 tests, ~2s)
+# Behavior tests only
 uv run pytest tests/behavior_tests
 
 # With verbose output
@@ -233,7 +232,7 @@ db_engine, db_test = create_test_fixtures(
 - **Database Config**: `repom/config.py`
 - **Database Connection**: `repom/database.py`
 - **Alembic Config**: `alembic.ini` and `alembic/env.py`
-- **Test Config**: `pytest.ini` and `tests/conftest.py`
+- **Test Config**: `pyproject.toml` (`[tool.pytest.ini_options]`) and `tests/conftest.py`
 
 ## Notes for AI Assistants
 

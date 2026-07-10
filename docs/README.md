@@ -57,35 +57,37 @@ docs/
 
 ---
 
-### 4. **proposals/** - 外部プロジェクトへの提案書
+### 4. クロスプロジェクト提案（issuekit API）
 
-**目的**: repom 側だけでは完結できない変更を、外部プロジェクト・外部パッケージ向けの一時提案書として記録
+**目的**: repom 側だけでは完結できない変更を、外部プロジェクト・外部パッケージ側へ提案として渡す
 
 **対象読者**: AI エージェント（外部変更の引き継ぎ・追跡）
 
-**詳細**: [docs/proposals/README.md](proposals/README.md) を参照
+**詳細**: `issuekit propose --to <project>` で送信、`issuekit incoming` で受信。
+ローカルの `docs/proposals` は廃止済みです。手順は `issuekit protocol` を参照してください。
 
 ---
 
-### 5. **issues/** - 問題管理
+### 5. Issue 管理（issuekit API）
 
 **目的**: 実装タスクの管理と記録
 
 **対象読者**: AI エージェント（プロジェクト管理）
 
-**詳細**: [docs/issues/README.md](issues/README.md) を参照
+**詳細**: Issue は issuekit API（`project = "repom"`）で管理します。ローカルの
+`docs/issues` トラッカーは廃止済みです。手順は `issuekit protocol --role <role>`
+（または MCP `get_protocol`）を参照してください。
 
 ---
 
 ## 🔄 情報のライフサイクル
 
 1. **ideas/**: 問題提起、簡潔な提案（250-350行制限）
-2. **issues/active/**: 実装計画、タスク管理（進捗管理）
-3. **issues/completed/**: 実装記録
-4. **technical/**: 設計判断の背景（なぜこうなったか）
-5. **guides/**: 使い方マニュアル（How-to）
+2. **issuekit API**: 実装計画・タスク管理・実装記録（active / completed）
+3. **technical/**: 設計判断の背景（なぜこうなったか）
+4. **guides/**: 使い方マニュアル（How-to）
 
-`proposals/` はこの通常ライフサイクルとは別枠です。repom の外に変更依頼や設計判断を渡す必要がある場合だけ使い、提案先で対応が完了したら削除します。
+クロスプロジェクト提案（`issuekit propose`）はこの通常ライフサイクルとは別枠です。repom の外に変更依頼や設計判断を渡す必要がある場合だけ使います。
 
 ---
 
@@ -97,10 +99,10 @@ docs/
 |------|--------|
 | 機能の使い方 | `guides/` |
 | 新機能のアイデア | `ideas/` |
-| 外部プロジェクトへの提案 | `proposals/` |
+| 外部プロジェクトへの提案 | `issuekit propose` |
 | 設計判断の記録 | `technical/` |
-| 実装タスク | `issue/active/` |
-| 完了した実装 | `issue/completed/` |
+| 実装タスク | issuekit API（active） |
+| 完了した実装 | issuekit API（completed） |
 
 ### 2. テンプレートを使う
 
@@ -112,7 +114,7 @@ docs/
 ## 関連ドキュメント
 - **guides/testing_guide.md**: 使い方
 - **technical/test_infrastructure_technical.md**: 設計判断
-- **issue/completed/009_test_infrastructure_improvement.md**: 実装記録
+- issuekit issue `repom#<id>`: 実装記録
 ```
 
 ### 4. コンテキスト容量を意識
@@ -148,7 +150,7 @@ docs/
 **A**: 段階的に導入：
 1. `docs/` ディレクトリを作成
 2. この README.md をコピー
-3. `guides/` と `issues/` から開始
+3. `guides/` と `ideas/` から開始
 4. 既存ドキュメントを移行
 5. 必要に応じて他のディレクトリを追加
 
