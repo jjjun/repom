@@ -3,7 +3,10 @@
   "terminal.integrated.env.windows": {
     "VIRTUAL_ENV_DISABLE_PROMPT": "1"
   },
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "ruff.path": [
+    "${workspaceFolder}/.venv/Scripts/ruff.exe"
+  ],
   "python.envFile": "${workspaceFolder}/.env",
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff",
