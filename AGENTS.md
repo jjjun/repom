@@ -191,8 +191,11 @@ uv run pytest tests/unit_tests
 uv run pytest tests/behavior_tests
 
 # With verbose output
-uv run pytest -v
+uv run pytest -vv -s
 ```
+
+Default runs capture successful test output and keep logging concise. Use the
+verbose command above when detailed stdout and DEBUG logs are needed.
 
 ### For External Projects
 

@@ -19,6 +19,22 @@ For new config hooks, prefer `SQLITE_USE_IN_MEMORY_FOR_TESTS=false` over
 `SQLITE_USE_FILE_DB=1`. `SQLITE_USE_FILE_DB` remains supported for existing
 test and subprocess workflows.
 
+## Running tests
+
+The default test run is concise and captures successful test output:
+
+```bash
+uv run pytest
+uv run pytest --collect-only -q
+```
+
+Use verbose output and disable capture when troubleshooting. This also enables
+DEBUG logging configured by the test suite:
+
+```bash
+uv run pytest -vv -s
+```
+
 ## 概要
 
 repom は **Transaction Rollback パターン** と **インメモリDB** を採用し、高速かつ分離されたテスト環境を提供します。

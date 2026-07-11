@@ -76,9 +76,8 @@ packages = ["repom"]
 basekit = { git = "https://github.com/jjjun/basekit.git", branch = "main" }
 [tool.pytest.ini_options]
 addopts = [
-  "-vv",
+  "-q",
   "-x",
-  "--capture=tee-sys",
   "--benchmark-skip",
   "--ignore=tests/test_local.py",
 ]
