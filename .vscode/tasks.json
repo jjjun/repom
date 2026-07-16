@@ -15,7 +15,7 @@
     {
       "label": "🧪Pytest/all",
       "type": "shell",
-      "command": "uv run pytest -v -ra -W default tests/unit_tests tests/behavior_tests",
+      "command": "uv run pytest --override-ini addopts='-q --tb=line -rfE --show-capture=no' -v -ra -W default tests/unit_tests tests/behavior_tests",
       "group": {
         "kind": "test",
       },
@@ -26,7 +26,7 @@
           "severity": "warning",
           "pattern": [
             {
-              "regexp": "^\\s+((?:[A-Za-z]:\\\\|/).+?):(\\d+):\\s+(.*Warning:.*)$",
+              "regexp": "^\\s*((?:[A-Za-z]:\\\\|/).+?):(\\d+):\\s+(.*Warning:.*)$",
               "file": 1,
               "line": 2,
               "message": 3
