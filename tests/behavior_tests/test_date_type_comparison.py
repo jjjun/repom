@@ -37,7 +37,7 @@ sqlalchemy の方で型を設定すると、SQLite自体、内部ではTEXTと�
 # to avoid mapper interference (see Issue #021)
 
 
-def generate_test_data(model: Type, start_date: datetime, end_date: datetime, num_records: int) -> List:
+def generate_test_data(model: Type, start_date: datetime, end_date: datetime, num_records: int, as_iso_string: bool = False) -> List:
     """
     Generate a specified number of records with dates ranging from start_date to end_date.
 
@@ -56,7 +56,8 @@ def generate_test_data(model: Type, start_date: datetime, end_date: datetime, nu
     records = []
     for i in range(num_records):
         record_date = start_date + i * delta
-        record = model(name='take a bath', created_at=record_date)
+        created_at = record_date.isoformat(sep=' ') if as_iso_string else record_date
+        record = model(name='take a bath', created_at=created_at)
         records.append(record)
     return records
 
@@ -98,7 +99,10 @@ def test_compare_save_behavior(db_test):
         __tablename__ = 'task_string'
         __table_args__ = {'extend_existing': True}
         done_at: Mapped[Optional[str]] = mapped_column(String)
-        created_at: Mapped[Optional[str]] = mapped_column(String, default=datetime.now())
+        created_at: Mapped[Optional[str]] = mapped_column(String, default=lambda: datetime.now().isoformat(sep=' '))
+
+        def done(self):
+            self.done_at = datetime.now().date().isoformat()
 
     Base.metadata.create_all(bind=db_test.bind)
 
@@ -166,7 +170,7 @@ def test_handle_invalid_date_save(db_test):
         __tablename__ = 'task_string'
         __table_args__ = {'extend_existing': True}
         done_at: Mapped[Optional[str]] = mapped_column(String)
-        created_at: Mapped[Optional[str]] = mapped_column(String, default=datetime.now())
+        created_at: Mapped[Optional[str]] = mapped_column(String, default=lambda: datetime.now().isoformat(sep=' '))
 
     Base.metadata.create_all(bind=db_test.bind)
 
@@ -225,21 +229,21 @@ def test_compare_search_behavior(db_test):
         __tablename__ = 'task_string'
         __table_args__ = {'extend_existing': True}
         done_at: Mapped[Optional[str]] = mapped_column(String)
-        created_at: Mapped[Optional[str]] = mapped_column(String, default=datetime.now())
+        created_at: Mapped[Optional[str]] = mapped_column(String, default=lambda: datetime.now().isoformat(sep=' '))
 
     Base.metadata.create_all(bind=db_test.bind)
 
     search_start = datetime(2023, 12, 1)
     search_end = datetime(2024, 2, 20, 23, 59, 59)
     task_records = generate_test_data(LocalTaskDateModel, search_start, search_end, 20)
-    task_str_records = generate_test_data(LocalTaskStringModel, search_start, search_end, 20)
+    task_str_records = generate_test_data(LocalTaskStringModel, search_start, search_end, 20, as_iso_string=True)
     db_test.add_all(task_records)
     db_test.add_all(task_str_records)
 
     out_range_start = datetime(2020, 12, 1)
     out_range_end = datetime(2021, 2, 20, 23, 59, 59)
     task_records = generate_test_data(LocalTaskDateModel, out_range_start, out_range_end, 10)
-    task_str_records = generate_test_data(LocalTaskStringModel, out_range_start, out_range_end, 10)
+    task_str_records = generate_test_data(LocalTaskStringModel, out_range_start, out_range_end, 10, as_iso_string=True)
     db_test.add_all(task_records)
     db_test.add_all(task_str_records)
 
@@ -249,9 +253,11 @@ def test_compare_search_behavior(db_test):
         LocalTaskDateModel.created_at >= search_start,
         LocalTaskDateModel.created_at <= search_end
     ).all()
+    search_start_string = search_start.isoformat(sep=' ')
+    search_end_string = search_end.isoformat(sep=' ')
     task_str_results = db_test.query(LocalTaskStringModel).filter(
-        LocalTaskStringModel.created_at >= search_start,
-        LocalTaskStringModel.created_at <= search_end
+        LocalTaskStringModel.created_at >= search_start_string,
+        LocalTaskStringModel.created_at <= search_end_string
     ).all()
     print("\n\n----- search results -----")
     print('TaskDateModel: %i' % len(task_date_results))
@@ -264,7 +270,7 @@ def test_compare_search_behavior(db_test):
         LocalTaskDateModel.created_at.between(search_start, search_end)
     ).all()
     task_str_results = db_test.query(LocalTaskStringModel).filter(
-        LocalTaskStringModel.created_at.between(search_start, search_end)
+        LocalTaskStringModel.created_at.between(search_start_string, search_end_string)
     ).all()
     print("\n\n----- search results -----")
     print('TaskDateModel: %i' % len(task_date_results))
@@ -277,12 +283,12 @@ def test_compare_search_behavior(db_test):
     task_date_results = db_test.execute(text("""
         SELECT * FROM task_date
         WHERE created_at BETWEEN :start_date AND :end_date
-    """), {'start_date': search_start, 'end_date': search_end}).fetchall()
+    """), {'start_date': search_start_string, 'end_date': search_end_string}).fetchall()
 
     task_str_results = db_test.execute(text("""
         SELECT * FROM task_string
         WHERE created_at BETWEEN :start_date AND :end_date
-    """), {'start_date': search_start, 'end_date': search_end}).fetchall()
+    """), {'start_date': search_start_string, 'end_date': search_end_string}).fetchall()
 
     print("\n\n----- search results -----")
     print('TaskDateModel: %i' % len(task_date_results))
@@ -294,12 +300,12 @@ def test_compare_search_behavior(db_test):
     task_date_results = db_test.execute(text("""
         SELECT * FROM task_date
         WHERE created_at >= :start_date AND created_at <= :end_date
-    """), {'start_date': search_start, 'end_date': search_end}).fetchall()
+    """), {'start_date': search_start_string, 'end_date': search_end_string}).fetchall()
 
     task_str_results = db_test.execute(text("""
         SELECT * FROM task_string
         WHERE created_at >= :start_date AND created_at <= :end_date
-    """), {'start_date': search_start, 'end_date': search_end}).fetchall()
+    """), {'start_date': search_start_string, 'end_date': search_end_string}).fetchall()
 
     print("\n\n----- search results -----")
     print('TaskDateModel: %i' % len(task_date_results))

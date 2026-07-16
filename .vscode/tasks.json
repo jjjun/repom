@@ -15,11 +15,30 @@
     {
       "label": "🧪Pytest/all",
       "type": "shell",
-      "command": "uv run pytest tests/unit_tests tests/behavior_tests",
+      "command": "uv run pytest -v -ra -W default tests/unit_tests tests/behavior_tests",
       "group": {
-        "kind": "test"
+        "kind": "test",
       },
-      "problemMatcher": []
+      "problemMatcher": [
+        "$python",
+        {
+          "owner": "pytest-warnings",
+          "severity": "warning",
+          "pattern": [
+            {
+              "regexp": "^\\s+((?:[A-Za-z]:\\\\|/).+?):(\\d+):\\s+(.*Warning:.*)$",
+              "file": 1,
+              "line": 2,
+              "message": 3
+            }
+          ]
+        }
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
     },
     {
       "label": "🧪Pytest/unit_tests",

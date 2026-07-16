@@ -50,22 +50,29 @@ class TestGetLogger:
         assert isinstance(logger, logging.Logger)
         assert logger.name == 'repom.test'
 
-    def test_get_logger_with_basicConfig(self, tmp_path, monkeypatch):
+    def test_get_logger_with_basicConfig(self, tmp_path, monkeypatch, request):
         """
         アプリ側で logging.basicConfig() を呼んだ場合、
         repom のデフォルト設定はスキップされる
         """
         # basicConfig() を先に呼ぶ（ハンドラーを追加）
         app_log_file = tmp_path / "app.log"
+        app_handler = logging.FileHandler(app_log_file)
         logging.basicConfig(
             level=logging.DEBUG,
             format='%(name)s - %(message)s',
-            handlers=[logging.FileHandler(app_log_file)]
+            handlers=[app_handler]
         )
 
         # root logger にハンドラーが追加されているか確認
         root_logger = logging.getLogger()
         repom_root_logger = logging.getLogger('repom')
+
+        def cleanup_handler():
+            root_logger.removeHandler(app_handler)
+            app_handler.close()
+
+        request.addfinalizer(cleanup_handler)
         assert len(root_logger.handlers) > 0
 
         # get_logger() を呼んでも、追加のハンドラーは追加されない
