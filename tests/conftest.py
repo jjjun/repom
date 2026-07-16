@@ -11,6 +11,12 @@ from repom.testing import create_test_fixtures, create_async_test_fixtures
 # テストモデルをインポート（自動登録される）
 
 
+def _debug_logging_enabled(config):
+    """Return whether explicit verbose output should enable DEBUG logging."""
+    # pyproject.toml adds -q, so an explicit -vv produces effective verbosity 1.
+    return config.option.verbose >= 1
+
+
 def pytest_configure(config):
     # Windows 環境で絵文字を含む出力が cp932 エンコードエラーを起こさないよう UTF-8 に統一
     # （--capture=tee-sys と capsys の teardown 連携で発生する UnicodeEncodeError を防止）
@@ -20,7 +26,7 @@ def pytest_configure(config):
         sys.stderr.reconfigure(encoding='utf-8')
 
     # -vv オプション時のみデバッグログを有効化
-    if config.option.verbose >= 2:
+    if _debug_logging_enabled(config):
         logging.basicConfig(
             level=logging.DEBUG,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
