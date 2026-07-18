@@ -9,6 +9,8 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      CONFIG_HOOK: repom.config_hook:hook_config
 
     steps:
       - uses: actions/checkout@v4
