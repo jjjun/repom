@@ -4,7 +4,7 @@ AsyncBaseRepository の非同期版テスト
 test_repository.py の全テストケースを非同期版に変換したもの。
 """
 from tests._init import *
-from sqlalchemy import Integer, desc, String
+from sqlalchemy import Integer, desc, String, select
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from typing import Optional, List
@@ -94,6 +94,25 @@ async def test_get_by_id(async_db_test):
     retrieved = await repo.get_by_id(obj.id)
     assert retrieved is not None
     assert retrieved.id == obj.id
+
+
+@pytest.mark.asyncio
+async def test_constrained_lookups_ignore_broken_find_override(async_db_test):
+    with pytest.warns(RuntimeWarning, match="should accept and merge"):
+        class BrokenFindRepository(AsyncSimpleRepository):
+            async def find(self, **kwargs):
+                statement = select(self.model).order_by(desc(self.model.value))
+                result = await self.session.execute(statement)
+                return result.scalars().all()
+
+    repo = BrokenFindRepository(session=async_db_test)
+    first = await repo.save(AsyncSimpleModel(value=1))
+    await repo.save(AsyncSimpleModel(value=2))
+
+    assert await repo.get_by_id(first.id) == first
+    assert await repo.get_by("value", 1, single=True) == first
+    assert await repo.find_one(filters=[AsyncSimpleModel.id == first.id]) == first
+    assert await repo.get_by_id(999999) is None
 
 
 @pytest.mark.asyncio

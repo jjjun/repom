@@ -16,7 +16,9 @@ class SampleRepository(BaseRepository[SampleModel]):
 
     def find(
         self,
-        params: SampleFilterParams,
+        params: Optional[SampleFilterParams] = None,
+        filters=None,
+        include_deleted: bool = False,
         **kwargs
     ) -> List[SampleModel]:
         """
@@ -33,7 +35,8 @@ class SampleRepository(BaseRepository[SampleModel]):
         Returns:
             List[SampleModel]: A list of SampleModel records.
         """
-        filters = []
-        if params.value is not None:
-            filters.append(SampleModel.value == params.value)
-        return super().find(filters=filters, **kwargs)
+        own_filters = []
+        if params is not None and params.value is not None:
+            own_filters.append(SampleModel.value == params.value)
+        merged_filters = [*own_filters, *(filters or [])]
+        return super().find(filters=merged_filters, include_deleted=include_deleted, **kwargs)

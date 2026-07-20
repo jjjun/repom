@@ -29,11 +29,12 @@ class ListModelRepository(BaseRepository[ListModel]):
     def __init__(self, session):
         super().__init__(ListModel, session)
 
-    def find(self, params: ListModelFilterParams, **kwargs):
-        filters = []
-        if params.option_list is not None:
-            filters.extend(listjson_filter(self.model.option_list, params.option_list))
-        return super().find(filters=filters, **kwargs)
+    def find(self, params=None, filters=None, include_deleted=False, **kwargs):
+        own_filters = []
+        if params is not None and params.option_list is not None:
+            own_filters.extend(listjson_filter(self.model.option_list, params.option_list))
+        merged_filters = [*own_filters, *(filters or [])]
+        return super().find(filters=merged_filters, include_deleted=include_deleted, **kwargs)
 
 
 def test_list_json_default_empty_list(db_test):

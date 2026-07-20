@@ -288,10 +288,13 @@ def set_find_option(
 
         # default_options をスキップ（eager loading なし）
         results = repo.find(options=[])  # 空リストを明示的に渡す
+        apply_order_by (bool): Whether to apply the resolved order_by option.
+
     """
     offset = kwargs.get('offset', None)
     limit = kwargs.get('limit', None)
     options = kwargs.get('options', None)
+    apply_order_by = kwargs.get('apply_order_by', True)
     # order_by の処理: None または空文字の場合は default_order_by を適用
     order_by = kwargs.get('order_by')
     if order_by is None or order_by == "":
@@ -332,7 +335,7 @@ def set_find_option(
         if not isinstance(limit, int):
             raise TypeError("limit must be an integer")
         query = query.limit(limit)
-    if order_by is not None:
+    if apply_order_by and order_by is not None:
         query = query.order_by(order_by)
 
     return query

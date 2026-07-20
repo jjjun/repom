@@ -1,5 +1,5 @@
 from tests._init import *
-from sqlalchemy import Integer, String, desc
+from sqlalchemy import Integer, String, desc, select
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from typing import Optional, List
@@ -90,6 +90,23 @@ def test_get_by_id(db_test):
     retrieved = repo.get_by_id(obj.id)
     assert retrieved is not None
     assert retrieved.id == obj.id
+
+
+def test_constrained_lookups_ignore_broken_find_override(db_test):
+    with pytest.warns(RuntimeWarning, match="should accept and merge"):
+        class BrokenFindRepository(SimpleRepository):
+            def find(self, **kwargs):
+                statement = select(self.model).order_by(desc(self.model.value))
+                return self.session.execute(statement).scalars().all()
+
+    repo = BrokenFindRepository(session=db_test)
+    first = repo.save(SimpleModel(value=1))
+    repo.save(SimpleModel(value=2))
+
+    assert repo.get_by_id(first.id) == first
+    assert repo.get_by("value", 1, single=True) == first
+    assert repo.find_one(filters=[SimpleModel.id == first.id]) == first
+    assert repo.get_by_id(999999) is None
 
 
 def test_get_by_column_returns_all_matches(db_test):

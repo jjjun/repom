@@ -132,6 +132,14 @@ task = repo.get_by('title', 'タスク1', single=True)
 all_tasks = repo.get_all()
 ```
 
+### Overriding `find()`
+
+Custom `find()` implementations must accept and merge the `filters` and
+`include_deleted` arguments. Ignoring either argument can return records that
+callers did not request or expose soft-deleted records. `get_by()`,
+`get_by_id()`, and `find_one()` execute their own constrained queries, so they
+do not call an overridden `find()` implementation.
+
 **関連モデルの取得（N+1 問題の解決）** については [上級編](repository_advanced_guide.md#eager-loadingn1-問題の解決) を参照してください。
 
 ### Update（更新）

@@ -101,9 +101,16 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
 
         column = getattr(self.model, column_name)
         filters = [column == value, *extra_filters]
+        results = self._find_with_filters(
+            filters,
+            include_deleted=include_deleted,
+            options=options,
+            limit=1 if single else None,
+            apply_order_by=not single,
+        )
         if single:
-            return self.find_one(filters=filters, include_deleted=include_deleted, options=options)
-        return self.find(filters=filters, include_deleted=include_deleted, options=options)
+            return results[0] if results else None
+        return results
 
     def get_by_id(self, id: int, include_deleted: bool = False, options: Optional[List] = None) -> Optional[T]:
         """
@@ -128,7 +135,17 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             ...     selectinload(Model.reviews)
             ... ])
         """
-        return self.get_by('id', id, single=True, include_deleted=include_deleted, options=options)
+        if not hasattr(self.model, 'id'):
+            raise AttributeError(f"Column 'id' does not exist on {self.model.__name__}")
+
+        results = self._find_with_filters(
+            [self.model.id == id],
+            include_deleted=include_deleted,
+            options=options,
+            limit=1,
+            apply_order_by=False,
+        )
+        return results[0] if results else None
 
     def get_all(self) -> List[T]:
         """
@@ -375,6 +392,9 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
         Returns:
             List[T]: モデルのリスト。
 
+        Overrides must accept and merge ``filters`` and ``include_deleted``.
+        Callers rely on those arguments to constrain results and enforce the
+        soft-delete policy.
         Example:
             >>> from sqlalchemy.orm import selectinload
             >>> # 複数レコード取得（relationship も eager load）
@@ -389,6 +409,25 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
         # 論理削除フィルタを追加
         base_filters = filters if filters is not None else self._build_filters(params)
         all_filters = list(base_filters) if base_filters else []
+        if self._has_soft_delete() and not include_deleted:
+            all_filters.append(self.model.deleted_at.is_(None))
+
+        if all_filters:
+            query = query.where(and_(*all_filters))
+
+        query = self.set_find_option(query, **kwargs)
+        with self._session_scope() as session:
+            return session.execute(query).scalars().all()
+
+    def _find_with_filters(
+        self,
+        filters: list,
+        *,
+        include_deleted: bool,
+        **kwargs,
+    ) -> List[T]:
+        query = select(self.model)
+        all_filters = list(filters)
         if self._has_soft_delete() and not include_deleted:
             all_filters.append(self.model.deleted_at.is_(None))
 
@@ -418,7 +457,8 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             ...     options=[selectinload(Model.tags)]
             ... )
         """
-        results = self.find(filters=filters, include_deleted=include_deleted, limit=1, **kwargs)
+        kwargs["limit"] = 1
+        results = self._find_with_filters(filters, include_deleted=include_deleted, **kwargs)
         return results[0] if results else None
 
     def count(self, filters: Optional[List[Callable]] = None, include_deleted: bool = False) -> int:
