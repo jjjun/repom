@@ -152,6 +152,32 @@ def _base_select(self):
 This hook applies to every repository query that selects model instances.
 Do not add filters in `_base_select()`; each caller owns its filters.
 
+### When `populate_existing` is required
+
+`populate_existing=True` is often described as a freshness option, but for some
+mapping styles it is not optional at all.
+
+A relationship declared `lazy="noload"` is left *populated* by an ordinary read -
+an empty list for a collection, `None` for a many-to-one - rather than being left
+unloaded. SQLAlchemy therefore considers the attribute already loaded. A later
+read of the same row with explicit eager-load `options` applies those options to
+the statement but does not overwrite the attribute, so the eager load silently
+does nothing:
+
+```
+lazy="noload", plain read, then re-read WITH selectinload
+  without populate_existing : []              # eager load silently does nothing
+  with    populate_existing : [<Child ...>]
+```
+
+So a repository that combines `lazy="noload"` relationships with per-query load
+options needs `populate_existing=True` for those options to have any effect. The
+same applies to any strategy that leaves the attribute populated rather than
+unloaded.
+
+This is the usual reason to reach for the flag. Read the next section before
+doing so.
+
 ### `populate_existing` and unflushed changes
 
 repom sessions default to `autoflush=False`, an inherited setting that preserves
