@@ -7,6 +7,8 @@
 
 from typing import Generic, Optional, TypeVar
 
+from sqlalchemy import select
+
 from repom.repositories._core import (
     FilterParams,
     parse_order_by,
@@ -36,6 +38,16 @@ class QueryBuilderMixin(Generic[T]):
     ]
     virtual_order_columns: list[str] = []
     default_order_by = None
+
+    def _base_select(self):
+        """Build the base SELECT for this repository.
+
+        Override to customise statement construction, such as execution
+        options or hints. This applies to every repository query that selects
+        model instances. Do not apply filtering here; filters are the caller's
+        contract.
+        """
+        return select(self.model)
 
     def set_find_option(self, query, **kwargs):
         """クエリにオプションを設定するメソッド（_core.set_find_option を呼び出し）"""

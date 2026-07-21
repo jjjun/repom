@@ -140,6 +140,18 @@ callers did not request or expose soft-deleted records. `get_by()`,
 `get_by_id()`, and `find_one()` execute their own constrained queries, so they
 do not call an overridden `find()` implementation.
 
+To customise statement construction for both searches and identity lookups,
+override `_base_select()` instead. For example, a repository that needs to
+refresh identity-mapped objects can use:
+
+```python
+def _base_select(self):
+    return super()._base_select().execution_options(populate_existing=True)
+```
+
+This hook applies to every repository query that selects model instances.
+Do not add filters in `_base_select()`; each caller owns its filters.
+
 **関連モデルの取得（N+1 問題の解決）** については [上級編](repository_advanced_guide.md#eager-loadingn1-問題の解決) を参照してください。
 
 ### Update（更新）

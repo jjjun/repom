@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Callable, Generic, List, Optional, TypeVar
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_
 from sqlalchemy.exc import SQLAlchemyError
 
 import logging
@@ -26,14 +26,14 @@ class _SoftDeleteQueryBuilder(Generic[T]):
         if self._has_soft_delete() and not include_deleted:
             filters.append(self.model.deleted_at.is_(None))
 
-        return select(self.model).where(and_(*filters)).limit(1)
+        return self._base_select().where(and_(*filters)).limit(1)
 
     def _find_deleted_query(self, filters: Optional[List[Callable]] = None, **kwargs):
         """削除済みレコードのみを取得するクエリを構築する。"""
         all_filters = list(filters) if filters else []
         all_filters.append(self.model.deleted_at.isnot(None))
 
-        query = select(self.model).where(and_(*all_filters))
+        query = self._base_select().where(and_(*all_filters))
         return self.set_find_option(query, **kwargs)
 
     def _find_deleted_before_query(self, before_date: datetime, **kwargs):
@@ -43,7 +43,7 @@ class _SoftDeleteQueryBuilder(Generic[T]):
             self.model.deleted_at < before_date,
         ]
 
-        query = select(self.model).where(and_(*filters))
+        query = self._base_select().where(and_(*filters))
         return self.set_find_option(query, **kwargs)
 
 

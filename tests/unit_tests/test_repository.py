@@ -1,5 +1,7 @@
 from tests._init import *
-from sqlalchemy import Integer, String, desc, select
+import warnings
+
+from sqlalchemy import Integer, String, desc, event, select
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from typing import Optional, List
@@ -19,6 +21,11 @@ class SimpleModel(BaseModel):
 class SimpleRepository(BaseRepository[SimpleModel]):
     def __init__(self, session):
         super().__init__(SimpleModel, session)
+
+
+class RefreshingSimpleRepository(SimpleRepository):
+    def _base_select(self):
+        return super()._base_select().execution_options(populate_existing=True)
 
 
 class SimpleFilterParams(FilterParams):
@@ -69,6 +76,20 @@ class SoftDeleteCountModel(BaseModelAuto, SoftDeletableMixin):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
+class RefreshingSoftDeleteModel(BaseModelAuto, SoftDeletableMixin):
+    __tablename__ = 'refreshing_soft_delete_items'
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class RefreshingSoftDeleteRepository(BaseRepository[RefreshingSoftDeleteModel]):
+    def __init__(self, session):
+        super().__init__(RefreshingSoftDeleteModel, session)
+
+    def _base_select(self):
+        return super()._base_select().execution_options(populate_existing=True)
+
+
 def test_create(db_test):
     """
     SimpleModelの基本的な作成テスト
@@ -107,6 +128,42 @@ def test_constrained_lookups_ignore_broken_find_override(db_test):
     assert repo.get_by("value", 1, single=True) == first
     assert repo.find_one(filters=[SimpleModel.id == first.id]) == first
     assert repo.get_by_id(999999) is None
+
+
+def test_base_select_customisation_applies_to_all_read_paths(db_test):
+    repo = RefreshingSimpleRepository(session=db_test)
+    first = repo.save(SimpleModel(value=1))
+    repo.save(SimpleModel(value=2))
+    soft_delete_repo = RefreshingSoftDeleteRepository(session=db_test)
+    soft_delete_item = soft_delete_repo.save(RefreshingSoftDeleteModel(name="item"))
+    execution_options = []
+
+    def capture_execution_options(orm_execute_state):
+        execution_options.append(orm_execute_state.execution_options)
+
+    event.listen(db_test, "do_orm_execute", capture_execution_options)
+    try:
+        repo.find()
+        repo.get_by("value", 1, single=True)
+        repo.get_by_id(first.id)
+        repo.find_one(filters=[SimpleModel.id == first.id])
+        repo.find_by_ids([first.id])
+        repo.get_all()
+        soft_delete_repo.soft_delete(soft_delete_item.id)
+    finally:
+        event.remove(db_test, "do_orm_execute", capture_execution_options)
+
+    assert len(execution_options) == 7
+    assert all(options["populate_existing"] for options in execution_options)
+
+
+def test_find_override_with_filters_and_kwargs_does_not_warn():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+
+        class CompatibleFindRepository(SimpleRepository):
+            def find(self, filters=None, **kwargs):
+                return super().find(filters=filters, **kwargs)
 
 
 def test_get_by_column_returns_all_matches(db_test):

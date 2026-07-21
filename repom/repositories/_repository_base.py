@@ -49,9 +49,10 @@ class RepositoryBase(Generic[T]):
             return
 
         parameters = inspect.signature(find).parameters
-        if "filters" not in parameters or "include_deleted" not in parameters:
+        # include_deleted may be correctly forwarded through **kwargs.
+        if "filters" not in parameters:
             warnings.warn(
-                f"{cls.__name__}.find() should accept and merge filters and include_deleted "
+                f"{cls.__name__}.find() should accept and merge filters "
                 "to preserve the BaseRepository find() contract.",
                 RuntimeWarning,
                 stacklevel=2,

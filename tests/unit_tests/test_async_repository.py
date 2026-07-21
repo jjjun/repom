@@ -4,7 +4,7 @@ AsyncBaseRepository の非同期版テスト
 test_repository.py の全テストケースを非同期版に変換したもの。
 """
 from tests._init import *
-from sqlalchemy import Integer, desc, String, select
+from sqlalchemy import Integer, desc, event, String, select
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from typing import Optional, List
@@ -23,6 +23,11 @@ class AsyncSimpleModel(BaseModel):
 class AsyncSimpleRepository(AsyncBaseRepository[AsyncSimpleModel]):
     def __init__(self, session):
         super().__init__(AsyncSimpleModel, session)
+
+
+class RefreshingAsyncSimpleRepository(AsyncSimpleRepository):
+    def _base_select(self):
+        return super()._base_select().execution_options(populate_existing=True)
 
 
 class AsyncSimpleFilterParams(FilterParams):
@@ -71,6 +76,14 @@ class AsyncSoftDeleteBulkModel(BaseModelAuto, SoftDeletableMixin):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
+class RefreshingAsyncSoftDeleteRepository(AsyncBaseRepository[AsyncSoftDeleteBulkModel]):
+    def __init__(self, session):
+        super().__init__(AsyncSoftDeleteBulkModel, session)
+
+    def _base_select(self):
+        return super()._base_select().execution_options(populate_existing=True)
+
+
 @pytest.mark.asyncio
 async def test_create(async_db_test):
     """
@@ -113,6 +126,34 @@ async def test_constrained_lookups_ignore_broken_find_override(async_db_test):
     assert await repo.get_by("value", 1, single=True) == first
     assert await repo.find_one(filters=[AsyncSimpleModel.id == first.id]) == first
     assert await repo.get_by_id(999999) is None
+
+
+@pytest.mark.asyncio
+async def test_async_base_select_customisation_applies_to_all_read_paths(async_db_test):
+    repo = RefreshingAsyncSimpleRepository(session=async_db_test)
+    first = await repo.save(AsyncSimpleModel(value=1))
+    await repo.save(AsyncSimpleModel(value=2))
+    soft_delete_repo = RefreshingAsyncSoftDeleteRepository(session=async_db_test)
+    soft_delete_item = await soft_delete_repo.save(AsyncSoftDeleteBulkModel(name="item"))
+    execution_options = []
+
+    def capture_execution_options(orm_execute_state):
+        execution_options.append(orm_execute_state.execution_options)
+
+    event.listen(async_db_test.sync_session, "do_orm_execute", capture_execution_options)
+    try:
+        await repo.find()
+        await repo.get_by("value", 1, single=True)
+        await repo.get_by_id(first.id)
+        await repo.find_one(filters=[AsyncSimpleModel.id == first.id])
+        await repo.find_by_ids([first.id])
+        await repo.get_all()
+        await soft_delete_repo.soft_delete(soft_delete_item.id)
+    finally:
+        event.remove(async_db_test.sync_session, "do_orm_execute", capture_execution_options)
+
+    assert len(execution_options) == 7
+    assert all(options["populate_existing"] for options in execution_options)
 
 
 @pytest.mark.asyncio

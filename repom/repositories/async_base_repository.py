@@ -185,7 +185,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             List[T]: 全てのインスタンスのリスト
         """
         async with self._session_scope() as session:
-            result = await session.execute(select(self.model))
+            result = await session.execute(self._base_select())
             return result.scalars().all()
 
     async def save(self, instance: T) -> T:
@@ -432,7 +432,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             ...     limit=10
             ... )
         """
-        query = select(self.model)
+        query = self._base_select()
 
         # 論理削除フィルタを追加
         base_filters = filters if filters is not None else self._build_filters(params)
@@ -455,7 +455,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
         include_deleted: bool,
         **kwargs,
     ) -> List[T]:
-        query = select(self.model)
+        query = self._base_select()
         all_filters = list(filters)
         if self._has_soft_delete() and not include_deleted:
             all_filters.append(self.model.deleted_at.is_(None))
@@ -565,7 +565,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
         if self._has_soft_delete() and not include_deleted:
             filters.append(self.model.deleted_at.is_(None))
 
-        query = select(self.model).where(and_(*filters))
+        query = self._base_select().where(and_(*filters))
         query = self.set_find_option(query, **kwargs)
         async with self._session_scope() as session:
             result = await session.execute(query)

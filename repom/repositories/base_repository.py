@@ -155,7 +155,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             List[T]: 全てのインスタンスのリスト
         """
         with self._session_scope() as session:
-            result = session.execute(select(self.model))
+            result = session.execute(self._base_select())
             return result.scalars().all()
 
     def save(self, instance: T) -> T:
@@ -404,7 +404,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             ...     limit=10
             ... )
         """
-        query = select(self.model)
+        query = self._base_select()
 
         # 論理削除フィルタを追加
         base_filters = filters if filters is not None else self._build_filters(params)
@@ -426,7 +426,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
         include_deleted: bool,
         **kwargs,
     ) -> List[T]:
-        query = select(self.model)
+        query = self._base_select()
         all_filters = list(filters)
         if self._has_soft_delete() and not include_deleted:
             all_filters.append(self.model.deleted_at.is_(None))
@@ -525,7 +525,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
         if self._has_soft_delete() and not include_deleted:
             filters.append(self.model.deleted_at.is_(None))
 
-        query = select(self.model).where(and_(*filters))
+        query = self._base_select().where(and_(*filters))
         query = self.set_find_option(query, **kwargs)
         with self._session_scope() as session:
             return session.execute(query).scalars().all()
