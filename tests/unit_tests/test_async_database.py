@@ -14,6 +14,7 @@ from repom.database import (
     convert_to_async_uri,
     DatabaseManager,
 )
+from repom.config import config
 import asyncio
 import os
 import pytest
@@ -159,6 +160,16 @@ class TestDatabaseManager:
         engine = await manager.get_async_engine()
         assert manager._async_engine is not None
         assert isinstance(engine, AsyncEngine)
+
+    @pytest.mark.asyncio
+    async def test_async_session_factory_uses_configured_autoflush(self, monkeypatch):
+        monkeypatch.setattr(config, "autoflush", True)
+        manager = DatabaseManager()
+
+        factory = await manager.get_async_session_factory()
+
+        assert factory.kw["autoflush"] is True
+        await manager.dispose_async()
 
     @pytest.mark.asyncio
     async def test_async_session_context_manager(self, async_db_test):

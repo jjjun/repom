@@ -144,7 +144,8 @@ def create_test_fixtures(
 
         # トランザクション内のセッション作成
         session = scoped_session(
-            sessionmaker(autocommit=False, autoflush=False, bind=connection)
+            # The inherited False default is documented in the repository guide.
+            sessionmaker(autocommit=False, autoflush=config.autoflush, bind=connection)
         )
 
         yield session
@@ -361,6 +362,7 @@ def create_async_test_fixtures(
             bind=connection,
             class_=AsyncSession,
             expire_on_commit=False,
+            autoflush=config.autoflush,
         )
 
         session = AsyncSessionLocal()

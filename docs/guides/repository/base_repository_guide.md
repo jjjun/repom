@@ -152,6 +152,23 @@ def _base_select(self):
 This hook applies to every repository query that selects model instances.
 Do not add filters in `_base_select()`; each caller owns its filters.
 
+### `populate_existing` and unflushed changes
+
+repom sessions default to `autoflush=False`, an inherited setting that preserves
+explicit flush timing. When `_base_select()` uses `populate_existing=True`, a
+repository read can therefore discard an unflushed in-session change by
+reloading the instance from the database.
+
+Flush before the read when the pending change must be retained:
+
+```python
+session.flush()
+item = repository.get_by_id(item.id)
+```
+
+Alternatively, set `config.autoflush = True` in the application's
+`CONFIG_HOOK` to restore SQLAlchemy's default query-time flush behavior.
+
 **関連モデルの取得（N+1 問題の解決）** については [上級編](repository_advanced_guide.md#eager-loadingn1-問題の解決) を参照してください。
 
 ### Update（更新）

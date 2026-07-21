@@ -40,10 +40,18 @@ from repom.config import RepomConfig
 def hook_config(config: RepomConfig) -> RepomConfig:
     config.db_type = "postgres"
     config.db_name = "myapp"
+    config.autoflush = True
     config.model_locations = ["myapp.models"]
     config.allowed_package_prefixes = {"myapp.", "repom."}
     return config
 ```
+
+`autoflush` defaults to `False`, preserving repom's existing explicit flush
+timing. Set it to `True` to use SQLAlchemy's default behavior of flushing
+pending changes before queries.
+
+`autoflush` is configured through `CONFIG_HOOK`; it has no environment-variable
+override.
 
 ### 2. 環境変数で指定する
 

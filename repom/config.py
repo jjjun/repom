@@ -53,6 +53,7 @@ class RepomConfig(Config):
     # SQLAlchemy クエリログ設定
     _enable_sqlalchemy_echo: bool = field(default=False, init=False, repr=False)
     _sqlalchemy_echo_level: str = field(default="INFO", init=False, repr=False)
+    _autoflush: bool = field(default=False, init=False, repr=False)
 
     # SQLAlchemy 接続プール設定
     _db_pool_size: int = field(default=10, init=False, repr=False)
@@ -324,6 +325,18 @@ class RepomConfig(Config):
         if value not in ("INFO", "DEBUG"):
             raise ValueError(f"Invalid log level: {value}. Must be 'INFO' or 'DEBUG'.")
         self._sqlalchemy_echo_level = value
+
+    @property
+    def autoflush(self) -> bool:
+        """Whether SQLAlchemy sessions flush before executing queries.
+
+        Defaults to ``False`` to preserve repom's inherited session behavior.
+        """
+        return self._autoflush
+
+    @autoflush.setter
+    def autoflush(self, value: bool):
+        self._autoflush = value
 
     @property
     def db_pool_size(self) -> int:

@@ -12,6 +12,7 @@ from repom.database import (
     get_inspector,
     DatabaseManager,
 )
+from repom.config import config
 from repom.models.base_model import BaseModel
 import os
 import pytest
@@ -170,6 +171,15 @@ class TestDatabaseManager:
         assert manager._sync_engine is not None
         assert isinstance(engine, Engine)
         # クリーンアップ
+        manager.dispose_sync()
+
+    def test_sync_session_factory_uses_configured_autoflush(self, monkeypatch):
+        monkeypatch.setattr(config, "autoflush", True)
+        manager = DatabaseManager()
+
+        factory = manager.get_sync_session_factory()
+
+        assert factory.kw["autoflush"] is True
         manager.dispose_sync()
 
     def test_sync_session_context_manager(self, db_test):

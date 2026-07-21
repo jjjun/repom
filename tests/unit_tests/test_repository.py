@@ -2,7 +2,7 @@ from tests._init import *
 import warnings
 
 from sqlalchemy import Integer, String, desc, event, select
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 import pytest
 from typing import Optional, List
 from repom.models.base_model import BaseModel
@@ -155,6 +155,29 @@ def test_base_select_customisation_applies_to_all_read_paths(db_test):
 
     assert len(execution_options) == 7
     assert all(options["populate_existing"] for options in execution_options)
+
+
+@pytest.mark.parametrize(
+    ("autoflush", "expected_value"),
+    [(False, 1), (True, 2)],
+)
+def test_populate_existing_respects_autoflush_for_pending_changes(
+    db_test, autoflush, expected_value
+):
+    session = sessionmaker(bind=db_test.bind, autoflush=autoflush)()
+    repo = RefreshingSimpleRepository(session=session)
+    item = SimpleModel(value=1)
+    try:
+        repo.save(item)
+        session.commit()
+
+        item.value = 2
+        repo.get_by_id(item.id)
+        session.commit()
+
+        assert item.value == expected_value
+    finally:
+        session.close()
 
 
 def test_find_override_with_filters_and_kwargs_does_not_warn():

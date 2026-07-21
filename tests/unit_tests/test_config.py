@@ -155,6 +155,16 @@ def test_db_url_override_takes_precedence(config_factory):
     assert config.db_url == custom_url
 
 
+def test_autoflush_defaults_to_false_and_is_settable(config_factory):
+    """``autoflush`` preserves the inherited default and can be overridden."""
+    config = config_factory()
+
+    assert config.autoflush is False
+
+    config.autoflush = True
+    assert config.autoflush is True
+
+
 # =============================================================================
 # db_name tests
 # =============================================================================

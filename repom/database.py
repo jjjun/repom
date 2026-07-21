@@ -213,10 +213,13 @@ class DatabaseManager:
         """
         if self._sync_session_factory is None:
             engine = self.get_sync_engine()
+            # Sync retains SQLAlchemy's expire_on_commit=True default; see
+            # AsyncBaseRepository.save() for the async refresh rationale.
             self._sync_session_factory = sessionmaker(
                 bind=engine,
                 autocommit=False,
-                autoflush=False
+                # The inherited False default is documented in the repository guide.
+                autoflush=config.autoflush
             )
         return self._sync_session_factory
 
@@ -376,9 +379,11 @@ class DatabaseManager:
             self._async_session_factory = async_sessionmaker(
                 engine,
                 class_=AsyncSession,
+                # See AsyncBaseRepository.save() for the async refresh rationale.
                 expire_on_commit=False,
                 autocommit=False,
-                autoflush=False
+                # The inherited False default is documented in the repository guide.
+                autoflush=config.autoflush
             )
         return self._async_session_factory
 

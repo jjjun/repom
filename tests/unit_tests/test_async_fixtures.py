@@ -13,7 +13,9 @@ async_db_test フィクスチャの動作を検証します。
 import pytest
 from sqlalchemy import String, select
 from sqlalchemy.orm import Mapped, mapped_column
+from repom.config import config
 from repom.models.base_model_auto import BaseModelAuto
+from repom.testing import create_async_test_fixtures
 
 
 # テスト用モデル
@@ -61,6 +63,20 @@ class TestAsyncDbTest:
         from sqlalchemy.ext.asyncio import AsyncSession
         assert async_db_test is not None
         assert isinstance(async_db_test, AsyncSession)
+
+    @pytest.mark.asyncio
+    async def test_fixture_uses_configured_autoflush(self, async_db_engine, monkeypatch):
+        monkeypatch.setattr(config, "autoflush", True)
+        _, fixture = create_async_test_fixtures()
+        session_generator = fixture.__wrapped__(async_db_engine)
+
+        session = await anext(session_generator)
+
+        try:
+            assert session.autoflush is True
+        finally:
+            with pytest.raises(StopAsyncIteration):
+                await anext(session_generator)
 
     @pytest.mark.asyncio
     async def test_can_add_and_query(self, async_db_test):
