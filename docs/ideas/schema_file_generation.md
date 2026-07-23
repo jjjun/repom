@@ -122,7 +122,6 @@ uv run repom generate-schemas \
   --template openapi \
   --output schemas/
 ```
-```
 
 ## Potential Approaches
 
@@ -222,7 +221,7 @@ schemas/
 ### 影響を受けるコンポーネント
 - `repom/scripts/` - 新規スクリプト: `generate_schemas.py`
 - `pyproject.toml` - `[project.scripts]` エントリーポイントを追加
-- `repom/base_model.py` - スキーマシリアライゼーションヘルパーの可能性
+- `repom/models/base_model_auto.py` - スキーマシリアライゼーションヘルパーの可能性
 - `README.md` - 新しいコマンドをドキュメント化
 
 ### 既存機能との相互作用
@@ -279,7 +278,7 @@ uv run repom generate-schemas --format openapi-yaml
 - [ ] CLI インターフェース設計（引数、出力フォーマット）
 - [ ] OpenAPI ツールと TypeScript ジェネレータでテスト
 - [ ] 自動再生成のためのウォッチモードを検討
-- [ ] 実装する場合は `docs/research/` に移動
+- [ ] 採用後は実装判断を `docs/technical/` に記録
 
 ## 関連ドキュメント
 

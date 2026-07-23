@@ -69,7 +69,7 @@ tasks = await repo.find_by_ids([1, 2, 3], include_deleted=True)
 tasks = await repo.find_by_ids([1, 2, 3])  # include_deleted=False
 ```
 
-**論理削除の詳細** については [SoftDelete ガイド](repository_soft_delete_guide.md) を参照してください。
+**論理削除の詳細** については [SoftDelete ガイド](../model/soft_delete_guide.md) を参照してください。
 
 **注意事項**
 
@@ -456,6 +456,7 @@ task_ids = [task.id for task in repo.find(options=[])]  # 高速
 ```python
 from sqlalchemy.orm import joinedload
 from repom import BaseRepository
+from repom.database import get_reusable_sync_transaction
 
 class TaskRepository(BaseRepository[Task]):
     # すべての取得メソッドに適用されるデフォルト eager load
@@ -464,10 +465,11 @@ class TaskRepository(BaseRepository[Task]):
     default_order_by = 'created_at:desc'
 
 # 使い方
-repo = TaskRepository(session=db_session)
-tasks = repo.find()          # user を eager load 済み & created_at desc でソート
-latest = repo.find_one()     # default_order_by が自動適用
-raw = repo.find(options=[])  # eager loading だけスキップしたい場合
+with get_reusable_sync_transaction() as session:
+    repo = TaskRepository(session=session)
+    tasks = repo.find()          # user を eager load 済み & created_at desc でソート
+    latest = repo.find_one([])   # default_order_by が自動適用
+    raw = repo.find(options=[])  # eager loading だけスキップしたい場合
 ```
 
 ### ベストプラクティス

@@ -24,14 +24,19 @@ repom/
 │   ├── repositories/          # Repository implementations (query builder & soft delete mixins)
 │   ├── mixins/                # Reusable mixins (SoftDeletableMixin, etc.)
 │   ├── scripts/               # CLI scripts (console script entry points)
+│   ├── postgres/              # PostgreSQL / pgAdmin configuration and Docker management
+│   ├── redis/                 # Redis configuration and Docker management
+│   ├── config_hooks/          # Runtime environment override helpers
 │   ├── config.py              # Environment-aware configuration
 │   ├── database.py            # Database connection setup
+│   ├── testing.py             # Reusable pytest fixture factories
 │   └── utility.py             # Shared utility functions
 ├── tests/                     # Test suite for shared functionality
 │   ├── unit_tests/           # Unit tests for base components
 │   ├── behavior_tests/       # Behavioural notes & examples
+│   ├── integration_tests/    # External-project and database integration tests
 │   ├── conftest.py           # Pytest configuration
-│   └── db_test_fixtures.py   # Database fixtures for tests
+│   └── db_test_fixtures.py   # Backward-compatibility note; fixtures live in conftest.py
 ├── alembic/                  # Database migration files
 ├── data/                     # SQLite databases for each environment
 ├── docs/                     # Documentation and usage notes
@@ -41,11 +46,14 @@ repom/
 
 ## Environment Management
 
-Configuration is wired through the `CONFIG_HOOK`, allowing consumers to inject their own settings while the project uses environment-specific databases controlled by the `EXEC_ENV` environment variable (default: `dev`):
+Configuration is wired through `CONFIG_HOOK`, allowing consumers to inject their
+own settings. `EXEC_ENV` defaults to `dev`.
 
-- **Production**: `db.sqlite3` (`EXEC_ENV=prod`)
-- **Development**: `db.dev.sqlite3` (default, `EXEC_ENV=dev`)
-- **Test**: `sqlite:///:memory:` (in-memory) or `db.test.sqlite3` (`EXEC_ENV=test`)
+`RepomConfig` itself defaults to SQLite. The repository's `.env.example` enables
+`repom.config_hook:hook_config`, which selects PostgreSQL for `dev` / `prod` and
+in-memory SQLite for `test`. When file-based SQLite is selected with the default
+`db_name=repom`, the generated names are `repom_dev.sqlite3`,
+`repom_test.sqlite3`, and `repom.sqlite3`.
 
 ### Setting Environment (Windows PowerShell)
 ```powershell
@@ -106,19 +114,11 @@ CONFIG_HOOK=mine_py.config:get_repom_config
 
 ```python
 # mine-py/src/mine_py/config.py
-from repom.config import RepomConfig
-
-class MinePyConfig(RepomConfig):
-    def __init__(self):
-        super().__init__()
-        
-        # Model auto-import settings
-        self.model_locations = ['mine_py.models']
-        self.allowed_package_prefixes = {'mine_py.', 'repom.'}
-        self.model_excluded_dirs = {'base', 'mixin', '__pycache__'}
-
-def get_repom_config():
-    return MinePyConfig()
+def get_repom_config(config):
+    config.model_locations = ['mine_py.models']
+    config.allowed_package_prefixes = {'mine_py.', 'repom.'}
+    config.model_excluded_dirs = {'base', 'mixin', '__pycache__'}
+    return config
 ```
 
 **Key Changes from Previous Versions:**
@@ -138,10 +138,12 @@ from sqlalchemy.orm import Session
 class UserRepository(BaseRepository[User]):
     pass
 
-# Usage
-from repom.database import db_session
-repo = UserRepository(session=db_session)
-user = repo.get_by_id(1)
+# Usage in an application-owned transaction
+from repom.database import get_reusable_sync_transaction
+
+with get_reusable_sync_transaction() as session:
+    repo = UserRepository(session=session)
+    user = repo.get_by_id(1)
 ```
 
 **メリット**:
@@ -216,7 +218,7 @@ db_engine, db_test = create_test_fixtures(
 - Keep shared logic within this repository minimal and framework-agnostic.
 - Define application models and repositories in the consuming project (inherit from `BaseModel` / `BaseRepository`).
 - Use the `BaseRepository` class methods (such as `get_by`) to retrieve and manipulate models consistently.
-- Reuse the fixtures in `tests/db_test_fixtures.py` if you need to validate the shared behaviour.
+- Reuse the fixtures in `tests/conftest.py` if you need to validate shared behaviour.
 - When adding new shared utilities, accompany them with tests in `tests/unit_tests/`.
 
 ## Key Dependencies

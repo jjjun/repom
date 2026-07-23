@@ -1,177 +1,29 @@
-# Documentation Structure
+# repom documentation
 
-## 概要
+repom の資料は用途別に次の3種類へ分けています。
 
-このドキュメント構造は **AI エージェント協働** を前提として設計されています。各ディレクトリは明確な役割を持ち、情報のライフサイクル全体をカバーします。
+| ディレクトリ | 内容 | 状態 |
+| --- | --- | --- |
+| [guides/](guides/README.md) | 現行機能の使い方 | 実装変更に合わせて更新 |
+| [technical/](technical/README.md) | 設計判断、制約、過去の調査 | 履歴資料はその旨を明記 |
+| [ideas/](ideas/README.md) | 未実装の機能アイデア | 実装済み機能と混同しない |
 
----
+プロジェクトの導入と公開 API はルートの [README](../README.md)、開発規約は
+[AGENTS.md](../AGENTS.md) が正本です。
 
-## 📂 ディレクトリ構造
+## Issue とクロスプロジェクト提案
 
-```
-docs/
-├── README.md           # このファイル（構造説明）
-├── guides/             📘 使い方ガイド（実用的、教育的）
-├── ideas/              💡 機能提案・アイデア
-├── proposals/          📮 外部プロジェクトへの一時提案書
-├── technical/          🔧 実装判断記録（なぜこうなったか）
-└── issue/              📋 問題管理（バックログ + 完了）
-    ├── README.md      # Issue インデックス
-    ├── active/        # 作業中・未着手
-    └── completed/     # 完了済み（001, 002, ...）
-```
+Issue は issuekit API の `project = "repom"` で管理します。廃止済みの
+`docs/issue` / `docs/issues` トラッカーを作り直さないでください。手順は
+`issuekit protocol --role <role>` または MCP の `get_protocol` で確認します。
 
----
+repom 外の変更が必要な場合は `issuekit propose --to <project>` を使用します。
+ローカルの `docs/proposals` は使用しません。
 
-## 📖 各ディレクトリの詳細
+## 更新ルール
 
-### 1. **guides/** - 使い方ガイド
-
-**目的**: 他の AI エージェントや開発者に機能を教えるための実用的なマニュアル
-
-**対象読者**:
-- 開発者（機能の使い方を学ぶ）
-- AI エージェント（実装時の参考）
-
-**詳細**: [docs/guides/README.md](guides/README.md) を参照
-
----
-
-### 2. **ideas/** - 機能提案
-
-**目的**: アイデア段階の提案を記録（実装前）
-
-**対象読者**: AI エージェント（新機能検討時）
-
-**詳細**: [docs/ideas/README.md](ideas/README.md) を参照
-
----
-
-### 3. **technical/** - 実装判断記録と技術調査
-
-**目的**: 実装済み機能の「なぜこうなったか」を記録し、必要に応じて技術調査も行う
-
-**対象読者**: AI エージェント（改善・拡張時）
-
-**詳細**: [docs/technical/README.md](technical/README.md) を参照
-
----
-
-### 4. クロスプロジェクト提案（issuekit API）
-
-**目的**: repom 側だけでは完結できない変更を、外部プロジェクト・外部パッケージ側へ提案として渡す
-
-**対象読者**: AI エージェント（外部変更の引き継ぎ・追跡）
-
-**詳細**: `issuekit propose --to <project>` で送信、`issuekit incoming` で受信。
-ローカルの `docs/proposals` は廃止済みです。手順は `issuekit protocol` を参照してください。
-
----
-
-### 5. Issue 管理（issuekit API）
-
-**目的**: 実装タスクの管理と記録
-
-**対象読者**: AI エージェント（プロジェクト管理）
-
-**詳細**: Issue は issuekit API（`project = "repom"`）で管理します。ローカルの
-`docs/issues` トラッカーは廃止済みです。手順は `issuekit protocol --role <role>`
-（または MCP `get_protocol`）を参照してください。
-
----
-
-## 🔄 情報のライフサイクル
-
-1. **ideas/**: 問題提起、簡潔な提案（250-350行制限）
-2. **issuekit API**: 実装計画・タスク管理・実装記録（active / completed）
-3. **technical/**: 設計判断の背景（なぜこうなったか）
-4. **guides/**: 使い方マニュアル（How-to）
-
-クロスプロジェクト提案（`issuekit propose`）はこの通常ライフサイクルとは別枠です。repom の外に変更依頼や設計判断を渡す必要がある場合だけ使います。
-
----
-
-## 🎯 ドキュメント作成のガイドライン
-
-### 1. 適切なディレクトリを選ぶ
-
-| 内容 | 配置先 |
-|------|--------|
-| 機能の使い方 | `guides/` |
-| 新機能のアイデア | `ideas/` |
-| 外部プロジェクトへの提案 | `issuekit propose` |
-| 設計判断の記録 | `technical/` |
-| 実装タスク | issuekit API（active） |
-| 完了した実装 | issuekit API（completed） |
-
-### 2. テンプレートを使う
-
-各ディレクトリの README.md にテンプレートがあります。
-
-### 3. クロスリファレンスを活用
-
-```markdown
-## 関連ドキュメント
-- **guides/testing_guide.md**: 使い方
-- **technical/test_infrastructure_technical.md**: 設計判断
-- issuekit issue `repom#<id>`: 実装記録
-```
-
-### 4. コンテキスト容量を意識
-
-- **ideas/**: 250-350行厳守
-- **guides/**: 簡潔に（500行以内推奨）
-- **technical/**: 必要に応じて詳細に
-
-### 4. AI エージェントを意識
-
-- 明確な見出し構造
-- コード例は最小限かつ完全
-- 前提条件を明示
-
----
-
-## 📝 よくある質問
-
-### Q: ideas/ と technical/ の違いは？
-
-**A**: 
-- **ideas/**: アイデア段階の簡潔な提案（250-350行）
-- **technical/**: 技術調査・設計判断の記録（制限なし、実装前の調査も実装後の記録も両方含む）
-
-### Q: guides/ と technical/ の違いは？
-
-**A**:
-- **guides/**: 使い方（How to use）
-- **technical/**: 設計判断の背景（Why it works this way）
-
-### Q: 既存プロジェクトに適用するには？
-
-**A**: 段階的に導入：
-1. `docs/` ディレクトリを作成
-2. この README.md をコピー
-3. `guides/` と `ideas/` から開始
-4. 既存ドキュメントを移行
-5. 必要に応じて他のディレクトリを追加
-
----
-
-## 🔗 関連リソース
-
-- **.github/copilot-instructions.md**: AI エージェント向け指示
-- **AGENTS.md**: プロジェクト構造と開発ガイドライン
-- **README.md**: プロジェクトの基本情報
-
----
-
-## 📅 メンテナンス
-
-この README.md は：
-- プロジェクト構造が変更された時に更新
-- 新しいベストプラクティスが見つかった時に追記
-- 他のプロジェクトからフィードバックがあった時に改善
-
----
-
-**最終更新**: 2025-11-16  
-**バージョン**: 1.0
+- guides は現行の import path、CLI、設定名、戻り値を実装とテストで確認する。
+- technical の履歴資料は、現行仕様と過去案を明確に区別する。
+- ideas のコードは未実装の概念例であることを明記する。
+- 同じ仕様を複数ファイルへコピーせず、正本へリンクする。
+- リポジトリ内リンクは相対パスを使い、端末固有の絶対パスを記載しない。

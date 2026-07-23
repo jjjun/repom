@@ -1,232 +1,33 @@
 # CONFIG_HOOK ガイド
 
-## 概要
+`CONFIG_HOOK` は、repom が作成した `RepomConfig` を利用側プロジェクトの関数へ渡し、
+返された設定を有効にする仕組みです。loader の正本は
+`basekit.config_hook`、repom 固有の設定項目は `repom.config.RepomConfig` です。
 
-`CONFIG_HOOK` は、repom の起動時に設定オブジェクトを外部プロジェクト側で差し替えるための仕組みです。
-hook の読み込み処理は `basekit.config_hook` が提供し、repom はその基盤を使って `RepomConfig` を適用します。
-
-通常の利用では、外部プロジェクトで `RepomConfig` を継承した設定クラスを作り、`CONFIG_HOOK` に `module:function` 形式で hook 関数を指定します。
-
----
-
-## 基本的な使い方
-
-### 1. hook 関数を定義する
+## 最小構成
 
 ```python
 # myapp/config.py
-from repom.config import RepomConfig
-
-
-class MyAppConfig(RepomConfig):
-    def __init__(self):
-        super().__init__()
-        self.db_name = "myapp"
-        self.model_locations = ["myapp.models"]
-        self.allowed_package_prefixes = {"myapp.", "repom."}
-
-
-def get_repom_config():
-    return MyAppConfig()
-```
-
-既存の `config` を受け取って変更する形も使えます。
-
-```python
-# myapp/config.py
-from repom.config import RepomConfig
-
-
-def hook_config(config: RepomConfig) -> RepomConfig:
-    config.db_type = "postgres"
+def hook_config(config):
     config.db_name = "myapp"
-    config.autoflush = True
     config.model_locations = ["myapp.models"]
     config.allowed_package_prefixes = {"myapp.", "repom."}
     return config
 ```
 
-`autoflush` defaults to `False`, preserving repom's existing explicit flush
-timing. Set it to `True` to use SQLAlchemy's default behavior of flushing
-pending changes before queries.
-
-`autoflush` is configured through `CONFIG_HOOK`; it has no environment-variable
-override.
-
-### 2. 環境変数で指定する
-
-```bash
-# .env
-CONFIG_HOOK=myapp.config:get_repom_config
+```dotenv
+CONFIG_HOOK=myapp.config:hook_config
 ```
 
-PowerShell では次のように指定します。
+hook は必ず1個の config 引数を受け取り、設定オブジェクトを返します。module を
+import した時点で新しい `RepomConfig` を作ったり、引数なし関数を登録したりしないで
+ください。
 
-```powershell
-$env:CONFIG_HOOK='myapp.config:get_repom_config'
-```
+## runtime environment override
 
----
-
-## repom と basekit の責務
-
-- `basekit.config_hook`: `CONFIG_HOOK` の読み取り、hook 関数の import、エラー処理を提供します。
-- `repom.config.RepomConfig`: DB、モデル自動インポート、ログ、パスなど repom 固有の設定を提供します。
-- `repom._.config_hook`: 以前の互換 import でしたが、現在は削除されています。
-
-`ConfigHookLoadError` を直接扱う必要がある場合は、`basekit.config_hook` から import してください。
+project の既定値を先に設定し、環境変数 helper を最後に呼びます。
 
 ```python
-from basekit.config_hook import ConfigHookLoadError
-```
-
----
-
-## よく使う設定例
-
-### モデル自動インポート
-
-```python
-from repom.config import RepomConfig
-
-
-class MyAppConfig(RepomConfig):
-    def __init__(self):
-        super().__init__()
-        self.model_locations = ["myapp.models", "myapp.modules.user"]
-        self.model_excluded_dirs = {"tests", "migrations", "__pycache__"}
-        self.allowed_package_prefixes = {"myapp.", "repom."}
-        self.model_import_strict = True
-
-
-def get_repom_config():
-    return MyAppConfig()
-```
-
-### PostgreSQL を使う
-
-```python
-from repom.config import RepomConfig
-
-
-def get_repom_config():
-    config = RepomConfig()
-    config.db_type = "postgres"
-    config.db_name = "myapp"
-    config.postgres.user = "myapp"
-    config.postgres.password = "myapp_dev"
-    config.postgres.container.container_name = "myapp_postgres"
-    config.postgres.container.host_port = 5434
-    return config
-```
-
-### Redis / PostgreSQL コンテナ名を分ける
-
-```python
-from repom.config import RepomConfig
-
-
-def get_repom_config():
-    config = RepomConfig()
-    config.postgres.container.container_name = "myapp_postgres"
-    config.redis.container.container_name = "myapp_redis"
-    config.redis.port = 6381
-    config.redis.container.host_port = 6381
-    return config
-```
-
----
-
-## 動作フロー
-
-1. `repom.config` がデフォルトの `RepomConfig` を作成する
-2. `basekit.config_hook.get_config_from_hook()` が `CONFIG_HOOK` を読む
-3. `CONFIG_HOOK` が未設定ならデフォルト設定をそのまま返す
-4. `CONFIG_HOOK` が設定されていれば `module:function` を import する
-5. hook 関数を実行し、返された config を repom の実行時設定として使う
-6. 返却後に `config.init()` が呼ばれ、パス作成などの初期化が行われる
-
----
-
-## エラーと確認方法
-
-`CONFIG_HOOK` に指定した module が import できない、関数が存在しない、指定先が callable ではない場合、`basekit.config_hook.ConfigHookLoadError` が送出されます。
-設定ミスを warning だけで無視しないため、CI/CD や外部プロジェクト連携では hook パスを明示的に検証してください。
-
-```python
-import os
-
-print("CONFIG_HOOK:", os.getenv("CONFIG_HOOK"))
-```
-
-hook パスは Python の module path で指定します。ファイルパスではありません。
-
-```bash
-# 正しい
-CONFIG_HOOK=myapp.config:get_repom_config
-
-# 間違い
-CONFIG_HOOK=myapp/config.py:get_repom_config
-```
-
----
-
-## ベストプラクティス
-
-1. hook 関数は軽量に保つ
-2. `RepomConfig` を継承したクラスを返すか、受け取った `config` を変更して返す
-3. モデル自動インポートを使う場合は `allowed_package_prefixes` を明示する
-4. 環境ごとの差分は `EXEC_ENV` を読んで最小限に分岐する
-5. `repom._.config_hook` は使わず、共通 hook API は `basekit.config_hook` を直接使う
-
----
-
-## 機能別 config モジュール
-
-`RepomConfig` は引き続き `repom.config` から import します。PostgreSQL、Redis、SQLite の個別設定クラスは機能別モジュールにも配置されています。
-
-```python
-from repom.postgres.config import PostgresConfig, PostgresContainerConfig
-from repom.redis.config import RedisConfig, RedisContainerConfig
-from repom.sqlite.config import SqliteConfig
-```
-
-Config 系クラスは機能別モジュールから直接 import します。複数機能をまとめる設定では `RepomConfig` を使います。
-
----
-
-## 関連ドキュメント
-
-- [README.md の設定概要](../../../README.md#環境変数)
-- [モデル自動インポートガイド](auto_import_models_guide.md)
-- [ロギングガイド](logging_guide.md)
-- [PostgreSQL セットアップガイド](../postgresql/postgresql_setup_guide.md)
-
-## Runtime Override Helpers
-
-repom keeps most direct environment reads out of config dataclasses. Runtime
-environment overrides live under `repom.config_hooks/` as small `apply_*`
-helpers. Call them at the end of a `CONFIG_HOOK` after setting project defaults
-when environment variables should win.
-
-Available helpers:
-
-| Helper | Environment variables |
-|---|---|
-| `apply_database_env_overrides()` | `REPOM_DATABASE_URL`, `DATABASE_URL`, `DB_TYPE`, `SQLALCHEMY_ECHO`, `SQLALCHEMY_ECHO_LEVEL` |
-| `apply_postgres_env_overrides()` | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT` |
-| `apply_pgadmin_env_overrides()` | `PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD` |
-| `apply_redis_env_overrides()` | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DB` |
-| `apply_sqlite_env_overrides()` | `SQLITE_DB_PATH`, `SQLITE_DB_FILE`, `SQLITE_USE_IN_MEMORY_FOR_TESTS`, `SQLITE_USE_FILE_DB` |
-
-`REPOM_DATABASE_URL` takes precedence over `DATABASE_URL` when both are set.
-`SQLITE_USE_FILE_DB` is kept for compatibility and forces test SQLite to use a
-file-backed database unless `SQLITE_USE_IN_MEMORY_FOR_TESTS` is also set.
-
-Example:
-
-```python
-from repom.config import RepomConfig
 from repom.config_hooks.database import apply_database_env_overrides
 from repom.config_hooks.pgadmin import apply_pgadmin_env_overrides
 from repom.config_hooks.postgres import apply_postgres_env_overrides
@@ -234,11 +35,10 @@ from repom.config_hooks.redis import apply_redis_env_overrides
 from repom.config_hooks.sqlite import apply_sqlite_env_overrides
 
 
-def hook_config(config: RepomConfig) -> RepomConfig:
+def hook_config(config):
     config.db_name = "myapp"
     config.db_type = "postgres"
-    config.postgres.port = 5434
-    config.redis.port = 6381
+    config.postgres.container.host_port = 5432
 
     apply_database_env_overrides(config)
     apply_postgres_env_overrides(config)
@@ -247,3 +47,53 @@ def hook_config(config: RepomConfig) -> RepomConfig:
     apply_sqlite_env_overrides(config)
     return config
 ```
+
+これにより、コード上の既定値を deployment 環境で上書きできます。サポートする DB
+関連変数は [PostgreSQL runtime overrides](../postgresql/runtime_env_overrides.md) と
+各 helper の docstring を参照してください。
+
+## 主な設定
+
+| 分類 | 設定例 |
+| --- | --- |
+| DB | `db_type`, `db_name`, `db_url`, pool 設定 |
+| SQLite | `sqlite.db_path`, `sqlite.db_file`, `sqlite.use_in_memory_for_tests` |
+| PostgreSQL | `postgres.*`, `postgres.container.*` |
+| pgAdmin | `pgadmin.*`, `pgadmin.container.*` |
+| Redis | `redis.*`, `redis.container.*` |
+| model import | `model_locations`, `allowed_package_prefixes`, `model_excluded_dirs`, `model_import_strict` |
+| logging | `log_path`, `enable_sqlalchemy_echo`, `sqlalchemy_echo_level` |
+
+有効値は次で確認します。
+
+```bash
+uv run repom_info
+```
+
+## 読み込み失敗
+
+module が import できない、属性がない、対象が callable でない場合、
+`basekit.config_hook.ConfigHookLoadError` を送出して起動を停止します。設定ミスを
+warning だけで無視しません。
+
+確認項目:
+
+1. `CONFIG_HOOK` が `module:callable` 形式か。
+2. 利用側 package が Python path にあるか。
+3. hook が config 引数を受け取るか。
+4. hook が config を返しているか。
+5. repom import より前に環境変数が設定されているか。
+
+## repom 自身の hook
+
+`.env.example` の `repom.config_hook:hook_config` は、この repository の開発用です。
+`test` では SQLite、`dev` / `prod` では PostgreSQL を選び、repom の model と
+container 既定値を設定します。利用側 project はこの hook をそのまま複製せず、自身の
+要件に必要な差分だけ定義してください。
+
+関連資料:
+
+- [`repom/config.py`](../../../repom/config.py)
+- [`repom/config_hook.py`](../../../repom/config_hook.py)
+- [モデル自動 import](auto_import_models_guide.md)
+- [README の設定概要](../../../README.md#設定)

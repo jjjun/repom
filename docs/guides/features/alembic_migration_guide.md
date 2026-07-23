@@ -29,7 +29,7 @@ from repom.alembic import AlembicSetup
 
 # 基本的な使い方（repom standalone）
 setup = AlembicSetup(
-    project_root='/path/to/project',
+    project_root='<repo-root>',
     db_url='sqlite:///data/db.sqlite3'
 )
 
@@ -45,9 +45,9 @@ alembic_cfg = setup.get_alembic_config()
 ```python
 # mine-py のような外部プロジェクトの場合
 setup = AlembicSetup(
-    project_root='/path/to/mine-py',
+    project_root='<consumer-root>',
     db_url='sqlite:///data/mine_py/db.sqlite3',
-    script_location='/path/to/mine-py/submod/repom/alembic',  # repom の alembic ディレクトリ
+    script_location='<consumer-root>/submod/repom/alembic',  # repom の alembic ディレクトリ
     version_locations='%(here)s/alembic/versions'  # プロジェクト内の versions
 )
 
@@ -69,8 +69,8 @@ setup.create_version_directory()
 uv run alembic_init
 
 # 出力例:
-# ✓ Created alembic.ini: /path/to/project/alembic.ini
-# ✓ Created version directory: /path/to/project/alembic/versions
+# ✓ Created alembic.ini: <repo-root>/alembic.ini
+# ✓ Created version directory: <repo-root>/alembic/versions
 ```
 
 **動作**:
@@ -187,21 +187,11 @@ repom の設定をカスタマイズする場合のみ設定します。
 
 ```python
 # mine-py/src/mine_py/config.py
-from repom.config import RepomConfig
-
-class MinePyConfig(RepomConfig):
-    def __init__(self):
-        super().__init__()
-        
-        # パッケージ名（データディレクトリ: data/mine_py/）
-        self.package_name = 'mine_py'
-        
-        # モデル自動インポート設定
-        self.model_locations = ['mine_py.models']
-        self.allowed_package_prefixes = {'mine_py.', 'repom.'}
-
-def get_repom_config():
-    return MinePyConfig()
+def get_repom_config(config):
+    config.package_name = 'mine_py'
+    config.model_locations = ['mine_py.models']
+    config.allowed_package_prefixes = {'mine_py.', 'repom.'}
+    return config
 ```
 
 ```bash
@@ -360,7 +350,8 @@ def downgrade() -> None:
 
 ### マイグレーションファイルが repom に作成される
 
-**症状**: 外部プロジェクトで `alembic revision` を実行すると、`repom/alembic/versions/` にファイルが作成される
+**過去の症状**: 外部プロジェクトの revision が共有 repom checkout の
+`alembic/versions/` に作成される
 
 **解決方法**: プロジェクトのルートに `alembic.ini` を作成し、`version_locations` を設定
 

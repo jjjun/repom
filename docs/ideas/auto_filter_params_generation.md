@@ -250,10 +250,10 @@ class SampleRepository(BaseRepository[Sample]):
 ## 統合ポイント
 
 ### 影響を受けるコンポーネント
-- `repom/base_repository.py` - `_filter_schema` サポートと自動生成ロジック追加
-- `repom/base_repository.py` - `FilterParams` の拡張（既存機能）
+- `repom/repositories/base_repository.py` - `_filter_schema` サポートと自動生成ロジック追加
+- `repom/repositories/_core.py` - `FilterParams` の拡張（既存機能）
 - `README.md` - 新機能のドキュメント化
-- `docs/guides/repository_and_utilities_guide.md` - ガイドの更新
+- `docs/guides/repository/base_repository_guide.md` - ガイドの更新
 
 ### 既存機能との相互作用
 - 既存の `_build_filters` メソッドと後方互換性を維持
@@ -262,7 +262,7 @@ class SampleRepository(BaseRepository[Sample]):
 
 ### 実装例
 ```python
-# repom/base_repository.py に追加
+# repom/repositories/base_repository.py に追加
 
 class BaseRepository(Generic[T]):
     _filter_schema: Dict[str, Dict[str, Any]] = {}
@@ -431,12 +431,12 @@ def list_products(
 - [ ] セキュリティテスト（不正なフィールドアクセスなど）
 - [ ] パフォーマンステスト
 - [ ] ドキュメントの更新
-- [ ] 実装する場合は `docs/research/` に移動
+- [ ] 採用後は実装判断を `docs/technical/` に記録
 
 ## 関連ドキュメント
 
-- `repom/base_repository.py` - BaseRepository の現在の実装
-- `docs/guides/repository_and_utilities_guide.md` - FilterParams の使い方
+- `repom/repositories/base_repository.py` - BaseRepository の現在の実装
+- `docs/guides/repository/repository_filter_params_guide.md` - FilterParams の使い方
 - `README.md` - BaseRepository のドキュメント
 
 ## 解決すべき質問

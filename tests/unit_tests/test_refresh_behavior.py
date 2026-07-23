@@ -1,8 +1,8 @@
 """
 Test to verify if refresh() is needed after commit for AutoDateTime fields.
 
-This test verifies the claim in the mine-py issue document:
-https://github.com/mine-py/docs/issues/repom_async_repository_refresh_issue.md
+This test is the executable regression specification for refresh behavior
+after commit.
 """
 import pytest
 import pytest_asyncio

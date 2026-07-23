@@ -194,7 +194,7 @@ def get_sample(id: int) -> RepomResponse[Sample]:
 - **新規パッケージ**: `repom/integrations/`（FastAPI、Flask モジュール）
 - `pyproject.toml` - オプショナル依存関係を追加
 - `README.md` - 統合パターンをドキュメント化
-- `repom/base_model.py` - 統合フックが必要になる可能性
+- `repom/models/base_model_auto.py` - 統合フックが必要になる可能性
 
 ### パッケージ構造例
 ```
@@ -232,11 +232,11 @@ uv add "repom[all]"
 - [ ] FastAPI 依存性注入でテスト
 - [ ] Flask 統合アプローチを検討
 - [ ] 既存プロジェクトへの影響を評価
-- [ ] 詳細な実装計画のため `docs/research/` に移動
+- [ ] 採用後は実装判断を `docs/technical/` に記録
 
 ## 関連ドキュメント
 
-- `repom/base_model.py` - `get_response_schema()` を持つ BaseModel
+- `repom/models/base_model_auto.py` - `get_response_schema()` を持つ BaseModelAuto
 - `README.md` - 現在の使用パターン
 - FastAPI ドキュメント: [Response Model](https://fastapi.tiangolo.com/tutorial/response-model/)
 

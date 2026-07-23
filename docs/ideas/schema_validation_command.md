@@ -177,13 +177,13 @@ $ uv run repom validate-schemas
 - [ ] CLI インターフェースと出力フォーマットを設計
 - [ ] CI/CD 用の JSON 出力オプションを検討
 - [ ] 大規模モデルセットでのパフォーマンスを評価
-- [ ] 詳細な実装計画のため `docs/research/` に移動
+- [ ] 必要な技術調査を `docs/technical/` に記録
 
 ## 関連ドキュメント
 
-- `docs/issues/completed/001_get_response_schema_forward_refs_improvement.md` - Phase 2 エラーハンドリング
-- `README.md` - Phase 2 実装詳細
-- `repom/base_model.py` - エラーハンドリング付き BaseModel 実装
+- `docs/technical/get_response_schema_technical.md` - スキーマ生成の実装詳細
+- `README.md` - 現行の公開 API
+- `repom/models/base_model.py` - BaseModel 実装
 
 ## 解決すべき質問
 

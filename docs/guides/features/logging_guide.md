@@ -1,562 +1,101 @@
 # repom ロギングガイド
 
-repom は Python 標準の logging モジュールを使ったロギング機能を提供します。**ハイブリッドアプローチ**により、CLI ツール実行時とアプリケーション使用時の両方で柔軟に対応できます。
+repom は Python 標準の `logging` を使います。汎用 handler と設定関数は
+`basekit.logging` が所有し、repom は package 名と `RepomConfig` を接続します。
 
-## ログファイル命名規則
+## 基本
 
-ログファイルは **`<区分>_<YYYY-MM-DD>.log`** 形式で日次ローテーションされます。
-
-```
-data/repom/logs/
-├── main_2026-05-05.log   ← 今日（アクティブ）
-├── main_2026-05-04.log   ← 昨日
-└── main_2026-05-03.log   ← 一昨日
-```
-
-- **区分**: `main`（通常）/ `test`（`EXEC_ENV=test` 時）
-- **ローテーション**: 毎日 0 時に自動切り替え
-- **保持期間**: デフォルト 30 日分（古いファイルは自動削除）
-
-## 目次
-
-- [基本的な使い方](#基本的な使い方)
-- [SQLAlchemy クエリログ](#sqlalchemy-クエリログ)
-- [CLI ツール実行時](#cli-ツール実行時)
-- [アプリケーション使用時](#アプリケーション使用時)
-- [config_hook でカスタマイズ](#config_hook-でカスタマイズ)
-- [テスト時のログ制御](#テスト時のログ制御)
-- [ログレベル変更](#ログレベル変更)
-- [複数ログファイルへの分割](#複数ログファイルへの分割)
-- [トラブルシューティング](#トラブルシューティング)
-
----
-
-## 基本的な使い方
-
-repom のロギングは以下の優先順位で動作します:
-
-1. **アプリ側の設定（最優先）**: `logging.basicConfig()` または `dictConfig()`
-2. **repom のデフォルト設定**: `config.log_file_path` を使用
-
-### ロガーの取得
+repom 内部では次のように logger を取得します。
 
 ```python
 from repom.logging import get_logger
 
 logger = get_logger(__name__)
-logger.debug("デバッグメッセージ")
-logger.info("情報メッセージ")
-logger.warning("警告メッセージ")
-logger.error("エラーメッセージ")
-logger.critical("致命的エラー")
+logger.info("operation completed")
 ```
 
-**注意**: `__name__` を渡すと、`repom.{__name__}` という名前のロガーが返されます。
+最初の `get_logger()` 呼び出し時に、repom root logger に handler がなければ
+`config.log_file_path` を使った既定設定を行います。アプリケーションが先に
+`logging.basicConfig()` や `dictConfig()` で handler を設定している場合は、その設定を
+優先します。
 
----
+利用側アプリケーションは、できるだけ process entry point で logging を設定してから
+repom の処理を開始してください。
 
-## SQLAlchemy クエリログ
+## 日次ファイル
 
-repom は SQLAlchemy のクエリログ機能を統合しており、N+1 問題の調査やデータベースクエリの最適化に役立ちます。
-
-### 基本的な使い方
-
-```python
-from repom.config import config
-
-# クエリログを有効化
-config.enable_sqlalchemy_echo = True
-
-# この後のクエリがすべてログに出力される
-repo = MyRepository()
-items = repo.find_all()
-
-for item in items:
-    # ここで N+1 が発生していれば、大量のクエリログが出る
-    data = item.to_dict()
-```
-
-### ログレベルの設定
-
-```python
-# INFO: SQL文のみを出力（デフォルト）
-config.enable_sqlalchemy_echo = True
-config.sqlalchemy_echo_level = 'INFO'
-
-# DEBUG: SQL文 + パラメータ + 実行結果の詳細
-config.enable_sqlalchemy_echo = True
-config.sqlalchemy_echo_level = 'DEBUG'
-```
-
-### 出力例
-
-**INFO レベル**:
-```
-🔍 SQL: SELECT task.id, task.title, task.created_at FROM task
-🔍 SQL: SELECT user.id, user.name FROM user WHERE user.id = ?
-🔍 SQL: SELECT comment.id FROM comment WHERE comment.task_id = ?
-```
-
-**DEBUG レベル**:
-```
-🔍 SQL: SELECT user.id, user.name FROM user WHERE user.id = ? [1]
-🔍 SQL: Col ('id', 'name')
-🔍 SQL: Row (1, 'John Doe')
-```
-
-### 外部プロジェクトでの有効化
-
-開発環境でのみクエリログを有効にする例：
-
-```python
-# mine-py/src/mine_py/config.py
-from repom.config import RepomConfig
-
-class MinePyConfig(RepomConfig):
-    def __init__(self):
-        super().__init__()
-        
-        # 開発環境でのみクエリログを有効化
-        if self.exec_env == 'dev':
-            self._enable_sqlalchemy_echo = True
-            self._sqlalchemy_echo_level = 'INFO'
-
-def get_repom_config():
-    return MinePyConfig()
-```
-
-```bash
-# .env ファイル
-CONFIG_HOOK=mine_py.config:get_repom_config
-```
-
-### N+1 問題の調査
-
-```python
-from repom.config import config
-
-# クエリログを有効化
-config.enable_sqlalchemy_echo = True
-
-# テスト実行
-repo = ArticleRepository()
-articles = repo.find_all()
-
-print(f"初期取得完了")
-
-for article in articles:
-    # この部分で追加クエリが発生していないか確認
-    count = len([x for x in article.comments if x.is_approved])
-    print(f"記事 {article.id}: {count} 件の承認済みコメント")
-```
-
-**N+1 が発生している場合の出力**:
-```
-🔍 SQL: SELECT article.id, article.title FROM article
-初期取得完了
-🔍 SQL: SELECT comment.id, comment.is_approved FROM comment WHERE comment.article_id = ?
-記事 1: 5 件の承認済みコメント
-🔍 SQL: SELECT comment.id, comment.is_approved FROM comment WHERE comment.article_id = ?
-記事 2: 3 件の承認済みコメント
-🔍 SQL: SELECT comment.id, comment.is_approved FROM comment WHERE comment.article_id = ?
-記事 3: 7 件の承認済みコメント
-```
-
-### Eager Loading で解決
-
-```python
-from sqlalchemy.orm import selectinload
-
-class ArticleRepository(BaseRepository[Article]):
-    def __init__(self, session: Session = None):
-        super().__init__(Article, session)
-        # comments を eager loading
-        self.default_options = [
-            selectinload(Article.comments)
-        ]
-
-# これで N+1 問題が解決される
-config.enable_sqlalchemy_echo = True
-articles = repo.find_all()
-
-for article in articles:
-    # 追加のクエリは発生しない
-    count = len([x for x in article.comments if x.is_approved])
-```
-
-**Eager Loading 後の出力**:
-```
-🔍 SQL: SELECT article.id, article.title FROM article
-🔍 SQL: SELECT comment.article_id, comment.id, comment.is_approved FROM comment WHERE comment.article_id IN (?, ?, ?)
-初期取得完了
-記事 1: 5 件の承認済みコメント
-記事 2: 3 件の承認済みコメント
-記事 3: 7 件の承認済みコメント
-```
-
-### テストでの使用
-
-```python
-# tests/test_query_optimization.py
-from repom.config import config
-
-def test_no_n_plus_one(db_test):
-    """N+1 問題が発生していないことを確認"""
-    # クエリログを有効化
-    config.enable_sqlalchemy_echo = True
-    
-    repo = ArticleRepository(session=db_test)
-    articles = repo.find_all()
-    
-    # ここで大量のクエリログが出ていないか目視確認
-    for article in articles:
-        data = article.to_dict()
-```
-
-### ログファイルへの出力
-
-クエリログは以下の場所に出力されます：
-
-- **コンソール**: 🔍 SQL: プレフィックス付き
-- **ログファイル**: `config.log_file_path` が設定されている場合（日次ローテーション）
-
-```python
-# ログファイルの例（main_2026-05-05.log）
-2026-05-05 10:30:45,123 - sqlalchemy.engine.Engine - INFO - SELECT user.id, user.name FROM user
-2026-05-05 10:30:45,125 - sqlalchemy.engine.Engine - INFO - SELECT task.id FROM task WHERE task.user_id = ?
-```
-
-### 注意事項
-
-- **本番環境では無効化**: `enable_sqlalchemy_echo = False`（デフォルト）
-- **パフォーマンス**: ログ出力により若干の処理時間が増加します
-- **ログサイズ**: 日次ローテーションにより自動管理されます（デフォルト 30 日分保持）
-
----
-
-## CLI ツール実行時
-
-repom の CLI ツール（`db_create`, `db_backup` など）を実行すると、repom のデフォルト設定が自動的に適用されます。
-
-### デフォルトの動作
-
-```bash
-# 開発環境でデータベースを作成
-$env:EXEC_ENV='dev'
-uv run db_create
-```
-
-**ログ出力先**:
-- **ファイル**: `data/repom/logs/main_<YYYY-MM-DD>.log`（デフォルト、日次ローテーション）
-- **コンソール**: INFO 以上のメッセージ
-
-**ログフォーマット**:
-- **ファイル**: `%(asctime)s - %(name)s - %(levelname)s - %(message)s`
-- **コンソール**: `%(levelname)s: %(message)s`
-
-### ログ内容の例
-
-```bash
-# data/repom/logs/main_2026-05-05.log
-2026-05-05 10:30:45,123 - repom.scripts.db_create - INFO - Database created: data/repom/db.dev.sqlite3
-
-# コンソール出力
-INFO: Database created: data/repom/db.dev.sqlite3
-```
-
----
-
-## アプリケーション使用時
-
-アプリケーションから repom を使う場合、**アプリ側で `logging.basicConfig()` を呼ぶことを推奨**します。
-
-### アプリ側で制御する（推奨）
+`make_timed_rotating_handler()` と `DateNamedDailyFileHandler` は公開 API です。
+active file は `<stem>_<YYYY-MM-DD>.log` 形式です。
 
 ```python
 import logging
-from repom.logging import get_logger
 
-# アプリ側でログ設定（これが優先される）
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('app.log'),
-        logging.StreamHandler()
-    ]
+from repom.logging import make_timed_rotating_handler
+
+handler = make_timed_rotating_handler(
+    "data/logs/myapp",
+    backup_count=30,
 )
-
-# repom のロガーを取得
-logger = get_logger(__name__)
-logger.info("アプリケーション起動")
+logger = logging.getLogger("myapp")
+logger.addHandler(handler)
 ```
 
-**動作**:
-- repom のデフォルト設定はスキップされます
-- アプリ側の設定（`app.log` + コンソール）のみが使われます
+handler の汎用仕様は `basekit.logging` が正本です。repom 固有の動作は
+[`tests/unit_tests/test_logging.py`](../../../tests/unit_tests/test_logging.py) で
+確認できます。
 
-### アプリ側で設定しない場合
+## SQLAlchemy query log
 
 ```python
-from repom.logging import get_logger
-
-# アプリ側で設定なし → repom のデフォルト設定が使われる
-logger = get_logger(__name__)
-logger.info("アプリケーション起動")
+def hook_config(config):
+    config.enable_sqlalchemy_echo = True
+    config.sqlalchemy_echo_level = "INFO"  # または "DEBUG"
+    return config
 ```
 
-**動作**:
-- repom のデフォルト設定が適用されます
-- `data/repom/logs/main_<YYYY-MM-DD>.log` + コンソール（INFO 以上）にログ出力
+環境変数 helper を使う場合:
 
----
-
-## config_hook でカスタマイズ
-
-`config_hook` を使って、ログファイルのパスを変更できます。
-
-### 外部プロジェクトでのカスタマイズ例（mine-py）
+```dotenv
+SQLALCHEMY_ECHO=true
+SQLALCHEMY_ECHO_LEVEL=INFO
+```
 
 ```python
-# mine-py/src/mine_py/config.py
-from repom.config import RepomConfig
+from repom.config_hooks.database import apply_database_env_overrides
 
-class MinePyConfig(RepomConfig):
-    def __init__(self):
-        super().__init__()
-        
-        # カスタムログパス（拡張子・日付なし）
-        # 実際のファイルは logs/mine_py_<YYYY-MM-DD>.log になる
-        self.log_file = 'mine_py'
 
-def get_repom_config():
-    return MinePyConfig()
+def hook_config(config):
+    apply_database_env_overrides(config)
+    return config
 ```
 
-```bash
-# .env ファイル
-CONFIG_HOOK=mine_py.config:get_repom_config
-```
+`INFO` は SQL 文、`DEBUG` はより詳細な engine log を出します。大量の query と値を
+記録し得るため、本番環境では出力先、保持期間、秘密情報の扱いを確認してください。
 
-**動作**:
-- repom の CLI ツールを実行すると、`data/<pkg>/logs/mine_py_<YYYY-MM-DD>.log` に出力される
-- アプリ側で `logging.basicConfig()` を呼べば、そちらが優先される
-
-> **注意**: `log_file_path` は拡張子・日付なしのベースパスです。`.log` を付けないでください。
-> 付けた場合、`mine_py.log_2026-05-05.log` のような意図しないファイル名になります。
-
----
-
-## テスト時のログ制御
-
-テスト時は、`EXEC_ENV=test` を設定することで、別のログファイルに出力できます。
-
-### テスト時の設定
-
-`EXEC_ENV=test` を設定すると、ログ区分名が自動的に `test` に切り替わります。
-ファイルは `data/repom/logs/test_<YYYY-MM-DD>.log` に出力されます。
-
-```python
-# tests/conftest.py
-import os
-os.environ['EXEC_ENV'] = 'test'
-
-# これだけで logs/test_<YYYY-MM-DD>.log に出力される
-# config.log_file は自動的に 'test' になる
-```
-
-### caplog を使ったテスト
-
-```python
-def test_logging(caplog):
-    """ログが記録されることを確認"""
-    from repom.logging import get_logger
-    
-    logger = get_logger('test')
-    
-    with caplog.at_level(logging.INFO):
-        logger.info("テストメッセージ")
-    
-    assert "テストメッセージ" in caplog.text
-```
-
----
-
-## ログレベル変更
-
-### repom のログレベルを変更
+## module ごとのレベル
 
 ```python
 import logging
 
-# repom のルートロガーを取得
-repom_logger = logging.getLogger('repom')
-
-# WARNING 以上のみ出力
-repom_logger.setLevel(logging.WARNING)
+logging.getLogger("repom").setLevel(logging.WARNING)
+logging.getLogger("repom.repositories.base_repository").setLevel(logging.DEBUG)
 ```
 
-### 特定のモジュールのログレベルを変更
+## テスト
 
-```python
-import logging
-
-# repom.base_repository のログレベルを DEBUG に変更
-repo_logger = logging.getLogger('repom.base_repository')
-repo_logger.setLevel(logging.DEBUG)
-```
-
----
-
-## 複数ログファイルへの分割
-
-`dictConfig` を使って、モジュールごとに異なるログファイルに出力できます。
-
-### dictConfig の例
-
-```python
-import logging.config
-
-LOGGING_CONFIG = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'default': {
-            'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        }
-    },
-    'handlers': {
-        'app': {
-            'class': 'logging.FileHandler',
-            'filename': 'logs/app.log',
-            'formatter': 'default',
-            'level': 'INFO'
-        },
-        'db': {
-            'class': 'logging.FileHandler',
-            'filename': 'logs/db.log',
-            'formatter': 'default',
-            'level': 'DEBUG'
-        },
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'default',
-            'level': 'INFO'
-        }
-    },
-    'loggers': {
-        'mine_py': {
-            'handlers': ['app', 'console'],
-            'level': 'INFO',
-            'propagate': False
-        },
-        'repom': {
-            'handlers': ['db', 'console'],
-            'level': 'DEBUG',
-            'propagate': False
-        }
-    },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO'
-    }
-}
-
-logging.config.dictConfig(LOGGING_CONFIG)
-```
-
-**動作**:
-- `mine_py.*` のログは `logs/app.log` に出力
-- `repom.*` のログは `logs/db.log` に出力
-- 全てのログは コンソール にも出力
-
----
+通常の `uv run pytest` は repom logger を WARNING 以上に抑えます。
+`uv run pytest -vv -s` を明示した場合だけ `tests/conftest.py` が DEBUG log と stdout
+を有効にします。
 
 ## トラブルシューティング
 
-### ログが出力されない
+- log が出ない: application handler または `config.log_file_path` を確認。
+- handler が重複する: app と library の両方で同じ logger に handler を追加していないか確認。
+- SQL log が出ない: hook 適用後の `enable_sqlalchemy_echo` を `uv run repom_info` で確認。
+- 日次 file の場所が違う: `config.log_file_path` と `EXEC_ENV` を確認。
 
-**原因1**: `logging.basicConfig()` を呼んでいない（アプリケーション使用時）
+関連資料:
 
-```python
-# ❌ ログが出力されない
-from repom.logging import get_logger
-logger = get_logger(__name__)
-logger.info("メッセージ")  # 出力されない
-
-# ✅ logging.basicConfig() を呼ぶ
-import logging
-logging.basicConfig(level=logging.INFO)
-
-from repom.logging import get_logger
-logger = get_logger(__name__)
-logger.info("メッセージ")  # 出力される
-```
-
-**原因2**: ログレベルが高すぎる
-
-```python
-# ❌ DEBUG が出力されない
-logging.basicConfig(level=logging.INFO)
-logger.debug("デバッグメッセージ")  # INFO 未満なので出力されない
-
-# ✅ ログレベルを DEBUG に変更
-logging.basicConfig(level=logging.DEBUG)
-logger.debug("デバッグメッセージ")  # 出力される
-```
-
-### ログが二重に出力される
-
-**原因**: `logging.basicConfig()` を複数回呼んでいる
-
-```python
-# ❌ 二重に出力される
-logging.basicConfig(level=logging.INFO)
-logging.basicConfig(level=logging.DEBUG)  # 2回目は無視されない場合がある
-
-# ✅ ハンドラーをクリアしてから再設定
-import logging
-logging.shutdown()  # 既存のハンドラーをクリア
-logging.basicConfig(level=logging.DEBUG)
-```
-
-### CLI ツールのログが出力されない
-
-**原因**: `config.log_file_path` が `None`
-
-```python
-# repom/config.py を確認
-from repom.config import config
-print(config.log_file_path)  # None なら設定されていない
-```
-
-**解決策**: `config_hook` でカスタマイズ
-
-```python
-# mine-py/src/mine_py/config.py
-class MinePyConfig(RepomConfig):
-    @property
-    def log_file_path(self):
-        return 'logs/mine_py'  # カスタムパスを指定（拡張子・日付なし）
-```
-
----
-
-## まとめ
-
-- **ログファイル形式**: `<区分>_<YYYY-MM-DD>.log`（日次ローテーション、30日保持）
-- **CLI ツール実行時**: repom のデフォルト設定が自動適用（`data/<pkg>/logs/main_<日付>.log`）
-- **アプリケーション使用時**: `logging.basicConfig()` を呼べば、そちらが優先
-- **SQLAlchemy クエリログ**: `config.enable_sqlalchemy_echo = True` で有効化
-  - INFO: SQL文のみ（N+1 問題調査に最適）
-  - DEBUG: SQL文 + パラメータ + 実行結果の詳細
-- **config_hook**: `config.log_file` で区分名をカスタマイズ（`.log` 拡張子は不要）
-- **テスト時**: `EXEC_ENV=test` で自動的に `test_<日付>.log` に分離
-- **ログレベル変更**: `logging.getLogger('repom').setLevel(logging.WARNING)`
-- **複数ログファイル**: `dictConfig` でモジュールごとに分割
-
-**推奨パターン**:
-- アプリケーションでは、必ず `logging.basicConfig()` を呼ぶ
-- CLI ツールでは、`config.log_file` で区分名をカスタマイズ
-- テストでは、`caplog` を使ってログを検証
-- N+1 問題調査では、`config.enable_sqlalchemy_echo = True` で可視化
+- [CONFIG_HOOK](config_hook_guide.md)
+- [ロギング設計の履歴](../../technical/hybrid_package_logging_strategy.md)
+- [`repom/logging.py`](../../../repom/logging.py)

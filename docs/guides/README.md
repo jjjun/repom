@@ -1,73 +1,44 @@
-# repom Guides
+# repom guides
 
-repom の使い方を機能別に整理したガイド集です。
+現行実装の使い方を機能別にまとめています。
 
-## 🧭 概要
+## モデル
 
-**目的**: 他の AI エージェントや開発者に機能を教えるための実用的なマニュアル
+- [BaseModelAuto とスキーマ生成](model/base_model_auto_guide.md)
+- [システムカラムとカスタム型](model/system_columns_and_custom_types.md)
+- [Soft Delete](model/soft_delete_guide.md)
 
-**特徴**:
-- ✅ 簡潔（How-to 重視）
-- ✅ コード例が豊富
-- ✅ すぐに使える情報
-- ✅ 初心者にも分かりやすい
+## Repository
 
-**命名規則**: `<feature_name>_guide.md`
+- [BaseRepository 基礎](repository/base_repository_guide.md)
+- [検索、filter、eager loading](repository/repository_advanced_guide.md)
+- [FilterParams](repository/repository_filter_params_guide.md)
+- [order_by](repository/order_by_guide.md)
+- [セッション管理](repository/repository_session_patterns.md)
+- [AsyncBaseRepository](repository/async_repository_guide.md)
 
-**例**:
-```
-base_model_auto_guide.md          # Pydantic スキーマ自動生成
-repository_and_utilities_guide.md # Repository パターン
-testing_guide.md                  # テスト戦略
-```
+## 設定と付加機能
 
-**対象読者**:
-- 開発者（機能の使い方を学ぶ）
-- AI エージェント（実装時の参考）
+- [CONFIG_HOOK](features/config_hook_guide.md)
+- [モデル自動 import](features/auto_import_models_guide.md)
+- [Alembic](features/alembic_migration_guide.md)
+- [マスターデータ同期](features/master_data_sync_guide.md)
+- [ロギング](features/logging_guide.md)
+- [QueryAnalyzer](features/query_analyzer_guide.md)
+- [Docker 管理の責務境界](features/docker_manager_guide.md)
 
-**テンプレート**:
-```markdown
-# [Feature Name] Guide
+## PostgreSQL / Redis
 
-## 概要
-[機能の説明]
+- [PostgreSQL](postgresql/README.md)
+- [PostgreSQL runtime overrides](postgresql/runtime_env_overrides.md)
+- [PostgreSQL credential rotation](postgresql/credential_rotation.md)
+- [Redis](redis/README.md)
+- [Redis credential rotation](redis/credential_rotation.md)
 
-## 基本的な使い方
-[コード例]
+## テスト
 
-## 高度な使い方
-[応用例]
+- [Testing Guide](testing/testing_guide.md)
+- [pytest fixture Guide](testing/fixture_guide.md)
 
-## トラブルシューティング
-[よくある問題と解決方法]
-
-## 関連ドキュメント
-[リンク]
-```
-
-## 📂 ガイドカテゴリ
-
-### 🎨 [model/](model/) - モデル定義
-- BaseModelAuto による Pydantic スキーマ自動生成
-- システムカラムとカスタム型
-- 論理削除（ソフトデリート）
-
-### 📦 [repository/](repository/) - リポジトリパターン
-- BaseRepository / AsyncBaseRepository の使い方
-- 検索・クエリ・フィルタリング
-- セッション管理パターン
-- SoftDelete 機能
-
-### ⚡ [features/](features/) - 機能別ガイド
-- モデルの自動インポート
-- マスターデータ同期
-- ロギング
-
-### 🐘 [postgresql/](postgresql/) - PostgreSQL
-- Docker による PostgreSQL セットアップ
-- 環境別データベース構成
-- 接続情報とトラブルシューティング
-
-### 🧪 [testing/](testing/) - テスト
-- Transaction Rollback パターン
-- テストフィクスチャの使い方
+公開 API の概要、インストール、CLI 一覧はルートの [README](../../README.md) を
+参照してください。

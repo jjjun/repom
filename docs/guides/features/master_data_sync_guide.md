@@ -47,23 +47,20 @@ your_project/
 
 ```python
 # repom/config.py（自動設定）
-config.master_data_path  # => "C:/path/to/project/data_master"
+config.master_data_path  # => "<repo-root>/data_master"
 ```
 
 **カスタマイズ例**:
 
 ```python
 # mine_py/config.py
-from repom.config import RepomConfig
+from pathlib import Path
 
-class MinePyConfig(RepomConfig):
-    def __init__(self):
-        super().__init__()
-        # カスタムパスを指定
-        self.master_data_path = "/custom/path/to/master_data"
 
-def get_repom_config():
-    return MinePyConfig()
+def get_repom_config(config):
+    # repository root からの相対位置を指定
+    config.master_data_path = str(Path(config.root_path) / "custom_master_data")
+    return config
 ```
 
 ```bash
@@ -147,7 +144,7 @@ EXEC_ENV=test uv run db_sync_master
 [1/3] モデルをロード中...
 ✓ モデルのロード完了
 
-[2/3] マスターデータディレクトリ: C:\path\to\project\data_master
+[2/3] マスターデータディレクトリ: <repo-root>/data_master
 
 [3/3] マスターデータを同期中...
   ✓ Role: 3 件
@@ -436,9 +433,9 @@ EXEC_ENV=prod uv run db_sync_master
 
 ## 関連ドキュメント
 
-- **[セッション管理ガイド](session_management_guide.md)** - `transaction()` の詳細
-- **[BaseRepository ガイド](repository_and_utilities_guide.md)** - データ操作の詳細
-- **[README.md](../../README.md)** - コマンドリファレンス
+- **[セッション管理ガイド](../repository/repository_session_patterns.md)** - transaction の詳細
+- **[BaseRepository ガイド](../repository/base_repository_guide.md)** - データ操作の詳細
+- **[README.md](../../../README.md)** - コマンドリファレンス
 
 ---
 

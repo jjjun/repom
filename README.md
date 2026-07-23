@@ -1,623 +1,210 @@
 # repom
 
-`repom` は SQLAlchemy を用いた最小限の DB アクセスレイヤーを提供するモジュールです。<br>
-アプリ固有のモデルやリポジトリは含めず、`BaseModel`・`BaseRepository`・共通ユーティリティのみを提供します。
-各プロジェクトはこの土台を基に独自のドメインモデルを構築してください。
+`repom` は、アプリケーションから拡張できる SQLAlchemy 2.x の共通基盤です。
+モデル基底、同期・非同期 Repository、設定フック、Alembic 補助、テスト
+fixture、PostgreSQL/Redis の Docker 管理を提供します。アプリ固有のモデルや
+Repository は利用側のプロジェクトに置いてください。
 
-### すぐ使えるリポジトリの拡張ポイント
+## 必要環境
 
-- **default_options / default_order_by**: クラス属性に設定するだけで、すべての取得系メソッドに既定の eager load とソートを適用できます。`options=[]` を渡すと eager load だけを無効化できます。
-- **FilterParams + field_to_column**: フィールドとカラムのマッピングを置くだけで等価・部分一致・IN を自動生成。特殊な条件が必要なときだけ `_build_filters()` をオーバーライドしてください。
-
-## 📚 詳細ガイド
-
-このドキュメントは基本的な情報のみを記載しています。詳細な使用方法は以下のガイドを参照してください：
-
-- **[BaseModelAuto & スキーマ自動生成ガイド](docs/guides/model/base_model_auto_guide.md)**
-  - Pydantic スキーマ自動生成（`get_create_schema()`, `get_update_schema()`, `get_response_schema()`）
-  - `@response_field` デコレータの使い方
-  - FastAPI 統合の実装例
-  - 前方参照の解決方法
-
-- **[BaseRepository 基礎ガイド](docs/guides/repository/base_repository_guide.md)**
-  - BaseRepository の基本的な使い方
-  - CRUD 操作の実装パターン
-
-- **[Repository 高度なガイド](docs/guides/repository/repository_advanced_guide.md)**
-  - 検索・クエリ・ソート・ページネーション
-  - **Eager loading サポート（joinedload, selectinload）- N+1 問題の解決** ⭐ NEW
-  - `default_options` による自動 eager loading
-
-- **[FilterParams ガイド](docs/guides/repository/repository_filter_params_guide.md)**
-  - FastAPI クエリパラメータ統合
-  - `as_query_depends()` メカニズム
-  - 型安全な検索パラメータ
-
-- **[AsyncBaseRepository ガイド](docs/guides/repository/async_repository_guide.md)** ⭐ NEW
-  - 完全非同期版リポジトリ（FastAPI 向け）
-  - AsyncSession による非同期データベース操作
-  - **Eager loading サポート（N+1 問題の解決）**
-  - `asyncio.gather` による並行処理パターン
-  - 論理削除（SoftDelete）の非同期操作
-
-- **[論理削除（Soft Delete）ガイド](docs/guides/model/soft_delete_guide.md)** ⭐ NEW
-  - SoftDeletableMixin による論理削除機能
-  - 削除済みレコードの自動フィルタリング
-  - 復元・物理削除の管理
-  - バッチ処理での活用
-
-- **[セッション管理パターンガイド](docs/guides/repository/repository_session_patterns.md)**
-  - トランザクション管理（`get_db_transaction()`, `transaction()`）
-  - FastAPI Depends パターン
-  - FastAPI Users 統合
-  - セッションのライフサイクル管理
-  - トラブルシューティング
-
-- **[マスターデータ同期ガイド](docs/guides/features/master_data_sync_guide.md)**
-  - `db_sync_master` コマンドの使い方
-  - マスターデータファイルの作成方法
-  - Upsert 操作とトランザクション管理
-  - ベストプラクティスとトラブルシューティング
-
-- **[ロギングガイド](docs/guides/features/logging_guide.md)**
-  - repom のロギング機能（ハイブリッドアプローチ）
-  - CLI ツール実行時の自動設定
-  - アプリケーション使用時の制御方法
-  - `config_hook` でのカスタマイズ
-  - テスト時のログ制御
-
-- **[Alembic マイグレーション管理ガイド](docs/guides/features/alembic_migration_guide.md)** ⭐ NEW
-  - Alembic の基本的な使い方とコマンド
-  - repom での設定と環境切り替え
-  - 外部プロジェクトでの設定方法
-  - 実践的な例（テーブル追加、カラム追加、データマイグレーション）
-  - トラブルシューティングとベストプラクティス
-
-## 目次
-
-- [セットアップ](#セットアップ)
-- [コマンドリファレンス](#コマンドリファレンス)
-- [基本的な使い方](#基本的な使い方)
-- [環境変数](#環境変数)
-- [テスト実行](#テスト実行)
-- [Alembic マイグレーション](#alembic-マイグレーション)
-- [ドキュメント構造](#ドキュメント構造)
-- [トラブルシューティング](#トラブルシューティング)
-
----
-
-## セットアップ
-
-### 必須環境
-
-- **Python**: 3.12以上
-- **uv**: 1.0以上（依存関係管理）
-
-### インストール手順
+- Python 3.12 以上
+- [uv](https://docs.astral.sh/uv/)
 
 ```bash
-# 1. リポジトリをクローン（または既存プロジェクトに配置）
-cd /path/to/repom
-
-# 2. 依存関係をインストール
+git clone <repository-url> repom
+cd repom
 uv sync
-
-# 3. （オプション）PostgreSQL サポートを追加
-uv sync --extra postgres
-
-# 4. 環境変数ファイルをセットアップ
-cp .env.example .env
-# .env を開いて必要に応じて値を編集（デフォルトのままでも動作します）
-
-# 5. データベースを作成
-uv run db_create
-
-# 6. マイグレーションを適用（必要な場合）
-uv run alembic upgrade head
-
-# 7. テストを実行して動作確認
-uv run pytest tests/unit_tests
+uv run pytest
 ```
 
-> **Note**: `.env` は git で管理されません（`.gitignore` で除外済み）。
-> `.env.example` がテンプレートです。機密情報（パスワード等）は `.env` にのみ記載してください。
-
-### Optional Dependencies
-
-repom は以下のオプション機能を提供しています：
+任意機能は必要なものだけ追加します。
 
 ```bash
-# PostgreSQL サポート (psycopg3)
-uv sync --extra postgres
-
-# 非同期 PostgreSQL サポート (asyncpg)
-uv sync --extra postgres-async
-
-# 非同期 SQLite サポート (aiosqlite)
-uv sync --extra async
-
-# 全ての非同期サポート
-uv sync --extra async-all
-
-# 複数のオプションを同時に有効化
-uv sync --extra postgres --extra async
+uv sync --extra postgres        # psycopg
+uv sync --extra postgres-async  # asyncpg
+uv sync --extra redis
+uv sync --extra async           # aiosqlite
+uv sync --extra async-all       # aiosqlite + asyncpg
 ```
-
-### 環境変数の設定
-
-`.env.example` をコピーして `.env` を作成し、必要に応じて値を編集してください：
-
-```bash
-cp .env.example .env
-```
-
-| 変数名 | 説明 | デフォルト |
-|---|---|---|
-| `EXEC_ENV` | 実行環境（`dev` / `test` / `prod`） | `dev` |
-| `CONFIG_HOOK` | 外部プロジェクトからの設定フック（`module:callable`） | `repom.config_hook:hook_config` |
-| `DB_TYPE` | DBエンジン（`sqlite` / `postgres`） | `sqlite` |
-| `REPOM_DATABASE_URL` | PostgreSQL使用時の接続URL | — |
-| `POSTGRES_USER` | PostgreSQL ユーザー名 | `repom` |
-| `POSTGRES_PASSWORD` | PostgreSQL パスワード | — |
-| `POSTGRES_HOST` | PostgreSQL ホスト | `localhost` |
-| `POSTGRES_PORT` | PostgreSQL ポート | `5432` |
-| `PGADMIN_DEFAULT_EMAIL` | pgAdmin ログインメール | — |
-| `PGADMIN_DEFAULT_PASSWORD` | pgAdmin パスワード | — |
-| `REDIS_HOST` | Redis ホスト | `localhost` |
-| `REDIS_PORT` | Redis ポート | `6379` |
-| `REDIS_PASSWORD` | Redis パスワード | （空） |
-| `REDIS_DB` | Redis DB インデックス | `0` |
-| `SQLITE_DB_PATH` | SQLite データディレクトリ | `data` |
-| `SQLITE_DB_FILE` | SQLite ファイル名 | `app_dev.sqlite3` |
-| `SQLITE_USE_IN_MEMORY_FOR_TESTS` | テスト時にインメモリDBを使う | `true` |
-| `SQLALCHEMY_ECHO` | SQLAlchemy のクエリログ出力 | `false` |
-| `SQLALCHEMY_ECHO_LEVEL` | クエリログのログレベル | `INFO` |
-
-> **Note**: `.env` は `.gitignore` で除外されています。機密情報（パスワード等）は `.env` にのみ記載し、`.env.example` には含めないでください。
-
-### 初回セットアップの確認
-
-```bash
-# Pythonから確認
-uv run python -c "from repom.config import config; print(config.db_url)"
-# 出力例: sqlite:///C:/path/to/repom/data/repom/db.dev.sqlite3
-```
-
----
 
 ## 基本的な使い方
 
-### モデルの定義
+### モデル
 
 ```python
-from sqlalchemy import String, Boolean
+from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from typing import Optional
-from repom.models import BaseModelAuto
+
+from repom import BaseModelAuto
+
 
 class Task(BaseModelAuto, use_id=True, use_created_at=True, use_updated_at=True):
     __tablename__ = "tasks"
 
     title: Mapped[str] = mapped_column(
-      String(255),
-      nullable=False,
-      info={"description": "タスク名"}
-    )
-    description: Mapped[Optional[str]] = mapped_column(
-      String,
-      info={"description": "詳細"}
-    )
-    is_done: Mapped[bool] = mapped_column(
-      Boolean,
-      default=False,
-      nullable=False,
-      info={"description": "完了フラグ"}
+        String(255),
+        nullable=False,
+        info={"description": "Task title"},
     )
 ```
 
-**モデル定義のポイント**:
-- `BaseModelAuto` では `info` を付けるとスキーマ説明が自動生成されます
-- `use_id` / `use_created_at` / `use_updated_at` は**クラス定義パラメータ**で指定
-- 複合主キーの場合は `use_id=False` を指定
-- テーブル名をファイル名に揃えたい場合は `get_plural_tablename()` の利用を検討
+`BaseModelAuto` は `get_create_schema()`、`get_update_schema()`、
+`get_response_schema()` を提供します。詳細は
+[BaseModelAuto ガイド](docs/guides/model/base_model_auto_guide.md)を参照してください。
 
-### リポジトリの実装
+### Repository
 
 ```python
 from repom import BaseRepository
-from your_project.models import Task
+
 
 class TaskRepository(BaseRepository[Task]):
-  pass
-
-# 使用例
-repo = TaskRepository(session=db_session)
-task = repo.save(Task(title="新しいタスク"))
-all_tasks = repo.find()
+    pass
 ```
 
-**Repository 定義のポイント**:
-- `BaseRepository[Model]` の型引数からモデルが自動推論されます
-- `__init__` は不要（必要な場合のみカスタムメソッドを追加）
-- `default_options` を使うと eager loading の既定を設定できます
-- クエリ条件が複雑なら FilterParams を利用してください
-
-### エンティティの作成・更新
-
-`save()` は**新規作成・更新の両方**に使えます。
+アプリケーションが所有するトランザクションでは、セッションを明示します。
+外部セッション使用時の `save()` は `flush()` まで行い、commit は呼び出し側が
+担当します。
 
 ```python
-# 内部セッション: 自動 commit + refresh
-repo = TaskRepository()
-task = repo.save(Task(title="新しいタスク"))
+from repom.database import get_reusable_sync_transaction
 
-# 外部セッション: flush のみ（commit は呼び出し側）
-from repom.database import _db_manager
-
-with _db_manager.get_sync_transaction() as session:
-    repo = TaskRepository(session)
-    task = repo.save(Task(title="トランザクション内"))
+with get_reusable_sync_transaction() as session:
+    repo = TaskRepository(session=session)
+    task = repo.save(Task(title="Write documentation"))
+    same_task = repo.get_by_id(task.id)
 ```
 
-**詳細**: [セッション管理パターンガイド](docs/guides/repository/repository_session_patterns.md)
-
-### FastAPI 統合
+短い単発操作ではセッションを省略できます。この場合は Repository が内部
+セッションを作成し、書き込みを commit します。
 
 ```python
-from fastapi import APIRouter
-
-# スキーマを生成
-TaskResponse = Task.get_response_schema()
-
-router = APIRouter()
-
-@router.get("/tasks/{task_id}", response_model=TaskResponse)
-def get_task(task_id: int):
-    task = repo.get_by_id(task_id)
-    return task.to_dict()
+task = TaskRepository().save(Task(title="One operation"))
 ```
 
-**詳細**: [BaseModelAuto & スキーマ自動生成ガイド](docs/guides/model/base_model_auto_guide.md)
+詳細は [BaseRepository ガイド](docs/guides/repository/base_repository_guide.md)と
+[セッション管理ガイド](docs/guides/repository/repository_session_patterns.md)を
+参照してください。
 
-### 論理削除（Soft Delete）
+### 非同期 Repository
 
 ```python
-from repom.models import BaseModelAuto, SoftDeletableMixin
-from repom import BaseRepository
+from repom import AsyncBaseRepository
+from repom.database import get_standalone_async_transaction
 
-# モデルに Mixin を追加
+
+class AsyncTaskRepository(AsyncBaseRepository[Task]):
+    pass
+
+
+async def load_task(task_id: int):
+    async with get_standalone_async_transaction() as session:
+        return await AsyncTaskRepository(session=session).get_by_id(task_id)
+```
+
+FastAPI では `Depends(get_async_db_session)` または
+`Depends(get_async_db_transaction)` を使用します。詳細は
+[AsyncBaseRepository ガイド](docs/guides/repository/async_repository_guide.md)を
+参照してください。
+
+### 論理削除
+
+```python
+from repom import BaseModelAuto, BaseRepository, SoftDeletableMixin
+
+
 class Article(BaseModelAuto, SoftDeletableMixin):
     __tablename__ = "articles"
-    title: Mapped[str] = mapped_column(String(200))
 
-# Repository で論理削除
+
 repo = BaseRepository(Article)
-article = repo.soft_delete(article_id)  # 論理削除（deleted_at に日時を記録）
-repo.restore(article_id)                 # 復元（deleted_at を NULL に戻す）
-repo.permanent_delete(article_id)        # 物理削除（完全削除）
-
-# 削除済みを除外して検索（デフォルト）
-active_articles = repo.find()
-
-# 削除済みも含めて検索
-all_articles = repo.find(include_deleted=True)
+repo.soft_delete(1)
+repo.restore(1)
+repo.permanent_delete(1)
 ```
 
-**詳細**: [論理削除（Soft Delete）ガイド](docs/guides/model/soft_delete_guide.md)
+通常の `find()`、`get_by()`、`get_by_id()` は削除済み行を除外します。
+詳細は [Soft Delete ガイド](docs/guides/model/soft_delete_guide.md)を参照してください。
 
----
+## 設定
 
-## コマンドリファレンス
-
-### 設定情報表示
+`RepomConfig` 単体の既定 DB は SQLite です。リポジトリ同梱の
+`.env.example` は、repom 自身の開発用に
+`CONFIG_HOOK=repom.config_hook:hook_config` を有効にしており、`dev` / `prod`
+では PostgreSQL、`test` ではインメモリ SQLite を選びます。利用側プロジェクトは
+自身の `CONFIG_HOOK` でこの方針を上書きできます。
 
 ```bash
-# 現在の repom 設定を表示
+cp .env.example .env
 uv run repom_info
 ```
 
-repom の現在の設定（データベース接続、パス設定、モデル読み込み状況など）を表示します。
+代表的な環境変数:
 
-**用途**:
-- 現在読み込まれているモデル一覧の確認
-- DB 種別/URL、パス設定、環境変数の確認
-- 設定のトラブルシューティング
+| 変数 | 用途 |
+| --- | --- |
+| `EXEC_ENV` | `dev` / `test` / `prod`。既定は `dev` |
+| `CONFIG_HOOK` | `module:callable` 形式の設定フック |
+| `DB_TYPE` | `sqlite` または `postgres` |
+| `REPOM_DATABASE_URL` | DB URL の最優先 override |
+| `REPOM_POSTGRES_DB` | PostgreSQL DB 名の固定 |
+| `POSTGRES_*` | PostgreSQL 接続・ホストポート設定 |
+| `PGADMIN_*` | pgAdmin 設定 |
+| `REDIS_*` | Redis 接続・ホストポート設定 |
+| `SQLITE_DB_PATH` / `SQLITE_DB_FILE` | SQLite ファイルの配置 |
+| `SQLITE_USE_IN_MEMORY_FOR_TESTS` | test 環境でのインメモリ利用 |
+| `SQLALCHEMY_*` | echo と接続プール設定 |
 
-**表示内容**:
-- 基本パス（root_path, backup_path, master_data_path）
-- データベース設定（db_type, db_url）
-- SQLite詳細情報（ファイルパス、存在確認、サイズ）
-- PostgreSQL詳細情報（host, port, database, user）
-- PostgreSQL接続テスト結果
-- モデル読み込み設定（読み込まれたモデル一覧）
-- 環境変数（EXEC_ENV, CONFIG_HOOK）
+SQLite の自動ファイル名は `db_name` と `EXEC_ENV` から生成されます。既定の
+`db_name=repom` では `repom_dev.sqlite3`、`repom_test.sqlite3`、
+`repom.sqlite3` です。実際の有効値は `uv run repom_info` で確認してください。
 
-### データベース操作
-
-```bash
-# データベース作成
-uv run db_create
-
-# バックアップ作成
-uv run db_backup
-
-# データベース削除
-uv run db_delete
-
-# マスターデータ同期（Upsert）
-uv run db_sync_master
-```
-
-**データベースファイルの場所:**
-- 本番環境 (`EXEC_ENV=prod`): `data/repom/db.sqlite3`
-- 開発環境 (`EXEC_ENV=dev`, デフォルト): `data/repom/db.dev.sqlite3`
-- テスト環境 (`EXEC_ENV=test`): `data/repom/db.test.sqlite3`（テストフレームワークではインメモリDBを使用）
-
-### PostgreSQL・Redis の Docker 管理（オプション）
-
-repom は PostgreSQL と Redis の Docker コンテナを独立して管理できます。各サービスの docker-compose.yml は専用ディレクトリに分離生成されます。
-
-**ディレクトリ構造:**
-
-```
-data/repom/
-├── postgres/
-│   ├── docker-compose.generated.yml  ← PostgreSQL + pgAdmin 定義
-│   ├── postgresql_init/
-│   │   └── 01_init_databases.sql
-│   ├── servers.json
-│   └── ...
-├── redis/
-│   ├── docker-compose.generated.yml  ← Redis のみ定義
-│   ├── redis_init/
-│   │   └── redis.conf
-│   └── ...
-└── db.dev.sqlite3  ← SQLite（オプション）
-```
-
-**コマンド:**
-
-```bash
-# PostgreSQL + pgAdmin（オプション）
-uv run postgres_generate  # docker-compose.yml 生成
-uv run postgres_start     # コンテナ起動（compose file なければ生成）
-uv run postgres_stop      # コンテナ停止
-uv run postgres_remove    # コンテナ・ボリューム削除
-
-# Redis（オプション）
-uv sync --extra redis  # Redis サポートを有効化
-uv run redis_generate      # docker-compose.yml 生成
-uv run redis_start         # コンテナ起動（compose file なければ生成）
-uv run redis_stop          # コンテナ停止
-uv run redis_remove        # コンテナ・ボリューム削除
-```
-
-**利点:**
-- ✅ サービスが独立したプロジェクトで管理される
-- ✅ orphan container 警告が出ない
-- ✅ 段階的な機能追加が容易（後から Redis を追加など）
-- ✅ Docker Desktop UI で各サービスのプロジェクトが分かれたまま表示
-
-**注意:**
-- ⚠️ オプション機能のため、通常の使用では不要
-- ⚠️ `uv sync --extra redis` で Redis サポートを明示的に有効化
-
-### マイグレーション操作
-
-```bash
-# マイグレーションファイル自動生成
-uv run alembic revision --autogenerate -m "description"
-
-# マイグレーション適用（最新まで）
-uv run alembic upgrade head
-
-# 現在のバージョン確認
-uv run alembic current
-
-# マイグレーション履歴確認
-uv run alembic history
-```
-
----
-
-## 環境変数
-
-### RepomConfig（概要）
-
-RepomConfig は repom の設定オブジェクトです。`CONFIG_HOOK` で起動時に差し替えできます。
-hook の読み込み処理は `basekit.config_hook` が提供し、repom はその基盤を使って `RepomConfig` を適用します。
-主なカテゴリ: DB / モデル自動インポート / ログ / パス / その他
-
-```python
-# myapp/config.py
-from repom.config import RepomConfig
-
-def hook_config(config: RepomConfig) -> RepomConfig:
-    config.db_type = "postgres"
-    config.db_name = "myapp"
-    return config
-```
-
-```bash
-CONFIG_HOOK=myapp.config:hook_config
-```
-
-### データベース接続設定
-
-デフォルトで以下の接続プール設定が適用されます：
-
-```python
-# repom/config.py
-@property
-def engine_kwargs(self) -> dict:
-    return {
-        'pool_size': 10,           # 常時維持する接続数
-        'max_overflow': 20,        # pool_sizeを超えて作成可能な追加接続数
-        'pool_timeout': 30,        # 接続待ちタイムアウト（秒）
-        'pool_recycle': 3600,      # 接続の再利用時間（秒）
-        'pool_pre_ping': True,     # 使用前に接続をテスト
-        'connect_args': {'check_same_thread': False}  # SQLite用
-    }
-```
-
-**カスタマイズ方法:**
-
-```python
-# mine_py/config.py
-from repom.config import RepomConfig
-
-class MinePyConfig(RepomConfig):
-    @property
-    def engine_kwargs(self) -> dict:
-        base_kwargs = super().engine_kwargs
-        # 大量の並列処理が必要な場合
-        base_kwargs['pool_size'] = 20
-        base_kwargs['max_overflow'] = 40
-        return base_kwargs
-```
-
-### `EXEC_ENV`
-
-実行環境を指定します。
-
-- **値**: `dev` / `test` / `prod`
-- **デフォルト**: `dev`
-
-```powershell
-# PowerShell
-$env:EXEC_ENV='dev'
-
-# Unix系
-export EXEC_ENV=dev
-```
-
-**環境別データベース:**
-- `prod`: `data/repom/db.sqlite3`
-- `dev`: `data/repom/db.dev.sqlite3` (デフォルト)
-- `test`: `data/repom/db.test.sqlite3`
-
-**テスト実行時の注意:**
-
-テストフレームワーク (`create_test_fixtures()`) を使う場合は自動的にインメモリDB (`sqlite:///:memory:`) を使用しますが、`EXEC_ENV=test` で直接実行する場合は `data/repom/db.test.sqlite3` が使用されます：
-
-```python
-from repom.config import config
-
-# test 環境の場合（EXEC_ENV=test で直接実行）
-config.exec_env = 'test'
-print(config.db_url)
-# 出力: sqlite:///C:/path/to/repom/data/repom/db.test.sqlite3
-
-# テストフレームワーク使用時はインメモリDB
-# create_test_fixtures() が自動的に sqlite:///:memory: を使用
-```
-
-**メリット:**
-- ✅ **35倍高速**: ファイルI/Oなし、純粋なメモリ操作
-- ✅ **ロック防止**: "database is locked" エラーが発生しない
-- ✅ **自動クリーンアップ**: プロセス終了時に自動削除、手動削除不要
-
-**外部プロジェクトでの設定:**
-
-```python
-# mine_py/config.py
-from repom.config import RepomConfig
-
-class MinePyConfig(RepomConfig):
-    def __init__(self):
-        super().__init__()
-        # インメモリDBをオフにする場合（デフォルトはTrue）
-        self.sqlite.use_in_memory_for_tests = False
-```
-
-### `CONFIG_HOOK`
-
-親プロジェクトから設定を注入します（オプション）。
-`CONFIG_HOOK` の loader とエラー型は `basekit.config_hook` にあります。
-通常の利用では `repom.config.RepomConfig` を継承し、hook 関数から設定オブジェクトを返します。
-
-```bash
-# .env ファイル
-CONFIG_HOOK=mine_py.config:get_repom_config
-```
-
-`CONFIG_HOOK` に指定した module が import できない、関数が存在しない、または
-指定先が callable でない場合は、起動時に `basekit.config_hook.ConfigHookLoadError` を送出して停止します。
-設定ミスを warning だけで無視しないため、CI/CD や外部プロジェクト連携では
-hook パスを明示的に検証してください。
-
-**用途例**:
-- モデル自動インポート対象の追加
-- 許可パッケージ prefix の制御
-- テスト用 DB の切り替え
-
-### Runtime env override helpers
-
-`repom.config_hooks` provides small helpers for environment overrides. Use them
-at the end of a `CONFIG_HOOK` after project defaults are set:
+設定フックでは、プロジェクト既定値を設定した後に必要な環境変数 helper を
+適用します。
 
 ```python
 from repom.config_hooks.database import apply_database_env_overrides
-from repom.config_hooks.pgadmin import apply_pgadmin_env_overrides
 from repom.config_hooks.postgres import apply_postgres_env_overrides
-from repom.config_hooks.redis import apply_redis_env_overrides
 from repom.config_hooks.sqlite import apply_sqlite_env_overrides
 
 
 def hook_config(config):
-    # project defaults first
     config.db_name = "myapp"
-
-    # env overrides last
     apply_database_env_overrides(config)
     apply_postgres_env_overrides(config)
-    apply_pgadmin_env_overrides(config)
-    apply_redis_env_overrides(config)
     apply_sqlite_env_overrides(config)
     return config
 ```
 
-`REPOM_DATABASE_URL` takes precedence over `DATABASE_URL`. `SQLITE_USE_FILE_DB`
-is still supported for compatibility; new code should prefer
-`SQLITE_USE_IN_MEMORY_FOR_TESTS=false`.
+詳細は [CONFIG_HOOK ガイド](docs/guides/features/config_hook_guide.md)と
+[runtime override 一覧](docs/guides/postgresql/runtime_env_overrides.md)を
+参照してください。
 
----
+## コマンド
 
-## テスト実行
+コマンドは `pyproject.toml` の `[project.scripts]` が正本です。
 
-**⚠️ 重要**: テスト作成時は必ず **[Testing Guide](docs/guides/testing/testing_guide.md)** を参照してください。
+| 分類 | コマンド |
+| --- | --- |
+| DB | `db_create`, `db_delete` (`db_remove`), `db_backup`, `db_restore`, `db_sync_master` |
+| 診断 | `repom_info`, `list_models` |
+| Alembic | `alembic_init`, `alembic_reset`, `alembic` |
+| PostgreSQL | `postgres_generate`, `postgres_start`, `postgres_stop`, `postgres_remove`, `postgres_rotate_credentials`, `pgadmin_rotate_password` |
+| Redis | `redis_generate`, `redis_start`, `redis_stop`, `redis_remove`, `redis_rotate_password` |
 
-### 基本的なテスト実行
+すべて `uv run <command>` として実行します。
+
+## テスト
 
 ```bash
-# すべてのテスト
 uv run pytest
-
-# 詳細表示で実行
-uv run pytest -v
-
-# ユニットテストのみ
 uv run pytest tests/unit_tests
-
-# 特定のファイルのみ
-uv run pytest tests/unit_tests/test_config.py
-
-# VS Code タスクから実行（推奨）
-# - ⭐Pytest/unit_tests
-# - 🧪Pytest/all
+uv run pytest tests/behavior_tests
+uv run pytest -vv -s
 ```
 
-### テスト戦略（概要）
+外部プロジェクトでも同じ transaction rollback fixture を利用できます。
 
-repom は **Transaction Rollback** 方式で高速かつ分離されたテストを提供します。
-詳細・フィクスチャ例は [Testing Guide](docs/guides/testing/testing_guide.md) を参照してください。
-
-**要点**:
-- セッションスコープで DB を 1 回だけ作成
-- 各テストはトランザクション内で実行し自動ロールバック
-- `db_test`（function scope）を使うだけでクリーンな状態を維持
-
-**最小フィクスチャ例**:
 ```python
 # tests/conftest.py
 from repom.testing import create_test_fixtures
@@ -625,114 +212,31 @@ from repom.testing import create_test_fixtures
 db_engine, db_test = create_test_fixtures()
 ```
 
----
+非同期版は `create_async_test_fixtures()` です。詳しくは
+[Testing Guide](docs/guides/testing/testing_guide.md)を参照してください。
 
-## Alembic マイグレーション
+## Alembic
 
-主要コマンドのみを記載します。詳細は [Alembic マイグレーション管理ガイド](docs/guides/features/alembic_migration_guide.md) を参照してください。
-
-**注意（PowerShell）**:
-- `$env:EXEC_ENV` はセッション内に残るため、環境切替は明示的に行う
-- 本番相当で実行する場合は `EXEC_ENV` をクリアしてから実行する
-
-```powershell
-# マイグレーションファイル自動生成
-uv run alembic revision --autogenerate -m "description"
-
-# マイグレーション適用（最新まで）
-uv run alembic upgrade head
-
-# 状態確認
-uv run alembic current
-uv run alembic history
-```
-
----
-
-## ドキュメント構造
-
-このプロジェクトは体系的なドキュメント構造を採用しています。
-
-### 📁 ディレクトリ構成
-
-```
-docs/
-├── README.md           # ドキュメント構造
-├── guides/             # 📖 使い方ガイド
-├── ideas/              # 💡 機能提案
-├── proposals/          # 📮 外部プロジェクトへの一時提案書
-├── technical/          # 🔧 実装判断記録
-└── issue/              # 📋 問題管理（active/completed）
-  ├── README.md      # Issue インデックス
-  ├── active/        # 作業中・未着手
-  └── completed/     # 完了済み
-```
-
-### 🎯 主要ガイド
-
-主要ガイドは [docs/guides/README.md](docs/guides/README.md) を参照してください。
-
-### 🤖 AI エージェント協働
-
-- **問題報告**: AI が Issue ファイルを作成し、解決をサポート
-- **アイデア提案**: AI がテンプレートに沿ってドキュメント化
-- **外部提案**: repom 外の変更が必要な場合は `docs/proposals/` に連番 proposal を作成
-- **自動完了処理**: 完了時に自動的に `completed/` へ移動
-
-詳細: `.github/copilot-instructions.md`
-
----
-
-## トラブルシューティング
-
-### テスト関連
+revision の作成先と実行元は、どちらも `alembic.ini` の
+`version_locations` で決まります。
 
 ```bash
-# データベースをクリーンアップ
-uv run db_delete
-
-# 依存関係を再インストール
-uv sync
-
-# 再度テスト実行
-uv run pytest tests/unit_tests -v
-```
-
-### Alembic 関連
-
-```powershell
-# 現在の環境変数を確認
-echo $env:EXEC_ENV
-
-# 環境変数をクリア
-Remove-Item Env:\EXEC_ENV
-
-# 現在のバージョンを確認
+uv run alembic revision --autogenerate -m "description"
+uv run alembic upgrade head
 uv run alembic current
 ```
 
-### 設定関連
+外部プロジェクトで repom の Alembic script を使う場合は、外部プロジェクト側の
+`alembic.ini` に revision 保存先を指定してください。詳細は
+[Alembic ガイド](docs/guides/features/alembic_migration_guide.md)を参照してください。
 
-```python
-# データディレクトリの確認
-uv run python -c "from repom.config import config; print(config.data_path)"
+## ドキュメントと作業管理
 
-# CONFIG_HOOK が正しく動作するか確認
-uv run python -c "from repom.config import config; print(config)"
-```
+- [ガイド一覧](docs/guides/README.md)
+- [技術資料一覧](docs/technical/README.md)
+- [機能アイデア](docs/ideas/README.md)
+- [プロジェクト規約](AGENTS.md)
 
----
-
-## 関連ドキュメント
-
-- **[AGENTS.md](AGENTS.md)**: AI アシスタント向けプロジェクト情報
-- **[docs/guides/](docs/guides/)**: 全ガイド一覧（機能別に整理）
-  - [model/](docs/guides/model/) - BaseModel、スキーマ生成、システムカラム、論理削除
-  - [repository/](docs/guides/repository/) - リポジトリパターン、セッション管理、データベース接続
-  - [features/](docs/guides/features/) - マスターデータ同期、ロギング、モデル自動インポート
-  - [testing/](docs/guides/testing/) - テスト戦略とフィクスチャ
-- **[docs/technical/](docs/technical/)**: 技術詳細と実装判断記録
-- **[docs/proposals/](docs/proposals/)**: 外部プロジェクト・外部パッケージへの一時提案書
-- **[.github/copilot-instructions.md](.github/copilot-instructions.md)**: GitHub Copilot 専用の指示
-
----
+Issue とクロスプロジェクト提案はローカル Markdown ではなく issuekit API で
+管理します。手順の正本は `issuekit protocol --role <role>` です。外部プロジェクト
+への変更提案は `issuekit propose --to <project>` を使用します。

@@ -1,39 +1,24 @@
-# Repository Guides
+# Repository guides
 
-リポジトリパターンとセッション管理に関するガイドです。
+These guides cover the synchronous and asynchronous repository APIs, query
+construction, and transaction ownership.
 
-## 📖 ガイド一覧
+## Start here
 
-### 初級編
-- **[BaseRepository 基礎ガイド](base_repository_guide.md)**  
-  リポジトリの作成、CRUD操作の基本
+- [BaseRepository](base_repository_guide.md)
+- [AsyncBaseRepository](async_repository_guide.md)
+- [Session and transaction patterns](repository_session_patterns.md)
 
-### 中級編
-- **[検索・クエリガイド](repository_advanced_guide.md)**  
-  find(), ソート、ページネーション、カウント、Eager Loading（N+1問題の解決）
+## Querying
 
-- **[order_by ガイド](order_by_guide.md)**  
-  canonical な `order_by` 仕様、OpenAPI helper、virtual_order_columns の運用
+- [Advanced queries](repository_advanced_guide.md)
+- [`order_by`](order_by_guide.md)
+- [`FilterParams`](repository_filter_params_guide.md)
 
-- **[FilterParams ガイド](repository_filter_params_guide.md)**  
-  FastAPI との統合、検索パラメータの型安全な処理
+## Related behavior
 
-- **[SoftDelete ガイド](repository_soft_delete_guide.md)**  
-  論理削除（復元可能な削除）、soft_delete(), restore(), permanent_delete()
+- [Soft delete](../model/soft_delete_guide.md)
 
-### その他
-- **[セッションパターン](repository_session_patterns.md)** - セッション管理パターンとベストプラクティス
-- **[非同期リポジトリ](async_repository_guide.md)** - AsyncBaseRepository の使い方
-
-
----
-
-## 🎯 このディレクトリの対象
-
-- BaseRepository / AsyncBaseRepository の使い方
-- セッション管理のパターン
-- トランザクション制御
-- FastAPI との統合
-- Eager Loading（default_options）によるパフォーマンス最適化
-- FilterParams による型安全な検索パラメータ
-- SoftDelete による論理削除機能
+Application repositories should subclass `BaseRepository` or
+`AsyncBaseRepository` with their domain model. Keep application-specific
+queries in the consuming project.

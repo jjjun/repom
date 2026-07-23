@@ -599,12 +599,11 @@ module = importlib.import_module(type_name)  # 任意モジュール実行
 
 ### 実装済み機能
 
-- **Phase 1**: [docs/issues/get_response_schema_forward_refs_improvement.md](../issues/get_response_schema_forward_refs_improvement.md)
-- **Phase 2**: 同上
+- Phase 1 / Phase 2 の作業履歴は issuekit API の repom project を参照
 
 ### 関連ドキュメント
 
-- **技術詳細**: [docs/get_response_schema_technical.md](../get_response_schema_technical.md)
+- **技術詳細**: [get_response_schema_technical.md](get_response_schema_technical.md)
 - **README**: FastAPI 統合セクション
 
 ### 参考資料

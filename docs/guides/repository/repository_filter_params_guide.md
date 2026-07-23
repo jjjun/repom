@@ -362,8 +362,8 @@ class TaskFilterParams(FilterParams):
 
 ## 関連ドキュメント
 
-- **[auto_import_models ガイド](../core/auto_import_models_guide.md)**: モデルの自動インポート
-- **[BaseModelAuto ガイド](../features/base_model_auto_guide.md)**: スキーマ自動生成
+- **[auto_import_models ガイド](../features/auto_import_models_guide.md)**: モデルの自動インポート
+- **[BaseModelAuto ガイド](../model/base_model_auto_guide.md)**: スキーマ自動生成
 - **[BaseRepository ソースコード](../../../repom/repositories/base_repository.py)**: 実装の詳細
 
 ---

@@ -1,5 +1,9 @@
 # ハイブリッド型パッケージのロギング戦略
 
+> **履歴資料**: 現行の repom API は
+> [ロギングガイド](../guides/features/logging_guide.md)を参照してください。この文書の
+> 外部プロジェクト例と実装案は、当時の設計検討を保存したものです。
+
 **対象読者**: CLI ツールを持つパッケージを開発する AI エージェント
 
 **目的**: repom で実装したハイブリッドアプローチのロギング戦略を他のプロジェクト（例: fast-domain）に適用するためのガイド
@@ -77,7 +81,7 @@ uv run db_create
 # ライブラリ使用時
 # mine-py/main.py
 logging.basicConfig(...)  # アプリ側の設定
-from repom.base_repository import BaseRepository
+from repom import BaseRepository
 repo = UserRepository()
 # → repom が独自にログ設定すると衝突する ❌
 ```
@@ -202,7 +206,7 @@ __all__ = ['get_logger']
 #### 使い方（各モジュールから呼び出し）
 
 ```python
-# repom/base_repository.py
+# repom/repositories/base_repository.py
 from repom.logging import get_logger
 
 logger = get_logger(__name__)
@@ -244,22 +248,9 @@ class RepomConfig:
 
 ```python
 # mine-py/src/mine_py/config.py
-from repom.config import RepomConfig
-
-class MinePyConfig(RepomConfig):
-    def __init__(self):
-        super().__init__()
-        
-        # カスタムログパス
-        self._log_path = 'logs/mine_py.log'
-    
-    @property
-    def log_file_path(self):
-        """カスタムログファイルパス"""
-        return self._log_path
-
-def get_repom_config():
-    return MinePyConfig()
+def get_repom_config(config):
+    config.log_path = "logs"
+    return config
 ```
 
 ```bash
@@ -502,14 +493,14 @@ uv run pytest
 - [ ] Config クラスに `log_file_path` プロパティを追加
 - [ ] 各モジュールで `get_logger(__name__)` を使用
 - [ ] テストを作成（6つのテストケース）
-- [ ] ドキュメントを作成（`docs/guides/logging_guide.md`）
+- [ ] ドキュメントを作成（`docs/guides/features/logging_guide.md`）
 - [ ] README.md にロギングガイドへのリンクを追加
 
 ### 参考資料
 
 - **repom の実装**: [repom/logging.py](../../repom/logging.py)
 - **repom のテスト**: [tests/unit_tests/test_logging.py](../../tests/unit_tests/test_logging.py)
-- **repom のガイド**: [docs/guides/logging_guide.md](../guides/logging_guide.md)
+- **repom のガイド**: [logging_guide.md](../guides/features/logging_guide.md)
 
 ---
 

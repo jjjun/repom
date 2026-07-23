@@ -1,1141 +1,122 @@
-# Testing Guide - repom
+# Testing Guide
 
-## SQLite Runtime Env Overrides
+repom は pytest 用の同期・非同期 fixture factory を提供します。DB schema は
+test session ごとに作成し、各 test は独立した transaction を rollback するため、
+テスト間でデータを残しません。
 
-SQLite test database behavior can be adjusted through
-`repom.config_hooks.sqlite.apply_sqlite_env_overrides()` when the helper is
-called from `CONFIG_HOOK`.
-
-Supported variables:
-
-| Variable | Effect |
-|---|---|
-| `SQLITE_DB_PATH` | Sets `config.sqlite.db_path` |
-| `SQLITE_DB_FILE` | Sets `config.sqlite.db_file` |
-| `SQLITE_USE_IN_MEMORY_FOR_TESTS` | Boolean override for `config.sqlite.use_in_memory_for_tests` |
-| `SQLITE_USE_FILE_DB` | Compatibility shortcut that forces file-backed test DBs |
-
-For new config hooks, prefer `SQLITE_USE_IN_MEMORY_FOR_TESTS=false` over
-`SQLITE_USE_FILE_DB=1`. `SQLITE_USE_FILE_DB` remains supported for existing
-test and subprocess workflows.
-
-## Running tests
-
-The default test run is concise and captures successful test output:
+## このリポジトリでの実行
 
 ```bash
 uv run pytest
-uv run pytest --collect-only -q
-```
-
-Use verbose output and disable capture when troubleshooting. This also enables
-DEBUG logging configured by the test suite:
-
-```bash
+uv run pytest tests/unit_tests
+uv run pytest tests/behavior_tests
+uv run pytest tests/integration_tests
 uv run pytest -vv -s
 ```
 
-## 概要
+既定の pytest 設定は `pyproject.toml` の `[tool.pytest.ini_options]` にあります。
+通常実行は成功時の出力を抑え、`-vv -s` の明示時だけ詳細な stdout と DEBUG log を
+有効にします。
 
-repom は **Transaction Rollback パターン** と **インメモリDB** を採用し、高速かつ分離されたテスト環境を提供します。
+## 同期 fixture
 
-**パフォーマンス**:
-- 従来方式（DB再作成）: ~30秒
-- Transaction Rollback: ~3秒
-- **9倍の高速化を実現**
-
-**インメモリDB（デフォルト）**:
-- ✅ **35倍高速**: ファイルI/Oなし、純粋なメモリ操作
-- ✅ **ロック防止**: "database is locked" エラーが発生しない
-- ✅ **自動クリーンアップ**: プロセス終了時に自動削除
-
----
-
-## 目次
-
-- [基本的な使い方](#基本的な使い方)
-- [テストモデルの使い分け](#テストモデルの使い分け)
-- [インメモリDB設定](#インメモリdb設定)
-- [外部プロジェクトでの使用](#外部プロジェクトでの使用)
-- [テスト用DBの作成](#テスト用dbの作成)
-- [モデルのインポート方法](#モデルのインポート方法)
-- [トラブルシューティング](#トラブルシューティング)
-- [ベストプラクティス](#ベストプラクティス)
-
----
-
-## repom プロジェクト内でのテスト作成ガイドライン
-
-### ⚠️ 重要：独自の fixture を定義しない
-
-repom プロジェクト内でテストを書く場合、**テストファイル内で独自の `db_engine` や `db_session` fixture を定義してはいけません**。
-
-**❌ 間違い**:
-```python
-# tests/unit_tests/test_my_feature.py
-
-@pytest.fixture(scope='function')
-def db_engine():  # ← conftest.py と衝突
-    engine = create_engine('sqlite:///:memory:')
-    Base.metadata.create_all(bind=engine)
-    yield engine
-    Base.metadata.drop_all(bind=engine)
-
-@pytest.fixture
-def db_session(db_engine):
-    with Session(db_engine) as session:
-        yield session
-
-def test_my_feature(db_session):  # ← 独自の fixture を使ってしまう
-    model = MyModel(name='Test')
-    db_session.add(model)
-    db_session.commit()
-```
-
-**問題点**:
-1. `conftest.py` の `db_test` fixture と衝突
-2. テーブルが作成されていない状態でクエリが実行される
-3. BaseRepository が別のセッションを使うため、データが見えない
-
-**✅ 正しい**:
-```python
-# tests/unit_tests/test_my_feature.py
-
-def test_my_feature(db_test):  # ← conftest.py の db_test を使う
-    model = MyModel(name='Test')
-    db_test.add(model)
-    db_test.commit()
-    
-    assert model.id is not None
-```
-
-### BaseRepository を使うテスト
-
-BaseRepository を使う場合は、**必ず `session` パラメータに `db_test` を渡してください**。
-
-**✅ 正しい**:
-```python
-def test_repository_integration(db_test):
-    # データ作成
-    model = MyModel(name='Test')
-    db_test.add(model)
-    db_test.commit()
-    
-    # Repository を使う（session を渡す）
-    repo = MyRepository(MyModel, session=db_test)
-    retrieved = repo.get_by_id(model.id)
-    
-    assert retrieved is not None
-    assert retrieved.name == 'Test'
-```
-
-**❌ 間違い**:
-```python
-def test_repository_integration(db_test):
-    model = MyModel(name='Test')
-    db_test.add(model)
-    db_test.commit()
-    
-    # ❌ session を渡していない
-    repo = MyRepository(MyModel)
-    retrieved = repo.get_by_id(model.id)
-    # → None が返る（db_test のデータが見えない）
-```
-
-### get_by() の使い方
-
-`BaseRepository.get_by()` は**位置引数形式**を使います：
+外部プロジェクトの `tests/conftest.py` では次の2 fixture を定義できます。
 
 ```python
-# ✅ 正しい
-results = repo.get_by('name', 'Alice')
-
-# ❌ 間違い
-results = repo.get_by(name='Alice')  # TypeError
-```
-
-### トラブルシューティング："no such table" エラー
-
-**症状**: `sqlite3.OperationalError: no such table: xxx`
-
-**原因**: テストファイルで独自の fixture を定義し、`conftest.py` の `db_test` を使っていない
-
-**解決方法**:
-1. テストファイル内の `@pytest.fixture` 定義を削除
-2. テスト関数のパラメータを `db_test` に変更
-3. Repository 作成時に `session=db_test` を渡す
-
----
-
-## 基本的な使い方
-
-### repom プロジェクト内でのテスト
-
-```python
-# tests/conftest.py
-import pytest
 from repom.testing import create_test_fixtures
 
-# テストフィクスチャを作成
 db_engine, db_test = create_test_fixtures()
 ```
 
-**実行**:
-```bash
-# すべてのテスト
-uv run pytest
+- `db_engine`: session scope の SQLAlchemy Engine
+- `db_test`: function scope の Session
 
-# 特定のディレクトリ
-uv run pytest tests/unit_tests
+`db_test` は rollback 対象の外部 session です。Repository に明示して使います。
 
-# 詳細表示
-uv run pytest -v
-```
-
----
-
-## テストモデルの使い分け
-
-### 🎯 使い分けフローチャート
-
-```
-テストを書く
-    ↓
-動的なモデル定義が必要か？
-    ├─ YES → テスト内で直接モデルを定義 + clear_mappers()/configure_mappers()
-    │          (TYPE_CHECKING テスト、前方参照テストなど)
-    │
-    └─ NO → tests/fixtures/models/ を使用
-               (通常の CRUD、リレーションシップテスト)
-```
-
-### ✅ 推奨: tests/fixtures/models/ のモデルを使用
-
-**用途**: 通常のテスト（99%のケース）
-- CRUD 操作のテスト
-- リレーションシップのテスト
-- Repository パターンのテスト
-- 再利用可能なモデル定義
-
-**利用可能なモデル**:
-- `User` - 基本的な CRUD テスト用（name, email）
-- `Post` - リレーションシップテスト用（title, content, user_id）
-- `Parent`, `Child` - cascade delete テスト用（一対多リレーション）
-
-**例**:
 ```python
-from tests.fixtures.models import User, Post, Parent, Child
 from repom import BaseRepository
 
-def test_user_crud(db_test):
-    """ユーザーの基本的な CRUD 操作をテスト"""
-    user = User(name="Alice", email="alice@example.com")
-    repo = BaseRepository(User, session=db_test)
-    repo.save(user)
-    
-    # 取得
-    fetched_user = repo.get_by_id(user.id)
-    assert fetched_user.name == "Alice"
-    
-    # 削除
-    repo.permanent_delete(user)
-    assert repo.get_by_id(user.id) is None
 
-def test_user_post_relationship(db_test):
-    """User-Post のリレーションシップをテスト"""
-    user = User(name="Bob", email="bob@example.com")
-    post = Post(title="My Post", content="Hello", user=user)
-    
-    user_repo = BaseRepository(User, session=db_test)
-    user_repo.save(user)
-    
-    # リレーションシップ確認
-    assert len(user.posts) == 1
-    assert user.posts[0].title == "My Post"
+def test_save_task(db_test):
+    repo = BaseRepository(Task, session=db_test)
+    task = repo.save(Task(title="test"))
+
+    assert task.id is not None
+    assert repo.get_by_id(task.id) is task
 ```
 
-**メリット**:
-- ✅ シンプルで読みやすい
-- ✅ モデル定義を再利用できる
-- ✅ テーブル作成が自動 (`setup_test_models` fixture)
-- ✅ マッパークリーンアップ不要
+テスト中に `db_test.commit()` を呼ぶ必要はありません。fixture の transaction
+境界を保つため、通常は `flush()` または Repository の `save()` を使います。
 
-### ⚠️ 特殊ケース: マッパークリーンアップが必要なテスト
-
-**用途**: 動的モデル定義が必要な特殊なテストのみ
-- TYPE_CHECKING ブロックの動作検証
-- SQLAlchemy マッパーの動作検証
-- インポート順序の検証
-- 前方参照の解決テスト
-
-**例**:
-```python
-def test_type_checking_forward_ref(db_test):
-    """
-    TYPE_CHECKING ブロックの前方参照をテスト
-    
-    注意: テスト内でモデルを動的に定義するため、
-           マッパーのクリーンアップが必要
-    """
-    from sqlalchemy.orm import clear_mappers, configure_mappers
-    from repom.models.base_model import BaseModel
-    from sqlalchemy import String, ForeignKey
-    from sqlalchemy.orm import Mapped, mapped_column, relationship
-    from typing import TYPE_CHECKING
-    
-    try:
-        if TYPE_CHECKING:
-            from __future__ import annotations
-        
-        class Author(BaseModel):
-            __tablename__ = 'author'
-            name: Mapped[str] = mapped_column(String(100))
-            books: Mapped[list["Book"]] = relationship(back_populates='author')
-        
-        class Book(BaseModel):
-            __tablename__ = 'book'
-            title: Mapped[str] = mapped_column(String(100))
-            author_id: Mapped[int] = mapped_column(ForeignKey('author.id'))
-            author: Mapped["Author"] = relationship(back_populates='books')
-        
-        # テーブル作成（動的定義時は手動）
-        BaseModel.metadata.create_all(bind=db_test.bind)
-        
-        # テスト実行
-        author = Author(name="John")
-        db_test.add(author)
-        db_test.commit()
-        assert author.id is not None
-    finally:
-        # クリーンアップは必須
-        clear_mappers()
-        configure_mappers()
-```
-
-**注意点**:
-- ❌ 通常のテストでは使用しない
-- ⚠️ `BaseModel.metadata.create_all()` を手動で呼ぶ必要がある
-- ⚠️ finally ブロックで `clear_mappers()` + `configure_mappers()` が必須
-
-### 📋 決定表
-
-| テストの種類 | 推奨方法 | 理由 |
-|------------|---------|------|
-| CRUD テスト | `tests/fixtures/models/` | シンプル、再利用可能 |
-| リレーションシップテスト | `tests/fixtures/models/` | 事前定義済み（User-Post, Parent-Child） |
-| Repository テスト | `tests/fixtures/models/` | BaseRepository と相性良い |
-| TYPE_CHECKING テスト | テスト内で直接定義 + finally クリーンアップ | 動的定義が必須 |
-| 前方参照テスト | テスト内で直接定義 + finally クリーンアップ | 動的定義が必須 |
-| インポート順序テスト | テスト内で直接定義 + finally クリーンアップ | 動的定義が必須 |
-| マッパー動作テスト | テスト内で直接定義 + finally クリーンアップ | 動的定義が必須 |
-
----
-
-## インメモリDB設定
-
-### デフォルト動作（v0.x.x 以降）
-
-repom は `exec_env == 'test'` の場合、自動的に SQLite インメモリDB (`sqlite:///:memory:`) を使用します：
+## 非同期 fixture
 
 ```python
-from repom.config import config
+from repom.testing import create_async_test_fixtures
 
-# test 環境では自動的にインメモリDB
-config.exec_env = 'test'
-print(config.db_url)
-# 出力: sqlite:///:memory:
-```
-
-### インメモリDBを無効化する
-
-ファイルベースのDB（`db.test.sqlite3`）を使用したい場合：
-
-```python
-# tests/conftest.py または設定ファイル
-from repom.config import config
-
-# conftest.py の pytest_configure() で設定
-def pytest_configure(config_pytest):
-    from repom.config import config as repom_config
-    repom_config.use_in_memory_db_for_tests = False
-```
-
-または、外部プロジェクトの config_hook で：
-
-```python
-# mine_py/config.py
-from repom.config import RepomConfig
-
-class MinePyConfig(RepomConfig):
-    def __init__(self):
-        super().__init__()
-        # ファイルベースのテストDBを使用
-        self.use_in_memory_db_for_tests = False
-
-def get_repom_config():
-    return MinePyConfig()
-```
-
-```bash
-# .env
-CONFIG_HOOK=mine_py.config:get_repom_config
-```
-
-### どちらを使うべきか？
-
-| 用途 | インメモリDB | ファイルベースDB |
-|------|-------------|-----------------|
-| **通常のユニットテスト** | ✅ 推奨（高速） | ❌ |
-| **統合テスト** | ✅ 推奨 | △ |
-| **DB永続化のテスト** | ❌ | ✅ 必要 |
-| **複数プロセスでの並行テスト** | ⚠️ 各プロセス独立 | ✅ |
-| **実行後のDB確認が必要** | ❌ | ✅ |
-| **CI/CD環境** | ✅ 推奨 | △ |
-
-**推奨**:
-- 99%のケースで **インメモリDB**（デフォルト）で十分です
-- ファイルベースDBは特別な理由がある場合のみ使用してください
-
----
-
-## 外部プロジェクトでの使用
-
-### パターン1: シンプルな構成（推奨）
-
-外部プロジェクト（mine-py など）で repom を使用する場合：
-
-```python
-# tests/conftest.py
-import os
-import sys
-from pathlib import Path
-import pytest
-from repom.testing import create_test_fixtures
-
-def pytest_configure(config):
-    """pytest 設定とパス設定"""
-    # プロジェクトのルートディレクトリ
-    root = Path(__file__).resolve().parents[1]
-    src_path = root / 'src'
-    
-    # submodule のパス（必要に応じて）
-    submodule_paths = (
-        root / 'submod' / 'repom',
-        root / 'submod' / 'mine_server',
-    )
-    
-    # sys.path に追加
-    for path in (root, src_path, *submodule_paths):
-        if str(path) not in sys.path:
-            sys.path.insert(0, str(path))
-    
-    # 環境変数の設定
-    os.environ['EXEC_ENV'] = 'test'
-    # プロジェクト固有の環境変数
-    os.environ['PYMINE__CORE__ENV'] = 'test'
-
-
-# ==================== Database Test Fixtures ====================
-
-# repom のヘルパー関数でテストフィクスチャを作成
-db_engine, db_test = create_test_fixtures()
-```
-
-**重要**: モデルのインポートは `create_test_fixtures()` が自動的に行います。
-
----
-
-### パターン2: カスタムモデルローダー（高度な使用）
-
-特殊なモデルインポート処理が必要な場合：
-
-```python
-# tests/conftest.py
-import os
-import sys
-from pathlib import Path
-import pytest
-from repom.testing import create_test_fixtures
-
-def pytest_configure(config):
-    """pytest 設定"""
-    root = Path(__file__).resolve().parents[1]
-    src_path = root / 'src'
-    
-    for path in (root, src_path):
-        if str(path) not in sys.path:
-            sys.path.insert(0, str(path))
-    
-    os.environ['EXEC_ENV'] = 'test'
-
-
-def custom_model_loader():
-    """カスタムモデルローダー（特殊な処理が必要な場合）"""
-    # 例: 特定の順序でモデルをインポート
-    from myproject.models import base_models  # noqa: F401
-    from myproject.models import user_models  # noqa: F401
-    from myproject.models import task_models  # noqa: F401
-
-
-# カスタムローダーを使用
-db_engine, db_test = create_test_fixtures(
-    model_loader=custom_model_loader
-)
-```
-
----
-
-## テスト用DBの作成
-
-### ❌ 間違い：Alembic でテスト用DB作成
-
-```bash
-# これは間違い
-$env:EXEC_ENV='test'
-uv run alembic upgrade head  # テスト用DBには不要
-uv run pytest
-```
-
-**理由**:
-- Alembic は**マイグレーション履歴の管理**が目的
-- テストは**常に最新のモデル定義**を使うべき
-- マイグレーション履歴の検証はテストの責任ではない
-
-### ✅ 正しい：pytest が自動でDB作成
-
-```bash
-# これが正しい（DBは自動作成される）
-uv run pytest
-```
-
-**動作フロー**:
-1. `pytest` コマンド実行
-2. `conftest.py` が読み込まれる
-3. `db_engine` フィクスチャが起動（session scope）
-4. `create_test_fixtures()` 内で自動的にモデルをロード
-5. `Base.metadata.create_all(bind=engine)` が実行される
-6. 全テーブルが作成される
-7. テスト実行
-8. テスト終了後、自動でDB削除
-
-### 手動でテスト用DB作成が必要な場合
-
-通常は不要ですが、デバッグ目的で手動作成したい場合：
-
-```powershell
-# PowerShell
-$env:EXEC_ENV='test'
-uv run db_create
-```
-
-```bash
-# Unix系
-export EXEC_ENV=test
-uv run db_create
-```
-
----
-
-## モデルのインポート方法
-
-### ⚠️ 重要：外部キー制約エラーの回避
-
-外部プロジェクトでテスト時に以下のエラーが発生する場合：
-
-```
-sqlalchemy.exc.NoReferencedTableError: 
-Foreign key associated with column 'time_blocks.activity_id' 
-could not find table 'time_activities'
-```
-
-**原因**: モデルの一部だけがインポートされ、外部キー参照先のテーブルが存在しない
-
-### ❌ 間違い：手動でモデルをインポート
-
-```python
-# tests/conftest.py
-
-# ❌ これは間違い
-from src import models  # noqa: F401
-
-db_engine, db_test = create_test_fixtures()
-```
-
-**問題点**:
-- `src/models/__init__.py` の内容に依存
-- すべてのモデルがインポートされる保証がない
-- 外部キー参照が解決されない可能性がある
-
-### ✅ 正しい方法1：CONFIG_HOOK を使用（推奨）
-
-**Step 1: CONFIG_HOOK を設定**
-
-```python
-# myproject/config.py
-from repom.config import RepomConfig
-
-class MyProjectConfig(RepomConfig):
-    def __init__(self):
-        super().__init__()
-        # 自動インポートするパッケージを指定
-        self.model_locations = [
-            'myproject.models',
-            'repom.models'  # repom のモデルも必要な場合
-        ]
-        # セキュリティ: 許可するパッケージプレフィックス
-        self.allowed_package_prefixes = {'myproject.', 'repom.'}
-
-def get_repom_config():
-    return MyProjectConfig()
-```
-
-**Step 2: 環境変数で指定**
-
-```bash
-# .env ファイル
-CONFIG_HOOK=myproject.config:get_repom_config
-```
-
-**Step 3: conftest.py はシンプルに**
-
-```python
-# tests/conftest.py
-import os
-import sys
-from pathlib import Path
-from repom.testing import create_test_fixtures
-
-def pytest_configure(config):
-    # パス設定のみ
-    root = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(root / 'src'))
-    os.environ['EXEC_ENV'] = 'test'
-
-# モデルは自動的にインポートされる
-db_engine, db_test = create_test_fixtures()
-```
-
-**動作の仕組み**:
-1. `create_test_fixtures()` が `load_set_model_hook_function()` を呼び出す
-2. `load_models()` が実行される
-3. `config.model_locations` に基づいて `auto_import_models_from_list()` が呼ばれる
-4. すべてのモデルが自動的にインポートされる
-5. 外部キー参照も正しく解決される
-
----
-
-### ✅ 正しい方法2：カスタムモデルローダー
-
-CONFIG_HOOK を使わない場合：
-
-```python
-# tests/conftest.py
-import os
-import sys
-from pathlib import Path
-from repom.testing import create_test_fixtures
-from repom.utility import auto_import_models_from_list
-
-def pytest_configure(config):
-    root = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(root / 'src'))
-    os.environ['EXEC_ENV'] = 'test'
-
-
-def load_all_models():
-    """すべてのモデルを自動インポート"""
-    auto_import_models_from_list(
-        package_names=[
-            'myproject.models',
-            'repom.models'
-        ],
-        allowed_prefixes={'myproject.', 'repom.'}
-    )
-
-
-# カスタムローダーを使用
-db_engine, db_test = create_test_fixtures(
-    model_loader=load_all_models
-)
-```
-
----
-
-### ✅ 正しい方法3：明示的にすべてインポート（非推奨）
-
-最もシンプルですが、メンテナンス性が低い：
-
-```python
-# tests/conftest.py
-import os
-import sys
-from pathlib import Path
-from repom.testing import create_test_fixtures
-
-def pytest_configure(config):
-    root = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(root / 'src'))
-    os.environ['EXEC_ENV'] = 'test'
-
-
-def load_all_models():
-    """すべてのモデルを明示的にインポート"""
-    # すべてのモデルファイルを明示的にインポート
-    from myproject.models import user  # noqa: F401
-    from myproject.models import task  # noqa: F401
-    from myproject.models import activity  # noqa: F401
-    from myproject.models import time_block  # noqa: F401
-    # ... すべてのモデルファイル
-
-
-db_engine, db_test = create_test_fixtures(
-    model_loader=load_all_models
-)
-```
-
-**デメリット**:
-- 新しいモデルを追加するたびに更新が必要
-- インポートの順序に依存する可能性がある
-
----
-
-## トラブルシューティング
-
-### NoReferencedTableError が発生する
-
-**エラー例**:
-```
-sqlalchemy.exc.NoReferencedTableError: 
-Foreign key associated with column 'time_blocks.activity_id' 
-could not find table 'time_activities'
-```
-
-**原因**: 外部キー参照先のモデルがインポートされていない
-
-**解決方法**:
-1. **CONFIG_HOOK を使用**（推奨）
-   - `config.model_locations` にパッケージを指定
-   - `auto_import_models` が自動的にすべてのモデルをインポート
-
-2. **カスタムモデルローダー**
-   - `auto_import_models_from_list()` を使用
-   - すべてのモデルパッケージを指定
-
-3. **デバッグ方法**
-   ```python
-   # テスト前にモデルが登録されているか確認
-   from repom.db import Base
-   print(Base.metadata.tables.keys())
-   # dict_keys(['users', 'tasks', 'time_activities', 'time_blocks', ...])
-   ```
-
----
-
-### ImportError: No module named '...'
-
-**原因**: `sys.path` にパスが追加されていない
-
-**解決方法**:
-```python
-# tests/conftest.py
-def pytest_configure(config):
-    root = Path(__file__).resolve().parents[1]
-    src_path = root / 'src'
-    
-    # 重要: insert(0, ...) で先頭に追加
-    sys.path.insert(0, str(root))
-    sys.path.insert(0, str(src_path))
-```
-
----
-
-### テストが遅い
-
-**症状**: 195テストで30秒以上かかる
-
-**原因**: Transaction Rollback パターンを使用していない
-
-**解決方法**:
-```python
-# tests/conftest.py
-
-# ❌ 古い方式（各テストでDB再作成）
-@pytest.fixture()
-def db_test():
-    engine = create_engine(config.db_url)
-    Base.metadata.create_all(bind=engine)  # 毎回作成
-    # ...
-    Base.metadata.drop_all(bind=engine)  # 毎回削除
-
-# ✅ 新しい方式（Transaction Rollback）
-from repom.testing import create_test_fixtures
-db_engine, db_test = create_test_fixtures()
-```
-
----
-
-### WARNING: transaction already deassociated
-
-**症状**: 例外が発生するテストで警告が出る
-
-**解決方法**: 既に修正済み（`repom/testing.py` の `transaction.is_active` チェック）
-
-最新版の `repom` を使用してください。
-
----
-
-### 「no such table」エラー（repom.session や repom.db を使用する場合）
-
-**症状**: `get_db_session()` や `repom.db.engine` を使用するテストで「no such table」エラーが発生
-
-**エラー例**:
-```python
-# tests/unit_tests/test_session.py
-from repom.session import get_db_session  # ← モジュールレベルでインポート
-
-def test_something(db_test):
-    gen = get_db_session()
-    session = next(gen)
-    # OperationalError: no such table: my_table
-```
-
-**原因**: 
-1. `repom.session` や `repom.db` がモジュールレベルで `engine` を作成
-2. インポート時点で `EXEC_ENV` が設定されていないため、dev 環境のDBを参照
-3. `conftest.py` の `db_test` フィクスチャとは異なる engine のため、テーブルが作成されていない
-
-**解決方法 1: テストファイルの先頭で EXEC_ENV を設定** ⭐ 推奨
-
-```python
-# tests/unit_tests/test_session.py
-import os
-import pytest
-
-# CRITICAL: repom モジュールをインポートする前に設定
-os.environ['EXEC_ENV'] = 'test'
-
-from repom.session import get_db_session  # ← この時点で :memory: DB が使われる
-```
-
-**解決方法 2: repom.db.engine を直接使わない**
-
-```python
-# ❌ 間違い: repom.db.engine を直接使用
-from repom.db import engine
-inspector = inspect(engine)
-
-# ✅ 正しい: db_test fixture の engine を使用
-def test_something(db_test):
-    inspector = inspect(db_test.bind)
-```
-
-**ポイント**:
-- テストファイルで `repom.session`, `repom.db`, `repom.async_session` などをインポートする場合
-- **必ずインポート前に `os.environ['EXEC_ENV'] = 'test'` を設定する**
-- または、`db_test.bind` を使って fixture の engine を参照する
-
----
-
-### StaticPool 環境でのトランザクション分離の制限
-
-**症状**: `:memory:` + `StaticPool` 環境で、コミットしていないデータが別のセッションで見える
-
-**原因**: 
-- `StaticPool` は単一の接続を全スレッド/セッションで共有
-- トランザクション分離が完全には機能しない
-
-**対処方法**:
-
-```python
-# このようなテストは :memory: + StaticPool では正しく動作しない
-@pytest.mark.skipif(
-    config.db_url == 'sqlite:///:memory:',
-    reason="StaticPool does not fully support transaction isolation"
-)
-def test_session_isolation(db_test):
-    """セッションの独立性をテスト（ファイルベースDBのみ）"""
-    # ...
-```
-
-**ポイント**:
-- トランザクション分離をテストしたい場合は、ファイルベースDBを使用
-- 通常のテストでは `:memory:` + `StaticPool` で問題なし
-
----
-
-## ベストプラクティス
-
-### 1. CONFIG_HOOK を使用する（推奨）
-
-```python
-# myproject/config.py
-from repom.config import RepomConfig
-
-class MyProjectConfig(RepomConfig):
-    def __init__(self):
-        super().__init__()
-        self.model_locations = ['myproject.models']
-        self.allowed_package_prefixes = {'myproject.', 'repom.'}
-
-def get_repom_config():
-    return MyProjectConfig()
-
-# .env
-CONFIG_HOOK=myproject.config:get_repom_config
-```
-
-**メリット**:
-- モデルのインポート漏れがない
-- 新しいモデルを追加しても自動的にインポートされる
-- テスト以外（DB作成、マイグレーション）でも同じ設定を使用
-
----
-
-### 2. シンプルな conftest.py
-
-```python
-# tests/conftest.py
-import os
-import sys
-from pathlib import Path
-from repom.testing import create_test_fixtures
-
-def pytest_configure(config):
-    """最小限のパス設定のみ"""
-    root = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(root / 'src'))
-    os.environ['EXEC_ENV'] = 'test'
-
-# これだけ！
-db_engine, db_test = create_test_fixtures()
-```
-
-**メリット**:
-- シンプルで理解しやすい
-- メンテナンスが容易
-- 別のAIエージェントも理解できる
-
----
-
-### 3. テストは pytest だけで完結
-
-```bash
-# ✅ Good: これだけでOK
-uv run pytest
-
-# ❌ Bad: 不要な前処理
-uv run alembic upgrade head  # 不要
-uv run db_create             # 不要
-uv run pytest
-```
-
----
-
-### 4. 環境変数は pytest_configure で設定
-
-```python
-def pytest_configure(config):
-    """テスト開始前に一度だけ実行される"""
-    os.environ['EXEC_ENV'] = 'test'
-    os.environ['CONFIG_HOOK'] = 'myproject.config:get_repom_config'
-```
-
-**メリット**:
-- コマンドラインで環境変数を設定する必要がない
-- `uv run pytest` だけで実行可能
-
----
-
-## まとめ
-
-### テスト用DB作成の正解
-
-| 質問 | 回答 |
-|------|------|
-| **Alembic でテスト用DB作成？** | ❌ 不要（間違い） |
-| **db_create コマンドが必要？** | ❌ 通常は不要 |
-| **pytest 実行だけでOK？** | ✅ 正解 |
-| **モデルのインポート方法は？** | ✅ CONFIG_HOOK + `model_locations`（推奨） |
-
-### 外部キーエラーの解決
-
-| 方法 | 推奨度 | 理由 |
-|------|--------|------|
-| **CONFIG_HOOK + model_locations** | ⭐⭐⭐⭐⭐ | 自動、安全、メンテナンス不要 |
-| **カスタムモデルローダー + auto_import** | ⭐⭐⭐⭐ | 柔軟、手動設定が必要 |
-| **明示的インポート** | ⭐⭐ | メンテナンス性が低い |
-| **`from src import models`** | ❌ | 不完全、エラーが発生しやすい |
-
----
-
-## 🔄 非同期テスト（Async Support）
-
-FastAPI Users など async ライブラリのテストには `create_async_test_fixtures()` を使用します。
-
-### 基本的な使い方
-
-```python
-# tests/conftest.py
-from repom.testing import create_test_fixtures, create_async_test_fixtures
-
-# 同期版（既存）
-db_engine, db_test = create_test_fixtures()
-
-# async 版（新規）
 async_db_engine, async_db_test = create_async_test_fixtures()
 ```
 
-### async テストの作成
-
 ```python
 import pytest
-from sqlalchemy import select
+
+from repom import AsyncBaseRepository
+
 
 @pytest.mark.asyncio
-async def test_create_user(async_db_test):
-    """async Session を使用したテスト"""
-    from your_project.models import User
-    
-    # ユーザー作成
-    user = User(email="test@example.com", hashed_password="hashed")
-    async_db_test.add(user)
-    await async_db_test.flush()
-    
-    # 取得
-    stmt = select(User).where(User.email == "test@example.com")
-    result = await async_db_test.execute(stmt)
-    found_user = result.scalar_one_or_none()
-    
-    assert found_user is not None
-    assert found_user.email == "test@example.com"
+async def test_async_save(async_db_test):
+    repo = AsyncBaseRepository(Task, session=async_db_test)
+    task = await repo.save(Task(title="async test"))
+
+    assert await repo.get_by_id(task.id) is task
 ```
 
-### 依存関係のインストール
+SQLite async テストには `aiosqlite`、pytest には `pytest-asyncio` が必要です。
+このリポジトリの dev dependency には両方が含まれています。
 
-```bash
-# SQLite async サポート
-uv add repom[async]
+## DB URL とモデル読み込み
 
-# PostgreSQL async サポート
-uv add repom[postgres-async]
-
-# 両方サポート
-uv add repom[async-all]
-
-# pytest-asyncio も必要
-uv add --dev pytest-asyncio
-```
-
-### FastAPI Users との統合例
+factory の引数は同期・非同期で共通です。
 
 ```python
-@pytest.mark.asyncio
-async def test_fastapi_users_registration(async_db_test):
-    """FastAPI Users を使用した認証テスト"""
-    from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
-    from your_project.models import User
-    
-    # FastAPI Users の UserDatabase を作成
-    user_db = SQLAlchemyUserDatabase(async_db_test, User)
-    
-    # ユーザー登録
-    user_dict = {
-        "email": "newuser@example.com",
-        "hashed_password": "hashed_password",
-        "is_active": True,
-        "is_superuser": False,
-        "is_verified": False,
-    }
-    user = await user_db.create(user_dict)
-    
-    # 確認
-    assert user.email == "newuser@example.com"
-    
-    # メールで検索
-    found = await user_db.get_by_email("newuser@example.com")
-    assert found is not None
+db_engine, db_test = create_test_fixtures(
+    db_url="sqlite:///:memory:",
+    model_loader=load_test_models,
+)
 ```
 
-### Transaction Rollback の動作
+- `db_url` 未指定時は `config.db_url` を使う。
+- `model_loader` 未指定時は `repom.utility.load_models()` を使う。
+- `load_models()` は `config.model_locations` を読み、全 import 後に mapper を構成する。
 
-async テストでも同じ Transaction Rollback パターンが動作します：
+テスト設定は repom module の import 前に確定させてください。このリポジトリの
+`tests/conftest.py` は先頭で `EXEC_ENV=test` を設定しています。外部プロジェクトで
+環境設定の import 順に依存したくない場合は、fixture factory に `db_url` と
+`model_loader` を明示します。
 
-```python
-@pytest.mark.asyncio
-async def test_first_test(async_db_test):
-    """最初のテストでデータを追加"""
-    user = User(email="test1@example.com")
-    async_db_test.add(user)
-    await async_db_test.flush()
-    # テスト終了時に自動ロールバック
+汎用 discovery API は `basekit.discovery` が所有します。repom 固有のモデル読み込み
+については [モデル自動 import ガイド](../features/auto_import_models_guide.md)を
+参照してください。
 
-@pytest.mark.asyncio
-async def test_second_test(async_db_test):
-    """2番目のテストでは前のデータが残っていない"""
-    from sqlalchemy import select
-    
-    stmt = select(User).where(User.email == "test1@example.com")
-    result = await async_db_test.execute(stmt)
-    found = result.scalar_one_or_none()
-    
-    assert found is None  # ロールバックされている
-```
+## モデルの選び方
 
-### 重要な注意事項
+通常のテストでは、module scope で安定して import できる fixture model を用意します。
+このリポジトリでは `tests/fixtures/models/` が正本です。
 
-#### 1. Lazy Loading は使えない
+テスト関数内で declarative model を動的定義すると mapper と metadata が process に
+残ります。import 順や mapper 構成自体を検証するテストだけに限定し、既存テストの
+cleanup pattern に従ってください。
 
-```python
-# ❌ 動作しない
-user = await async_db_test.get(User, 1)
-posts = user.posts  # AttributeError
+## transaction の注意
 
-# ✅ Eager Loading を使用
-from sqlalchemy.orm import selectinload
+- 1 test につき1つの `db_test` / `async_db_test` を使う。
+- 別 session や module-global engine を混在させない。
+- `:memory:` SQLite は `StaticPool` で connection を共有する。実 DB 固有の分離、
+  locking、dialect 動作は PostgreSQL integration test で確認する。
+- async relationship は lazy load に頼らず、`selectinload()` などを指定する。
 
-stmt = select(User).options(selectinload(User.posts)).where(User.id == 1)
-result = await async_db_test.execute(stmt)
-user = result.scalar_one()
-posts = user.posts  # OK
-```
+## fixture 自体を学ぶ
 
-#### 2. await を忘れずに
-
-```python
-# ❌ await を忘れる
-result = async_db_test.execute(stmt)  # TypeError
-
-# ✅ await を付ける
-result = await async_db_test.execute(stmt)
-```
-
-#### 3. URI 変換が自動で行われる
-
-```python
-# 同期 URI
-sqlite:///data/db.test.sqlite3
-
-# async URI（自動変換される）
-sqlite+aiosqlite:///data/db.test.sqlite3
-```
-
-### パフォーマンス
-
-async テストでも高速性は維持されます：
-
-- **DB作成**: session scope で1回のみ
-- **各テスト**: Transaction Rollback のみ
-- **速度**: 同期テストと同等の高速性
-
----
-
-## 関連ドキュメント
-
-- **repom/testing.py**: `create_test_fixtures()` / `create_async_test_fixtures()` の実装
-- **docs/guides/auto_import_models_guide.md**: モデル自動インポートの詳細
-- **README.md**: テスト戦略セクション
-- **AGENTS.md**: Testing Framework セクション
-
----
-
-**最終更新**: 2025-12-14
+pytest の fixture scope、factory、parametrize の一般的な説明は
+[Fixture Guide](fixture_guide.md)を参照してください。実装の正本は
+[`repom/testing.py`](../../../repom/testing.py) と
+[`tests/conftest.py`](../../../tests/conftest.py) です。

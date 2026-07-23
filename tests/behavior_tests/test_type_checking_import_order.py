@@ -1,8 +1,8 @@
 """
 Test for TYPE_CHECKING import order issue with auto_import_models
 
-This test reproduces the issue described in:
-mine-py/docs/issues/active/alphabetical_import_order_breaks_sqlalchemy_relationships.md
+This test is the executable regression specification for alphabetical model
+imports combined with TYPE_CHECKING-only references.
 
 Issue Summary:
 - auto_import_models() imports files alphabetically

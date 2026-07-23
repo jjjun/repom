@@ -1,6 +1,7 @@
 # Phase 1 実装設計書：Docker 管理基盤
 
-**対象**: 当初は `repom/_/docker_manager.py` の実装。現行の汎用基盤は `basekit.docker_manager` に移管済み。
+**対象**: 当初の private Docker manager。現行の汎用基盤は
+`basekit.docker_manager` に移管済み。
 **目標**: 共通基盤完成 + PostgreSQL 参考実装 + テスト  
 **期間**: 2-3日
 

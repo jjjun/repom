@@ -1,14 +1,9 @@
 """
 
-Issue #020: 
-https://github.com/repom/issues/020
+Behavior coverage for circular SQLAlchemy mapper initialization.
 
-
-SQLAlchemy 
-
-
-- mine-py/docs/issues/active/circular_import_mapper_initialization_issue.md
-- tests/behavior_tests/test_circular_import_solutions.py
+Issue history is stored in issuekit; this file is the executable regression
+specification.
 """
 import pytest
 from repom.models.base_model import Base

@@ -459,6 +459,6 @@ def setup_full_data(setup_users, setup_posts):
 
 repom のテストで実際に使用しているフィクスチャパターン：
 
-- [tests/conftest.py](../../tests/conftest.py) - 共通フィクスチャ定義
-- [tests/unit_tests/test_repository_default_order_by.py](../../tests/unit_tests/test_repository_default_order_by.py) - 同期フィクスチャの使用例
-- [tests/unit_tests/test_async_repository_default_order_by.py](../../tests/unit_tests/test_async_repository_default_order_by.py) - 非同期フィクスチャの使用例
+- [tests/conftest.py](../../../tests/conftest.py) - 共通フィクスチャ定義
+- [tests/unit_tests/test_repository_default_order_by.py](../../../tests/unit_tests/test_repository_default_order_by.py) - 同期フィクスチャの使用例
+- [tests/unit_tests/test_async_repository_default_order_by.py](../../../tests/unit_tests/test_async_repository_default_order_by.py) - 非同期フィクスチャの使用例

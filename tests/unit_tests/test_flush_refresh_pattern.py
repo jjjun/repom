@@ -1,8 +1,8 @@
 """
 Test to verify if refresh() is needed after flush() for AutoDateTime fields.
 
-This test verifies the issue described in:
-mine-py/docs/issues/active/repo-flush-refresh-pattern.md
+This test is the executable regression specification for external-session
+flush and refresh behavior.
 """
 import pytest
 from datetime import datetime

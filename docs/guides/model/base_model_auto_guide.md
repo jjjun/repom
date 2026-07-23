@@ -6,7 +6,7 @@
 
 1. [概要](#概要)
 2. [BaseModelAuto: Create/Update スキーマ自動生成](#basemodelauto-createupdate-スキーマ自動生成)
-3. [Response スキーマ & @response_field デコレータ](#response-スキーマ--responsefield-デコレータ)
+3. [Response スキーマ & @response_field デコレータ](#response-スキーマ--response_field-デコレータ)
 4. [前方参照の解決](#前方参照の解決)
 5. [スキーマ生成ルール詳細](#スキーマ生成ルール詳細)
 6. [複合主キー対応](#複合主キー対応)
@@ -648,9 +648,9 @@ def to_dict(self):
 
 ## 関連ドキュメント
 
-- **BaseRepository & FilterParams**: [../repository/repository_and_utilities_guide.md](../repository/repository_and_utilities_guide.md)
+- **BaseRepository & FilterParams**: [../repository/base_repository_guide.md](../repository/base_repository_guide.md)
 - **AI コンテキスト管理**: [../../technical/ai_context_management.md](../../technical/ai_context_management.md)
-- **Soft Delete Guide**: [../features/soft_delete_guide.md](../features/soft_delete_guide.md)
+- **Soft Delete Guide**: [soft_delete_guide.md](soft_delete_guide.md)
 
 ---
 

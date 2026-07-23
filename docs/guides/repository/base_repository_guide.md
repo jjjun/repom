@@ -28,14 +28,15 @@
 ```python
 from repom import BaseRepository
 from your_project.models import Task
-from sqlalchemy.orm import Session
+from repom.database import get_reusable_sync_transaction
 
 # カスタムリポジトリを定義（推奨）
 class TaskRepository(BaseRepository[Task]):
     pass
 
 # インスタンス化（モデル名の指定が不要）
-repo = TaskRepository(session=db_session)
+with get_reusable_sync_transaction() as session:
+    repo = TaskRepository(session=session)
 ```
 
 **メリット**:
@@ -47,10 +48,12 @@ repo = TaskRepository(session=db_session)
 
 ```python
 from repom import BaseRepository
+from repom.database import get_reusable_sync_transaction
 from your_project.models import Task
 
 # カスタムリポジトリが不要な場合
-repo = BaseRepository(Task, session=db_session)
+with get_reusable_sync_transaction() as session:
+    repo = BaseRepository(Task, session=session)
 ```
 
 ### 主要メソッド一覧
@@ -114,7 +117,7 @@ tasks = repo.bulk_insert([Task(title=f"タスク{i}") for i in range(100)])
 - one-shot script（終了時 dispose を含む）: `get_standalone_sync_transaction()`
 - async パターン: `get_async_db_session()` / `get_async_db_transaction()` / `get_standalone_async_transaction()`
 
-**詳細**: [セッション管理パターンガイド](repository_session_patterns.md#トランザクション管理の詳細)
+**詳細**: [セッション管理パターンガイド](repository_session_patterns.md)
 
 ### Read（取得）
 
@@ -195,7 +198,7 @@ item = repository.get_by_id(item.id)
 Alternatively, set `config.autoflush = True` in the application's
 `CONFIG_HOOK` to restore SQLAlchemy's default query-time flush behavior.
 
-**関連モデルの取得（N+1 問題の解決）** については [上級編](repository_advanced_guide.md#eager-loadingn1-問題の解決) を参照してください。
+**関連モデルの取得（N+1 問題の解決）** については [上級編](repository_advanced_guide.md#eager-loadingn1問題の解決) を参照してください。
 
 ### Update（更新）
 
@@ -235,7 +238,7 @@ deleted = repo.bulk_delete(ids=[1, 2, 3])
 deleted = repo.bulk_delete(filter_by={"status": "archived"})
 ```
 
-**論理削除（復元可能な削除）** については [SoftDelete ガイド](repository_soft_delete_guide.md) を参照してください。
+**論理削除（復元可能な削除）** については [SoftDelete ガイド](../model/soft_delete_guide.md) を参照してください。
 `bulk_delete()` は `SoftDeletableMixin` 対応モデルでは物理削除ではなく `deleted_at` を更新します。
 
 ---
@@ -248,21 +251,22 @@ class UserRepository(BaseRepository[User]):
     pass
 
 # 使用例
-repo = UserRepository(session=db_session)
+with get_reusable_sync_transaction() as session:
+    repo = UserRepository(session=session)
 
-# 作成
-user = repo.dict_save({"name": "太郎", "email": "taro@example.com"})
+    # 作成
+    user = repo.dict_save({"name": "太郎", "email": "taro@example.com"})
 
-# 取得
-user = repo.get_by_id(1)
-users = repo.get_by('email', 'taro@example.com')
+    # 取得
+    user = repo.get_by_id(1)
+    users = repo.get_by('email', 'taro@example.com')
 
-# 更新
-user.name = "太郎2"
-repo.save(user)
+    # 更新
+    user.name = "太郎2"
+    repo.save(user)
 
-# 削除
-repo.remove(user)
+    # 削除
+    repo.remove(user)
 ```
 
 ---
@@ -292,8 +296,10 @@ repo = TaskRepository()
 task = repo.get_by_id(1)  # エラー
 
 # ✅ 新しいセッションを使用
-from repom.database import db_session
-repo = TaskRepository(session=db_session)
+from repom.database import get_reusable_sync_transaction
+
+with get_reusable_sync_transaction() as session:
+    repo = TaskRepository(session=session)
 ```
 
 ### デバッグのヒント
@@ -321,8 +327,8 @@ else:
 
 ## 関連ドキュメント
 
-- **[auto_import_models ガイド](../core/auto_import_models_guide.md)**: モデルの自動インポート
-- **[BaseModelAuto ガイド](../features/base_model_auto_guide.md)**: スキーマ自動生成
+- **[auto_import_models ガイド](../features/auto_import_models_guide.md)**: モデルの自動インポート
+- **[BaseModelAuto ガイド](../model/base_model_auto_guide.md)**: スキーマ自動生成
 - **[BaseRepository ソースコード](../../../repom/repositories/base_repository.py)**: 実装の詳細
 
 ---
