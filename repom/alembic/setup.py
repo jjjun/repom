@@ -1,5 +1,6 @@
 """Alembic setup and management utilities."""
 
+from collections.abc import Sequence
 from pathlib import Path
 from alembic.config import Config as AlembicConfig
 from repom.alembic.templates import AlembicTemplates
@@ -18,7 +19,9 @@ class AlembicSetup:
         project_root: str | Path,
         db_url: str,
         script_location: str = "alembic",
-        version_locations: str = "%(here)s/alembic/versions"
+        version_locations: str = "%(here)s/alembic/versions",
+        version_table: str | None = None,
+        autogenerate_exclude_tables: str | Sequence[str] | None = None
     ):
         """
         Args:
@@ -32,6 +35,8 @@ class AlembicSetup:
                              %(here)s は alembic.ini の場所（プロジェクトルート）を指す
                              例: '%(here)s/alembic/versions'
                              （デフォルト: '%(here)s/alembic/versions'）
+            version_table: Alembic version table name
+            autogenerate_exclude_tables: Sibling version table names to exclude
 
         Note:
             - db_url や各パスのデフォルト値は scripts/ 側で config から取得して渡す
@@ -42,6 +47,8 @@ class AlembicSetup:
         self.db_url = db_url
         self.script_location = script_location
         self.version_locations = version_locations
+        self.version_table = version_table
+        self.autogenerate_exclude_tables = autogenerate_exclude_tables
 
         self.alembic_dir = self.project_root / self.script_location
         # %(here)s が含まれている場合は実際のパスに展開
@@ -66,7 +73,9 @@ class AlembicSetup:
 
         content = AlembicTemplates.generate_alembic_ini(
             script_location=self.script_location,
-            version_locations=self.version_locations
+            version_locations=self.version_locations,
+            version_table=self.version_table,
+            autogenerate_exclude_tables=self.autogenerate_exclude_tables
         )
         ini_path.write_text(content, encoding='utf-8')
         print(f"[OK] Created alembic.ini: {ini_path}")

@@ -24,6 +24,8 @@ class TestAlembicSetupInit:
             assert setup.project_root == Path(tmpdir)
             assert setup.db_url == 'sqlite:///test.db'
             assert setup.script_location == 'alembic'
+            assert setup.version_table is None
+            assert setup.autogenerate_exclude_tables is None
             # version_locations preserves %(here)s placeholder
             assert setup.version_locations == '%(here)s/alembic/versions'
             # versions_dir has the expanded path
@@ -98,7 +100,108 @@ class TestCreateAlembicIni:
                 '# autogenerate_exclude_tables = '
                 'alembic_version_fast_domain'
             ) in content
+            assert (
+                '# Optional: isolate an independent migration namespace.'
+            ) in content
+            assert '# Defaults to alembic_version when omitted.' in content
+            assert (
+                '# version_table = alembic_version_fast_domain'
+            ) in content
+            assert '\nversion_table = ' not in content
             assert '[logger_alembic]' in content  # Logging configuration
+
+    def test_create_alembic_ini_with_version_table(self):
+        """create_alembic_ini writes a configured version table"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            setup = AlembicSetup(
+                tmpdir,
+                'sqlite:///test.db',
+                version_table='alembic_version_fast_domain'
+            )
+            setup.create_alembic_ini()
+
+            content = (Path(tmpdir) / 'alembic.ini').read_text()
+
+            assert (
+                'version_table = alembic_version_fast_domain'
+            ) in content
+
+    def test_create_alembic_ini_with_exclusion_string(self):
+        """create_alembic_ini writes a raw exclusion string"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            setup = AlembicSetup(
+                tmpdir,
+                'sqlite:///test.db',
+                autogenerate_exclude_tables='alembic_version_fast_domain'
+            )
+            setup.create_alembic_ini()
+
+            content = (Path(tmpdir) / 'alembic.ini').read_text()
+
+            assert (
+                'autogenerate_exclude_tables = '
+                'alembic_version_fast_domain'
+            ) in content
+            assert (
+                '# autogenerate_exclude_tables = '
+                'alembic_version_fast_domain'
+            ) not in content
+
+    def test_create_alembic_ini_with_exclusion_sequence(self):
+        """create_alembic_ini joins an exclusion sequence"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            setup = AlembicSetup(
+                tmpdir,
+                'sqlite:///test.db',
+                autogenerate_exclude_tables=[
+                    'alembic_version_fast_domain',
+                    'alembic_version_mine_py'
+                ]
+            )
+            setup.create_alembic_ini()
+
+            content = (Path(tmpdir) / 'alembic.ini').read_text()
+
+            assert (
+                'autogenerate_exclude_tables = '
+                'alembic_version_fast_domain, alembic_version_mine_py'
+            ) in content
+
+    def test_create_alembic_ini_with_empty_exclusion_string(self):
+        """create_alembic_ini treats an empty exclusion string as omitted"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            setup = AlembicSetup(
+                tmpdir,
+                'sqlite:///test.db',
+                autogenerate_exclude_tables=''
+            )
+            setup.create_alembic_ini()
+
+            content = (Path(tmpdir) / 'alembic.ini').read_text()
+
+            assert (
+                '# autogenerate_exclude_tables = '
+                'alembic_version_fast_domain'
+            ) in content
+            assert '\nautogenerate_exclude_tables = ' not in content
+
+    def test_create_alembic_ini_with_empty_exclusion_sequence(self):
+        """create_alembic_ini treats an empty exclusion sequence as omitted"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            setup = AlembicSetup(
+                tmpdir,
+                'sqlite:///test.db',
+                autogenerate_exclude_tables=[]
+            )
+            setup.create_alembic_ini()
+
+            content = (Path(tmpdir) / 'alembic.ini').read_text()
+
+            assert (
+                '# autogenerate_exclude_tables = '
+                'alembic_version_fast_domain'
+            ) in content
+            assert '\nautogenerate_exclude_tables = ' not in content
 
     def test_create_alembic_ini_does_not_overwrite_by_default(self):
         """create_alembic_ini does not overwrite existing file by default"""

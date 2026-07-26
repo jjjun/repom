@@ -58,6 +58,8 @@ setup.create_version_directory()
 **オプション**:
 - `script_location`: env.py と script.py.mako の場所（デフォルト: `alembic`）
 - `version_locations`: マイグレーションファイルの保存場所（デフォルト: `%(here)s/alembic/versions`）
+- `version_table`: Alembic のバージョンテーブル名（デフォルト: `alembic_version`）
+- `autogenerate_exclude_tables`: 除外する兄弟名前空間のバージョンテーブル名（文字列またはシーケンス）
 - `overwrite`: 既存の alembic.ini を上書きするか（デフォルト: `False`）
 
 ### CLI コマンドで初期化
