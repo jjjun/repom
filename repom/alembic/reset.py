@@ -10,35 +10,47 @@ class AlembicReset:
     def __init__(
         self,
         db_url: str,
-        versions_dir: Path
+        versions_dir: Path,
+        version_table: str = "alembic_version"
     ):
+        """
+        Args:
+            db_url: データベース URL
+            versions_dir: マイグレーションファイルの保存場所
+            version_table: Alembic バージョンテーブル名
+        """
         self.db_url = db_url
         self.versions_dir = Path(versions_dir)
+        self.version_table = version_table
 
     def drop_alembic_version_table(self) -> None:
-        """alembic_version テーブルを削除"""
+        """設定された Alembic バージョンテーブルを削除"""
         engine = create_engine(self.db_url)
+        quoted_version_table = engine.dialect.identifier_preparer.quote(
+            self.version_table
+        )
 
         with engine.connect() as conn:
             # データベースタイプに応じたテーブル存在チェック
             if self.db_url.startswith('postgresql'):
                 result = conn.execute(text(
                     "SELECT table_name FROM information_schema.tables "
-                    "WHERE table_schema = 'public' AND table_name = 'alembic_version'"
-                ))
+                    "WHERE table_schema = 'public' "
+                    "AND table_name = :version_table"
+                ), {"version_table": self.version_table})
             else:
                 # SQLite
                 result = conn.execute(text(
                     "SELECT name FROM sqlite_master "
-                    "WHERE type='table' AND name='alembic_version'"
-                ))
+                    "WHERE type='table' AND name=:version_table"
+                ), {"version_table": self.version_table})
 
             if result.fetchone():
-                conn.execute(text("DROP TABLE alembic_version"))
+                conn.execute(text(f"DROP TABLE {quoted_version_table}"))
                 conn.commit()
-                print("[OK] Dropped alembic_version table")
+                print(f"[OK] Dropped {self.version_table} table")
             else:
-                print("[OK] alembic_version table does not exist")
+                print(f"[OK] {self.version_table} table does not exist")
 
     def delete_migration_files(self) -> None:
         """マイグレーションファイルを削除"""

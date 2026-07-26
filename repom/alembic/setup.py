@@ -101,14 +101,23 @@ class AlembicSetup:
         """マイグレーションをリセット
 
         Args:
-            drop_table: alembic_version テーブルを削除するか
+            drop_table: 設定された Alembic バージョンテーブルを削除するか
             delete_files: マイグレーションファイルを削除するか
+
+        Note:
+            設定されたバージョンテーブルが存在しない場合、テーブル削除は何もせず、
+            delete_files が True ならマイグレーションファイルの削除は続行します。
+            version_table の指定を誤ると、データベースにリビジョンが記録されたまま、
+            対応するスクリプトが削除されます。
         """
         reset = AlembicReset(
             db_url=self.db_url,
-            versions_dir=self.versions_dir
+            versions_dir=self.versions_dir,
+            version_table=self.version_table or "alembic_version"
         )
 
+        # A missing version table remains a reported no-op for compatibility;
+        # explicitly requested migration-file deletion still proceeds.
         if drop_table:
             reset.drop_alembic_version_table()
 

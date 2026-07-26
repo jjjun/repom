@@ -248,6 +248,52 @@ class TestCreateVersionDirectory:
             assert versions_dir.exists()
 
 
+class TestResetMigrations:
+    """Tests for reset_migrations method"""
+
+    def test_reset_migrations_passes_version_table(self, monkeypatch, tmp_path):
+        created_with = {}
+
+        class ResetStub:
+            def __init__(self, **kwargs):
+                created_with.update(kwargs)
+
+        monkeypatch.setattr(
+            "repom.alembic.setup.AlembicReset",
+            ResetStub
+        )
+        setup = AlembicSetup(
+            tmp_path,
+            "sqlite:///test.db",
+            version_table="alembic_version_app2"
+        )
+
+        setup.reset_migrations(drop_table=False, delete_files=False)
+
+        assert created_with["version_table"] == "alembic_version_app2"
+
+    def test_reset_migrations_passes_default_version_table(
+        self,
+        monkeypatch,
+        tmp_path
+    ):
+        created_with = {}
+
+        class ResetStub:
+            def __init__(self, **kwargs):
+                created_with.update(kwargs)
+
+        monkeypatch.setattr(
+            "repom.alembic.setup.AlembicReset",
+            ResetStub
+        )
+        setup = AlembicSetup(tmp_path, "sqlite:///test.db")
+
+        setup.reset_migrations(drop_table=False, delete_files=False)
+
+        assert created_with["version_table"] == "alembic_version"
+
+
 class TestGetAlembicConfig:
     """Tests for get_alembic_config method"""
 
