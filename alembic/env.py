@@ -28,6 +28,15 @@ config.set_main_option("sqlalchemy.url", db_config.db_url)
 # script_location should also be set in alembic.ini:
 #   - repom standalone: script_location = alembic
 #   - external project: script_location = submod/repom/alembic
+#
+# version_table is read from alembic.ini and defaults to alembic_version.
+# Consumers with multiple independent migration namespaces should give each
+# script_location/version_locations pair its own version_table.
+# During autogenerate, Alembic excludes only the active namespace's version
+# table. A sibling namespace's table may be proposed for removal, so filter
+# or carefully review generated migrations in multi-namespace projects.
+
+version_table = config.get_main_option("version_table", "alembic_version")
 
 # pdb.set_trace()
 # Interpret the config file for Python logging.
@@ -68,6 +77,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        version_table=version_table,
     )
 
     with context.begin_transaction():
@@ -92,6 +102,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             render_as_batch=True,
+            version_table=version_table,
         )
 
         with context.begin_transaction():

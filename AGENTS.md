@@ -89,6 +89,17 @@ The location of Alembic migration files is controlled **solely** by `alembic.ini
 
 **Important**: Both file creation (`alembic revision`) and execution (`alembic upgrade`) use the same location specified in `alembic.ini`. This ensures consistency and prevents confusion.
 
+### Migration Version Table Control
+
+`alembic/env.py` reads `version_table` from `alembic.ini` and defaults to
+`alembic_version`. A consuming project with independent migration namespaces
+should configure a distinct `script_location`, `version_locations`, and
+`version_table` for each namespace.
+
+When using multiple namespaces, autogenerate excludes only the active
+namespace's version table. Review or filter generated migrations so a sibling
+namespace's version table is not treated as an unknown table and dropped.
+
 ### For External Projects (e.g., mine-py)
 
 **Step 1: Create alembic.ini**
@@ -101,6 +112,10 @@ script_location = submod/repom/alembic
 # CRITICAL: This controls BOTH file creation and execution
 # %(here)s refers to the directory containing alembic.ini
 version_locations = %(here)s/alembic/versions
+
+# Optional: isolate an independent migration namespace.
+# Defaults to alembic_version when omitted.
+# version_table = alembic_version_fast_domain
 ```
 
 **Step 2: Set CONFIG_HOOK (optional)**

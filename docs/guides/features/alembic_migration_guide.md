@@ -170,9 +170,20 @@ script_location = submod/repom/alembic
 # マイグレーションファイルの保存場所（プロジェクト内）
 # %(here)s は alembic.ini のあるディレクトリ
 version_locations = %(here)s/alembic/versions
+
+# 独立したマイグレーション名前空間を分離する場合のみ指定
+# 省略時は alembic_version
+# version_table = alembic_version_fast_domain
 ```
 
 **最小限の設定**: 上記のみで動作します。ロギング設定は省略可能です。
+
+複数の独立したマイグレーション名前空間を使用する場合は、それぞれに異なる
+`script_location`、`version_locations`、`version_table` を設定します。
+autogenerate は実行中の名前空間のバージョンテーブルだけを除外するため、別の
+名前空間のバージョンテーブルを不明なテーブルとして削除する migration を生成する
+可能性があります。生成された migration を確認するか、対象外テーブルを
+フィルタリングしてください。
 
 ### Step 2: ディレクトリを作成
 
