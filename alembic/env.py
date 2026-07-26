@@ -33,10 +33,33 @@ config.set_main_option("sqlalchemy.url", db_config.db_url)
 # Consumers with multiple independent migration namespaces should give each
 # script_location/version_locations pair its own version_table.
 # During autogenerate, Alembic excludes only the active namespace's version
-# table. A sibling namespace's table may be proposed for removal, so filter
-# or carefully review generated migrations in multi-namespace projects.
+# table. List sibling namespace version tables in autogenerate_exclude_tables;
+# the active version_table does not need to be listed. Do not use this option
+# to hide drift in model tables, and carefully review generated migrations.
 
 version_table = config.get_main_option("version_table", "alembic_version")
+
+
+def _parse_table_names(value: str | None) -> frozenset[str]:
+    return frozenset(
+        name
+        for item in (value or "").split(",")
+        if (name := item.strip())
+    )
+
+
+autogenerate_exclude_tables = _parse_table_names(
+    config.get_main_option("autogenerate_exclude_tables")
+)
+
+
+def include_object(object_, name, type_, reflected, compare_to):
+    return not (
+        reflected
+        and type_ == "table"
+        and name in autogenerate_exclude_tables
+    )
+
 
 # pdb.set_trace()
 # Interpret the config file for Python logging.
@@ -78,6 +101,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         version_table=version_table,
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -103,6 +127,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             render_as_batch=True,
             version_table=version_table,
+            include_object=include_object,
         )
 
         with context.begin_transaction():

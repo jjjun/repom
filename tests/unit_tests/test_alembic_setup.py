@@ -94,6 +94,10 @@ class TestCreateAlembicIni:
             assert '[alembic]' in content
             assert 'script_location' in content
             assert 'version_locations' in content
+            assert (
+                '# autogenerate_exclude_tables = '
+                'alembic_version_fast_domain'
+            ) in content
             assert '[logger_alembic]' in content  # Logging configuration
 
     def test_create_alembic_ini_does_not_overwrite_by_default(self):

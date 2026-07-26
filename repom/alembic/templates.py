@@ -37,6 +37,10 @@ script_location = {script_location}
 # %(here)s refers to the directory containing this alembic.ini (project root)
 version_locations = {version_locations}
 
+# Comma-separated sibling migration version tables to ignore during autogenerate.
+# Do not list the active version_table; Alembic excludes it automatically.
+# autogenerate_exclude_tables = alembic_version_fast_domain
+
 # Path separator for version_locations (when multiple paths are specified)
 # Using 'os' allows OS-specific path separators
 path_separator = os

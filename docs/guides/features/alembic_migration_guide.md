@@ -174,6 +174,9 @@ version_locations = %(here)s/alembic/versions
 # 独立したマイグレーション名前空間を分離する場合のみ指定
 # 省略時は alembic_version
 # version_table = alembic_version_fast_domain
+
+# autogenerate から除外する別名前空間のバージョンテーブル（カンマ区切り）
+# autogenerate_exclude_tables = alembic_version_fast_domain
 ```
 
 **最小限の設定**: 上記のみで動作します。ロギング設定は省略可能です。
@@ -182,8 +185,13 @@ version_locations = %(here)s/alembic/versions
 `script_location`、`version_locations`、`version_table` を設定します。
 autogenerate は実行中の名前空間のバージョンテーブルだけを除外するため、別の
 名前空間のバージョンテーブルを不明なテーブルとして削除する migration を生成する
-可能性があります。生成された migration を確認するか、対象外テーブルを
-フィルタリングしてください。
+可能性があります。`autogenerate_exclude_tables` に別名前空間のバージョンテーブルを
+カンマ区切りで指定してください。実行中の名前空間の `version_table` は Alembic が
+自動的に除外するため、重複して指定する必要はありません。
+
+この設定は別名前空間のバージョンテーブル専用です。実際のモデルテーブルを除外すると
+`alembic check` がスキーマ差分を検出できなくなり、安全性が低下します。一般的な
+差分抑制には使用せず、生成された migration も必ず確認してください。
 
 ### Step 2: ディレクトリを作成
 

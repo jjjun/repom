@@ -97,8 +97,10 @@ should configure a distinct `script_location`, `version_locations`, and
 `version_table` for each namespace.
 
 When using multiple namespaces, autogenerate excludes only the active
-namespace's version table. Review or filter generated migrations so a sibling
-namespace's version table is not treated as an unknown table and dropped.
+namespace's version table. List sibling namespace version tables in
+`autogenerate_exclude_tables`; the active `version_table` does not need to be
+listed. This option is not a general drift-suppression escape hatch: excluding
+model tables would weaken `alembic check` as a safety gate.
 
 ### For External Projects (e.g., mine-py)
 
@@ -116,6 +118,10 @@ version_locations = %(here)s/alembic/versions
 # Optional: isolate an independent migration namespace.
 # Defaults to alembic_version when omitted.
 # version_table = alembic_version_fast_domain
+
+# Comma-separated sibling migration version tables to ignore during autogenerate.
+# Do not list the active version_table; Alembic excludes it automatically.
+# autogenerate_exclude_tables = alembic_version_fast_domain
 ```
 
 **Step 2: Set CONFIG_HOOK (optional)**
