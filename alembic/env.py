@@ -30,14 +30,19 @@ config.set_main_option("sqlalchemy.url", db_config.db_url)
 #   - external project: script_location = submod/repom/alembic
 #
 # version_table is read from alembic.ini and defaults to alembic_version.
+# version_table_schema is also read from alembic.ini and defaults to None.
 # Consumers with multiple independent migration namespaces should give each
-# script_location/version_locations pair its own version_table.
+# script_location/version_locations pair its own version_table and, when
+# separating namespaces by schema, its own version_table_schema.
 # During autogenerate, Alembic excludes only the active namespace's version
 # table. List sibling namespace version tables in autogenerate_exclude_tables;
 # the active version_table does not need to be listed. Do not use this option
 # to hide drift in model tables, and carefully review generated migrations.
 
 version_table = config.get_main_option("version_table", "alembic_version")
+version_table_schema = config.get_main_option("version_table_schema")
+if version_table_schema is not None:
+    version_table_schema = version_table_schema.strip() or None
 
 
 def _parse_table_names(value: str | None) -> frozenset[str]:
@@ -101,6 +106,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         version_table=version_table,
+        version_table_schema=version_table_schema,
         include_object=include_object,
     )
 
@@ -127,6 +133,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             render_as_batch=True,
             version_table=version_table,
+            version_table_schema=version_table_schema,
             include_object=include_object,
         )
 

@@ -11,17 +11,20 @@ class AlembicReset:
         self,
         db_url: str,
         versions_dir: Path,
-        version_table: str = "alembic_version"
+        version_table: str = "alembic_version",
+        version_table_schema: str | None = None
     ):
         """
         Args:
             db_url: データベース URL
             versions_dir: マイグレーションファイルの保存場所
             version_table: Alembic バージョンテーブル名
+            version_table_schema: Alembic バージョンテーブルのスキーマ（SQLite では無視）
         """
         self.db_url = db_url
         self.versions_dir = Path(versions_dir)
         self.version_table = version_table
+        self.version_table_schema = version_table_schema
 
     def drop_alembic_version_table(self) -> None:
         """設定された Alembic バージョンテーブルを削除"""
@@ -29,15 +32,28 @@ class AlembicReset:
         quoted_version_table = engine.dialect.identifier_preparer.quote(
             self.version_table
         )
+        if (
+            self.db_url.startswith('postgresql')
+            and self.version_table_schema is not None
+        ):
+            quoted_version_table = (
+                f"{engine.dialect.identifier_preparer.quote_schema(self.version_table_schema)}."
+                f"{quoted_version_table}"
+            )
 
         with engine.connect() as conn:
             # データベースタイプに応じたテーブル存在チェック
             if self.db_url.startswith('postgresql'):
                 result = conn.execute(text(
                     "SELECT table_name FROM information_schema.tables "
-                    "WHERE table_schema = 'public' "
+                    "WHERE table_schema = :version_table_schema "
                     "AND table_name = :version_table"
-                ), {"version_table": self.version_table})
+                ), {
+                    "version_table_schema": (
+                        self.version_table_schema or "public"
+                    ),
+                    "version_table": self.version_table
+                })
             else:
                 # SQLite
                 result = conn.execute(text(

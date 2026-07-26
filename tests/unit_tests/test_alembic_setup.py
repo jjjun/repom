@@ -25,6 +25,7 @@ class TestAlembicSetupInit:
             assert setup.db_url == 'sqlite:///test.db'
             assert setup.script_location == 'alembic'
             assert setup.version_table is None
+            assert setup.version_table_schema is None
             assert setup.autogenerate_exclude_tables is None
             # version_locations preserves %(here)s placeholder
             assert setup.version_locations == '%(here)s/alembic/versions'
@@ -108,6 +109,10 @@ class TestCreateAlembicIni:
                 '# version_table = alembic_version_fast_domain'
             ) in content
             assert '\nversion_table = ' not in content
+            assert (
+                '# version_table_schema = migration_fast_domain'
+            ) in content
+            assert '\nversion_table_schema = ' not in content
             assert '[logger_alembic]' in content  # Logging configuration
 
     def test_create_alembic_ini_with_version_table(self):
@@ -124,6 +129,22 @@ class TestCreateAlembicIni:
 
             assert (
                 'version_table = alembic_version_fast_domain'
+            ) in content
+
+    def test_create_alembic_ini_with_version_table_schema(self):
+        """create_alembic_ini writes a configured version table schema"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            setup = AlembicSetup(
+                tmpdir,
+                'sqlite:///test.db',
+                version_table_schema='migration_fast_domain'
+            )
+            setup.create_alembic_ini()
+
+            content = (Path(tmpdir) / 'alembic.ini').read_text()
+
+            assert (
+                'version_table_schema = migration_fast_domain'
             ) in content
 
     def test_create_alembic_ini_with_exclusion_string(self):
@@ -271,6 +292,31 @@ class TestResetMigrations:
         setup.reset_migrations(drop_table=False, delete_files=False)
 
         assert created_with["version_table"] == "alembic_version_app2"
+
+    def test_reset_migrations_passes_version_table_schema(
+        self,
+        monkeypatch,
+        tmp_path
+    ):
+        created_with = {}
+
+        class ResetStub:
+            def __init__(self, **kwargs):
+                created_with.update(kwargs)
+
+        monkeypatch.setattr(
+            "repom.alembic.setup.AlembicReset",
+            ResetStub
+        )
+        setup = AlembicSetup(
+            tmp_path,
+            "sqlite:///test.db",
+            version_table_schema="migration_app2"
+        )
+
+        setup.reset_migrations(drop_table=False, delete_files=False)
+
+        assert created_with["version_table_schema"] == "migration_app2"
 
     def test_reset_migrations_passes_default_version_table(
         self,

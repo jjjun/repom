@@ -11,7 +11,8 @@ class AlembicTemplates:
         script_location: str,
         version_locations: str,
         version_table: str | None = None,
-        autogenerate_exclude_tables: str | Sequence[str] | None = None
+        autogenerate_exclude_tables: str | Sequence[str] | None = None,
+        version_table_schema: str | None = None
     ) -> str:
         """alembic.ini を生成
 
@@ -25,6 +26,7 @@ class AlembicTemplates:
                                 'alembic/versions' の部分を変数で埋め込む
             version_table: Alembic version table name
             autogenerate_exclude_tables: Sibling version table names to exclude
+            version_table_schema: Alembic version table schema
 
         Note:
             - script_location: env.py と script.py.mako を含む repom の alembic ディレクトリ
@@ -38,6 +40,15 @@ class AlembicTemplates:
                 "# Optional: isolate an independent migration namespace.\n"
                 "# Defaults to alembic_version when omitted.\n"
                 "# version_table = alembic_version_fast_domain\n\n"
+            )
+        )
+        version_table_schema_option = (
+            f"version_table_schema = {version_table_schema}\n\n"
+            if version_table_schema is not None
+            else (
+                "# Optional: place the version table in a named schema.\n"
+                "# Defaults to no explicit schema when omitted.\n"
+                "# version_table_schema = migration_fast_domain\n\n"
             )
         )
         if not autogenerate_exclude_tables:
@@ -67,7 +78,7 @@ script_location = {script_location}
 # %(here)s refers to the directory containing this alembic.ini (project root)
 version_locations = {version_locations}
 
-{version_table_option}# Comma-separated sibling migration version tables to ignore during autogenerate.
+{version_table_option}{version_table_schema_option}# Comma-separated sibling migration version tables to ignore during autogenerate.
 # Do not list the active version_table; Alembic excludes it automatically.
 {exclude_tables_option}
 

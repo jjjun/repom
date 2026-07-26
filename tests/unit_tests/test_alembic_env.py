@@ -14,10 +14,17 @@ class AlembicConfigStub:
     config_file_name = None
     config_ini_section = "alembic"
 
-    def __init__(self, version_table, autogenerate_exclude_tables=None):
+    def __init__(
+        self,
+        version_table,
+        autogenerate_exclude_tables=None,
+        version_table_schema=None,
+    ):
         self.options = {}
         if version_table is not None:
             self.options["version_table"] = version_table
+        if version_table_schema is not None:
+            self.options["version_table_schema"] = version_table_schema
         if autogenerate_exclude_tables is not None:
             self.options["autogenerate_exclude_tables"] = (
                 autogenerate_exclude_tables
@@ -73,6 +80,60 @@ def test_env_configures_version_table(
 
     assert configured_options["version_table"] == expected_version_table
     assert configured_options["include_object"] is env_globals["include_object"]
+    if not offline_mode:
+        assert configured_options["connection"] is connection
+
+
+@pytest.mark.parametrize("offline_mode", [True, False])
+@pytest.mark.parametrize(
+    (
+        "configured_version_table_schema",
+        "expected_version_table_schema",
+    ),
+    [
+        (None, None),
+        ("", None),
+        ("   ", None),
+        ("migration_fast_domain", "migration_fast_domain"),
+    ],
+)
+def test_env_configures_version_table_schema(
+    monkeypatch,
+    offline_mode,
+    configured_version_table_schema,
+    expected_version_table_schema,
+):
+    configured_options = {}
+    alembic_config = AlembicConfigStub(
+        None,
+        version_table_schema=configured_version_table_schema,
+    )
+    connection = object()
+    connectable = SimpleNamespace(connect=lambda: nullcontext(connection))
+
+    monkeypatch.setattr(context, "config", alembic_config, raising=False)
+    monkeypatch.setattr(context, "is_offline_mode", lambda: offline_mode)
+    monkeypatch.setattr(
+        context,
+        "configure",
+        lambda **options: configured_options.update(options),
+    )
+    monkeypatch.setattr(context, "begin_transaction", nullcontext)
+    monkeypatch.setattr(context, "run_migrations", lambda: None)
+    monkeypatch.setattr(repom.utility, "load_models", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sqlalchemy,
+        "engine_from_config",
+        lambda *args, **kwargs: connectable,
+    )
+
+    env_path = Path(__file__).parents[2] / "alembic" / "env.py"
+    runpy.run_path(env_path)
+
+    assert (
+        configured_options["version_table_schema"]
+        == expected_version_table_schema
+    )
     if not offline_mode:
         assert configured_options["connection"] is connection
 

@@ -21,7 +21,8 @@ class AlembicSetup:
         script_location: str = "alembic",
         version_locations: str = "%(here)s/alembic/versions",
         version_table: str | None = None,
-        autogenerate_exclude_tables: str | Sequence[str] | None = None
+        autogenerate_exclude_tables: str | Sequence[str] | None = None,
+        version_table_schema: str | None = None
     ):
         """
         Args:
@@ -37,6 +38,7 @@ class AlembicSetup:
                              （デフォルト: '%(here)s/alembic/versions'）
             version_table: Alembic version table name
             autogenerate_exclude_tables: Sibling version table names to exclude
+            version_table_schema: Alembic version table schema
 
         Note:
             - db_url や各パスのデフォルト値は scripts/ 側で config から取得して渡す
@@ -48,6 +50,7 @@ class AlembicSetup:
         self.script_location = script_location
         self.version_locations = version_locations
         self.version_table = version_table
+        self.version_table_schema = version_table_schema
         self.autogenerate_exclude_tables = autogenerate_exclude_tables
 
         self.alembic_dir = self.project_root / self.script_location
@@ -75,6 +78,7 @@ class AlembicSetup:
             script_location=self.script_location,
             version_locations=self.version_locations,
             version_table=self.version_table,
+            version_table_schema=self.version_table_schema,
             autogenerate_exclude_tables=self.autogenerate_exclude_tables
         )
         ini_path.write_text(content, encoding='utf-8')
@@ -113,7 +117,8 @@ class AlembicSetup:
         reset = AlembicReset(
             db_url=self.db_url,
             versions_dir=self.versions_dir,
-            version_table=self.version_table or "alembic_version"
+            version_table=self.version_table or "alembic_version",
+            version_table_schema=self.version_table_schema
         )
 
         # A missing version table remains a reported no-op for compatibility;

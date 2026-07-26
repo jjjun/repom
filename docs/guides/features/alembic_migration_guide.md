@@ -59,6 +59,7 @@ setup.create_version_directory()
 - `script_location`: env.py と script.py.mako の場所（デフォルト: `alembic`）
 - `version_locations`: マイグレーションファイルの保存場所（デフォルト: `%(here)s/alembic/versions`）
 - `version_table`: Alembic のバージョンテーブル名（デフォルト: `alembic_version`）
+- `version_table_schema`: Alembic のバージョンテーブルを配置するスキーマ（デフォルト: 明示的なスキーマなし）
 - `autogenerate_exclude_tables`: 除外する兄弟名前空間のバージョンテーブル名（文字列またはシーケンス）
 - `overwrite`: 既存の alembic.ini を上書きするか（デフォルト: `False`）
 
@@ -177,6 +178,10 @@ version_locations = %(here)s/alembic/versions
 # 省略時は alembic_version
 # version_table = alembic_version_fast_domain
 
+# バージョンテーブルを名前付きスキーマに配置する場合のみ指定
+# 省略時は明示的なスキーマなし
+# version_table_schema = migration_fast_domain
+
 # autogenerate から除外する別名前空間のバージョンテーブル（カンマ区切り）
 # autogenerate_exclude_tables = alembic_version_fast_domain
 ```
@@ -185,6 +190,7 @@ version_locations = %(here)s/alembic/versions
 
 複数の独立したマイグレーション名前空間を使用する場合は、それぞれに異なる
 `script_location`、`version_locations`、`version_table` を設定します。
+スキーマで名前空間を分離する場合は、異なる `version_table_schema` も設定します。
 autogenerate は実行中の名前空間のバージョンテーブルだけを除外するため、別の
 名前空間のバージョンテーブルを不明なテーブルとして削除する migration を生成する
 可能性があります。`autogenerate_exclude_tables` に別名前空間のバージョンテーブルを

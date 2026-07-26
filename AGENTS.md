@@ -91,10 +91,12 @@ The location of Alembic migration files is controlled **solely** by `alembic.ini
 
 ### Migration Version Table Control
 
-`alembic/env.py` reads `version_table` from `alembic.ini` and defaults to
-`alembic_version`. A consuming project with independent migration namespaces
-should configure a distinct `script_location`, `version_locations`, and
-`version_table` for each namespace.
+`alembic/env.py` reads `version_table` and `version_table_schema` from
+`alembic.ini`. They default to `alembic_version` and no explicit schema,
+respectively. A consuming project with independent migration namespaces should
+configure a distinct `script_location`, `version_locations`, and `version_table`
+for each namespace. When separating namespaces by schema, configure a distinct
+`version_table_schema` as well.
 
 When using multiple namespaces, autogenerate excludes only the active
 namespace's version table. List sibling namespace version tables in
@@ -118,6 +120,10 @@ version_locations = %(here)s/alembic/versions
 # Optional: isolate an independent migration namespace.
 # Defaults to alembic_version when omitted.
 # version_table = alembic_version_fast_domain
+
+# Optional: place the version table in a named schema.
+# Defaults to no explicit schema when omitted.
+# version_table_schema = migration_fast_domain
 
 # Comma-separated sibling migration version tables to ignore during autogenerate.
 # Do not list the active version_table; Alembic excludes it automatically.

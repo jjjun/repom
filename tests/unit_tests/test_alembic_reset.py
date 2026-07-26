@@ -43,6 +43,25 @@ def test_drop_alembic_version_table_uses_custom_name_on_sqlite(tmp_path):
     assert not inspect(engine).has_table(version_table)
 
 
+def test_drop_alembic_version_table_ignores_schema_on_sqlite(tmp_path):
+    db_path = tmp_path / "schema.db"
+    db_url = f"sqlite:///{db_path}"
+    engine = create_engine(db_url)
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE alembic_version (version_num VARCHAR(32))"
+        ))
+
+    reset = AlembicReset(
+        db_url,
+        tmp_path,
+        version_table_schema="migration_ns"
+    )
+    reset.drop_alembic_version_table()
+
+    assert not inspect(engine).has_table("alembic_version")
+
+
 def test_drop_alembic_version_table_uses_custom_name_on_postgresql(tmp_path):
     engine = MagicMock()
     engine.dialect = postgresql.dialect()
@@ -62,9 +81,35 @@ def test_drop_alembic_version_table_uses_custom_name_on_postgresql(tmp_path):
     existence_call, drop_call = conn.execute.call_args_list
     assert "table_name = :version_table" in str(existence_call.args[0])
     assert existence_call.args[1] == {
+        "version_table_schema": "public",
         "version_table": "alembic-version-app2"
     }
     assert str(drop_call.args[0]) == 'DROP TABLE "alembic-version-app2"'
+    conn.commit.assert_called_once_with()
+
+
+def test_drop_alembic_version_table_uses_custom_schema_on_postgresql(tmp_path):
+    engine = MagicMock()
+    engine.dialect = postgresql.dialect()
+    conn = engine.connect.return_value.__enter__.return_value
+    conn.execute.return_value.fetchone.return_value = ("alembic_version",)
+
+    with patch("repom.alembic.reset.create_engine", return_value=engine):
+        reset = AlembicReset(
+            "postgresql://localhost/test",
+            tmp_path,
+            version_table_schema="migration-fast-domain"
+        )
+        reset.drop_alembic_version_table()
+
+    existence_call, drop_call = conn.execute.call_args_list
+    assert existence_call.args[1] == {
+        "version_table_schema": "migration-fast-domain",
+        "version_table": "alembic_version"
+    }
+    assert str(drop_call.args[0]) == (
+        'DROP TABLE "migration-fast-domain".alembic_version'
+    )
     conn.commit.assert_called_once_with()
 
 
