@@ -1,11 +1,10 @@
-import importlib
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
-from basekit.config_hook import ConfigHookLoadError
+from basekit import load_hook_function
 
 from repom.database import Base
 from repom.config import config as db_config
@@ -65,36 +64,11 @@ autogenerate_exclude_tables = _parse_table_names(
 
 
 def _load_pre_migration_hook(hook_path: str):
-    if ":" not in hook_path:
-        raise ConfigHookLoadError(
-            f"Invalid pre_migration_hook='{hook_path}': expected an explicit "
-            "'module:callable' target"
-        )
-
-    module_path, function_name = hook_path.rsplit(":", 1)
-    try:
-        module = importlib.import_module(module_path)
-    except ImportError as exc:
-        raise ConfigHookLoadError(
-            f"Failed to import pre-migration hook module '{module_path}' "
-            f"(pre_migration_hook='{hook_path}'): {exc}"
-        ) from exc
-
-    try:
-        hook = getattr(module, function_name)
-    except AttributeError as exc:
-        raise ConfigHookLoadError(
-            f"Pre-migration hook function '{function_name}' not found in "
-            f"module '{module_path}' (pre_migration_hook='{hook_path}')"
-        ) from exc
-
-    if not callable(hook):
-        raise ConfigHookLoadError(
-            f"Pre-migration hook target '{hook_path}' is not callable "
-            f"(pre_migration_hook='{hook_path}')"
-        )
-
-    return hook
+    return load_hook_function(
+        hook_path,
+        source="pre_migration_hook",
+        default_function=None,
+    )
 
 
 def include_object(object_, name, type_, reflected, compare_to):

@@ -173,19 +173,19 @@ def test_raising_pre_migration_hook_does_not_write_to_existing_database(
     [
         (
             "missing_alembic_hook_module:validate",
-            "Failed to import pre-migration hook module",
+            "Failed to import config hook module",
         ),
         (
             "alembic_test_hooks:missing",
-            "Pre-migration hook function",
+            "Config hook function",
         ),
         (
             "alembic_test_hooks:not_callable",
-            "Pre-migration hook target",
+            "Config hook target",
         ),
         (
             "alembic_test_hooks",
-            "expected an explicit 'module:callable' target",
+            "must use 'module:function_name' format",
         ),
     ],
     ids=[
