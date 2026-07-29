@@ -104,6 +104,19 @@ namespace's version table. List sibling namespace version tables in
 listed. This option is not a general drift-suppression escape hatch: excluding
 model tables would weaken `alembic check` as a safety gate.
 
+### Pre-Migration Hook
+
+Consumers can set `pre_migration_hook` to an explicit `module:callable` target.
+The callable receives the resolved `RepomConfig` as its only argument and can
+validate or log the selected database before Alembic connects or writes
+migration state. Exceptions are not caught and abort the command.
+Mutating the passed config does not change the database Alembic connects to.
+
+The hook runs whenever the shared `env.py` is invoked, including offline and
+online execution and commands that load the migration environment. Consumers
+should account for read-only commands when deciding whether their hook should
+reject a configuration.
+
 ### For External Projects (e.g., mine-py)
 
 **Step 1: Create alembic.ini**
@@ -128,6 +141,10 @@ version_locations = %(here)s/alembic/versions
 # Comma-separated sibling migration version tables to ignore during autogenerate.
 # Do not list the active version_table; Alembic excludes it automatically.
 # autogenerate_exclude_tables = alembic_version_fast_domain
+
+# Optional: validate the resolved database before Alembic runs.
+# The callable signature is validate_alembic_database(db_config).
+# pre_migration_hook = mine_py.alembic_runtime:validate_alembic_database
 ```
 
 **Step 2: Set CONFIG_HOOK (optional)**

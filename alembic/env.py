@@ -1,9 +1,11 @@
+import importlib
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+from basekit.config_hook import ConfigHookLoadError
 
 from repom.database import Base
 from repom.config import config as db_config
@@ -38,6 +40,10 @@ config.set_main_option("sqlalchemy.url", db_config.db_url)
 # table. List sibling namespace version tables in autogenerate_exclude_tables;
 # the active version_table does not need to be listed. Do not use this option
 # to hide drift in model tables, and carefully review generated migrations.
+#
+# pre_migration_hook optionally names a consumer hook using the explicit
+# module:callable form. The hook receives db_config and runs whenever this
+# environment is invoked, before either offline or online migrations begin.
 
 version_table = config.get_main_option("version_table", "alembic_version")
 version_table_schema = config.get_main_option("version_table_schema")
@@ -56,6 +62,39 @@ def _parse_table_names(value: str | None) -> frozenset[str]:
 autogenerate_exclude_tables = _parse_table_names(
     config.get_main_option("autogenerate_exclude_tables")
 )
+
+
+def _load_pre_migration_hook(hook_path: str):
+    if ":" not in hook_path:
+        raise ConfigHookLoadError(
+            f"Invalid pre_migration_hook='{hook_path}': expected an explicit "
+            "'module:callable' target"
+        )
+
+    module_path, function_name = hook_path.rsplit(":", 1)
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as exc:
+        raise ConfigHookLoadError(
+            f"Failed to import pre-migration hook module '{module_path}' "
+            f"(pre_migration_hook='{hook_path}'): {exc}"
+        ) from exc
+
+    try:
+        hook = getattr(module, function_name)
+    except AttributeError as exc:
+        raise ConfigHookLoadError(
+            f"Pre-migration hook function '{function_name}' not found in "
+            f"module '{module_path}' (pre_migration_hook='{hook_path}')"
+        ) from exc
+
+    if not callable(hook):
+        raise ConfigHookLoadError(
+            f"Pre-migration hook target '{hook_path}' is not callable "
+            f"(pre_migration_hook='{hook_path}')"
+        )
+
+    return hook
 
 
 def include_object(object_, name, type_, reflected, compare_to):
@@ -140,6 +179,13 @@ def run_migrations_online() -> None:
         with context.begin_transaction():
             context.run_migrations()
 
+
+pre_migration_hook_path = (
+    config.get_main_option("pre_migration_hook") or ""
+).strip()
+if pre_migration_hook_path:
+    pre_migration_hook = _load_pre_migration_hook(pre_migration_hook_path)
+    pre_migration_hook(db_config)
 
 if context.is_offline_mode():
     run_migrations_offline()
