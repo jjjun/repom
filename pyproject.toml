@@ -108,3 +108,7 @@ project = "repom"
 recent_count = 30
 ascii_id_threshold = 76
 default_reviewer = "auto"
+
+[tool.issuekit.triage]
+author_agent = "codex"
+trusted_origins = ["fast-domain"]
