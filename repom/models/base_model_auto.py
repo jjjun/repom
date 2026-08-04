@@ -33,14 +33,9 @@ from pydantic import BaseModel as PydanticBaseModel, create_model, Field
 from repom.models.base_model import BaseModel
 from sqlalchemy import Enum as SQLAlchemyEnum, inspect
 import re
-import logging
 
 # グローバルレジストリ: クラスオブジェクトをキーとして extra response fields を管理
 _EXTRA_FIELDS_REGISTRY: WeakKeyDictionary[type, Dict[str, Any]] = WeakKeyDictionary()
-
-# Logger
-logger = logging.getLogger(__name__)
-
 
 class SchemaGenerationError(Exception):
     """Raised when schema generation fails due to unresolved forward references"""
@@ -490,7 +485,6 @@ class BaseModelAuto(BaseModel):
         if forward_refs is not None:
             try:
                 schema.model_rebuild(_types_namespace=forward_refs)
-                logger.debug(f"Successfully resolved forward references for {schema_name}")
             except NameError as e:
                 # 未定義の型を抽出
                 undefined_types = _extract_undefined_types(str(e))

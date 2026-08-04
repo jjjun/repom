@@ -10,6 +10,8 @@ This test suite verifies:
 6. Backward compatibility - Existing behavior without model_locations
 """
 
+import logging
+
 import pytest
 from unittest.mock import patch, MagicMock
 from basekit.discovery import (
@@ -18,6 +20,7 @@ from basekit.discovery import (
 )
 from repom.utility import load_models
 from repom.config import config
+from repom.logging import get_logger
 
 
 class TestImportPackageDirectory:
@@ -219,6 +222,41 @@ class TestRepomConfigProperties:
 
 class TestLoadModelsIntegration:
     """Test load_models() function integration with config"""
+
+    def test_load_models_logs_one_summary_without_model_names(self, caplog):
+        with caplog.at_level('DEBUG', logger='repom.repom.utility'):
+            load_models()
+
+        summary_records = [
+            record
+            for record in caplog.records
+            if record.name == 'repom.repom.utility'
+            and record.levelname == 'DEBUG'
+            and record.getMessage().startswith('Loaded ')
+        ]
+
+        assert len(summary_records) == 1
+        assert 'models in ' in summary_records[0].getMessage()
+
+    def test_load_models_logs_model_names_when_detail_logger_is_enabled(self, caplog):
+        detail_logger = get_logger('repom.utility').getChild('models.detail')
+        original_level = detail_logger.level
+
+        detail_logger.setLevel(logging.DEBUG)
+        caplog.set_level(logging.DEBUG)
+        try:
+            load_models()
+        finally:
+            detail_logger.setLevel(original_level)
+
+        detail_records = [
+            record
+            for record in caplog.records
+            if record.name == detail_logger.name
+        ]
+
+        assert len(detail_records) == 1
+        assert detail_records[0].getMessage().startswith('Loaded models:')
 
     def test_load_models_uses_model_locations(self):
         """model_locations が設定されている場合、auto_import_models_from_list を呼び出す"""

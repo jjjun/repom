@@ -1,7 +1,10 @@
 import os
-import inflect
+import logging
+import time
 import unicodedata
 from typing import Optional
+
+import inflect
 
 # Import generic discovery helpers from basekit.
 from basekit.discovery import (
@@ -101,15 +104,20 @@ def load_models(context: Optional[str] = None) -> None:
 
         Uses import_from_packages() from discovery module with SQLAlchemy's
         configure_mappers() as post_import_hook.
+
+        Set the ``models.detail`` child logger to DEBUG to include
+        the full table-name list in logs.
     """
     from repom.config import config
     from repom.logging import get_logger
     from sqlalchemy.orm import configure_mappers
 
     logger = get_logger(__name__)
+    detail_logger = logger.getChild('models.detail')
+    if detail_logger.level == logging.NOTSET:
+        detail_logger.setLevel(logging.INFO)
     context_prefix = f"[{context}] " if context else ""
-
-    logger.debug(f"{context_prefix}Starting model loading...")
+    started_at = time.perf_counter()
 
     if config.model_locations:
         # Use generic discovery infrastructure with SQLAlchemy hook
@@ -127,7 +135,16 @@ def load_models(context: Optional[str] = None) -> None:
     from repom.models.base_model import Base
     try:
         table_names = sorted(Base.metadata.tables.keys())
-        logger.debug(f"{context_prefix}Loaded {len(table_names)} models: {', '.join(table_names)}")
+        logger.debug(
+            "%sLoaded %d models in %.2fs",
+            context_prefix,
+            len(table_names),
+            time.perf_counter() - started_at,
+        )
+        if detail_logger.isEnabledFor(logging.DEBUG):
+            detail_logger.debug(
+                "%sLoaded models: %s", context_prefix, ', '.join(table_names)
+            )
     except Exception as e:
         logger.warning(f"{context_prefix}Could not retrieve model list: {e}")
 
