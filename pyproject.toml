@@ -8,7 +8,7 @@ requires-python = ">=3.12,<4.0"
 dependencies = [
   # This floor is inert while [tool.uv.sources] uses a git branch;
   # uv.lock is the effective pin until basekit is consumed from an index.
-  "basekit>=0.2.0",
+  "basekit>=0.4.0",
   "sqlalchemy>=2.0.49,<3.0.0",
   "alembic>=1.14.0,<2.0.0",
   "inflect>=7.5.0,<8.0.0",

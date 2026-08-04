@@ -36,7 +36,7 @@ def get_logger(name: str) -> logging.Logger:
 
         from repom.config import config
 
-        configure_default_logging("repom", config.log_file_path)
+        configure_default_logging("repom", config.log_file_path, config.log_level)
         _setup_sqlalchemy_logging()
 
     return logger

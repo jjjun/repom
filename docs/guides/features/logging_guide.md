@@ -22,6 +22,15 @@ logger.info("operation completed")
 利用側アプリケーションは、できるだけ process entry point で logging を設定してから
 repom の処理を開始してください。
 
+ログレベルは `EXEC_ENV` から決まり、`prod` では `INFO`、それ以外では `DEBUG` です。
+`LOG_LEVEL` 環境変数を設定すると、大文字小文字を区別せずにこの既定値を上書きできます。
+ファイル handler にはこのレベルが設定され、console handler には `max(ログレベル, INFO)` が
+設定されます。そのため、本番環境で `DEBUG` のファイル出力を必要とする場合は、
+`LOG_LEVEL=DEBUG` を設定してください。
+
+`LOG_LEVEL` には有効な logging level 名を指定してください。無効な値を指定すると、最初に
+logger を使用した時点で `ValueError` が発生します。
+
 ## 日次ファイル
 
 `make_timed_rotating_handler()` と `DateNamedDailyFileHandler` は公開 API です。
