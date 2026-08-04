@@ -193,13 +193,28 @@ async def test_collect_database_info_async_postgres_reads_size():
 def test_collect_database_info_sync_unsupported_backend():
     mock_config = SimpleNamespace(
         db_type="mysql",
-        db_url="mysql://localhost/app",
+        db_url="mysql://user:known-password@localhost/app",
     )
 
     with patch.object(database_info.config_module, "config", mock_config):
         info = collect_database_info_sync()
 
     assert info.backend == "mysql"
-    assert info.target == "mysql://localhost/app"
+    assert info.target == "mysql://user:***@localhost/app"
+    assert "known-password" not in info.target
     assert info.status == "unsupported"
     assert "Unsupported database backend" in info.error
+
+
+@pytest.mark.asyncio
+async def test_collect_database_info_async_unsupported_backend_masks_password():
+    mock_config = SimpleNamespace(
+        db_type="mysql",
+        db_url="mysql://user:known-password@localhost/app",
+    )
+
+    with patch.object(database_info.config_module, "config", mock_config):
+        info = await collect_database_info_async()
+
+    assert info.target == "mysql://user:***@localhost/app"
+    assert "known-password" not in info.target

@@ -43,6 +43,7 @@ from contextlib import contextmanager, asynccontextmanager  # Only for DatabaseM
 import asyncio
 
 from sqlalchemy import create_engine, Engine, inspect
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
     AsyncEngine,
@@ -58,6 +59,20 @@ logger = get_logger(__name__)
 
 
 T = TypeVar('T')
+
+
+def safe_db_url(url: str) -> str:
+    """Return a database URL suitable for display or logging."""
+    scheme, separator, remainder = url.partition("://")
+    if separator:
+        credentials, at, host = remainder.rpartition("@")
+        if at and credentials.count("@"):
+            return f"{scheme}://***@{host}"
+
+    try:
+        return make_url(url).render_as_string(hide_password=True)
+    except Exception:
+        return "<invalid database URL>"
 
 
 async def _run_shielded(awaitable) -> None:
@@ -201,7 +216,7 @@ class DatabaseManager:
                 config.db_url,
                 **config.engine_kwargs
             )
-            logger.debug(f"Sync engine created: {config.db_url}")
+            logger.debug(f"Sync engine created: {safe_db_url(config.db_url)}")
         return self._sync_engine
 
     def get_sync_session_factory(self) -> sessionmaker:
@@ -364,7 +379,7 @@ class DatabaseManager:
                         **config.engine_kwargs,
                         echo=False
                     )
-                    logger.debug(f"Async engine created: {async_url}")
+                    logger.debug(f"Async engine created: {safe_db_url(async_url)}")
         return self._async_engine
 
     async def get_async_session_factory(self) -> async_sessionmaker:
@@ -860,6 +875,8 @@ def get_lifespan_manager():
 __all__ = [
     # Base
     'Base',
+    # Utilities
+    'safe_db_url',
     # Manager
     'DatabaseManager',
     # Sync API

@@ -8,7 +8,7 @@ from sqlalchemy import text, create_engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from repom.config import config
-from repom.database import Base
+from repom.database import Base, safe_db_url
 from basekit.discovery import import_from_packages
 from repom.diagnostics.database_info import (
     collect_database_info_sync,
@@ -239,15 +239,7 @@ def display_config():
     print("[Database Configuration]")
     print(f"  Type              : {config.db_type}")
 
-    # Mask password in URL
-    db_url_display = str(config.db_url)
-    if '@' in db_url_display and '://' in db_url_display:
-        scheme, rest = db_url_display.split('://', 1)
-        if '@' in rest:
-            credentials, host_part = rest.split('@', 1)
-            if ':' in credentials:
-                user, _ = credentials.split(':', 1)
-                db_url_display = f"{scheme}://{user}:***@{host_part}"
+    db_url_display = safe_db_url(str(config.db_url))
 
     print(f"  URL               : {db_url_display}")
     print()
@@ -359,4 +351,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
-

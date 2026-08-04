@@ -10,6 +10,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import repom.config as config_module
+from repom.database import safe_db_url
 
 
 @dataclass
@@ -152,7 +153,7 @@ def collect_database_info_sync(
 
     return DatabaseInfo(
         backend=str(config.db_type),
-        target=str(config.db_url),
+        target=safe_db_url(str(config.db_url)),
         size_bytes=None,
         size_text="N/A",
         status="unsupported",
@@ -214,7 +215,7 @@ async def collect_database_info_async(
 
     return DatabaseInfo(
         backend=str(config.db_type),
-        target=str(config.db_url),
+        target=safe_db_url(str(config.db_url)),
         size_bytes=None,
         size_text="N/A",
         status="unsupported",
