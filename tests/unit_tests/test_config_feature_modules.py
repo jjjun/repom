@@ -5,12 +5,9 @@ import pytest
 from repom.config import RepomConfig
 from repom.postgres.config import (
     PgAdminConfig as DirectPgAdminConfig,
-    PgAdminContainerConfig as DirectPgAdminContainerConfig,
     PostgresConfig as DirectPostgresConfig,
-    PostgresContainerConfig as DirectPostgresContainerConfig,
 )
 from repom.redis.config import RedisConfig as DirectRedisConfig
-from repom.redis.config import RedisContainerConfig as DirectRedisContainerConfig
 from repom.sqlite.config import SqliteConfig as DirectSqliteConfig
 
 
