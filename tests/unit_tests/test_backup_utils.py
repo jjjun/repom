@@ -1,9 +1,11 @@
 from tests._init import *
 
 from unittest.mock import MagicMock
+import time
 
 from repom.scripts import _backup_utils
 from repom.scripts._backup_utils import (
+    cleanup_incomplete_backups,
     format_size,
     get_backups,
     rotate_backups,
@@ -71,6 +73,51 @@ def test_rotate_backups_ignores_non_matching_files(tmp_path):
     assert removed == []
     assert matching.exists()
     assert ignored.exists()
+
+
+def test_rotate_backups_removes_zero_byte_files_before_counting_retention(tmp_path):
+    old = tmp_path / "db_20260101_000000.sql.gz"
+    middle = tmp_path / "db_20260102_000000.sql.gz"
+    new = tmp_path / "db_20260103_000000.sql.gz"
+    empty = tmp_path / "db_20260104_000000.sql.gz"
+    _touch(old, 1)
+    _touch(middle, 2)
+    _touch(new, 3)
+    empty.touch()
+
+    removed = rotate_backups(tmp_path, "db_*.sql.gz", max_keep=2)
+
+    assert removed == [empty, old]
+    assert not old.exists()
+    assert not empty.exists()
+    assert middle.exists()
+    assert new.exists()
+
+
+def test_cleanup_incomplete_backups_removes_partial_artifacts(tmp_path):
+    final = tmp_path / "db_20260101_000000.sql.gz"
+    partial = tmp_path / "db_20260102_000000.sql.gz.partial"
+    _touch(final, 1)
+    _touch(partial, 2)
+
+    removed = cleanup_incomplete_backups(tmp_path, "db_*.sql.gz")
+
+    assert removed == [partial]
+    assert final.exists()
+    assert not partial.exists()
+
+
+def test_cleanup_incomplete_backups_preserves_recent_partial_artifacts(tmp_path):
+    recent_partial = tmp_path / "db_20260101_000000.sql.gz.partial"
+    stale_partial = tmp_path / "db_20260102_000000.sql.gz.partial"
+    _touch(recent_partial, time.time())
+    _touch(stale_partial, time.time() - _backup_utils.STALE_PARTIAL_BACKUP_AGE_SECONDS - 1)
+
+    removed = cleanup_incomplete_backups(tmp_path, "db_*.sql.gz")
+
+    assert removed == [stale_partial]
+    assert recent_partial.exists()
+    assert not stale_partial.exists()
 
 
 def test_format_size_formats_fixed_mb_values():

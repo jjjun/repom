@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 from typing import Callable, TypeVar
 
 from basekit.docker_manager import DockerCommandExecutor
@@ -8,6 +9,7 @@ from repom.logging import get_logger
 
 logger = get_logger(__name__)
 T = TypeVar("T")
+STALE_PARTIAL_BACKUP_AGE_SECONDS = 24 * 60 * 60
 
 
 def format_size(size_bytes: int) -> str:
@@ -33,20 +35,51 @@ def get_backups(backup_dir: str | Path, db_type: str) -> list[Path]:
     return backups
 
 
+def cleanup_incomplete_backups(backup_dir: Path, glob_pattern: str) -> list[Path]:
+    """Remove zero-byte backup files and stale partial artifacts."""
+    incomplete_files = []
+    for path in backup_dir.glob(glob_pattern):
+        try:
+            if path.stat().st_size == 0:
+                path.unlink(missing_ok=True)
+                incomplete_files.append(path)
+        except FileNotFoundError:
+            continue
+
+    stale_partial_cutoff = time.time() - STALE_PARTIAL_BACKUP_AGE_SECONDS
+    for path in backup_dir.glob(f"{glob_pattern}.partial"):
+        try:
+            if path.stat().st_mtime <= stale_partial_cutoff:
+                path.unlink(missing_ok=True)
+                incomplete_files.append(path)
+        except FileNotFoundError:
+            continue
+
+    return incomplete_files
+
+
 def rotate_backups(backup_dir: Path, glob_pattern: str, max_keep: int) -> list[Path]:
-    """Remove old backup files and return the removed paths.
+    """Remove incomplete and old backup files and return the removed paths.
 
-    Rotation keeps the newest ``max_keep`` files by modification time. A
-    ``max_keep`` value of 0 or less disables deletion.
+    Rotation keeps the newest ``max_keep`` non-empty final files by modification
+    time. A ``max_keep`` value of 0 or less disables retention deletion.
     """
+    removed_files = cleanup_incomplete_backups(backup_dir, glob_pattern)
     if max_keep <= 0:
-        return []
+        return removed_files
 
-    files = sorted(backup_dir.glob(glob_pattern), key=lambda path: path.stat().st_mtime)
-    old_files = files[:-max_keep]
+    files = []
+    for path in backup_dir.glob(glob_pattern):
+        try:
+            files.append((path.stat().st_mtime, path))
+        except FileNotFoundError:
+            continue
+
+    files.sort(key=lambda file: file[0])
+    old_files = [path for _, path in files[:-max_keep]]
     for old_file in old_files:
-        old_file.unlink()
-    return old_files
+        old_file.unlink(missing_ok=True)
+    return removed_files + old_files
 
 
 def run_postgres_via_docker_or_host(

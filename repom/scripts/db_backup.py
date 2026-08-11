@@ -8,6 +8,7 @@ import gzip
 from datetime import datetime
 from pathlib import Path
 from repom.scripts._backup_utils import (
+    cleanup_incomplete_backups,
     format_size,
     rotate_backups,
     run_postgres_via_docker_or_host,
@@ -18,6 +19,12 @@ logger = get_logger(__name__)
 
 # Maximum number of backups to keep per database name
 MAX_BACKUPS_PER_DB = 3
+
+
+def cleanup_stale_backups(backup_dir: Path, glob_pattern: str):
+    """Remove artifacts left by interrupted backup attempts."""
+    for incomplete_backup in cleanup_incomplete_backups(backup_dir, glob_pattern):
+        logger.warning(f"Removed incomplete backup: {incomplete_backup.name}")
 
 
 def backup_sqlite():
@@ -36,20 +43,30 @@ def backup_sqlite():
     now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     # Create backup file name: <name>_<datetime><ext>
     backup_name = f"{name}_{now_str}{ext}"
-    backup_path = os.path.join(config.db_backup_path, backup_name)
+    backup_path = Path(config.db_backup_path) / backup_name
+    partial_path = backup_path.with_name(f"{backup_path.name}.partial")
     logger.debug(f"Backup file name: {backup_name}")
 
     backup_dir = Path(config.db_backup_path)
-    removed = rotate_backups(backup_dir, f"{name}_*{ext}", MAX_BACKUPS_PER_DB - 1)
+    backup_pattern = f"{name}_*{ext}"
+    cleanup_stale_backups(backup_dir, backup_pattern)
+
+    # Copy the file
+    logger.debug(f"Copying {config.sqlite.db_file_path} to {partial_path}")
+    shutil.copy2(config.sqlite.db_file_path, partial_path)
+    if partial_path.stat().st_size == 0:
+        logger.error("Backup file is empty")
+        print("Error: Backup file is empty")
+        partial_path.unlink()
+        return
+
+    partial_path.replace(backup_path)
+    removed = rotate_backups(backup_dir, backup_pattern, MAX_BACKUPS_PER_DB)
     if removed:
         logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
         for old in removed:
             print(f"Removed old backup: {old.name}")
             logger.warning(f"Removed old backup: {old.name}")
-
-    # Copy the file
-    logger.debug(f"Copying {config.sqlite.db_file_path} to {backup_path}")
-    shutil.copy2(config.sqlite.db_file_path, backup_path)
     print(f"Backup created: {backup_path}")
     logger.info(f"Backup created successfully: {backup_name}")
 
@@ -71,14 +88,11 @@ def backup_postgresql_via_host():
     now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_name = f"db_{now_str}.sql.gz"
     backup_path = Path(config.db_backup_path) / backup_name
+    partial_path = backup_path.with_name(f"{backup_path.name}.partial")
     logger.debug(f"Backup file name: {backup_name}")
 
-    removed = rotate_backups(Path(config.db_backup_path), "db_*.sql.gz", MAX_BACKUPS_PER_DB - 1)
-    if removed:
-        logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
-        for old in removed:
-            print(f"Removed old backup: {old.name}")
-            logger.warning(f"Removed old backup: {old.name}")
+    backup_dir = Path(config.db_backup_path)
+    cleanup_stale_backups(backup_dir, "db_*.sql.gz")
 
     # pg_dump コマンド実行
     try:
@@ -110,7 +124,7 @@ def backup_postgresql_via_host():
         )
 
         # gzip 圧縮
-        with gzip.open(backup_path, 'wb') as gz_file:
+        with gzip.open(partial_path, 'wb') as gz_file:
             for line in pg_dump_proc.stdout:
                 gz_file.write(line)
 
@@ -121,20 +135,27 @@ def backup_postgresql_via_host():
             error_msg = stderr.decode('utf-8')
             logger.error(f"pg_dump failed: {error_msg}")
             print(f"Error: pg_dump failed\n{error_msg}")
-            if backup_path.exists():
-                backup_path.unlink()  # 失敗したバックアップファイルを削除
+            if partial_path.exists():
+                partial_path.unlink()  # 失敗したバックアップファイルを削除
             return
 
         # バックアップファイルサイズ確認
-        file_size = backup_path.stat().st_size
+        file_size = partial_path.stat().st_size
         logger.info(f"Backup file size: {format_size(file_size)}")
 
         if file_size == 0:
             logger.error("Backup file is empty")
             print("Error: Backup file is empty")
-            backup_path.unlink()
+            partial_path.unlink()
             return
 
+        partial_path.replace(backup_path)
+        removed = rotate_backups(backup_dir, "db_*.sql.gz", MAX_BACKUPS_PER_DB)
+        if removed:
+            logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
+            for old in removed:
+                print(f"Removed old backup: {old.name}")
+                logger.warning(f"Removed old backup: {old.name}")
         print(f"Backup created: {backup_path}")
         logger.info(f"Backup created successfully: {backup_name}")
 
@@ -146,8 +167,8 @@ def backup_postgresql_via_host():
     except Exception as e:
         logger.error(f"Backup failed: {e}")
         print(f"Error: Backup failed: {e}")
-        if backup_path.exists():
-            backup_path.unlink()
+        if partial_path.exists():
+            partial_path.unlink()
         return
 
 
@@ -171,14 +192,11 @@ def backup_postgresql_via_docker():
     now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_name = f"db_{now_str}.sql.gz"
     backup_path = Path(config.db_backup_path) / backup_name
+    partial_path = backup_path.with_name(f"{backup_path.name}.partial")
     logger.debug(f"Backup file name: {backup_name}")
 
-    removed = rotate_backups(Path(config.db_backup_path), "db_*.sql.gz", MAX_BACKUPS_PER_DB - 1)
-    if removed:
-        logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
-        for old in removed:
-            print(f"Removed old backup: {old.name}")
-            logger.warning(f"Removed old backup: {old.name}")
+    backup_dir = Path(config.db_backup_path)
+    cleanup_stale_backups(backup_dir, "db_*.sql.gz")
 
     # docker exec で pg_dump 実行
     try:
@@ -205,19 +223,26 @@ def backup_postgresql_via_docker():
         )
 
         # gzip 圧縮して保存
-        with gzip.open(backup_path, 'wb') as gz_file:
+        with gzip.open(partial_path, 'wb') as gz_file:
             gz_file.write(result.stdout)
 
         # バックアップファイルサイズ確認
-        file_size = backup_path.stat().st_size
+        file_size = partial_path.stat().st_size
         logger.info(f"Backup file size: {format_size(file_size)}")
 
         if file_size == 0:
             logger.error("Backup file is empty")
             print("Error: Backup file is empty")
-            backup_path.unlink()
+            partial_path.unlink()
             return
 
+        partial_path.replace(backup_path)
+        removed = rotate_backups(backup_dir, "db_*.sql.gz", MAX_BACKUPS_PER_DB)
+        if removed:
+            logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
+            for old in removed:
+                print(f"Removed old backup: {old.name}")
+                logger.warning(f"Removed old backup: {old.name}")
         print(f"Backup created: {backup_path}")
         logger.info(f"Backup created successfully: {backup_name}")
 
@@ -225,21 +250,21 @@ def backup_postgresql_via_docker():
         logger.error("docker command not found. Please install Docker Desktop.")
         print("Error: docker command not found")
         print("Please install Docker Desktop: https://www.docker.com/products/docker-desktop")
-        if backup_path.exists():
-            backup_path.unlink()
+        if partial_path.exists():
+            partial_path.unlink()
         return
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.decode('utf-8') if e.stderr else str(e)
         logger.error(f"pg_dump failed: {error_msg}")
         print(f"Error: pg_dump failed\n{error_msg}")
-        if backup_path.exists():
-            backup_path.unlink()
+        if partial_path.exists():
+            partial_path.unlink()
         return
     except Exception as e:
         logger.error(f"Backup failed: {e}")
         print(f"Error: Backup failed: {e}")
-        if backup_path.exists():
-            backup_path.unlink()
+        if partial_path.exists():
+            partial_path.unlink()
         return
 
 
