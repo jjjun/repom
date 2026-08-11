@@ -30,23 +30,30 @@ REDISCLI_AUTH="new-password" redis-cli -p 6379
 Dry-run the runtime password change:
 
 ```bash
-uv run redis_rotate_password --new-password "new-password"
+printf '%s\n' 'new-password' | uv run redis_rotate_password --new-password-stdin
 ```
 
 Execute it:
 
 ```bash
-uv run redis_rotate_password \
-  --new-password "new-password" \
+printf '%s\n' 'new-password' | uv run redis_rotate_password \
+  --new-password-stdin \
   --execute
 ```
+
+Update the configured password holder first, then rotate Redis. When standard
+input is a TTY, omitting the new-password option prompts for it.
+`--new-password` and `--old-password` remain available for compatibility, but
+expose their values in process arguments. `--allow-config-password` explicitly
+opts in to using the configured password as the new value.
+When more than one stdin option is used, the new password is read first.
 
 If Redis already has a password, pass it explicitly:
 
 ```bash
-uv run redis_rotate_password \
-  --old-password "old-password" \
-  --new-password "new-password" \
+printf '%s\n%s\n' 'new-password' 'old-password' | uv run redis_rotate_password \
+  --new-password-stdin \
+  --old-password-stdin \
   --execute
 ```
 

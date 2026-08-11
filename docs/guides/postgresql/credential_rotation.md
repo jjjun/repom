@@ -10,24 +10,33 @@ self-managed environment without deleting PostgreSQL data.
 Dry-run the SQL plan first:
 
 ```bash
-uv run postgres_rotate_credentials --new-password "new-password"
+printf '%s\n' 'new-password' | uv run postgres_rotate_credentials --new-password-stdin
 ```
 
 Execute after reviewing the masked plan:
 
 ```bash
-uv run postgres_rotate_credentials --new-password "new-password" --execute
+printf '%s\n' 'new-password' | uv run postgres_rotate_credentials --new-password-stdin --execute
 ```
+
+Update the configured password holder first, then rotate the running role.
+When standard input is a TTY, omitting the new-password option prompts for it.
+`--new-password` remains available for compatibility, but exposes the value in
+process arguments. `--allow-config-password` explicitly opts in to using the
+configured password as the new value.
+`--current-password-stdin` also accepts the current password without placing it
+in process arguments; otherwise the configured current password is used.
+When more than one stdin option is used, the new password is read first.
 
 If you are replacing the application role rather than only rotating the
 password:
 
 ```bash
-uv run postgres_rotate_credentials \
+printf '%s\n%s\n' 'new-password' 'old-password' | uv run postgres_rotate_credentials \
   --current-user repom \
-  --current-password "old-password" \
+  --current-password-stdin \
   --new-user mine_py_app \
-  --new-password "new-password" \
+  --new-password-stdin \
   --database mine_py \
   --database mine_py_dev \
   --database mine_py_test \
@@ -47,13 +56,13 @@ for this value, so the masked repom output does not prevent short-lived
 process-argument exposure while the command runs. Dry-run first:
 
 ```bash
-uv run pgadmin_rotate_password --new-password "new-password"
+printf '%s\n' 'new-password' | uv run pgadmin_rotate_password --new-password-stdin
 ```
 
 Execute after reviewing the masked command:
 
 ```bash
-uv run pgadmin_rotate_password --new-password "new-password" --execute
+printf '%s\n' 'new-password' | uv run pgadmin_rotate_password --new-password-stdin --execute
 ```
 
 If the update command is not usable for the installed pgAdmin image, recreate

@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable, Sequence
 
 from repom.config import config
+from repom.credentials import resolve_password
 
 
 CommandRunner = Callable[..., subprocess.CompletedProcess]
@@ -73,11 +74,11 @@ class PgAdminCredentialRotationPlan:
     def from_config(
         cls,
         *,
-        new_password: str | None = None,
+        new_password: str,
     ) -> "PgAdminCredentialRotationPlan":
         return cls(
             email=config.pgadmin.email,
-            new_password=new_password or config.pgadmin.password,
+            new_password=new_password,
             container_name=config.pgadmin.container.get_container_name(),
             volume_name=config.pgadmin.container.get_volume_name(),
         )
@@ -352,11 +353,47 @@ def main_postgres() -> None:
     """Console entry point for PostgreSQL credential rotation."""
 
     parser = argparse.ArgumentParser(
-        description="Rotate credentials for a running repom PostgreSQL container."
+        description="Rotate credentials for a running repom PostgreSQL container.",
+        epilog=(
+            "Update the configured password holder before rotating the role. "
+            "--new-password exposes the value in process arguments; use "
+            "--new-password-stdin or the TTY prompt instead."
+        ),
     )
-    parser.add_argument("--new-password", default=None)
+    new_password_group = parser.add_mutually_exclusive_group()
+    new_password_group.add_argument(
+        "--new-password",
+        default=None,
+        help="New password (visible in process arguments).",
+    )
+    new_password_group.add_argument(
+        "--new-password-stdin",
+        action="store_true",
+        help=(
+            "Read the new password from one line of standard input. When more "
+            "than one stdin option is used, the new password is read first."
+        ),
+    )
+    new_password_group.add_argument(
+        "--allow-config-password",
+        action="store_true",
+        help="Use config.postgres.password as the new password.",
+    )
     parser.add_argument("--current-user", default=None)
-    parser.add_argument("--current-password", default=None)
+    current_password_group = parser.add_mutually_exclusive_group()
+    current_password_group.add_argument(
+        "--current-password",
+        default=None,
+        help="Current password (visible in process arguments).",
+    )
+    current_password_group.add_argument(
+        "--current-password-stdin",
+        action="store_true",
+        help=(
+            "Read the current password from one line of standard input. When more "
+            "than one stdin option is used, the new password is read first."
+        ),
+    )
     parser.add_argument("--new-user", default=None)
     parser.add_argument("--database", action="append", dest="databases")
     parser.add_argument("--schema", action="append", dest="schemas")
@@ -367,13 +404,26 @@ def main_postgres() -> None:
     )
     args = parser.parse_args()
 
-    new_password = args.new_password or config.postgres.password
-    if not new_password:
-        raise ValueError("--new-password or config.postgres.password is required")
+    new_password = resolve_password(
+        password=args.new_password,
+        read_stdin=args.new_password_stdin,
+        allow_config_password=args.allow_config_password,
+        config_password=config.postgres.password,
+        prompt="New PostgreSQL password: ",
+        option_name="--new-password",
+    )
+    current_password = resolve_password(
+        password=args.current_password,
+        read_stdin=args.current_password_stdin,
+        allow_config_password=True,
+        config_password=config.postgres.password,
+        prompt="Current PostgreSQL password: ",
+        option_name="--current-password",
+    )
 
     plan = PostgresCredentialRotationPlan.from_config(
         current_user=args.current_user,
-        current_password=args.current_password,
+        current_password=current_password,
         new_password=new_password,
         new_user=args.new_user,
         databases=args.databases,
@@ -387,9 +437,29 @@ def main_pgadmin() -> None:
     """Console entry point for pgAdmin password rotation."""
 
     parser = argparse.ArgumentParser(
-        description="Rotate the pgAdmin admin password for a repom container."
+        description="Rotate the pgAdmin admin password for a repom container.",
+        epilog=(
+            "Update the configured password holder before rotating the account. "
+            "--new-password exposes the value in process arguments; use "
+            "--new-password-stdin or the TTY prompt instead."
+        ),
     )
-    parser.add_argument("--new-password", default=None)
+    new_password_group = parser.add_mutually_exclusive_group()
+    new_password_group.add_argument(
+        "--new-password",
+        default=None,
+        help="New password (visible in process arguments).",
+    )
+    new_password_group.add_argument(
+        "--new-password-stdin",
+        action="store_true",
+        help="Read the new password from one line of standard input.",
+    )
+    new_password_group.add_argument(
+        "--allow-config-password",
+        action="store_true",
+        help="Use config.pgadmin.password as the new password.",
+    )
     parser.add_argument(
         "--execute",
         action="store_true",
@@ -407,9 +477,17 @@ def main_pgadmin() -> None:
     )
     args = parser.parse_args()
 
-    plan = PgAdminCredentialRotationPlan.from_config(
-        new_password=args.new_password,
-    )
+    new_password = ""
+    if not args.recreate_volume:
+        new_password = resolve_password(
+            password=args.new_password,
+            read_stdin=args.new_password_stdin,
+            allow_config_password=args.allow_config_password,
+            config_password=config.pgadmin.password,
+            prompt="New pgAdmin password: ",
+            option_name="--new-password",
+        )
+    plan = PgAdminCredentialRotationPlan.from_config(new_password=new_password)
     if args.recreate_volume:
         result = recreate_pgadmin_volume(
             plan,

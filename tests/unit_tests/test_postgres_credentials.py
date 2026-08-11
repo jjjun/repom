@@ -1,6 +1,10 @@
 """Tests for PostgreSQL and pgAdmin credential helpers."""
 
+from io import StringIO
+import sys
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from repom.postgres.credentials import (
     PgAdminCredentialRotationPlan,
@@ -13,6 +17,8 @@ from repom.postgres.credentials import (
     recreate_pgadmin_volume,
     rotate_pgadmin_password,
     rotate_postgres_credentials,
+    main_pgadmin,
+    main_postgres,
 )
 
 
@@ -164,3 +170,82 @@ def test_postgres_plan_from_config_uses_default_databases():
 
     assert plan.databases == ("mine_py", "mine_py_dev", "mine_py_test")
     assert plan.container_name == "repom_postgres"
+
+
+def test_postgres_main_requires_explicit_new_password_without_sql(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["postgres_rotate_credentials"])
+    monkeypatch.setattr(sys, "stdin", StringIO(""))
+
+    with patch("repom.postgres.credentials.rotate_postgres_credentials") as rotate:
+        with pytest.raises(ValueError, match="--new-password"):
+            main_postgres()
+
+    rotate.assert_not_called()
+
+
+def test_postgres_main_rejects_empty_new_password_without_sql(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["postgres_rotate_credentials", "--new-password", ""],
+    )
+
+    with patch("repom.postgres.credentials.rotate_postgres_credentials") as rotate:
+        with pytest.raises(ValueError, match="--new-password must not be empty"):
+            main_postgres()
+
+    rotate.assert_not_called()
+
+
+def test_postgres_main_reads_new_password_from_stdin_without_command_exposure(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["postgres_rotate_credentials", "--new-password-stdin"],
+    )
+    monkeypatch.setattr(sys, "stdin", StringIO("new-secret\n"))
+
+    with patch("repom.postgres.credentials.rotate_postgres_credentials") as rotate:
+        main_postgres()
+
+    plan = rotate.call_args.args[0]
+    assert plan.new_password == "new-secret"
+    assert "new-secret" not in " ".join(sys.argv)
+
+
+def test_postgres_main_prompts_for_new_password_in_a_tty(monkeypatch):
+    stdin = MagicMock()
+    stdin.isatty.return_value = True
+    monkeypatch.setattr(sys, "argv", ["postgres_rotate_credentials"])
+    monkeypatch.setattr(sys, "stdin", stdin)
+
+    with patch("repom.credentials.getpass.getpass", return_value="new-secret") as prompt:
+        with patch("repom.postgres.credentials.rotate_postgres_credentials") as rotate:
+            main_postgres()
+
+    prompt.assert_called_once_with("New PostgreSQL password: ")
+    assert rotate.call_args.args[0].new_password == "new-secret"
+
+
+def test_pgadmin_main_keeps_new_password_argument_behavior(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["pgadmin_rotate_password", "--new-password", "new-secret"],
+    )
+
+    with patch("repom.postgres.credentials.rotate_pgadmin_password") as rotate:
+        main_pgadmin()
+
+    assert rotate.call_args.args[0].new_password == "new-secret"
+
+
+def test_pgadmin_main_requires_explicit_new_password(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["pgadmin_rotate_password"])
+    monkeypatch.setattr(sys, "stdin", StringIO(""))
+
+    with patch("repom.postgres.credentials.rotate_pgadmin_password") as rotate:
+        with pytest.raises(ValueError, match="--new-password"):
+            main_pgadmin()
+
+    rotate.assert_not_called()

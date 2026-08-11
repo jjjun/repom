@@ -1,6 +1,10 @@
 """Tests for Redis credential helpers."""
 
+from io import StringIO
+import sys
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from repom.redis.credentials import (
     RedisCredentialRotationPlan,
@@ -8,6 +12,7 @@ from repom.redis.credentials import (
     build_redis_ping_command,
     rotate_redis_password,
 )
+from repom.redis.manage import main_rotate_password, rotate_password
 
 
 def test_redis_cli_command_without_password():
@@ -114,3 +119,41 @@ def test_redis_rotation_uses_auth_only_when_old_password_is_explicit():
     result = rotate_redis_password(plan, dry_run=True)
 
     assert "REDISCLI_AUTH=old-secret" in result.command
+
+
+def test_redis_rotate_password_requires_explicit_new_password():
+    with pytest.raises(ValueError, match="new_password"):
+        rotate_password()
+
+
+def test_redis_rotate_password_rejects_empty_new_password():
+    with pytest.raises(ValueError, match="new_password must not be empty"):
+        rotate_password("")
+
+
+def test_redis_main_reads_new_password_from_stdin_without_command_exposure(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["redis_rotate_password", "--new-password-stdin"],
+    )
+    monkeypatch.setattr(sys, "stdin", StringIO("new-secret\n"))
+
+    with patch("repom.redis.manage.rotate_password") as rotate:
+        main_rotate_password()
+
+    assert rotate.call_args.kwargs["new_password"] == "new-secret"
+    assert "new-secret" not in " ".join(sys.argv)
+
+
+def test_redis_main_prompts_for_new_password_in_a_tty(monkeypatch):
+    stdin = MagicMock()
+    stdin.isatty.return_value = True
+    monkeypatch.setattr(sys, "argv", ["redis_rotate_password"])
+    monkeypatch.setattr(sys, "stdin", stdin)
+
+    with patch("repom.credentials.getpass.getpass", side_effect=["new-secret", ""]):
+        with patch("repom.redis.manage.rotate_password") as rotate:
+            main_rotate_password()
+
+    assert rotate.call_args.kwargs["new_password"] == "new-secret"

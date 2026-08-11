@@ -11,8 +11,10 @@ Console scripts:
 from __future__ import annotations
 
 import subprocess
+import sys
 
 from repom.config import config
+from repom.credentials import resolve_password
 from repom.redis.credentials import (
     RedisCredentialRotationPlan,
     build_redis_ping_command,
@@ -249,15 +251,19 @@ def rotate_password(
     new_password: str | None = None,
     *,
     old_password: str | None = None,
+    allow_config_password: bool = False,
     dry_run: bool = True,
 ):
     """Apply a new Redis password to the running instance and persisted config."""
 
-    password = new_password or config.redis.password
+    if new_password is None:
+        if not allow_config_password:
+            raise ValueError("new_password is required for Redis rotation")
+        password = config.redis.password
+    else:
+        password = new_password
     if not password:
-        raise ValueError(
-            "new_password or config.redis.password is required for Redis rotation"
-        )
+        raise ValueError("new_password must not be empty for Redis rotation")
 
     result = rotate_redis_password(
         plan=RedisCredentialRotationPlan.from_config(
@@ -280,18 +286,80 @@ def main_rotate_password():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Rotate the password for a running repom Redis container."
+        description="Rotate the password for a running repom Redis container.",
+        epilog=(
+            "Update the configured password holder before rotating Redis. "
+            "--new-password and --old-password expose values in process arguments; "
+            "use the stdin options or TTY prompts instead."
+        ),
     )
-    parser.add_argument("--new-password", default=None)
-    parser.add_argument("--old-password", default=None)
+    new_password_group = parser.add_mutually_exclusive_group()
+    new_password_group.add_argument(
+        "--new-password",
+        default=None,
+        help="New password (visible in process arguments).",
+    )
+    new_password_group.add_argument(
+        "--new-password-stdin",
+        action="store_true",
+        help=(
+            "Read the new password from one line of standard input. When more "
+            "than one stdin option is used, the new password is read first."
+        ),
+    )
+    new_password_group.add_argument(
+        "--allow-config-password",
+        action="store_true",
+        help="Use config.redis.password as the new password.",
+    )
+    old_password_group = parser.add_mutually_exclusive_group()
+    old_password_group.add_argument(
+        "--old-password",
+        default=None,
+        help="Current password (visible in process arguments).",
+    )
+    old_password_group.add_argument(
+        "--old-password-stdin",
+        action="store_true",
+        help=(
+            "Read the current password from one line of standard input. When more "
+            "than one stdin option is used, the new password is read first."
+        ),
+    )
     parser.add_argument(
         "--execute",
         action="store_true",
         help="Execute the rotation. Without this flag, only a dry-run is printed.",
     )
     args = parser.parse_args()
+    new_password = resolve_password(
+        password=args.new_password,
+        read_stdin=args.new_password_stdin,
+        allow_config_password=args.allow_config_password,
+        config_password=config.redis.password,
+        prompt="New Redis password: ",
+        option_name="--new-password",
+    )
+    old_password = args.old_password
+    if args.old_password_stdin:
+        old_password = resolve_password(
+            password=None,
+            read_stdin=True,
+            prompt="Current Redis password: ",
+            option_name="--old-password",
+            allow_empty=True,
+        )
+    elif old_password is None and sys.stdin.isatty():
+        old_password = resolve_password(
+            password=None,
+            read_stdin=False,
+            prompt="Current Redis password (leave blank if unset): ",
+            option_name="--old-password",
+            allow_empty=True,
+        )
+
     rotate_password(
-        new_password=args.new_password,
-        old_password=args.old_password,
+        new_password=new_password,
+        old_password=old_password or None,
         dry_run=not args.execute,
     )
