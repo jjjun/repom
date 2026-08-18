@@ -1,5 +1,7 @@
 from sqlalchemy.types import TypeDecorator, TEXT
 
+from repom.nul_bytes import validate_no_nul_byte
+
 
 class StrEncodedArray(TypeDecorator):
     """
@@ -13,6 +15,7 @@ class StrEncodedArray(TypeDecorator):
     def process_bind_param(self, value, dialect):
         if value is not None:
             value = ','.join(filter(None, map(str, value)))
+            validate_no_nul_byte(value, 'StrEncodedArray')
         return value
 
     def process_result_value(self, value, dialect):

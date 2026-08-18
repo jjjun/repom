@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime, timezone
 from repom.database import Base
 from repom.custom_types.AutoDateTime import AutoDateTime
+from repom.nul_bytes import validate_model_no_nul_bytes
 
 # センチネル値（パラメータが指定されていないことを示す）
 _UNSET = object()
@@ -212,6 +213,12 @@ class BaseModel(Base):
 
 
 # SQLAlchemy Event: updated_at の自動更新
+@event.listens_for(BaseModel, 'before_insert', propagate=True)
+@event.listens_for(BaseModel, 'before_update', propagate=True)
+def validate_before_write(mapper, connection, target):
+    validate_model_no_nul_bytes(target)
+
+
 @event.listens_for(BaseModel, 'before_update', propagate=True)
 def receive_before_update(mapper, connection, target):
     """

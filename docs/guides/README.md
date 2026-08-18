@@ -26,6 +26,8 @@
 - [ロギング](features/logging_guide.md)
 - [QueryAnalyzer](features/query_analyzer_guide.md)
 - [Docker 管理の責務境界](features/docker_manager_guide.md)
+- [NUL byte validation](features/nul_byte_validation.md)
+
 
 ## PostgreSQL / Redis
 

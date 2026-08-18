@@ -6,6 +6,7 @@ from sqlalchemy import ColumnElement, and_, delete, func, select, true, update
 from sqlalchemy.orm import Session, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 from repom.database import get_db_session
+from repom.nul_bytes import validate_values_no_nul_bytes
 from repom.repositories._core import FilterParams
 from repom.repositories._repository_base import RepositoryBase
 from repom.repositories._soft_delete import SoftDeleteRepositoryMixin
@@ -285,6 +286,8 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
                         filters.append(self.model.id == update_values.pop("id"))
                     if not update_values:
                         continue
+
+                    validate_values_no_nul_bytes(self.model, update_values)
 
                     result = session.execute(
                         update(self.model)

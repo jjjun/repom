@@ -18,6 +18,7 @@ Recommended Import Style (推奨):
 
 # Core models
 from repom.models import BaseModel, BaseModelAuto
+from repom.exceptions import NulByteError
 
 # Repositories
 from repom.repositories import (
@@ -44,6 +45,7 @@ __all__ = [
     # Models
     'BaseModel',
     'BaseModelAuto',
+    'NulByteError',
     # Repositories
     'BaseRepository',
     'AsyncBaseRepository',
