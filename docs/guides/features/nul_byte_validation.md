@@ -1,11 +1,11 @@
 # NUL byte validation
 
-repom rejects values containing a NUL byte (`0x00`) in `String` and `Text`
-columns before they reach the database. It also rejects NUL bytes in `JSON`,
-`CustomJSON`, `ListJSON`, and `ARRAY(String)` values, including nested dict
-keys and values. It raises `NulByteError`, which names the column and byte
-offset; document errors also include the key path so applications can map the
-error to a 4xx response.
+repom rejects values containing a NUL byte (`0x00`) in every mapped column
+whose type resolves to a `String` or `JSON` family type, including through
+`TypeDecorator`s. This includes `CustomJSON`, `ListJSON`, `JSONEncoded`, and
+`ARRAY(String)` values, including nested dict keys and values. It raises
+`NulByteError`, which names the column and byte offset; document errors also
+include the key path so applications can map the error to a 4xx response.
 
 The guard runs for inserts and updates of `BaseModel` subclasses in every
 SQLAlchemy session. `BaseRepository.bulk_update` and
@@ -15,21 +15,15 @@ deferred columns solely for validation. In-place mutations to a dict or list
 are not written or validated unless the column uses SQLAlchemy mutable tracking
 (for example, `MutableDict`) or the application assigns a new value.
 
-`JSONEncoded` is intentionally excluded. It stores JSON-encoded text, where a
-NUL round-trips losslessly and cannot be used with server-side JSON extraction.
-repom rejects values where a real NUL byte would reach the column, or where a
-stored JSON escape would make the value unreadable through server-side
-extraction; it does not reject values where the escape round-trips losslessly.
+`StrEncodedArray` keeps its encoded-text validation as a backstop for paths the
+mapper events do not reach. Mapped values are validated first, so errors name
+the mapped column and identify the individual list element.
 
-`StrEncodedArray` validates its encoded text value separately. Because its
-bind processor has no mapped-column context, `NulByteError.column_name` is
-`StrEncodedArray`. Its offset is into the comma-joined encoded string, not an
-individual list element.
+## Detecting existing PostgreSQL JSON and JSON-over-TEXT values
 
-## Detecting existing PostgreSQL JSON values
-
-For a `json` column that may contain values written before this validation was
-added, use a non-pattern search to obtain a cheap superset of candidates:
+For a `json` or `jsonb` column that may contain values written before this
+validation was added, use a non-pattern search to obtain a cheap superset of
+candidates:
 
 ```sql
 SELECT id
@@ -46,6 +40,20 @@ SELECT payload::jsonb
 FROM my_table
 WHERE id = :id;
 ```
+
+For a JSON document stored through a `TypeDecorator` over `TEXT`, the `jsonb`
+cast does not apply. Search the text column for the same escape sequence:
+
+```sql
+SELECT id, payload
+FROM my_table
+WHERE strpos(payload, chr(92) || 'u0000') > 0;
+```
+
+Then confirm each candidate by parsing it with `json.loads` and recursively
+checking the parsed document for a real NUL byte. The text search is only a
+superset here too: ordinary prose containing `\\u0000` is a false positive and
+must not be treated as poisoned unless parsing reveals a real NUL byte.
 
 ## Performance
 

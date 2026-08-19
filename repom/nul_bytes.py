@@ -27,6 +27,8 @@ def _validation_mode(column) -> str | None:
         return 'string'
 
     column_type = _unwrap_type(column.type)
+    if isinstance(column_type, String):
+        return 'document'
     if isinstance(column_type, JSON):
         return 'document'
     if isinstance(column_type, ARRAY) and isinstance(
