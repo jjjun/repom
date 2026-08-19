@@ -3,6 +3,7 @@ from repom.config import config
 import pytest
 import os
 from sqlalchemy import text
+from sqlalchemy.exc import DataError
 
 # PostgreSQL 統合テスト用に db_type を設定
 # EXEC_ENV='test' のまま（repom_test データベースに接続）
@@ -127,6 +128,25 @@ class TestPostgreSQLIntegration:
             # クリーンアップ
             for conn in connections:
                 conn.close()
+
+    def test_json_nul_escape_fails_on_text_extraction(self):
+        from repom.database import get_sync_engine
+
+        engine = get_sync_engine()
+
+        with engine.connect() as conn:
+            transaction = conn.begin()
+            try:
+                conn.execute(text("CREATE TEMP TABLE nul_json_test (payload json)"))
+                conn.execute(
+                    text("INSERT INTO nul_json_test (payload) VALUES (CAST(:payload AS json))"),
+                    {'payload': '{"value":"\\u0000"}'},
+                )
+
+                with pytest.raises(DataError, match='unsupported Unicode escape sequence'):
+                    conn.execute(text("SELECT payload ->> 'value' FROM nul_json_test"))
+            finally:
+                transaction.rollback()
 
 
 @pytest.mark.skipif(

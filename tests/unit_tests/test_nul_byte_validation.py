@@ -1,12 +1,13 @@
 from typing import Any
 
 import pytest
-from sqlalchemy import Integer, String, Text, event
+from sqlalchemy import ARRAY, JSON, Integer, String, Text, event
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
 from repom import AsyncBaseRepository, BaseRepository, NulByteError
 from repom.custom_types.CustomJSON import CustomJSON
 from repom.custom_types.ListJSON import ListJSON
+from repom.custom_types.JSONEncoded import JSONEncoded
 from repom.custom_types.StrEncodedArray import StrEncodedArray
 from repom.models.base_model import BaseModel
 
@@ -19,6 +20,11 @@ class NulByteModel(BaseModel):
     body: Mapped[str] = mapped_column(Text)
     custom_payload: Mapped[Any] = mapped_column(CustomJSON, nullable=True)
     list_payload: Mapped[list] = mapped_column(ListJSON, nullable=True)
+    payload: Mapped[Any] = mapped_column(JSON, nullable=True)
+    array_payload: Mapped[list[str]] = mapped_column(
+        ARRAY(String).with_variant(JSON, 'sqlite'), nullable=True
+    )
+    encoded_payload: Mapped[Any] = mapped_column(JSONEncoded, nullable=True)
     tags: Mapped[list] = mapped_column(StrEncodedArray, nullable=True)
 
 
@@ -75,17 +81,88 @@ def test_nul_byte_error_reports_utf8_byte_offset(db_test):
     assert exc_info.value.offset == 9
 
 
-def test_json_columns_allow_nested_nul_bytes(db_test):
+@pytest.mark.parametrize(
+    ('value', 'key_path'),
+    [
+        ('bad\0value', '$'),
+        ({'nested': {'value': 'bad\0value'}}, 'nested.value'),
+        ({'items': [{'name': 'bad\0value'}]}, 'items[0].name'),
+        ({'bad\0key': 'value'}, 'bad\0key'),
+    ],
+)
+def test_json_columns_reject_nul_bytes_with_key_path(db_test, value, key_path):
     record = NulByteModel(
         title='valid',
         body='valid',
-        custom_payload={'nested': {'value': 'bad\0value'}},
-        list_payload=[{'nested': 'bad\0value'}],
+        payload=value,
     )
     db_test.add(record)
-    db_test.flush()
 
-    assert record.id is not None
+    with pytest.raises(NulByteError) as exc_info:
+        db_test.flush()
+
+    assert exc_info.value.column_name == 'nul_byte_models.payload'
+    assert exc_info.value.key_path == key_path
+    if '\0' in key_path:
+        assert key_path.replace('\0', '\\u0000') in str(exc_info.value)
+        assert chr(0) not in str(exc_info.value)
+    else:
+        assert key_path in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ('field', 'value', 'key_path'),
+    [
+        ('custom_payload', {'nested': 'bad\0value'}, 'nested'),
+        ('list_payload', [{'nested': 'bad\0value'}], '[0].nested'),
+        ('array_payload', ['bad\0value'], '[0]'),
+    ],
+)
+def test_json_decorators_and_string_arrays_reject_nul_bytes(
+    db_test, field, value, key_path
+):
+    db_test.add(NulByteModel(title='valid', body='valid', **{field: value}))
+
+    with pytest.raises(NulByteError) as exc_info:
+        db_test.flush()
+
+    assert exc_info.value.column_name == f'nul_byte_models.{field}'
+    assert exc_info.value.key_path == key_path
+
+
+def test_json_columns_preserve_escaped_nul_text_and_control_characters(db_test):
+    value = {
+        'note': 'ordinary prose: \\u0000',
+        'text': '日本語\nwith a newline',
+    }
+    record = NulByteModel(title='valid', body='valid', payload=value)
+    db_test.add(record)
+    db_test.flush()
+    db_test.expire_all()
+
+    assert db_test.get(NulByteModel, record.id).payload == value
+
+
+def test_json_encoded_round_trips_nul_bytes(db_test):
+    value = {'nested': 'bad\0value'}
+    record = NulByteModel(title='valid', body='valid', encoded_payload=value)
+    db_test.add(record)
+    db_test.flush()
+    db_test.expire_all()
+
+    assert db_test.get(NulByteModel, record.id).encoded_payload == value
+
+
+def test_json_column_update_rejects_nul_bytes(db_test):
+    record = NulByteModel(title='valid', body='valid', payload={'value': 'valid'})
+    db_test.add(record)
+    db_test.flush()
+    record.payload = {'value': 'bad\0value'}
+
+    with pytest.raises(NulByteError) as exc_info:
+        db_test.flush()
+
+    assert exc_info.value.key_path == 'value'
 
 
 def test_str_encoded_array_rejects_nul_bytes(db_test):
@@ -150,6 +227,33 @@ def test_bulk_insert_nul_byte_guard_benchmark(db_engine, benchmark):
     def bulk_insert():
         records = [
             NulByteModel(title=f'title {index}', body='realistic text body')
+            for index in range(1_000)
+        ]
+        session.add_all(records)
+        session.flush()
+        session.rollback()
+
+    try:
+        benchmark(bulk_insert)
+    finally:
+        session.close()
+
+
+@pytest.mark.run_benchmark
+def test_bulk_insert_json_nul_byte_guard_benchmark(db_engine, benchmark):
+    session = sessionmaker(bind=db_engine)()
+    payload = {
+        'items': [
+            {'name': f'item {index}', 'description': 'realistic payload text' * 10}
+            for index in range(100)
+        ]
+    }
+
+    def bulk_insert():
+        records = [
+            NulByteModel(
+                title=f'title {index}', body='realistic text body', payload=payload
+            )
             for index in range(1_000)
         ]
         session.add_all(records)
