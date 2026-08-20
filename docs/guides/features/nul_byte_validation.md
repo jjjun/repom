@@ -2,7 +2,7 @@
 
 repom rejects values containing a NUL byte (`0x00`) in every mapped column
 whose type resolves to a `String` or `JSON` family type, including through
-`TypeDecorator`s. This includes `CustomJSON`, `ListJSON`, `JSONEncoded`, and
+`TypeDecorator`s. This includes `CustomJSON`, `ListJSON`, and
 `ARRAY(String)` values, including nested dict keys and values. It raises
 `NulByteError`, which names the column and byte offset; document errors also
 include the key path so applications can map the error to a 4xx response.
@@ -14,10 +14,6 @@ On updates, unloaded and unchanged attributes are skipped to avoid loading
 deferred columns solely for validation. In-place mutations to a dict or list
 are not written or validated unless the column uses SQLAlchemy mutable tracking
 (for example, `MutableDict`) or the application assigns a new value.
-
-`StrEncodedArray` keeps its encoded-text validation as a backstop for paths the
-mapper events do not reach. Mapped values are validated first, so errors name
-the mapped column and identify the individual list element.
 
 ## Detecting existing PostgreSQL JSON and JSON-over-TEXT values
 

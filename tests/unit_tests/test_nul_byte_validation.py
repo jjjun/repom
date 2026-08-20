@@ -9,8 +9,6 @@ from sqlalchemy.types import TypeDecorator
 from repom import AsyncBaseRepository, BaseRepository, NulByteError
 from repom.custom_types.CustomJSON import CustomJSON
 from repom.custom_types.ListJSON import ListJSON
-from repom.custom_types.JSONEncoded import JSONEncoded
-from repom.custom_types.StrEncodedArray import StrEncodedArray
 from repom.models.base_model import BaseModel
 
 
@@ -26,6 +24,21 @@ class PipeJoined(TypeDecorator):
     def process_result_value(self, value, dialect):
         if value is not None:
             value = value.split('|')
+        return value
+
+
+class JSONOverText(TypeDecorator):
+    impl = TEXT
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            value = json.dumps(value)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            value = json.loads(value)
         return value
 
 
@@ -54,8 +67,7 @@ class NulByteModel(BaseModel):
     array_payload: Mapped[list[str]] = mapped_column(
         ARRAY(String).with_variant(JSON, 'sqlite'), nullable=True
     )
-    encoded_payload: Mapped[Any] = mapped_column(JSONEncoded, nullable=True)
-    tags: Mapped[list] = mapped_column(StrEncodedArray, nullable=True)
+    encoded_payload: Mapped[Any] = mapped_column(JSONOverText, nullable=True)
     pipe_payload: Mapped[list] = mapped_column(PipeJoined, nullable=True)
 
 
@@ -182,7 +194,7 @@ def test_json_columns_preserve_escaped_nul_text_and_control_characters(db_test):
         ({'items': ['bad\0value']}, 'items[0]'),
     ],
 )
-def test_json_encoded_rejects_nul_bytes_with_key_path(db_test, value, key_path):
+def test_json_over_text_rejects_nul_bytes_with_key_path(db_test, value, key_path):
     db_test.add(NulByteModel(title='valid', body='valid', encoded_payload=value))
 
     with pytest.raises(NulByteError) as exc_info:
@@ -192,7 +204,7 @@ def test_json_encoded_rejects_nul_bytes_with_key_path(db_test, value, key_path):
     assert exc_info.value.key_path == key_path
 
 
-def test_json_encoded_preserves_escaped_nul_prose(db_test):
+def test_json_over_text_preserves_escaped_nul_prose(db_test):
     value = {'note': 'ordinary prose: \\u0000'}
     record = NulByteModel(title='valid', body='valid', encoded_payload=value)
     db_test.add(record)
@@ -212,17 +224,6 @@ def test_json_column_update_rejects_nul_bytes(db_test):
         db_test.flush()
 
     assert exc_info.value.key_path == 'value'
-
-
-def test_str_encoded_array_rejects_nul_bytes(db_test):
-    db_test.add(NulByteModel(title='valid', body='valid', tags=['bad\0value']))
-
-    with pytest.raises(NulByteError) as exc_info:
-        db_test.flush()
-
-    assert exc_info.value.offset == 3
-    assert exc_info.value.column_name == 'nul_byte_models.tags'
-    assert exc_info.value.key_path == '[0]'
 
 
 def test_text_type_decorator_rejects_nul_bytes_with_key_path(db_test):

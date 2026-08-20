@@ -58,19 +58,19 @@ implementation and tests before selecting it for a persistent schema:
 ```python
 from sqlalchemy.orm import Mapped, mapped_column
 
-from repom.custom_types.JSONEncoded import JSONEncoded
+from repom.custom_types.CustomJSON import CustomJSON
 
 
 class Event(BaseModel):
     __tablename__ = "events"
 
-    payload: Mapped[dict] = mapped_column(JSONEncoded)
+    payload: Mapped[dict] = mapped_column(CustomJSON)
 ```
 
-`JSONEncoded` remains for compatibility; new models should normally prefer
-SQLAlchemy's native `JSON` type. Custom type behavior can affect migration
-output and cross-database compatibility, so applications should add
-round-trip tests for every database engine they support.
+Use `CustomJSON` for object-like JSON values and `ListJSON` for list values.
+Custom type behavior can affect migration output and cross-database
+compatibility, so applications should add round-trip tests for every database
+engine they support.
 
 ## Related documentation
 

@@ -190,7 +190,7 @@ uv run repom generate-schemas \
 ### カスタム型の処理
 repom はうまくシリアライズされない可能性があるカスタム TypeDecorator を使用:
 - `ISO8601DateTime` → ISO 8601 文字列フォーマットとしてエクスポート
-- `JSONEncoded` → オブジェクト型としてエクスポート
+- `CustomJSON` → オブジェクト型としてエクスポート
 - `ListJSON` → 配列型としてエクスポート
 - `CreatedAt` → datetime 文字列としてエクスポート
 

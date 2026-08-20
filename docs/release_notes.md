@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- BREAKING: Removed `JSONEncoded` and `StrEncodedArray`. Use `CustomJSON` for
+  object-like JSON values and `ListJSON` for list values. If a historical
+  migration imports either removed type solely for a `TEXT` column in
+  `op.create_table`, replace it with `sa.TEXT()`; this emits identical DDL and
+  lets fresh database bootstraps proceed.
 - NUL bytes in `String` and `Text` columns now raise `NulByteError` on every
   supported dialect, including SQLite. SQLite-backed consumers that previously
   stored NUL bytes must reject or sanitize those values before persistence.
