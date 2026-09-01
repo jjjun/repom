@@ -35,10 +35,10 @@ uv sync --extra async-all       # aiosqlite + asyncpg
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from repom import BaseModelAuto
+from repom import BaseModel
 
 
-class Task(BaseModelAuto, use_id=True, use_created_at=True, use_updated_at=True):
+class Task(BaseModel, use_id=True, use_created_at=True, use_updated_at=True):
     __tablename__ = "tasks"
 
     title: Mapped[str] = mapped_column(
@@ -48,9 +48,8 @@ class Task(BaseModelAuto, use_id=True, use_created_at=True, use_updated_at=True)
     )
 ```
 
-`BaseModelAuto` は `get_create_schema()`、`get_update_schema()`、
-`get_response_schema()` を提供します。詳細は
-[BaseModelAuto ガイド](docs/guides/model/base_model_auto_guide.md)を参照してください。
+FastAPI 向けの Pydantic スキーマ自動生成（旧 `BaseModelAuto`）は利用側フレーム
+ワーク（fast-domain）に移管されました。
 
 ### Repository
 
@@ -110,10 +109,10 @@ FastAPI では `Depends(get_async_db_session)` または
 ### 論理削除
 
 ```python
-from repom import BaseModelAuto, BaseRepository, SoftDeletableMixin
+from repom import BaseModel, BaseRepository, SoftDeletableMixin
 
 
-class Article(BaseModelAuto, SoftDeletableMixin):
+class Article(BaseModel, SoftDeletableMixin):
     __tablename__ = "articles"
 
 

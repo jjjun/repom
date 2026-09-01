@@ -7,7 +7,7 @@
 
 - Python 3.12 以上、SQLAlchemy 2.x、`uv` を使用する。
 - import は公開 API を優先する:
-  `from repom import BaseModel, BaseModelAuto, BaseRepository, AsyncBaseRepository`
+  `from repom import BaseModel, BaseRepository, AsyncBaseRepository`
 - DB セッション API は `repom.database`、テスト fixture helper は
   `repom.testing` から import する。
 - アプリ固有のモデルや Repository は利用側プロジェクトに置く。

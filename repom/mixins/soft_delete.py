@@ -21,9 +21,9 @@ class SoftDeletableMixin:
 
     使用方法:
         from repom.mixins import SoftDeletableMixin
-        from repom.models.base_model_auto import BaseModelAuto
+        from repom.models.base_model import BaseModel
 
-        class MyModel(BaseModelAuto, SoftDeletableMixin):
+        class MyModel(BaseModel, SoftDeletableMixin):
             __tablename__ = "my_table"
             # ... other fields
 

@@ -5,7 +5,6 @@ __init_subclass__ パラメータ方式と従来のクラス属性方式の両�
 1. パラメータ方式で use_id などを指定できること
 2. 従来のクラス属性方式も引き続き動作すること
 3. パラメータ方式が優先されること
-4. BaseModelAuto のような拡張基底クラスも正しく動作すること
 """
 
 from sqlalchemy import String, Integer, Date, Time
@@ -13,7 +12,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from datetime import date as date_type, time as time_type
 from typing import Optional
 from repom.models.base_model import BaseModel
-from repom.models.base_model_auto import BaseModelAuto
 
 
 # ===== パラメータ方式のテスト =====
@@ -66,7 +64,7 @@ class ClassAttrCompositeKey(BaseModel):
     value: Mapped[Optional[int]] = mapped_column(Integer)
 
 
-# ===== BaseModelAuto を使った拡張基底クラスのテスト =====
+# ===== カスタム拡張基底クラスのテスト =====
 
 class CustomBaseParam(BaseModel, use_id=False, use_created_at=True):
     """パラメータ方式の拡張基底クラス"""
@@ -83,34 +81,6 @@ class ModelFromCustomBaseParam(CustomBaseParam):
 class ModelFromCustomBaseParamOverride(CustomBaseParam, use_id=True):
     """CustomBaseParam を継承し、use_id=True で上書き"""
     __tablename__ = "model_from_custom_override"
-    name: Mapped[Optional[str]] = mapped_column(String(100))
-
-
-# ===== BaseModelAuto のテスト =====
-
-class ModelFromAutoDefault(BaseModelAuto):
-    """BaseModelAuto のデフォルト（use_id=True）を継承"""
-    __tablename__ = "model_from_auto_default"
-    name: Mapped[Optional[str]] = mapped_column(String(100))
-
-
-class ModelFromAutoWithoutId(BaseModelAuto, use_id=False):
-    """BaseModelAuto を継承し、パラメータで use_id=False"""
-    __tablename__ = "model_from_auto_without_id"
-    code: Mapped[str] = mapped_column(String(50), primary_key=True)
-    name: Mapped[Optional[str]] = mapped_column(String(100))
-
-
-class ModelFromAutoWithId(BaseModelAuto):
-    """BaseModelAuto を継承し、クラス属性で use_id=True"""
-    __tablename__ = "model_from_auto_with_id"
-    use_id = True
-    name: Mapped[Optional[str]] = mapped_column(String(100))
-
-
-class ModelFromAutoWithIdParam(BaseModelAuto, use_id=True):
-    """BaseModelAuto を継承し、パラメータで use_id=True"""
-    __tablename__ = "model_from_auto_with_id_param"
     name: Mapped[Optional[str]] = mapped_column(String(100))
 
 
@@ -210,26 +180,6 @@ def test_custom_base_param_override():
     assert 'id' in [col.name for col in ModelFromCustomBaseParamOverride.__table__.columns]
 
 
-# ===== BaseModelAuto のテスト =====
-
-def test_base_model_auto_default_no_id():
-    """BaseModelAuto のデフォルト（use_id=True）を継承した場合、id がある"""
-    assert hasattr(ModelFromAutoDefault, 'id')
-    assert 'id' in [col.name for col in ModelFromAutoDefault.__table__.columns]
-
-
-def test_base_model_auto_with_id_classattr():
-    """BaseModelAuto を継承し、クラス属性で use_id=True を指定した場合、id がある"""
-    assert hasattr(ModelFromAutoWithId, 'id')
-    assert 'id' in [col.name for col in ModelFromAutoWithId.__table__.columns]
-
-
-def test_base_model_auto_with_id_param():
-    """BaseModelAuto を継承し、パラメータで use_id=True を指定した場合、id がある"""
-    assert hasattr(ModelFromAutoWithIdParam, 'id')
-    assert 'id' in [col.name for col in ModelFromAutoWithIdParam.__table__.columns]
-
-
 # ===== 優先順位のテスト =====
 
 class PriorityTestParamOverClass(BaseModel, use_id=False):
@@ -258,6 +208,4 @@ def test_multiple_styles_can_coexist():
     assert hasattr(ParamStyleWithId, 'id')
     # 従来方式のモデル
     assert hasattr(ClassAttrWithId, 'id')
-    # BaseModelAuto を使ったモデル
-    assert hasattr(ModelFromAutoWithId, 'id')
     # すべて正しく動作している

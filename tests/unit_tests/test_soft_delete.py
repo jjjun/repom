@@ -15,20 +15,20 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.models.base_model_auto import BaseModelAuto
+from repom.models.base_model import BaseModel
 from repom.repositories import AsyncBaseRepository, BaseRepository
 from repom.mixins import SoftDeletableMixin
 
 
 # テスト用モデル
-class SoftDeleteTestModel(BaseModelAuto, SoftDeletableMixin):
+class SoftDeleteTestModel(BaseModel, SoftDeletableMixin):
     """論理削除対応テストモデル"""
     __tablename__ = "soft_delete_test_items"
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
-class NormalTestModel(BaseModelAuto):
+class NormalTestModel(BaseModel):
     """論理削除非対応テストモデル"""
     __tablename__ = "normal_test_items"
 

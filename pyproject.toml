@@ -1,7 +1,7 @@
 [project]
 name = "repom"
 version = "0.1.0"
-description = "Repository pattern + ORM utilities for FastAPI with automatic schema generation"
+description = "SQLAlchemy repository pattern and ORM utility package"
 authors = [{ name = "jj", email = "soft.management943@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.12,<4.0"
@@ -56,15 +56,8 @@ dev = [
   "pytest-benchmark>=5.1.0,<6.0.0",
   "pytest-asyncio>=0.24.0,<2.0.0",
   "aiosqlite>=0.22.1,<0.23.0",
-  "fastapi>=0.137.0,<1.0.0",
-  "httpx2>=2.7.0,<3.0.0",
   "requests>=2.33.1,<3.0.0",
   "ruff>=0.15.13",
-]
-
-[tool.uv]
-constraint-dependencies = [
-  "starlette>=1.3.1",
 ]
 
 [build-system]

@@ -7,7 +7,6 @@ import pytest
 from typing import Optional, List
 from repom.models.base_model import BaseModel
 from repom import BaseRepository
-from repom.models.base_model_auto import BaseModelAuto
 from repom.mixins import SoftDeletableMixin
 from repom.repositories import FilterParams
 
@@ -68,7 +67,7 @@ class AutoFilterRepository(BaseRepository[AutoFilterModel]):
         super().__init__(AutoFilterModel, session)
 
 
-class SoftDeleteCountModel(BaseModelAuto, SoftDeletableMixin):
+class SoftDeleteCountModel(BaseModel, SoftDeletableMixin):
     """count の include_deleted フラグ検証用モデル"""
 
     __tablename__ = 'soft_delete_count_items'
@@ -76,7 +75,7 @@ class SoftDeleteCountModel(BaseModelAuto, SoftDeletableMixin):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
-class RefreshingSoftDeleteModel(BaseModelAuto, SoftDeletableMixin):
+class RefreshingSoftDeleteModel(BaseModel, SoftDeletableMixin):
     __tablename__ = 'refreshing_soft_delete_items'
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)

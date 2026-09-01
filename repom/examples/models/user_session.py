@@ -10,11 +10,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 from typing import Optional
 
-from repom.models.base_model_auto import BaseModelAuto
+from repom.models.base_model import BaseModel
 from repom.utility import get_plural_tablename
 
 
-class UserSession(BaseModelAuto, use_id=False, use_created_at=True, use_updated_at=True):
+class UserSession(BaseModel, use_id=False, use_created_at=True, use_updated_at=True):
     """
     User session tracking model with composite primary key.
     This model demonstrates use_id=False to avoid auto-generated id column.

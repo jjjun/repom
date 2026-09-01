@@ -13,20 +13,20 @@ N+1 問題を解決するための一括取得メソッドです。
 
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from repom.models.base_model_auto import BaseModelAuto
+from repom.models.base_model import BaseModel
 from repom import BaseRepository
 from repom.mixins import SoftDeletableMixin
 
 
 # テスト用モデル
-class FindByIdsTestModel(BaseModelAuto):
+class FindByIdsTestModel(BaseModel):
     """通常のテストモデル"""
     __tablename__ = "find_by_ids_test_items"
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
-class FindByIdsSoftDeleteModel(BaseModelAuto, SoftDeletableMixin):
+class FindByIdsSoftDeleteModel(BaseModel, SoftDeletableMixin):
     """論理削除対応テストモデル"""
     __tablename__ = "find_by_ids_soft_delete_items"
 

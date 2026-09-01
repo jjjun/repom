@@ -8,7 +8,7 @@
 
 **関連ドキュメント**:
 - [基礎編：CRUD操作](base_repository_guide.md) - リポジトリの基本的な使い方
-- [FastAPI 統合編：FilterParams](repository_filter_params_guide.md) - FastAPI での検索パラメータ処理
+- [FilterParams ガイド](repository_filter_params_guide.md) - 検索パラメータ (FilterParams) の定義と使用方法
 - [非同期版](async_repository_guide.md) - AsyncBaseRepository 固有の機能と並行処理など
 
 ---
@@ -198,22 +198,11 @@ class TaskRepository(AsyncBaseRepository[Task]):
     allowed_order_columns = AsyncBaseRepository.allowed_order_columns + ['custom_field']
 ```
 
-### FastAPI / OpenAPI 統合
+### order_by の introspection API
 
-`repom` は Repository 定義から OpenAPI 用の `order_by` dependency を構築できます。
-
-```python
-from fastapi import Depends
-from repom import build_order_by_query_depends
-
-@router.get("/tasks")
-async def read_tasks(
-    order_params: dict = Depends(build_order_by_query_depends(TaskRepository)),
-):
-    return order_params
-```
-
-候補一覧だけ必要な場合は introspection API を使います。
+FastAPI 向けの `order_by` dependency 生成（`build_order_by_query_depends`）は
+利用側フレームワーク（fast-domain）に移管されました。repom には並び替え候補を
+取得する introspection API のみが残ります。
 
 ```python
 from repom import (
@@ -678,12 +667,11 @@ class OrderRepository(AsyncBaseRepository[Order]):
 ## 次のステップ
 
 - **[基礎編：CRUD操作](base_repository_guide.md)** - リポジトリの基本的な使い方
-- **[FastAPI 統合編：FilterParams](repository_filter_params_guide.md)** - FastAPI での検索パラメータ処理
+- **[FilterParams ガイド](repository_filter_params_guide.md)** - 検索パラメータ (FilterParams) の定義と使用方法
 
 ## 関連ドキュメント
 
 - **[auto_import_models ガイド](../features/auto_import_models_guide.md)**: モデルの自動インポート
-- **[BaseModelAuto ガイド](../model/base_model_auto_guide.md)**: スキーマ自動生成
 - **[BaseModel ソースコード](../../../repom/models/base_model.py)**: BaseModel 実装の詳細
 - **[BaseRepository ソースコード](../../../repom/repositories/base_repository.py)**: BaseRepository 実装の詳細
 

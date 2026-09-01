@@ -6,7 +6,7 @@
 
 **関連ドキュメント**:
 - [上級編：検索・フィルタ・options](repository_advanced_guide.md) - 複雑な検索、eager loading、パフォーマンス最適化
-- [FastAPI 統合編：FilterParams](repository_filter_params_guide.md) - FastAPI での検索パラメータ処理
+- [FilterParams ガイド](repository_filter_params_guide.md) - 検索パラメータ (FilterParams) の定義と使用方法
 
 ---
 
@@ -323,12 +323,11 @@ else:
 ## 次のステップ
 
 - **[上級編：検索・フィルタ・options](repository_advanced_guide.md)** - 複雑な検索、ソート、ページング、N+1問題の解決
-- **[FastAPI 統合編：FilterParams](repository_filter_params_guide.md)** - FastAPI での検索パラメータ処理
+- **[FilterParams ガイド](repository_filter_params_guide.md)** - 検索パラメータ (FilterParams) の定義と使用方法
 
 ## 関連ドキュメント
 
 - **[auto_import_models ガイド](../features/auto_import_models_guide.md)**: モデルの自動インポート
-- **[BaseModelAuto ガイド](../model/base_model_auto_guide.md)**: スキーマ自動生成
 - **[BaseRepository ソースコード](../../../repom/repositories/base_repository.py)**: 実装の詳細
 
 ---

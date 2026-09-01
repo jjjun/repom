@@ -19,7 +19,7 @@
 ```
 repom/
 ├── repom/                      # Main package
-│   ├── models/                # Model base classes (BaseModel, BaseModelAuto)
+│   ├── models/                # Model base classes (BaseModel)
 │   ├── custom_types/          # Reusable custom SQLAlchemy types
 │   ├── repositories/          # Repository implementations (query builder & soft delete mixins)
 │   ├── mixins/                # Reusable mixins (SoftDeletableMixin, etc.)

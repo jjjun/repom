@@ -15,7 +15,6 @@ from repom.repositories._introspection import (
     get_model_from_repository_class,
 )
 from repom.repositories._order_by import (
-    build_order_by_query_depends,
     get_order_by_columns,
     get_order_by_default_value,
     get_order_by_values,
@@ -30,7 +29,6 @@ __all__ = [
     'AsyncBaseRepository',
     'QueryBuilderMixin',
     'FilterParams',
-    'build_order_by_query_depends',
     'get_order_by_columns',
     'get_order_by_default_value',
     'get_order_by_values',

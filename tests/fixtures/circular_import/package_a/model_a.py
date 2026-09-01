@@ -2,13 +2,13 @@
 from sqlalchemy import String
 from sqlalchemy.orm import relationship, mapped_column, Mapped
 from typing import TYPE_CHECKING, List
-from repom import BaseModelAuto
+from repom import BaseModel
 
 if TYPE_CHECKING:
     from ..package_b.model_b import ModelB
 
 
-class ModelA(BaseModelAuto, use_created_at=True):
+class ModelA(BaseModel, use_created_at=True):
     """親モデル（AniVideoItemModel に相当）"""
     __tablename__ = 'test_model_a'
 

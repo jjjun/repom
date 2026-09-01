@@ -1,22 +1,24 @@
-# FilterParams ガイド（FastAPI 統合編）
+# FilterParams ガイド
 
-**目的**: FastAPI で型安全な検索パラメータを実装する
+**目的**: 型安全な検索パラメータを Pydantic モデルとして定義する
 
-**対象読者**: FastAPI で API を構築する開発者・AI エージェント
+**対象読者**: repom を使ってリポジトリ検索を実装する開発者・AI エージェント
 
 **関連ドキュメント**:
 - [基礎編：CRUD操作](base_repository_guide.md) - リポジトリの基本的な使い方
 - [上級編：検索・フィルタ・options](repository_advanced_guide.md) - 複雑な検索、eager loading、パフォーマンス最適化
+
+FastAPI のクエリパラメータへの変換（旧 `as_query_depends()`）は利用側フレーム
+ワーク（fast-domain）に移管されました。このガイドでは repom に残る
+`FilterParams` 本体の使い方（`find_by_params()` と組み合わせた検索）を説明し
+ます。
 
 ---
 
 ## 📚 目次
 
 1. [基本的な FilterParams](#基本的な-filterparams)
-2. [FastAPI での使用](#fastapi-での使用)
-3. [セキュリティ：除外フィールド](#セキュリティ除外フィールド)
-4. [カスタムリポジトリでの処理](#カスタムリポジトリでの処理)
-5. [実装パターン：FilterParams + FastAPI](#実装パターンfilterparams--fastapi)
+2. [カスタムリポジトリでの処理](#カスタムリポジトリでの処理)
 
 ---
 
@@ -32,57 +34,10 @@ class TaskFilterParams(FilterParams):
     title: Optional[str] = None
 ```
 
----
-
-## FastAPI での使用
-
 ```python
-from fastapi import APIRouter, Depends
-
-router = APIRouter()
-
-@router.get("/tasks")
-def list_tasks(
-    filter_params: TaskFilterParams = Depends(TaskFilterParams.as_query_depends())
-):
-    # filter_params を使ってリポジトリで検索
-    repo = TaskRepository()
-    tasks = repo.find_by_params(filter_params)
-    return tasks
+repo = TaskRepository()
+tasks = repo.find_by_params(TaskFilterParams(status="active", priority="high"))
 ```
-
-**クエリ例**:
-```
-GET /tasks?status=active&priority=high
-```
-
-**`as_query_depends()` の役割**:
-- FilterParams を FastAPI の Query パラメータに変換
-- OpenAPI スキーマに自動反映
-- 型チェックとバリデーション
-
----
-
-## セキュリティ：除外フィールド
-
-```python
-class SecureFilterParams(FilterParams):
-    # 公開フィールド
-    status: Optional[str] = None
-    
-    # 除外フィールド（クエリパラメータから隠す）
-    _excluded_from_query = {"internal_id", "secret_field"}
-    internal_id: Optional[int] = None  # 除外される
-    secret_field: Optional[str] = None  # 除外される
-```
-
-**動作**:
-- `_excluded_from_query` に指定されたフィールドは `as_query_depends()` から除外
-- プライベートフィールド（`_`で始まる）も自動的に除外
-
-**ユースケース**:
-- 内部でのみ使用するフィールド（管理者用フィルタなど）
-- セキュリティ上公開すべきでないフィールド
 
 ---
 
@@ -169,78 +124,6 @@ tasks = repo.find_by_params(TaskFilterParams(status="active", title="task"))
 **推奨**:
 - ✅ シンプルな検索 → `field_to_column` マッピング
 - 🔧 複雑な検索 → `_build_filters()` オーバーライド
-
----
-
-## 実装パターン：FilterParams + FastAPI
-
-```python
-from fastapi import APIRouter, Depends
-from repom import BaseRepository, FilterParams
-from typing import Optional, List
-
-# FilterParams 定義
-class UserFilterParams(FilterParams):
-    name: Optional[str] = None
-    email: Optional[str] = None
-    is_active: Optional[bool] = None
-
-# リポジトリ定義
-class UserRepository(BaseRepository[User]):
-    def _build_filters(self, params: Optional[UserFilterParams]) -> list:
-        if not params:
-            return []
-        
-        filters = []
-        if params.name:
-            filters.append(User.name.like(f"%{params.name}%"))
-        if params.email:
-            filters.append(User.email == params.email)
-        if params.is_active is not None:
-            filters.append(User.is_active == params.is_active)
-        
-        return filters
-    
-    def find_by_params(self, params: Optional[UserFilterParams] = None, **kwargs):
-        filters = self._build_filters(params)
-        return self.find(filters=filters, **kwargs)
-    
-    def count_by_params(self, params: Optional[UserFilterParams] = None) -> int:
-        filters = self._build_filters(params)
-        return self.count(filters=filters)
-
-# FastAPI エンドポイント
-router = APIRouter()
-
-@router.get("/users")
-def list_users(
-    filter_params: UserFilterParams = Depends(UserFilterParams.as_query_depends()),
-    offset: int = 0,
-    limit: int = 10
-):
-    repo = UserRepository()
-    users = repo.find_by_params(filter_params, offset=offset, limit=limit)
-    total = repo.count_by_params(filter_params)
-    
-    return {
-        "items": [user.to_dict() for user in users],
-        "total": total,
-        "offset": offset,
-        "limit": limit
-    }
-```
-
-**クエリ例**:
-```
-GET /users?name=太郎&is_active=true&offset=0&limit=10
-```
-
-**OpenAPI スキーマ**:
-- `name` (string, optional): 名前（部分一致）
-- `email` (string, optional): メールアドレス（完全一致）
-- `is_active` (boolean, optional): アクティブ状態
-- `offset` (integer): ページネーションのオフセット
-- `limit` (integer): 取得件数
 
 ---
 
@@ -331,20 +214,7 @@ class TaskFilterParams(FilterParams):
     # ... 20個のフィールド
 ```
 
-### 2. セキュリティを考慮
-
-```python
-class UserFilterParams(FilterParams):
-    name: Optional[str] = None
-    email: Optional[str] = None
-    
-    # 管理者のみ使用（除外）
-    _excluded_from_query = {"is_deleted", "internal_notes"}
-    is_deleted: Optional[bool] = None
-    internal_notes: Optional[str] = None
-```
-
-### 3. デフォルト値を設定
+### 2. デフォルト値を設定
 
 ```python
 class TaskFilterParams(FilterParams):
@@ -363,7 +233,6 @@ class TaskFilterParams(FilterParams):
 ## 関連ドキュメント
 
 - **[auto_import_models ガイド](../features/auto_import_models_guide.md)**: モデルの自動インポート
-- **[BaseModelAuto ガイド](../model/base_model_auto_guide.md)**: スキーマ自動生成
 - **[BaseRepository ソースコード](../../../repom/repositories/base_repository.py)**: 実装の詳細
 
 ---

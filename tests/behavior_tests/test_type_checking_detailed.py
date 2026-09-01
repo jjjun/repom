@@ -44,11 +44,11 @@ def test_inspect_import_order():
             (models_dir / filename).write_text(f"""
 print(f"Importing: {filename}")
 
-from repom.models.base_model_auto import BaseModelAuto
+from repom.models.base_model import BaseModel
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import String
 
-class {filename[:-3].title().replace('_', '')}Model(BaseModelAuto):
+class {filename[:-3].title().replace('_', '')}Model(BaseModel):
     __tablename__ = '{filename[:-3]}'
     name: Mapped[str] = mapped_column(String(50))
 """, encoding='utf-8')
@@ -108,14 +108,14 @@ def test_sqlalchemy_relationship_lazy_resolution():
 from typing import TYPE_CHECKING, List
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy import String
-from repom.models.base_model_auto import BaseModelAuto
+from repom.models.base_model import BaseModel
 
 if TYPE_CHECKING:
     from .z_child import ZChildModel
 
 print(">>> a_parent.py: Defining AParentModel")
 
-class AParentModel(BaseModelAuto):
+class AParentModel(BaseModel):
     __tablename__ = 'a_parents'
     name: Mapped[str] = mapped_column(String(50))
     
@@ -132,14 +132,14 @@ print(">>> a_parent.py: AParentModel defined successfully")
 from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from repom.models.base_model_auto import BaseModelAuto
+from repom.models.base_model import BaseModel
 
 if TYPE_CHECKING:
     from .a_parent import AParentModel
 
 print(">>> z_child.py: Defining ZChildModel")
 
-class ZChildModel(BaseModelAuto):
+class ZChildModel(BaseModel):
     __tablename__ = 'z_children'
     name: Mapped[str] = mapped_column(String(50))
     parent_id: Mapped[int] = mapped_column(ForeignKey('a_parents.id'))
@@ -248,12 +248,12 @@ def test_actual_failure_scenario():
 from typing import TYPE_CHECKING, List
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy import String
-from repom.models.base_model_auto import BaseModelAuto
+from repom.models.base_model import BaseModel
 
 if TYPE_CHECKING:
     from .child_not_imported import ChildNotImportedModel
 
-class ParentModel(BaseModelAuto):
+class ParentModel(BaseModel):
     __tablename__ = 'parents'
     name: Mapped[str] = mapped_column(String(50))
     

@@ -14,12 +14,12 @@ import pytest
 from sqlalchemy import String, select
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.config import config
-from repom.models.base_model_auto import BaseModelAuto
+from repom.models.base_model import BaseModel
 from repom.testing import create_async_test_fixtures
 
 
 # テスト用モデル
-class AsyncTestUser(BaseModelAuto):
+class AsyncTestUser(BaseModel):
     """async テスト用ユーザーモデル"""
     __tablename__ = "async_test_users"
 

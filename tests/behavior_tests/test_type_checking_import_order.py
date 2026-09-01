@@ -56,12 +56,12 @@ def test_type_checking_with_alphabetical_import_order():
 from typing import TYPE_CHECKING, List
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from repom.models.base_model_auto import BaseModelAuto
+from repom.models.base_model import BaseModel
 
 if TYPE_CHECKING:
     from .ani_video_user_status import AniVideoUserStatusModel
 
-class AniVideoItemModel(BaseModelAuto):
+class AniVideoItemModel(BaseModel):
     __tablename__ = 'ani_video_items'
     
     title: Mapped[str] = mapped_column(String(200))
@@ -79,12 +79,12 @@ class AniVideoItemModel(BaseModelAuto):
 from typing import TYPE_CHECKING
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from repom.models.base_model_auto import BaseModelAuto
+from repom.models.base_model import BaseModel
 
 if TYPE_CHECKING:
     from .ani_video_item import AniVideoItemModel
 
-class AniVideoUserStatusModel(BaseModelAuto):
+class AniVideoUserStatusModel(BaseModel):
     __tablename__ = 'ani_video_user_statuses'
     
     ani_video_item_id: Mapped[int] = mapped_column(ForeignKey('ani_video_items.id'))
@@ -199,12 +199,12 @@ def test_type_checking_with_manual_import_order():
 from typing import List
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from repom.models.base_model_auto import BaseModelAuto
+from repom.models.base_model import BaseModel
 
 # TYPE_CHECKING 
 from .ani_video_user_status import AniVideoUserStatusModel
 
-class AniVideoItemModel(BaseModelAuto):
+class AniVideoItemModel(BaseModel):
     __tablename__ = 'ani_video_items_fixed'
     
     title: Mapped[str] = mapped_column(String(200))
@@ -221,14 +221,14 @@ class AniVideoItemModel(BaseModelAuto):
         user_status_file.write_text("""
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from repom.models.base_model_auto import BaseModelAuto
+from repom.models.base_model import BaseModel
 
 # 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .ani_video_item import AniVideoItemModel
 
-class AniVideoUserStatusModel(BaseModelAuto):
+class AniVideoUserStatusModel(BaseModel):
     __tablename__ = 'ani_video_user_statuses_fixed'
     
     ani_video_item_id: Mapped[int] = mapped_column(ForeignKey('ani_video_items_fixed.id'))

@@ -1,5 +1,7 @@
 # get_response_schema() - Technical Documentation
 
+> Note: `get_response_schema()` and `@response_field` described in this document have moved from repom to the consuming framework (fast-domain).
+
 ## Overview
 
 `get_response_schema()` is a class method in `BaseModel` that dynamically generates Pydantic response schemas from SQLAlchemy models. It combines database column definitions with additional fields declared via the `@response_field` decorator.

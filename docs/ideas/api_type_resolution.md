@@ -1,5 +1,7 @@
 # FastAPI/Flask での API 型解決
 
+> 補足: このアイディアが参照する `BaseModelAuto` は repom から利用側フレームワーク（fast-domain）に移管されました。
+
 ## ステータス
 - **段階**: アイディア
 - **優先度**: 低

@@ -9,7 +9,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 import pytest
 from typing import Optional, List
 from repom.models.base_model import BaseModel
-from repom.models.base_model_auto import BaseModelAuto
 from repom.mixins import SoftDeletableMixin
 from repom.repositories import AsyncBaseRepository, FilterParams
 
@@ -70,7 +69,7 @@ class AsyncAutoFilterRepository(AsyncBaseRepository[AsyncAutoFilterModel]):
         super().__init__(AsyncAutoFilterModel, session)
 
 
-class AsyncSoftDeleteBulkModel(BaseModelAuto, SoftDeletableMixin):
+class AsyncSoftDeleteBulkModel(BaseModel, SoftDeletableMixin):
     __tablename__ = 'async_soft_delete_bulk_items'
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)

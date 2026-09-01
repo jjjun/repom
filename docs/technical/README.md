@@ -5,12 +5,12 @@
 
 ## 現行実装の設計資料
 
-- [get_response_schema の内部設計](get_response_schema_technical.md)
 - [Alembic version_locations の制約](alembic_version_locations_limitation.md)
 - [ロギング戦略](hybrid_package_logging_strategy.md)
 
 ## 調査・履歴資料
 
+- [get_response_schema の内部設計](get_response_schema_technical.md)
 - [前方参照自動解決の調査](auto_forward_refs_resolution.md)
 - [Docker manager 共通化の分析](docker_manager_code_reduction_analysis.md)
 - [Docker manager 初期実装計画](docker_manager_phase1_implementation_guide.md)

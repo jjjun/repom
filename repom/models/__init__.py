@@ -4,20 +4,16 @@
 
 Available Classes:
 - BaseModel: SQLAlchemy モデルの基底クラス
-- BaseModelAuto: Pydantic スキーマ自動生成機能付きモデル
 - Base: SQLAlchemy の DeclarativeBase（database.py から再エクスポート）
 
 Recommended Import Style (推奨):
-    from repom import BaseModel, BaseModelAuto
-    from repom.models import BaseModel, BaseModelAuto  # 直接インポートも可能
+    from repom import BaseModel
+    from repom.models import BaseModel  # 直接インポートも可能
 """
 
 from repom.models.base_model import BaseModel, Base
-from repom.models.base_model_auto import BaseModelAuto, SchemaGenerationError
 
 __all__ = [
     'BaseModel',
-    'BaseModelAuto',
     'Base',
-    'SchemaGenerationError',
 ]

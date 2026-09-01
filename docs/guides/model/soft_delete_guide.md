@@ -41,9 +41,9 @@ repom は以下の2つのコンポーネントで論理削除をサポートし�
 ```python
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from repom import BaseModelAuto, SoftDeletableMixin
+from repom import BaseModel, SoftDeletableMixin
 
-class Article(BaseModelAuto, SoftDeletableMixin):
+class Article(BaseModel, SoftDeletableMixin):
     __tablename__ = "articles"
     
     title: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -521,7 +521,7 @@ def delete_article(article_id: int):
 論理削除を使用する場合、外部キー制約は維持されます：
 
 ```python
-class Comment(BaseModelAuto, SoftDeletableMixin):
+class Comment(BaseModel, SoftDeletableMixin):
     __tablename__ = "comments"
     
     article_id: Mapped[int] = mapped_column(ForeignKey("articles.id"))
@@ -546,7 +546,7 @@ ValueError: MyModel does not support soft delete. Add SoftDeletableMixin to the 
 モデルに `SoftDeletableMixin` を追加してください：
 
 ```python
-class MyModel(BaseModelAuto, SoftDeletableMixin):
+class MyModel(BaseModel, SoftDeletableMixin):
     # ...
 ```
 
@@ -611,9 +611,10 @@ def upgrade():
 
 ## 関連ドキュメント
 
-- [BaseModelAuto ガイド](base_model_auto_guide.md) - Mixin パターンの詳細
 - [BaseRepository ガイド](../repository/base_repository_guide.md) - Repository パターンの詳細
 - [Testing ガイド](../testing/testing_guide.md) - テスト戦略
+
+FastAPI 向けの Pydantic スキーマ自動生成は、利用側フレームワーク（fast-domain）に移管されました。
 
 ---
 

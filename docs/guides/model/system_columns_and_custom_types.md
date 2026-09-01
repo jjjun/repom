@@ -74,6 +74,7 @@ engine they support.
 
 ## Related documentation
 
-- [BaseModelAuto guide](base_model_auto_guide.md)
 - [Soft-delete guide](soft_delete_guide.md)
 - [Model guide index](README.md)
+
+FastAPI schema generation now lives in the consuming framework.

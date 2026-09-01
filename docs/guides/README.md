@@ -4,7 +4,6 @@
 
 ## モデル
 
-- [BaseModelAuto とスキーマ生成](model/base_model_auto_guide.md)
 - [システムカラムとカスタム型](model/system_columns_and_custom_types.md)
 - [Soft Delete](model/soft_delete_guide.md)
 

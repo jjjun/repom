@@ -34,26 +34,10 @@ class TaskRepository(BaseRepository[Task]):
 - `allowed_order_columns`: ソート可能なカラムのホワイトリスト
 - `default_order_by`: `order_by` 未指定時の既定値（canonical form で指定）
 
-## FastAPI 統合
-
-`build_order_by_query_depends()` を使うと、Repository 定義から OpenAPI enum を生成できます。
-
-```python
-from fastapi import Depends
-from repom import build_order_by_query_depends
-
-@router.get("/tasks")
-def read_tasks(
-    order_params: dict = Depends(build_order_by_query_depends(TaskRepository)),
-):
-    return order_params
-```
-
-返却値の形:
-
-```python
-{"order_by": "created_at:desc"}
-```
+Repository 定義から OpenAPI 用の `order_by` dependency を構築する機能
+（旧 `build_order_by_query_depends()`）は利用側フレームワーク（fast-domain）に
+移管されました。repom には並び替え候補を取得する introspection API のみが
+残ります。
 
 ## introspection API
 
@@ -113,10 +97,8 @@ def find_with_rating(self, order_by: str = "created_at:desc"):
 
 - `default_order_by` の正本は repository 側に寄せる
 - decorator 側・endpoint 側で `default_order_by` を二重管理しない
-- OpenAPI 公開値は `build_order_by_query_depends()` に統一する
 
 ## 移行メモ（旧仕様から来る場合）
 
 - `order_by="column"` は `column:asc` へ置換する
 - repository の `default_order_by` を canonical form に統一する
-- endpoint の手書き `order_by` dependency は `build_order_by_query_depends()` へ置換する

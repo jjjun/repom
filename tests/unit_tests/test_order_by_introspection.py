@@ -7,22 +7,12 @@ import pytest
 from repom import (
     BaseRepository,
     AsyncBaseRepository,
-    build_order_by_query_depends,
     get_order_by_columns,
     get_order_by_default_value,
     get_order_by_values,
     VirtualColumnError,
 )
 from repom.models.base_model import BaseModel
-
-
-try:
-    from fastapi import Depends, FastAPI
-    from fastapi.testclient import TestClient
-
-    FASTAPI_AVAILABLE = True
-except ImportError:
-    FASTAPI_AVAILABLE = False
 
 
 class OrderByOpenAPIModel(BaseModel):
@@ -79,17 +69,6 @@ class InvalidVirtualOrderByRepository(BaseRepository[OrderByOpenAPIModel]):
 
     def __init__(self, session):
         super().__init__(OrderByOpenAPIModel, session)
-
-
-def _find_enum_schemas(node, matches: list):
-    if isinstance(node, dict):
-        if "enum" in node:
-            matches.append(node["enum"])
-        for value in node.values():
-            _find_enum_schemas(value, matches)
-    elif isinstance(node, list):
-        for item in node:
-            _find_enum_schemas(item, matches)
 
 
 def test_get_order_by_columns_filters_to_real_model_columns():
@@ -193,101 +172,3 @@ def test_default_order_by_rejects_bare_column_default_at_runtime(db_test):
         match="canonical format 'column:asc' or 'column:desc'",
     ):
         repo.find()
-
-
-@pytest.mark.skipif(
-    not FASTAPI_AVAILABLE,
-    reason="FastAPI is not installed. Install with: uv add --dev fastapi httpx",
-)
-def test_build_order_by_query_depends_returns_default_dict_shape():
-    app = FastAPI()
-
-    @app.get("/items")
-    def read_items(
-        order_params: dict = Depends(build_order_by_query_depends(OrderByRepository)),
-    ):
-        return order_params
-
-    client = TestClient(app)
-
-    assert client.get("/items").json() == {"order_by": "priority:desc"}
-    assert client.get("/items?order_by=name:asc").json() == {"order_by": "name:asc"}
-
-
-@pytest.mark.skipif(
-    not FASTAPI_AVAILABLE,
-    reason="FastAPI is not installed. Install with: uv add --dev fastapi httpx",
-)
-def test_build_order_by_query_depends_exposes_enum_in_openapi():
-    app = FastAPI()
-
-    @app.get("/items")
-    def read_items(
-        order_params: dict = Depends(build_order_by_query_depends(OrderByRepository)),
-    ):
-        return order_params
-
-    client = TestClient(app)
-    schema = client.get("/openapi.json").json()
-
-    enum_matches = []
-    _find_enum_schemas(schema, enum_matches)
-
-    assert [
-        "id:asc",
-        "id:desc",
-        "name:asc",
-        "name:desc",
-        "priority:asc",
-        "priority:desc",
-    ] in enum_matches
-
-    operation = schema["paths"]["/items"]["get"]
-    parameters = operation["parameters"]
-    order_by_param = next(param for param in parameters if param["name"] == "order_by")
-    assert order_by_param["required"] is False
-
-
-@pytest.mark.skipif(
-    not FASTAPI_AVAILABLE,
-    reason="FastAPI is not installed. Install with: uv add --dev fastapi httpx",
-)
-def test_build_order_by_query_depends_exposes_virtual_enum_in_openapi():
-    app = FastAPI()
-
-    @app.get("/items")
-    def read_items(
-        order_params: dict = Depends(
-            build_order_by_query_depends(VirtualOrderByRepository)
-        ),
-    ):
-        return order_params
-
-    client = TestClient(app)
-    schema = client.get("/openapi.json").json()
-
-    enum_matches = []
-    _find_enum_schemas(schema, enum_matches)
-
-    assert [
-        "id:asc",
-        "id:desc",
-        "name:asc",
-        "name:desc",
-        "priority:asc",
-        "priority:desc",
-        "rating:asc",
-        "rating:desc",
-    ] in enum_matches
-
-
-@pytest.mark.skipif(
-    not FASTAPI_AVAILABLE,
-    reason="FastAPI is not installed. Install with: uv add --dev fastapi httpx",
-)
-def test_build_order_by_query_depends_rejects_invalid_string_default():
-    with pytest.raises(
-        ValueError,
-        match="canonical format 'column:asc' or 'column:desc'",
-    ):
-        build_order_by_query_depends(BareDefaultOrderRepository)

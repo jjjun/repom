@@ -1,10 +1,8 @@
-"""Repository-backed order_by introspection and FastAPI helpers."""
+"""Repository-backed order_by introspection helpers."""
 
 from __future__ import annotations
 
-import inspect
-from enum import Enum
-from typing import Optional, Type
+from typing import Type
 
 from sqlalchemy.inspection import inspect as sa_inspect
 from sqlalchemy.orm.exc import UnmappedClassError
@@ -117,58 +115,3 @@ def get_order_by_default_value(repository_class: type) -> str | None:
         )
 
     return canonical_value
-
-
-def build_order_by_query_depends(
-    repository_class: type,
-    *,
-    description: str | None = None,
-):
-    """Build a FastAPI dependency that exposes canonical order_by enum values."""
-    try:
-        from fastapi import Query
-    except ImportError as exc:
-        raise ImportError(
-            "FastAPI is required to use build_order_by_query_depends(). "
-            "Install it in the consuming project."
-        ) from exc
-
-    allowed_values = get_order_by_values(repository_class)
-    default_value = get_order_by_default_value(repository_class)
-
-    enum_name = f"{repository_class.__name__}OrderBy"
-    members = {
-        value.replace(":", "_").replace("-", "_").upper(): value
-        for value in allowed_values
-    }
-    order_by_enum = Enum(enum_name, members, type=str)
-
-    query_description = description or (
-        f"Sort order for {repository_class.__name__}. "
-        "Use canonical form 'column:asc' or 'column:desc'."
-    )
-
-    default_enum = order_by_enum(default_value) if default_value is not None else None
-    query_param = Query(default_enum, description=query_description)
-
-    def query_depends(**kwargs):
-        order_by = kwargs.get("order_by")
-        if order_by is None:
-            return {"order_by": None}
-        return {"order_by": order_by.value}
-
-    query_depends.__name__ = f"{repository_class.__name__}_order_by_depends"
-    query_depends.__annotations__ = {"order_by": Optional[order_by_enum]}
-    query_depends.__signature__ = inspect.Signature(
-        parameters=[
-            inspect.Parameter(
-                name="order_by",
-                kind=inspect.Parameter.KEYWORD_ONLY,
-                default=query_param,
-                annotation=Optional[order_by_enum],
-            )
-        ],
-        return_annotation=dict,
-    )
-
-    return query_depends

@@ -4,7 +4,6 @@
 
 Available Classes:
 - BaseModel: SQLAlchemy モデルの基底クラス
-- BaseModelAuto: Pydantic スキーマ自動生成機能付きモデル
 - BaseRepository: 同期版リポジトリ
 - AsyncBaseRepository: 非同期版リポジトリ
 - FilterParams: 検索パラメータの基底クラス
@@ -13,11 +12,11 @@ Available Classes:
 Recommended Import Style (推奨):
     from repom import BaseRepository, AsyncBaseRepository
     from repom import FilterParams, SoftDeletableMixin
-    from repom import BaseModel, BaseModelAuto
+    from repom import BaseModel
 """
 
 # Core models
-from repom.models import BaseModel, BaseModelAuto
+from repom.models import BaseModel
 from repom.exceptions import NulByteError
 
 # Repositories
@@ -25,7 +24,6 @@ from repom.repositories import (
     BaseRepository,
     AsyncBaseRepository,
     FilterParams,
-    build_order_by_query_depends,
     get_order_by_columns,
     get_order_by_default_value,
     get_order_by_values,
@@ -44,13 +42,11 @@ from repom.logging import make_timed_rotating_handler, DateNamedDailyFileHandler
 __all__ = [
     # Models
     'BaseModel',
-    'BaseModelAuto',
     'NulByteError',
     # Repositories
     'BaseRepository',
     'AsyncBaseRepository',
     'FilterParams',
-    'build_order_by_query_depends',
     'get_order_by_columns',
     'get_order_by_default_value',
     'get_order_by_values',
