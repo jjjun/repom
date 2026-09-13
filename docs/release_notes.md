@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- BREAKING: `bulk_update()` and `bulk_delete()` now raise `ValueError` when the
+  resolved filter list is empty (`bulk_delete()` with neither `filter_by` nor
+  `ids`, or `bulk_update(..., filter_by={})`). Pass `allow_unfiltered=True` to
+  keep the previous whole-table behaviour. Filter keys and the `ids` sequence
+  are now resolved through the SQLAlchemy mapper, so relationship names, dunder
+  attributes and SQL expressions are rejected instead of compiling to `WHERE true`.
 - BREAKING: Removed `JSONEncoded` and `StrEncodedArray`. Use `CustomJSON` for
   object-like JSON values and `ListJSON` for list values. If a historical
   migration imports either removed type solely for a `TEXT` column in
