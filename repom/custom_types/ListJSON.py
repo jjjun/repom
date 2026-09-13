@@ -15,11 +15,15 @@ class ListJSON(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(self, value, dialect):
+        # impl (JSON) が Python オブジェクトを自動でシリアライズするため、ここで
+        # json.dumps() すると二重エンコードになり、json_each() など SQL 側で
+        # 配列を直接扱う関数が要素を正しく分解できなくなる。ネイティブな値を
+        # そのまま返し、シリアライズは impl に任せる。
         if value is None:
-            return json.dumps([])
+            return []
         if not isinstance(value, list):
             raise ValueError("Expected a list, but got a different type")
-        return json.dumps(value)
+        return value
 
     def process_result_value(self, value, dialect):
         if value is None:
@@ -38,11 +42,15 @@ def listjson_filter(model_column, values):
     Generate SQLAlchemy filter conditions for ListJSON columns.
     - If values == [], filter for empty lists.
     - If values is a non-empty list, filter for each value using json_each.
+    - Each value is matched by exact equality against an array element, so
+      element boundaries are respected (e.g. a filter of "admin" does not
+      match an element of "superadministrator") and no LIKE wildcard
+      characters are interpreted.
     """
     if values == []:
         return [model_column == []]
     filters = []
     for value in values:
         fields_func = func.json_each(model_column).table_valued("value", joins_implicitly=True)
-        filters.append(fields_func.c.value.contains(value))
+        filters.append(fields_func.c.value == value)
     return filters

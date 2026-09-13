@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, load_only
 
 from repom.models.base_model import BaseModel
 from repom import BaseRepository
-from repom.repositories import FilterParams
+from repom.repositories import FilterParams, contains_column
 
 
 class QueryBuilderItem(BaseModel):
@@ -28,7 +28,7 @@ class TrackingRepository(BaseRepository[QueryBuilderItem]):
     field_to_column = {
         "rank": QueryBuilderItem.rank,
         "categories": QueryBuilderItem.category,
-        "name": QueryBuilderItem.name,
+        "name": contains_column(QueryBuilderItem.name),
     }
 
     def __init__(self, session):

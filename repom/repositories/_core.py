@@ -5,6 +5,7 @@
 
 from typing import Optional, List, Mapping, Any
 from collections.abc import Iterable
+from enum import Enum
 from sqlalchemy import ColumnElement, UnaryExpression, asc, desc
 from pydantic import BaseModel
 from repom.repositories._order_by import normalize_order_by_value, VirtualColumnError
@@ -27,6 +28,61 @@ class FilterParams(BaseModel):
     """
 
 
+class MatchMode(str, Enum):
+    """文字列フィールドの照合方法
+
+    Attributes:
+        EXACT: 完全一致（``==``）。field_to_column の既定値。
+        PREFIX: 前方一致（``LIKE 'value%'``。ワイルドカードはエスケープされる）。
+        CONTAINS: 部分一致（``LIKE '%value%'``。ワイルドカードはエスケープされる）。
+    """
+
+    EXACT = "exact"
+    PREFIX = "prefix"
+    CONTAINS = "contains"
+
+
+# PREFIX / CONTAINS で LIKE に渡す文字列の既定の長さ上限。
+# 交互ワイルドカードパターンによるバックトラッキング DoS を防ぐための上限であり、
+# EXACT（== による比較）には適用されない。
+DEFAULT_FILTER_STRING_MAX_LENGTH = 256
+
+
+class MatchColumn:
+    """field_to_column のマッピング値として使い、文字列の照合方法を明示するラッパー
+
+    素のカラムを渡した場合は MatchMode.EXACT（完全一致）として扱われる。
+    部分一致・前方一致が必要な場合は contains_column() / prefix_column() を使うこと。
+
+    Args:
+        column: マッピング先の SQLAlchemy カラム
+        mode: 照合方法（既定は MatchMode.EXACT）
+        max_length: PREFIX / CONTAINS で許可する文字列の最大長
+    """
+
+    __slots__ = ("column", "mode", "max_length")
+
+    def __init__(
+        self,
+        column: Any,
+        mode: MatchMode = MatchMode.EXACT,
+        max_length: int = DEFAULT_FILTER_STRING_MAX_LENGTH,
+    ):
+        self.column = column
+        self.mode = mode
+        self.max_length = max_length
+
+
+def contains_column(column: Any, max_length: int = DEFAULT_FILTER_STRING_MAX_LENGTH) -> MatchColumn:
+    """field_to_column で部分一致（LIKE、ワイルドカードはエスケープ）を使うことを明示する"""
+    return MatchColumn(column, MatchMode.CONTAINS, max_length)
+
+
+def prefix_column(column: Any, max_length: int = DEFAULT_FILTER_STRING_MAX_LENGTH) -> MatchColumn:
+    """field_to_column で前方一致（LIKE、ワイルドカードはエスケープ）を使うことを明示する"""
+    return MatchColumn(column, MatchMode.PREFIX, max_length)
+
+
 def has_soft_delete(model_class) -> bool:
     """モデルが SoftDeletableMixin を持つか確認
 
@@ -39,18 +95,34 @@ def has_soft_delete(model_class) -> bool:
     return hasattr(model_class, 'deleted_at')
 
 
-def _value_to_filter(column: Any, value: Any):
+def _value_to_filter(
+    column: Any,
+    value: Any,
+    mode: MatchMode = MatchMode.EXACT,
+    max_length: int = DEFAULT_FILTER_STRING_MAX_LENGTH,
+):
     """Map a single value to a SQLAlchemy filter expression.
 
     - Iterable values (except str/bytes) use ``column.in_(...)``
-    - str values try ``column.contains(...)`` if available, otherwise ``==``
+    - str values use ``==`` (exact match) unless ``mode`` requests PREFIX or
+      CONTAINS, in which case an escaped LIKE is used (``autoescape=True``)
+      so literal ``%``/``_`` characters in the value are treated literally
+      rather than as wildcards. Values longer than ``max_length`` are
+      rejected before reaching LIKE to guard against backtracking-heavy
+      wildcard patterns.
     - Other values fall back to ``==``
     """
     if isinstance(value, Iterable) and not isinstance(value, (str, bytes)):
         return column.in_(list(value))
 
-    if isinstance(value, str) and hasattr(column, 'contains'):
-        return column.contains(value)
+    if isinstance(value, str) and mode is not MatchMode.EXACT and hasattr(column, 'contains'):
+        if len(value) > max_length:
+            raise ValueError(
+                f"Filter value exceeds the maximum length of {max_length} characters allowed for LIKE matching."
+            )
+        if mode is MatchMode.PREFIX:
+            return column.startswith(value, autoescape=True)
+        return column.contains(value, autoescape=True)
 
     return column == value
 
@@ -60,22 +132,28 @@ def build_filters_from_mapping(params: FilterParams, field_to_column: Mapping[st
 
     Args:
         params: Filter parameters instance (None values are ignored)
-        field_to_column: Mapping of FilterParams field names to SQLAlchemy columns/expressions
+        field_to_column: Mapping of FilterParams field names to SQLAlchemy
+            columns/expressions, or to a MatchColumn (see contains_column() /
+            prefix_column()) when a str field needs LIKE matching instead of
+            the default exact match.
 
     Returns:
         list: SQLAlchemy filter expressions generated from non-None fields
     """
     filters = []
 
-    for field_name, column in field_to_column.items():
-        if column is None:
+    for field_name, mapped in field_to_column.items():
+        if mapped is None:
             continue
 
         value = getattr(params, field_name, None)
         if value is None:
             continue
 
-        filters.append(_value_to_filter(column, value))
+        if isinstance(mapped, MatchColumn):
+            filters.append(_value_to_filter(mapped.column, value, mapped.mode, mapped.max_length))
+        else:
+            filters.append(_value_to_filter(mapped, value))
 
     return filters
 

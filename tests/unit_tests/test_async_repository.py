@@ -11,7 +11,7 @@ import pytest
 from typing import Optional, List
 from repom.models.base_model import BaseModel
 from repom.mixins import SoftDeletableMixin
-from repom.repositories import AsyncBaseRepository, FilterParams
+from repom.repositories import AsyncBaseRepository, FilterParams, contains_column
 
 
 class AsyncSimpleModel(BaseModel):
@@ -63,7 +63,7 @@ class AsyncAutoFilterRepository(AsyncBaseRepository[AsyncAutoFilterModel]):
     field_to_column = {
         "number": AsyncAutoFilterModel.number,
         "numbers": AsyncAutoFilterModel.number,
-        "name": AsyncAutoFilterModel.name,
+        "name": contains_column(AsyncAutoFilterModel.name),
     }
 
     def __init__(self, session):

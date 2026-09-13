@@ -93,7 +93,10 @@ class TaskRepository(BaseRepository[Task]):
 
 ### 方法2: `field_to_column` マッピング（シンプル）
 
-等価・部分一致・リスト検索のみの場合は、マッピングだけで自動生成できます。
+等価・部分一致・前方一致・リスト検索のみの場合は、マッピングだけで自動生成できます。
+
+素のカラムを渡した場合は**完全一致（`==`）**になります。リスト型のフィールドは
+自動的に `IN` 検索になります。
 
 ```python
 from repom import BaseRepository, FilterParams
@@ -103,7 +106,7 @@ class TaskFilterParams(FilterParams):
     title: str | None = None
 
 class TaskRepository(BaseRepository[Task]):
-    # フィールドとカラムのマッピングを置くだけ
+    # フィールドとカラムのマッピングを置くだけ（既定は完全一致）
     field_to_column = {
         "status": Task.status,
         "title": Task.title,
@@ -112,6 +115,29 @@ class TaskRepository(BaseRepository[Task]):
 # 使い方
 repo = TaskRepository()
 tasks = repo.find_by_params(TaskFilterParams(status="active", title="task"))
+```
+
+部分一致・前方一致が必要な場合は `contains_column()` / `prefix_column()` で
+明示してください。これらは SQL の `LIKE` を使いますが、値に含まれる `%` / `_`
+はワイルドカードではなくリテラル文字として自動的にエスケープされます
+（`contains()` の既定挙動である無エスケープの `LIKE` は、`%` 一文字で全件
+ヒットしたり、交互ワイルドカードパターンでバックトラッキング DoS を招く
+ため使いません）。長すぎる値はこの DoS を防ぐため `ValueError` で拒否され、
+上限は `max_length` 引数で調整できます（既定 256 文字）。
+
+```python
+from repom import BaseRepository, FilterParams
+from repom.repositories import contains_column, prefix_column
+
+class TaskFilterParams(FilterParams):
+    status: str | None = None
+    title: str | None = None
+
+class TaskRepository(BaseRepository[Task]):
+    field_to_column = {
+        "status": Task.status,                 # 完全一致
+        "title": contains_column(Task.title),  # 部分一致（LIKE、エスケープ済み）
+    }
 ```
 
 **違いのまとめ**:

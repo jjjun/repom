@@ -30,3 +30,15 @@
   parse each candidate with `json.loads` and recursively check for a real NUL
   byte. The pre-filter also matches ordinary prose containing the escape
   sequence, so parsing is required to confirm a poisoned value.
+- BREAKING: `field_to_column` string fields now match exactly (`==`) instead
+  of an unescaped `LIKE` substring match. Consumers that relied on the
+  implicit substring search must wrap the column with `contains_column()` or
+  `prefix_column()`; both escape `%` and `_` and reject values longer than
+  `max_length` (default 256).
+- BREAKING: `ListJSON` now stores a real JSON array instead of a
+  double-encoded JSON string. Reads remain compatible with both formats, but
+  `listjson_filter()` and the empty-list filter (`column == []`) only match
+  rows written in the new format, so rows written by earlier versions will
+  not be found until they are rewritten. To rewrite existing rows:
+  - SQLite: `UPDATE t SET col = json(json_extract(col, '$')) WHERE json_type(col) = 'text'`
+  - PostgreSQL `json`: `UPDATE t SET col = (col #>> '{}')::json WHERE json_typeof(col) = 'string'`

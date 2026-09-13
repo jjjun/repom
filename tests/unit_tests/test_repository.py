@@ -9,7 +9,7 @@ from typing import Optional, List
 from repom.models.base_model import BaseModel
 from repom import BaseRepository
 from repom.mixins import SoftDeletableMixin
-from repom.repositories import FilterParams
+from repom.repositories import FilterParams, contains_column
 
 
 class SimpleModel(BaseModel):
@@ -61,7 +61,7 @@ class AutoFilterRepository(BaseRepository[AutoFilterModel]):
     field_to_column = {
         "number": AutoFilterModel.number,
         "numbers": AutoFilterModel.number,
-        "name": AutoFilterModel.name,
+        "name": contains_column(AutoFilterModel.name),
     }
 
     def __init__(self, session):
