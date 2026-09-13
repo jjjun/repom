@@ -118,6 +118,25 @@ tasks = await repo.find(offset=0, limit=10)
 tasks = await repo.find(offset=10, limit=10)
 ```
 
+**注意**:
+
+- `offset` / `limit` は 0 以上の整数のみ受け付けます（負値や bool は `TypeError` /
+  `ValueError`）。
+- `limit` はリポジトリの `max_limit` クラス属性（デフォルト 1000）を超えると
+  `ValueError` を送出します。ページ API など外部入力をそのまま渡す場合は、この
+  上限に依存して DoS を防いでください。
+
+```python
+class TaskRepository(AsyncBaseRepository[Task]):
+    max_limit = 100  # このリポジトリでは 100 件が上限
+```
+
+- `limit` を省略すると上限なしで全件を取得し、`find()` の呼び出し元に対して
+  `RuntimeWarning` を送出します（呼び出し箇所ごとに 1 回のみ表示され、同じ箇所
+  から繰り返し呼んでもログが埋まりません）。外部入力をそのまま `find()` に
+  渡す API では、`limit` を必ず明示してください。`get_by()` や `find_by_ids()`
+  など他の取得メソッドはこの警告を出しません。
+
 ### ソート
 
 ```python

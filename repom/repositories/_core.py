@@ -7,10 +7,7 @@ from typing import Optional, List, Mapping, Any
 from collections.abc import Iterable
 from sqlalchemy import ColumnElement, UnaryExpression, asc, desc
 from pydantic import BaseModel
-import logging
 from repom.repositories._order_by import normalize_order_by_value, VirtualColumnError
-
-logger = logging.getLogger(__name__)
 
 
 class FilterParams(BaseModel):
@@ -142,6 +139,7 @@ def set_find_option(
     virtual_order_columns: Optional[List[str]] = None,
     default_options: Optional[List] = None,
     default_order_by=None,
+    max_limit: Optional[int] = None,
     **kwargs
 ):
     """
@@ -163,9 +161,16 @@ def set_find_option(
             クラス属性が優先され、options=None のときのみ適用されます。
         default_order_by: デフォルトの order_by 設定（リポジトリの default_order_by）
             クラス属性が優先され、order_by が未指定の場合に適用されます。
+        max_limit: 許可する limit の最大値（リポジトリの max_limit クラス属性）。
+            limit がこれを超えると ValueError を送出します。None の場合は上限
+            チェックを行いません。
         **kwargs: 任意のキーワード引数。以下の引数をサポートします。
-            - offset (int): 取得するデータの開始位置。デフォルトは 0。
-            - limit (int): 取得するデータの件数。デフォルトは 10。
+            - offset (int): 取得するデータの開始位置。0 以上の整数。未指定の場合は
+              offset を適用しません（先頭から取得）。
+            - limit (int): 取得するデータの件数。0 以上 max_limit 以下の整数。
+              bool は真偽値であり件数として無効なため拒否します。未指定の場合は
+              上限なしで全件を取得します（find() は limit 省略時に
+              RuntimeWarning を送出します。呼び出し側が明示的に制限してください）。
             - order_by (Callable | str): 結果を並べ替えるための呼び出し可能オブジェクト。デフォルトはモデルの id フィールドの昇順。
             - options (list | Load): SQLAlchemy の load options (joinedload, selectinload など)。
               None の場合は default_options を使用。空リスト [] を渡すと eager loading なし。
@@ -232,12 +237,18 @@ def set_find_option(
         order_by = model.id.asc()
 
     if offset is not None:
-        if not isinstance(offset, int):
+        if isinstance(offset, bool) or not isinstance(offset, int):
             raise TypeError("offset must be an integer")
+        if offset < 0:
+            raise ValueError("offset must not be negative")
         query = query.offset(offset)
     if limit is not None:
-        if not isinstance(limit, int):
+        if isinstance(limit, bool) or not isinstance(limit, int):
             raise TypeError("limit must be an integer")
+        if limit < 0:
+            raise ValueError("limit must not be negative")
+        if max_limit is not None and limit > max_limit:
+            raise ValueError(f"limit must not exceed max_limit ({max_limit})")
         query = query.limit(limit)
     if apply_order_by and order_by is not None:
         query = query.order_by(order_by)

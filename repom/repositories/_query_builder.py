@@ -29,6 +29,8 @@ class QueryBuilderMixin(Generic[T]):
         allowed_order_columns: ソート可能なカラムのホワイトリスト（サブクラスで拡張可能）
         default_options: eager loading のデフォルト設定（クラス属性としても設定可能）
         default_order_by: order_by のデフォルト設定（クラス属性としても設定可能）
+        max_limit: limit に許可する最大値（クラス属性としても設定可能）。
+            None にすると上限チェックを無効化できます。
     """
 
     # Default allowed columns for order_by operations (can be extended by subclasses)
@@ -38,6 +40,8 @@ class QueryBuilderMixin(Generic[T]):
     ]
     virtual_order_columns: list[str] = []
     default_order_by = None
+    # limit の上限（サブクラスで上書き可能）。None で上限チェックを無効化。
+    max_limit: Optional[int] = 1000
 
     def _base_select(self):
         """Build the base SELECT for this repository.
@@ -53,6 +57,7 @@ class QueryBuilderMixin(Generic[T]):
         """クエリにオプションを設定するメソッド（_core.set_find_option を呼び出し）"""
         default_options = self._get_attr_with_class_priority('default_options')
         default_order_by = self._get_attr_with_class_priority('default_order_by')
+        max_limit = self._get_attr_with_class_priority('max_limit')
         return set_find_option(
             query,
             self.model,
@@ -60,6 +65,7 @@ class QueryBuilderMixin(Generic[T]):
             self.virtual_order_columns,
             default_options,
             default_order_by,
+            max_limit,
             **kwargs
         )
 

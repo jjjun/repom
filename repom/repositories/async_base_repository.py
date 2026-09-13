@@ -35,6 +35,7 @@ from repom.repositories._repository_base import RepositoryBase
 from repom.repositories._soft_delete import AsyncSoftDeleteRepositoryMixin
 from repom.repositories._query_builder import QueryBuilderMixin
 import logging
+import warnings
 
 T = TypeVar('T')
 
@@ -457,6 +458,14 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             ...     limit=10
             ... )
         """
+        if kwargs.get('limit', None) is None:
+            warnings.warn(
+                "find() was called without a limit; the query will return "
+                "every matching row. Pass an explicit limit to bound the result size.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
         query = self._base_select()
 
         # 論理削除フィルタを追加
