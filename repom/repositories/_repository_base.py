@@ -9,7 +9,8 @@
 - ``_infer_model_from_type_params``（型パラメータからのモデル推論）
 - ``session`` プロパティ / セッター
 - ``_has_soft_delete``
-- ``_bulk_filters`` / ``_resolve_column`` / ``_resolve_equality_filter``
+- ``_bulk_filters`` / ``_resolve_column`` / ``_resolve_equality_filter`` /
+  ``_resolve_ids_filter``
 
 I/O を伴うメソッド（``find`` / ``save`` など）は await ポイントが
 異なるため各サブクラスに残します。
@@ -17,9 +18,11 @@ I/O を伴うメソッド（``find`` / ``save`` など）は await ポイント�
 
 import inspect
 import warnings
+from collections.abc import Sequence
 from typing import Any, Generic, List, Optional, Type, TypeVar
 
-from sqlalchemy import ColumnElement, inspect as sa_inspect
+from sqlalchemy import ClauseElement, ColumnElement, inspect as sa_inspect
+from sqlalchemy.orm import QueryableAttribute
 
 from repom.repositories._core import has_soft_delete
 from repom.repositories._introspection import resolve_repository_model
@@ -170,3 +173,29 @@ class RepositoryBase(Generic[T]):
             raise AttributeError(f"Unknown column on {self.model.__name__}")
 
         return predicate
+
+    def _resolve_ids_filter(self, ids: Sequence[Any]) -> ColumnElement:
+        """``bulk_delete`` の ``ids`` からマップされた ``id`` カラムの IN 条件を組み立てる。
+
+        ``Column.in_()`` は要素が ``ClauseElement``（SQL 式）や
+        ``QueryableAttribute``（``Model.column`` のような ORM 属性、
+        ``__clause_element__()`` で ``ClauseElement`` に解決される）の場合、
+        バインドパラメータではなく SQL 式としてそのまま埋め込む。例えば
+        ``Model.id.in_([Model.other_column])`` は ``id IN (other_column)`` に
+        コンパイルされ、値の比較ではなくカラム同士の比較になる。``ids`` は
+        スカラー値の列挙である前提のため、これらが紛れ込んでいる場合は式の
+        混入とみなして拒否する。
+
+        Raises:
+            AttributeError: モデルに ``id`` カラムが存在しない場合。
+            TypeError: ``ids`` に SQL 式や ORM 属性が含まれる場合。
+        """
+        mapper = sa_inspect(self.model)
+        if "id" not in mapper.columns:
+            raise AttributeError(f"Column 'id' does not exist on {self.model.__name__}")
+
+        for value in ids:
+            if isinstance(value, (ClauseElement, QueryableAttribute)):
+                raise TypeError(f"ids must contain plain values, not SQL expressions: {value!r}")
+
+        return self.model.id.in_(ids)

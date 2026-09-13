@@ -419,6 +419,27 @@ def test_bulk_update_uses_filter_by_when_provided(db_test):
     assert repo.count(filters=[SimpleModel.value == 9]) == 2
 
 
+@pytest.mark.parametrize("filter_by", [{}, None])
+def test_bulk_update_rejects_empty_filter_by(db_test, filter_by):
+    repo = SimpleRepository(session=db_test)
+    repo.bulk_insert([SimpleModel(value=1), SimpleModel(value=2)])
+
+    with pytest.raises(ValueError):
+        repo.bulk_update([{"value": 9}], filter_by=filter_by)
+
+    assert repo.count(filters=[SimpleModel.value == 9]) == 0
+
+
+def test_bulk_update_allows_unfiltered_when_opted_in(db_test):
+    repo = SimpleRepository(session=db_test)
+    repo.bulk_insert([SimpleModel(value=1), SimpleModel(value=2)])
+
+    rowcount = repo.bulk_update([{"value": 9}], filter_by={}, allow_unfiltered=True)
+
+    assert rowcount == 2
+    assert repo.count(filters=[SimpleModel.value == 9]) == 2
+
+
 def test_bulk_delete_physically_deletes_by_ids(db_test):
     repo = SimpleRepository(session=db_test)
     first, second, third = repo.bulk_insert([
@@ -459,6 +480,63 @@ def test_bulk_delete_empty_ids_returns_zero(db_test):
 
     assert repo.bulk_delete(ids=[]) == 0
     assert repo.count() == 1
+
+
+@pytest.mark.parametrize("filter_by", [{}, None])
+def test_bulk_delete_rejects_empty_filter_by(db_test, filter_by):
+    repo = SimpleRepository(session=db_test)
+    repo.bulk_insert([SimpleModel(value=1), SimpleModel(value=2)])
+
+    with pytest.raises(ValueError):
+        repo.bulk_delete(filter_by=filter_by)
+
+    assert repo.count() == 2
+
+
+def test_bulk_delete_allows_unfiltered_when_opted_in(db_test):
+    repo = SimpleRepository(session=db_test)
+    repo.bulk_insert([SimpleModel(value=1), SimpleModel(value=2)])
+
+    rowcount = repo.bulk_delete(allow_unfiltered=True)
+
+    assert rowcount == 2
+    assert repo.count() == 0
+
+
+def test_bulk_delete_ids_rejects_sql_expressions(db_test):
+    repo = SimpleRepository(session=db_test)
+    repo.bulk_insert([SimpleModel(value=1), SimpleModel(value=2)])
+
+    with pytest.raises(TypeError):
+        repo.bulk_delete(ids=[SimpleModel.value])
+
+    assert repo.count() == 2
+
+
+@pytest.mark.parametrize(
+    "column_name",
+    ["__tablename__", "__name__", "__qualname__", "__module__", "__doc__"],
+)
+def test_bulk_delete_rejects_dunder_filter_keys(db_test, column_name):
+    repo = SimpleRepository(session=db_test)
+    repo.bulk_insert([SimpleModel(value=1), SimpleModel(value=2)])
+
+    with pytest.raises(AttributeError):
+        repo.bulk_delete(filter_by={column_name: SimpleModel.__tablename__})
+
+    assert repo.count() == 2
+
+
+def test_bulk_delete_compiles_non_trivial_where_clause(db_test):
+    repo = SimpleRepository(session=db_test)
+    filters = repo._bulk_filters({"value": 1})
+
+    from sqlalchemy import and_, delete
+
+    compiled = str(delete(SimpleModel).where(and_(*filters)).compile(compile_kwargs={"literal_binds": True}))
+
+    assert "WHERE" in compiled
+    assert "true" not in compiled.lower()
 
 
 def test_find_with_offset(db_test):

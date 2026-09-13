@@ -69,8 +69,8 @@ with get_reusable_sync_transaction() as session:
 | `save(instance)` | 保存 | `T` |
 | `saves(instances)` | 一括保存 | `None` |
 | `bulk_insert(objects)` | 一括作成 | `list[T]` |
-| `bulk_update(values, filter_by=None)` | 一括更新 | `int` |
-| `bulk_delete(filter_by=None, ids=None)` | 一括削除 | `int` |
+| `bulk_update(values, filter_by=None, allow_unfiltered=False)` | 一括更新 | `int` |
+| `bulk_delete(filter_by=None, ids=None, allow_unfiltered=False)` | 一括削除 | `int` |
 | `remove(instance)` | 削除 | `None` |
 
 ---
@@ -241,10 +241,17 @@ deleted = repo.bulk_delete(ids=[1, 2, 3])
 
 # 条件に一致する行をまとめて削除
 deleted = repo.bulk_delete(filter_by={"status": "archived"})
+
+# filter_by も ids も指定しない場合は ValueError
+# 全件を対象にする場合は明示的に allow_unfiltered=True を渡す
+deleted = repo.bulk_delete(allow_unfiltered=True)
 ```
 
 **論理削除（復元可能な削除）** については [SoftDelete ガイド](../model/soft_delete_guide.md) を参照してください。
 `bulk_delete()` は `SoftDeletableMixin` 対応モデルでは物理削除ではなく `deleted_at` を更新します。
+
+`bulk_update()` も `filter_by` に空の dict を渡すと同様に `ValueError` を送出します。
+`filter_by` 未指定時は各 dict の `id` を条件に使うため、この制限の対象外です。
 
 ---
 

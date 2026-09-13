@@ -406,6 +406,29 @@ async def test_bulk_update_uses_filter_by_when_provided(async_db_test):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("filter_by", [{}, None])
+async def test_bulk_update_rejects_empty_filter_by(async_db_test, filter_by):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
+
+    with pytest.raises(ValueError):
+        await repo.bulk_update([{"value": 9}], filter_by=filter_by)
+
+    assert await repo.count(filters=[AsyncSimpleModel.value == 9]) == 0
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_allows_unfiltered_when_opted_in(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
+
+    rowcount = await repo.bulk_update([{"value": 9}], filter_by={}, allow_unfiltered=True)
+
+    assert rowcount == 2
+    assert await repo.count(filters=[AsyncSimpleModel.value == 9]) == 2
+
+
+@pytest.mark.asyncio
 async def test_bulk_delete_physically_deletes_by_ids(async_db_test):
     repo = AsyncSimpleRepository(session=async_db_test)
     first, second, third = await repo.bulk_insert([
@@ -448,6 +471,68 @@ async def test_bulk_delete_empty_ids_returns_zero(async_db_test):
 
     assert await repo.bulk_delete(ids=[]) == 0
     assert await repo.count() == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("filter_by", [{}, None])
+async def test_bulk_delete_rejects_empty_filter_by(async_db_test, filter_by):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
+
+    with pytest.raises(ValueError):
+        await repo.bulk_delete(filter_by=filter_by)
+
+    assert await repo.count() == 2
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_allows_unfiltered_when_opted_in(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
+
+    rowcount = await repo.bulk_delete(allow_unfiltered=True)
+
+    assert rowcount == 2
+    assert await repo.count() == 0
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_ids_rejects_sql_expressions(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
+
+    with pytest.raises(TypeError):
+        await repo.bulk_delete(ids=[AsyncSimpleModel.value])
+
+    assert await repo.count() == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "column_name",
+    ["__tablename__", "__name__", "__qualname__", "__module__", "__doc__"],
+)
+async def test_bulk_delete_rejects_dunder_filter_keys(async_db_test, column_name):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
+
+    with pytest.raises(AttributeError):
+        await repo.bulk_delete(filter_by={column_name: AsyncSimpleModel.__tablename__})
+
+    assert await repo.count() == 2
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_compiles_non_trivial_where_clause(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    filters = repo._bulk_filters({"value": 1})
+
+    from sqlalchemy import and_, delete
+
+    compiled = str(delete(AsyncSimpleModel).where(and_(*filters)).compile(compile_kwargs={"literal_binds": True}))
+
+    assert "WHERE" in compiled
+    assert "true" not in compiled.lower()
 
 
 @pytest.mark.asyncio

@@ -260,11 +260,13 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
                 raise
         return instances
 
-    def bulk_update(self, values: Sequence[dict], *, filter_by: dict | None = None) -> int:
+    def bulk_update(self, values: Sequence[dict], *, filter_by: dict | None = None, allow_unfiltered: bool = False) -> int:
         """複数レコードを一括更新し、影響行数を返す。
 
         ``filter_by`` 未指定時は各 dict の ``id`` を条件として使います。
         ``filter_by`` 指定時は渡された条件に対して各 dict の値を適用します。
+        ``filter_by`` に空の dict を渡すと全件が対象になるため、
+        ``allow_unfiltered=True`` を明示しない限り ``ValueError`` を送出します。
         """
         if not values:
             return 0
@@ -273,6 +275,11 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             for row in values:
                 if "id" not in row:
                     raise ValueError("bulk_update() requires each values dict to include 'id' when filter_by is not provided.")
+        elif not filter_by and not allow_unfiltered:
+            raise ValueError(
+                "bulk_update() requires a non-empty filter_by, or allow_unfiltered=True "
+                "to update every row matched by filter_by."
+            )
 
         with self._session_scope() as session:
             using_internal_session = self._session_override is None and self._scoped_session is session
@@ -290,7 +297,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
 
                     result = session.execute(
                         update(self.model)
-                        .where(and_(*filters))
+                        .where(and_(*filters) if filters else true())
                         .values(**update_values)
                         .execution_options(synchronize_session="fetch")
                     )
@@ -307,17 +314,30 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
                 raise
         return rowcount
 
-    def bulk_delete(self, *, filter_by: dict | None = None, ids: Sequence[Any] | None = None) -> int:
+    def bulk_delete(
+        self,
+        *,
+        filter_by: dict | None = None,
+        ids: Sequence[Any] | None = None,
+        allow_unfiltered: bool = False,
+    ) -> int:
         """条件に一致するレコードを一括削除し、影響行数を返す。
 
         SoftDeletableMixin 対応モデルでは ``deleted_at`` を更新し、非対応モデルでは
-        物理削除します。``filter_by`` と ``ids`` を省略すると全件が対象です。
+        物理削除します。``filter_by`` と ``ids`` を両方省略すると絞り込みが無くなる
+        ため、``allow_unfiltered=True`` を明示しない限り ``ValueError`` を送出します。
         """
         filters = self._bulk_filters(filter_by)
         if ids is not None:
             if not ids:
                 return 0
-            filters.append(self.model.id.in_(ids))
+            filters.append(self._resolve_ids_filter(ids))
+
+        if not filters and not allow_unfiltered:
+            raise ValueError(
+                "bulk_delete() requires filter_by or ids, or allow_unfiltered=True "
+                "to delete every row."
+            )
 
         with self._session_scope() as session:
             using_internal_session = self._session_override is None and self._scoped_session is session

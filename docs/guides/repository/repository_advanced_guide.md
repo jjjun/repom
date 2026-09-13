@@ -239,6 +239,12 @@ class TaskRepository(AsyncBaseRepository[Task]):
 await repo.get_by('internal_note', value)
 ```
 
+`bulk_update(..., filter_by=...)` と `bulk_delete(filter_by=..., ids=...)` は、
+絞り込み条件が結果的に空になる呼び出し（`filter_by` 省略や `{}`、かつ
+`bulk_delete` では `ids` も省略）を `ValueError` で拒否します。テーブル全体を
+対象にする操作は意図的な選択であるべきなので、`allow_unfiltered=True` を
+明示的に渡してください。
+
 ### 件数カウント
 
 ```python
