@@ -107,7 +107,10 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
         ``single`` が ``True`` の場合は最初の1件のみを返します。
 
         Args:
-            column_name: 検索するカラム名
+            column_name: 検索するカラム名。信頼できる識別子であることが前提。
+                リクエストのフィールド名をそのまま渡すなど、信頼できない
+                入力から導出する場合は allowed_filter_columns でホワイト
+                リストを設定すること。
             value: 検索する値
             extra_filters: 追加のフィルタ条件
             single: True の場合は最初の1件のみ返す
@@ -118,7 +121,8 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             Union[List[T], Optional[T]]: レコードのリストまたは単一レコード
 
         Raises:
-            AttributeError: 指定されたカラムがモデルに存在しない場合
+            AttributeError: 指定されたカラムがモデルに存在しない場合、または
+                allowed_filter_columns によって許可されていない場合
 
         Example:
             >>> from sqlalchemy.orm import selectinload
@@ -129,11 +133,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             ...     options=[selectinload(User.profile)]
             ... )
         """
-        if not hasattr(self.model, column_name):
-            raise AttributeError(f"Column '{column_name}' does not exist on {self.model.__name__}")
-
-        column = getattr(self.model, column_name)
-        filters = [column == value, *extra_filters]
+        filters = [self._resolve_equality_filter(column_name, value), *extra_filters]
         results = await self._find_with_filters(
             filters,
             include_deleted=include_deleted,

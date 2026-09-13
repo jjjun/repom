@@ -135,6 +135,11 @@ task = repo.get_by('title', 'タスク1', single=True)
 all_tasks = repo.get_all()
 ```
 
+`get_by()` の第一引数は信頼できるカラム名であることが前提です。リクエスト
+のフィールド名をそのまま渡す場合は `allowed_filter_columns` でホワイト
+リストを設定してください（詳細は
+[検索カラムの制限](repository_advanced_guide.md#get_by--bulk_update--bulk_delete-の検索カラムの制限)）。
+
 ### Overriding `find()`
 
 Custom `find()` implementations must accept and merge the `filters` and

@@ -1,8 +1,9 @@
 from tests._init import *
 import warnings
 
-from sqlalchemy import Integer, String, desc, event, select
-from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
+from sqlalchemy import ForeignKey, Integer, String, desc, event, select
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import Mapped, mapped_column, relationship, sessionmaker
 import pytest
 from typing import Optional, List
 from repom.models.base_model import BaseModel
@@ -65,6 +66,36 @@ class AutoFilterRepository(BaseRepository[AutoFilterModel]):
 
     def __init__(self, session):
         super().__init__(AutoFilterModel, session)
+
+
+class ColumnGuardParentModel(BaseModel):
+    __tablename__ = 'column_guard_parent_model'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+
+class ColumnGuardChildModel(BaseModel):
+    __tablename__ = 'column_guard_child_model'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey('column_guard_parent_model.id'), nullable=True)
+    value: Mapped[int] = mapped_column(Integer)
+
+    parent: Mapped[Optional[ColumnGuardParentModel]] = relationship()
+
+    @hybrid_property
+    def doubled_value(self):
+        return self.value * 2
+
+    def compute_value(self):
+        return self.value
+
+
+class ColumnGuardRepository(BaseRepository[ColumnGuardChildModel]):
+    def __init__(self, session):
+        super().__init__(ColumnGuardChildModel, session)
+
+
+class AllowlistedRepository(SimpleRepository):
+    allowed_filter_columns = ['id']
 
 
 class SoftDeleteCountModel(BaseModel, SoftDeletableMixin):
@@ -227,6 +258,56 @@ def test_get_by_invalid_column(db_test):
 
     with pytest.raises(AttributeError):
         repo.get_by("unknown", 123)
+
+
+def test_get_by_rejects_relationship_name(db_test):
+    repo = ColumnGuardRepository(session=db_test)
+    repo.save(ColumnGuardChildModel(value=1))
+
+    with pytest.raises(AttributeError):
+        repo.get_by("parent", None)
+
+
+def test_get_by_rejects_dunder_and_method_names(db_test):
+    repo = ColumnGuardRepository(session=db_test)
+    repo.save(ColumnGuardChildModel(value=1))
+
+    for column_name in ("__class__", "metadata", "compute_value", "doubled_value"):
+        with pytest.raises(AttributeError):
+            repo.get_by(column_name, 1)
+
+
+def test_get_by_accepts_mapped_column(db_test):
+    repo = ColumnGuardRepository(session=db_test)
+    obj = repo.save(ColumnGuardChildModel(value=42))
+
+    retrieved = repo.get_by("value", 42, single=True)
+
+    assert retrieved == obj
+
+
+def test_get_by_respects_allowed_filter_columns(db_test):
+    repo = AllowlistedRepository(session=db_test)
+    obj = repo.save(SimpleModel(value=1))
+
+    with pytest.raises(AttributeError):
+        repo.get_by("value", 1)
+
+    assert repo.get_by("id", obj.id, single=True) == obj
+
+
+def test_bulk_filters_uses_mapper_resolution(db_test):
+    repo = ColumnGuardRepository(session=db_test)
+
+    with pytest.raises(AttributeError):
+        repo._bulk_filters({"parent": None})
+
+    with pytest.raises(AttributeError):
+        repo._bulk_filters({"__class__": None})
+
+    assert [str(f) for f in repo._bulk_filters({"value": 1})] == [
+        str(ColumnGuardChildModel.value == 1)
+    ]
 
 
 def test_get_all(db_test):

@@ -9,7 +9,7 @@
 - ``_infer_model_from_type_params``（型パラメータからのモデル推論）
 - ``session`` プロパティ / セッター
 - ``_has_soft_delete``
-- ``_bulk_filters``
+- ``_bulk_filters`` / ``_resolve_column`` / ``_resolve_equality_filter``
 
 I/O を伴うメソッド（``find`` / ``save`` など）は await ポイントが
 異なるため各サブクラスに残します。
@@ -17,9 +17,9 @@ I/O を伴うメソッド（``find`` / ``save`` など）は await ポイント�
 
 import inspect
 import warnings
-from typing import Generic, List, Optional, Type, TypeVar
+from typing import Any, Generic, List, Optional, Type, TypeVar
 
-from sqlalchemy import ColumnElement
+from sqlalchemy import ColumnElement, inspect as sa_inspect
 
 from repom.repositories._core import has_soft_delete
 from repom.repositories._introspection import resolve_repository_model
@@ -41,6 +41,11 @@ class RepositoryBase(Generic[T]):
     _session_reject_message: str = ""
     # _infer_model_from_type_params のガイダンス表示に使う基底クラス名
     _repository_base_name: str = "BaseRepository"
+
+    # get_by / _bulk_filters が受け付けるカラム名のホワイトリスト。
+    # None の場合はマップされた全カラムを許可する（サブクラスで上書き可能、
+    # allowed_order_columns と同様の仕組み）。
+    allowed_filter_columns: Optional[List[str]] = None
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -119,9 +124,49 @@ class RepositoryBase(Generic[T]):
         if not filter_by:
             return []
 
-        filters = []
-        for column_name, value in filter_by.items():
-            if not hasattr(self.model, column_name):
-                raise AttributeError(f"Column '{column_name}' does not exist on {self.model.__name__}")
-            filters.append(getattr(self.model, column_name) == value)
-        return filters
+        return [self._resolve_equality_filter(column_name, value) for column_name, value in filter_by.items()]
+
+    def _resolve_column(self, column_name: str) -> ColumnElement:
+        """caller-supplied column name をマップされたカラム属性に解決する。
+
+        hasattr/getattr は relationship・hybrid property・メソッド・dunder
+        など、マップされたカラムでない属性にも一致してしまう。ここでは
+        ``sqlalchemy.inspect(self.model).columns`` に対して照合することで、
+        実在するマップドカラムのみを許可する。``allowed_filter_columns`` が
+        設定されている場合は、そのホワイトリストに含まれるカラムのみを
+        さらに許可する（``allowed_order_columns`` と同じ設計）。
+
+        Args:
+            column_name: 検索・更新条件に使うカラム名。信頼できる識別子で
+                あることが前提であり、リクエスト由来の値をそのまま渡す
+                場合は ``allowed_filter_columns`` を設定すること。
+
+        Raises:
+            AttributeError: column_name がマップされたカラムでない場合、
+                または allowed_filter_columns によって許可されていない場合。
+        """
+        mapper = sa_inspect(self.model)
+        if column_name not in mapper.columns:
+            raise AttributeError(f"Unknown column on {self.model.__name__}")
+
+        if self.allowed_filter_columns is not None and column_name not in self.allowed_filter_columns:
+            raise AttributeError(f"Unknown column on {self.model.__name__}")
+
+        return getattr(self.model, column_name)
+
+    def _resolve_equality_filter(self, column_name: str, value: Any) -> ColumnElement:
+        """``_resolve_column`` で解決したカラムから等価フィルタ式を組み立てる。
+
+        マップされたカラムであっても、生成された式が ``ColumnElement`` に
+        ならないケースを防ぐための最終防御として、``column == value`` の
+        結果を検証する。例えば ``__tablename__`` のような素の文字列属性は
+        本来 mapper.columns に含まれず ``_resolve_column`` で弾かれるが、
+        万一すり抜けた場合でも Python の bool 評価にフォールバックさせず
+        例外にする。
+        """
+        column = self._resolve_column(column_name)
+        predicate = column == value
+        if not isinstance(predicate, ColumnElement):
+            raise AttributeError(f"Unknown column on {self.model.__name__}")
+
+        return predicate

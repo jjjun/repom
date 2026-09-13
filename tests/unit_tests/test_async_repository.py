@@ -4,8 +4,9 @@ AsyncBaseRepository の非同期版テスト
 test_repository.py の全テストケースを非同期版に変換したもの。
 """
 from tests._init import *
-from sqlalchemy import Integer, desc, event, String, select
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import ForeignKey, Integer, desc, event, String, select
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 import pytest
 from typing import Optional, List
 from repom.models.base_model import BaseModel
@@ -67,6 +68,36 @@ class AsyncAutoFilterRepository(AsyncBaseRepository[AsyncAutoFilterModel]):
 
     def __init__(self, session):
         super().__init__(AsyncAutoFilterModel, session)
+
+
+class AsyncColumnGuardParentModel(BaseModel):
+    __tablename__ = 'async_column_guard_parent_model'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+
+class AsyncColumnGuardChildModel(BaseModel):
+    __tablename__ = 'async_column_guard_child_model'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey('async_column_guard_parent_model.id'), nullable=True)
+    value: Mapped[int] = mapped_column(Integer)
+
+    parent: Mapped[Optional[AsyncColumnGuardParentModel]] = relationship()
+
+    @hybrid_property
+    def doubled_value(self):
+        return self.value * 2
+
+    def compute_value(self):
+        return self.value
+
+
+class AsyncColumnGuardRepository(AsyncBaseRepository[AsyncColumnGuardChildModel]):
+    def __init__(self, session):
+        super().__init__(AsyncColumnGuardChildModel, session)
+
+
+class AsyncAllowlistedRepository(AsyncSimpleRepository):
+    allowed_filter_columns = ['id']
 
 
 class AsyncSoftDeleteBulkModel(BaseModel, SoftDeletableMixin):
@@ -198,6 +229,61 @@ async def test_get_by_invalid_column(async_db_test):
 
     with pytest.raises(AttributeError):
         await repo.get_by("unknown", 123)
+
+
+@pytest.mark.asyncio
+async def test_get_by_rejects_relationship_name(async_db_test):
+    repo = AsyncColumnGuardRepository(session=async_db_test)
+    await repo.save(AsyncColumnGuardChildModel(value=1))
+
+    with pytest.raises(AttributeError):
+        await repo.get_by("parent", None)
+
+
+@pytest.mark.asyncio
+async def test_get_by_rejects_dunder_and_method_names(async_db_test):
+    repo = AsyncColumnGuardRepository(session=async_db_test)
+    await repo.save(AsyncColumnGuardChildModel(value=1))
+
+    for column_name in ("__class__", "metadata", "compute_value", "doubled_value"):
+        with pytest.raises(AttributeError):
+            await repo.get_by(column_name, 1)
+
+
+@pytest.mark.asyncio
+async def test_get_by_accepts_mapped_column(async_db_test):
+    repo = AsyncColumnGuardRepository(session=async_db_test)
+    obj = await repo.save(AsyncColumnGuardChildModel(value=42))
+
+    retrieved = await repo.get_by("value", 42, single=True)
+
+    assert retrieved == obj
+
+
+@pytest.mark.asyncio
+async def test_get_by_respects_allowed_filter_columns(async_db_test):
+    repo = AsyncAllowlistedRepository(session=async_db_test)
+    obj = await repo.save(AsyncSimpleModel(value=1))
+
+    with pytest.raises(AttributeError):
+        await repo.get_by("value", 1)
+
+    assert await repo.get_by("id", obj.id, single=True) == obj
+
+
+@pytest.mark.asyncio
+async def test_bulk_filters_uses_mapper_resolution(async_db_test):
+    repo = AsyncColumnGuardRepository(session=async_db_test)
+
+    with pytest.raises(AttributeError):
+        repo._bulk_filters({"parent": None})
+
+    with pytest.raises(AttributeError):
+        repo._bulk_filters({"__class__": None})
+
+    assert [str(f) for f in repo._bulk_filters({"value": 1})] == [
+        str(AsyncColumnGuardChildModel.value == 1)
+    ]
 
 
 @pytest.mark.asyncio

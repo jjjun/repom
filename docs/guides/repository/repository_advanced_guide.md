@@ -218,6 +218,27 @@ get_order_by_default_value(TaskRepository)
 
 詳細は [order_by ガイド](order_by_guide.md) を参照してください。
 
+### get_by() / bulk_update() / bulk_delete() の検索カラムの制限
+
+`get_by(column_name, value)` と `bulk_update(..., filter_by=...)` /
+`bulk_delete(filter_by=...)` の `column_name` はマップされたカラムのみを
+受け付けます（SQLAlchemy マッパー経由で解決し、relationship・hybrid
+property・メソッド・dunder 属性は拒否されます）。ただし `column_name` は
+信頼できる識別子であることが前提であり、リクエストのフィールド名を
+そのまま渡すような使い方をする場合は、`allowed_order_columns` と同様に
+`allowed_filter_columns` でホワイトリストを設定してください。
+
+```python
+from repom import AsyncBaseRepository
+
+# デフォルト（None）はマップされた全カラムを許可
+class TaskRepository(AsyncBaseRepository[Task]):
+    allowed_filter_columns = ['id', 'status', 'title']
+
+# ホワイトリスト外のカラムは AttributeError
+await repo.get_by('internal_note', value)
+```
+
 ### 件数カウント
 
 ```python
