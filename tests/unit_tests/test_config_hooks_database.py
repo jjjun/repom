@@ -12,6 +12,7 @@ DATABASE_ENV_NAMES = (
     "DB_TYPE",
     "SQLALCHEMY_ECHO",
     "SQLALCHEMY_ECHO_LEVEL",
+    "SQLALCHEMY_HIDE_PARAMETERS",
     "SQLALCHEMY_POOL_SIZE",
     "SQLALCHEMY_MAX_OVERFLOW",
     "SQLALCHEMY_POOL_TIMEOUT",
@@ -35,6 +36,7 @@ def test_apply_database_env_overrides_does_nothing_when_unset():
     assert config.db_url != "postgresql://example"
     assert config.enable_sqlalchemy_echo is False
     assert config.sqlalchemy_echo_level == "INFO"
+    assert config.sqlalchemy_hide_parameters is True
 
 
 def test_apply_database_env_overrides_applies_database_url(monkeypatch):
@@ -118,6 +120,43 @@ def test_apply_database_env_overrides_rejects_invalid_sqlalchemy_echo_level(
     config = RepomConfig()
 
     with pytest.raises(ValueError, match="Invalid log level"):
+        apply_database_env_overrides(config)
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "off"])
+def test_apply_database_env_overrides_disables_sqlalchemy_hide_parameters(
+    monkeypatch, value
+):
+    monkeypatch.setenv("SQLALCHEMY_HIDE_PARAMETERS", value)
+    config = RepomConfig()
+
+    apply_database_env_overrides(config)
+
+    assert config.sqlalchemy_hide_parameters is False
+
+
+@pytest.mark.parametrize("value", ["1", "true", "yes", "on"])
+def test_apply_database_env_overrides_enables_sqlalchemy_hide_parameters(
+    monkeypatch, value
+):
+    monkeypatch.setenv("SQLALCHEMY_HIDE_PARAMETERS", value)
+    config = RepomConfig()
+    config.sqlalchemy_hide_parameters = False
+
+    apply_database_env_overrides(config)
+
+    assert config.sqlalchemy_hide_parameters is True
+
+
+def test_apply_database_env_overrides_rejects_invalid_sqlalchemy_hide_parameters(
+    monkeypatch,
+):
+    monkeypatch.setenv("SQLALCHEMY_HIDE_PARAMETERS", "sometimes")
+    config = RepomConfig()
+
+    with pytest.raises(
+        ValueError, match="SQLALCHEMY_HIDE_PARAMETERS must be a boolean value"
+    ):
         apply_database_env_overrides(config)
 
 

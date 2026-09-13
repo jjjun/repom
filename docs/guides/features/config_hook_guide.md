@@ -62,7 +62,7 @@ def hook_config(config):
 | pgAdmin | `pgadmin.*`, `pgadmin.container.*` |
 | Redis | `redis.*`, `redis.container.*` |
 | model import | `model_locations`, `allowed_package_prefixes`, `model_excluded_dirs`, `model_import_strict` |
-| logging | `log_path`, `enable_sqlalchemy_echo`, `sqlalchemy_echo_level` |
+| logging | `log_path`, `enable_sqlalchemy_echo`, `sqlalchemy_echo_level`, `sqlalchemy_hide_parameters` |
 
 有効値は次で確認します。
 

@@ -12,8 +12,9 @@ def apply_database_env_overrides(config: Any) -> None:
     """Apply database runtime overrides from environment variables.
 
     Reads: REPOM_DATABASE_URL, DATABASE_URL, DB_TYPE, SQLALCHEMY_ECHO,
-    SQLALCHEMY_ECHO_LEVEL, SQLALCHEMY_POOL_SIZE, SQLALCHEMY_MAX_OVERFLOW,
-    SQLALCHEMY_POOL_TIMEOUT, SQLALCHEMY_POOL_RECYCLE, SQLALCHEMY_POOL_PRE_PING.
+    SQLALCHEMY_ECHO_LEVEL, SQLALCHEMY_HIDE_PARAMETERS, SQLALCHEMY_POOL_SIZE,
+    SQLALCHEMY_MAX_OVERFLOW, SQLALCHEMY_POOL_TIMEOUT, SQLALCHEMY_POOL_RECYCLE,
+    SQLALCHEMY_POOL_PRE_PING.
     """
     db_type = os.getenv("DB_TYPE")
     if db_type is not None:
@@ -30,6 +31,12 @@ def apply_database_env_overrides(config: Any) -> None:
     echo_level = os.getenv("SQLALCHEMY_ECHO_LEVEL")
     if echo_level is not None:
         config.sqlalchemy_echo_level = echo_level
+
+    raw_hide_parameters = os.getenv("SQLALCHEMY_HIDE_PARAMETERS")
+    if raw_hide_parameters is not None:
+        config.sqlalchemy_hide_parameters = parse_bool_env(
+            "SQLALCHEMY_HIDE_PARAMETERS", raw_hide_parameters
+        )
 
     pool_size = os.getenv("SQLALCHEMY_POOL_SIZE")
     if pool_size is not None:

@@ -78,8 +78,12 @@ def hook_config(config):
     return config
 ```
 
-`INFO` は SQL 文、`DEBUG` はより詳細な engine log を出します。大量の query と値を
-記録し得るため、本番環境では出力先、保持期間、秘密情報の扱いを確認してください。
+`INFO` と `DEBUG` はどちらも SQL 文に加えてバインドパラメータの実際の値をログへ
+出力します（`DEBUG` はさらに実行結果の行データも出力します）。パスワードハッシュ
+やトークンなど機微な値も記録され得るため、本番相当の実データを扱う環境で安易に
+有効化しないでください。値を伏せて SQL 文の傾向だけを確認したい場合は
+`config.sqlalchemy_hide_parameters`（デフォルト `True`。環境変数
+`SQLALCHEMY_HIDE_PARAMETERS`）を有効のままにしておいてください。
 
 ## module ごとのレベル
 

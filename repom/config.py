@@ -53,6 +53,7 @@ class RepomConfig(Config):
     # SQLAlchemy クエリログ設定
     _enable_sqlalchemy_echo: bool = field(default=False, init=False, repr=False)
     _sqlalchemy_echo_level: str = field(default="INFO", init=False, repr=False)
+    _sqlalchemy_hide_parameters: bool = field(default=True, init=False, repr=False)
     _autoflush: bool = field(default=False, init=False, repr=False)
 
     # SQLAlchemy 接続プール設定
@@ -280,6 +281,13 @@ class RepomConfig(Config):
             - SQL クエリはログに出力されない
             - 本番環境での推奨設定
 
+        警告:
+            出力されるログには SQL 文だけでなくバインドパラメータの実際の値も
+            含まれる（`sqlalchemy_echo_level` を参照）。パスワードハッシュや
+            トークンなど機微な値も記録され得るため、実データを扱う環境で
+            安易に有効化しない。値を伏せたい場合は `sqlalchemy_hide_parameters`
+            を True のままにしておくこと（デフォルトで True）。
+
         使用例（CONFIG_HOOK で有効化）:
             # mine-py/config.py
             def hook_config(config):
@@ -305,14 +313,21 @@ class RepomConfig(Config):
         デフォルト: INFO
 
         INFO:
-            - SQL文のみを出力
-            - 通常の N+1 問題調査に最適
-            - 出力例: SELECT user.id, user.name FROM user
+            - SQL文とバインドパラメータ（実行時の実際の値）を出力
+            - 出力例:
+                INFO sqlalchemy.engine.Engine INSERT INTO users (email, password_hash) VALUES (?, ?)
+                INFO sqlalchemy.engine.Engine [generated in 0.00012s] ('a@example.com', '$2b$12$...')
 
         DEBUG:
-            - SQL文 + パラメータ + 実行結果の詳細
+            - INFO の内容に加えて、取得した実行結果の行データも出力
             - より詳細なデバッグが必要な場合に使用
-            - 出力例: SELECT user.id, user.name FROM user WHERE user.id = ? [1]
+
+        警告:
+            INFO と DEBUG のどちらも、パスワードハッシュやトークン、個人情報を
+            含むバインドパラメータの値をそのままログへ書き出す。「INFO は SQL文
+            のみ」という誤解に基づいて実データを扱う環境で有効化しないこと。
+            値を伏せて SQL文の傾向だけを見たい場合は `sqlalchemy_hide_parameters`
+            （デフォルト True、SQLAlchemy の `hide_parameters` に対応）を利用する。
 
         使用例:
             config.enable_sqlalchemy_echo = True
@@ -325,6 +340,31 @@ class RepomConfig(Config):
         if value not in ("INFO", "DEBUG"):
             raise ValueError(f"Invalid log level: {value}. Must be 'INFO' or 'DEBUG'.")
         self._sqlalchemy_echo_level = value
+
+    @property
+    def sqlalchemy_hide_parameters(self) -> bool:
+        """SQLAlchemy ログでバインドパラメータの値を伏せるか
+
+        デフォルト: True
+
+        True の場合:
+            - engine_kwargs で SQLAlchemy の `hide_parameters=True` を設定する
+            - ログのパラメータ部分が
+              "[SQL parameters hidden due to hide_parameters=True]" に置き換わる
+            - SQL文自体は `sqlalchemy_echo_level` の設定どおり出力される
+
+        False の場合:
+            - バインドパラメータの実際の値がログに出力される
+            - `enable_sqlalchemy_echo` / `sqlalchemy_echo_level` の警告を参照
+
+        参考:
+            https://docs.sqlalchemy.org/en/20/core/engines.html#sqlalchemy.create_engine.params.hide_parameters
+        """
+        return self._sqlalchemy_hide_parameters
+
+    @sqlalchemy_hide_parameters.setter
+    def sqlalchemy_hide_parameters(self, value: bool):
+        self._sqlalchemy_hide_parameters = value
 
     @property
     def autoflush(self) -> bool:
@@ -442,6 +482,8 @@ class RepomConfig(Config):
         - poolclass: 接続プールクラス
           * SQLite :memory: DB: StaticPool（単一接続をすべてのスレッドで共有）
           * その他: デフォルト（NullPool または QueuePool）
+        - hide_parameters: ログ出力時にバインドパラメータの値を伏せるか
+          （デフォルト: True。`sqlalchemy_hide_parameters` を参照。すべてのDBで有効）
 
         StaticPool の必要性:
         - :memory: DB は1つの connection でのみデータを保持
@@ -482,6 +524,7 @@ class RepomConfig(Config):
                 "pool_timeout": self.db_pool_timeout,
                 "pool_recycle": self.db_pool_recycle,
                 "pool_pre_ping": self.db_pool_pre_ping,
+                "hide_parameters": self.sqlalchemy_hide_parameters,
             }
 
         # SQLite :memory: DB の場合は、StaticPool を使用して単一接続を全スレッドで共有
@@ -496,6 +539,7 @@ class RepomConfig(Config):
                 "connect_args": {
                     "check_same_thread": False
                 },  # スレッド安全性チェックを無効化
+                "hide_parameters": self.sqlalchemy_hide_parameters,
             }
         else:
             # ファイルベース SQLite 用の完全な設定
@@ -505,6 +549,7 @@ class RepomConfig(Config):
                 "pool_timeout": self.db_pool_timeout,  # 接続待機タイムアウト（秒）
                 "pool_recycle": self.db_pool_recycle,  # 接続の再利用時間（秒）
                 "pool_pre_ping": self.db_pool_pre_ping,  # 接続前のpingチェック
+                "hide_parameters": self.sqlalchemy_hide_parameters,  # パラメータ値のログ出力を抑制
             }
 
             # SQLite ファイルベースの場合は check_same_thread を無効化
