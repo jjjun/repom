@@ -7,7 +7,10 @@ logger = get_logger(__name__)
 
 
 def main():
-    load_models(context="db_create")
+    # Strict regardless of config.model_import_strict: create_all against a
+    # partial Base.metadata would silently skip creating whichever tables
+    # failed to import.
+    load_models(context="db_create", strict=True)
 
     if config.db_type == 'postgres':
         from repom.postgres.manage import ensure_running

@@ -36,7 +36,7 @@ class RepomConfig(Config):
     allowed_package_prefixes: Set[str] = field(
         default_factory=lambda: {"repom."}, init=False, repr=False
     )
-    model_import_strict: bool = field(default=False, init=False, repr=False)
+    model_import_strict: bool = field(default=True, init=False, repr=False)
 
     # データベース設定 (機能別に分離)
     postgres: _PostgresConfig = field(default_factory=_PostgresConfig)

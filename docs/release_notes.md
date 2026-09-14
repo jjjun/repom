@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- BREAKING: `config.model_import_strict` now defaults to `True` instead of
+  `False`. `load_models()` discarded the failure list `import_from_packages()`
+  returned, so a model module that failed to import was silently absent from
+  `Base.metadata` — `alembic revision --autogenerate` would then propose
+  `op.drop_table` for that model's table, and `db_create` would skip creating
+  it, with no error either way. `load_models()` now returns the
+  `DiscoveryFailure` list and logs every failure at ERROR with the module
+  name and exception. `alembic/env.py` and `db_create` now call
+  `load_models(strict=True)`, so they raise on any import failure regardless
+  of `config.model_import_strict`; `alembic/env.py` also refuses to run when
+  `model_locations` is configured but discovery finds zero models. Projects
+  that rely on best-effort model loading in other entry points can still set
+  `config.model_import_strict = False` explicitly. `repom_info` now lists any
+  import failures under a new "Model Import Failures" section instead of
+  swallowing them.
 - BREAKING: `create_test_fixtures()` / `create_async_test_fixtures()` now
   default `db_url` to in-memory SQLite (`sqlite:///:memory:`) instead of
   `config.db_url`, and raise `RuntimeError` when the resolved database is

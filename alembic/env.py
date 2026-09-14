@@ -105,13 +105,31 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Allow applications to import their own models before migrations run.
-load_models(context="alembic_migration")
+# Strict regardless of config.model_import_strict: autogenerate compares the
+# live database against Base.metadata, and a model missing from that
+# metadata because its module failed to import looks identical to a model
+# that was intentionally removed, so autogenerate would emit a destructive
+# op.drop_table for a table that still exists.
+load_models(context="alembic_migration", strict=True)
 
 # add your model's MetaData object here
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 target_metadata = Base.metadata
+
+# Catastrophic-case guard: model_locations is configured but discovery found
+# zero tables. This should be unreachable given the strict load above (any
+# import failure would have already raised), but guards the case where
+# model_locations point at packages that import cleanly while defining no
+# models at all - autogenerating against that metadata would propose
+# dropping every table in the database.
+if db_config.model_locations and not target_metadata.tables:
+    raise RuntimeError(
+        "model_locations is configured "
+        f"({db_config.model_locations!r}) but no models were discovered; "
+        "refusing to run migrations against empty metadata."
+    )
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

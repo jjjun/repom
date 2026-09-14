@@ -2,7 +2,7 @@
 
 import os
 import sys
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import text, create_engine
 from sqlalchemy.engine.url import make_url
@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from repom.config import config
 from repom.database import Base, safe_db_url
-from basekit.discovery import import_from_packages
+from basekit.discovery import DiscoveryFailure, import_from_packages
 from repom.diagnostics.database_info import (
     collect_database_info_sync,
     format_size as _format_size,
@@ -156,24 +156,37 @@ def test_redis_connection() -> str:
         return "[NG] redis-py not installed"
 
 
-def get_loaded_models() -> List[Dict[str, str]]:
+def get_loaded_models() -> Tuple[List[Dict[str, str]], List[DiscoveryFailure]]:
     """Get list of loaded models from SQLAlchemy metadata.
 
     Returns:
-        List of dictionaries with model_name, table_name, and package
+        Tuple of (models, failures). ``models`` is a list of dictionaries
+        with model_name, table_name, and package. ``failures`` lists any
+        model module that failed to import, so a partial load is visible in
+        this diagnostic output instead of being silently dropped.
     """
     models = []
+    failures: List[DiscoveryFailure] = []
 
     # Auto-import models if configured
     if config.model_locations:
         try:
-            import_from_packages(
+            failures = import_from_packages(
                 package_names=config.model_locations,
                 excluded_dirs=config.model_excluded_dirs,
                 allowed_prefixes=config.allowed_package_prefixes
             )
-        except Exception:
-            pass  # Silently continue if import fails
+        except Exception as exc:
+            # e.g. a security-validation ValueError, which import_from_packages
+            # raises unconditionally rather than returning as a DiscoveryFailure.
+            failures = [
+                DiscoveryFailure(
+                    target=", ".join(config.model_locations),
+                    target_type="package",
+                    exception_type=type(exc).__name__,
+                    message=str(exc),
+                )
+            ]
 
     # Get all tables from metadata
     for table_name, table in Base.metadata.tables.items():
@@ -198,7 +211,7 @@ def get_loaded_models() -> List[Dict[str, str]]:
                 'package': 'Unknown'
             })
 
-    return sorted(models, key=lambda x: x['model_name'])
+    return sorted(models, key=lambda x: x['model_name']), failures
 
 
 def display_config():
@@ -296,7 +309,7 @@ def display_config():
     print()
 
     # Loaded Models
-    models = get_loaded_models()
+    models, model_import_failures = get_loaded_models()
     print(f"  [Loaded Models] ({len(models)} model{'s' if len(models) != 1 else ''} found)")
 
     if models:
@@ -307,6 +320,18 @@ def display_config():
     else:
         print("    (No models loaded)")
     print()
+
+    # Model Import Failures - surfaced so a partial load (some model modules
+    # imported, others silently dropped) is diagnosable instead of looking
+    # like an intentionally smaller model set.
+    if model_import_failures:
+        failure_count = len(model_import_failures)
+        print(f"  [Model Import Failures] ({failure_count} failure{'s' if failure_count != 1 else ''})")
+        for idx, failure in enumerate(model_import_failures, 1):
+            print(f"    {idx}. {failure.target}")
+            print(f"       - Type       : {failure.exception_type}")
+            print(f"       - Message    : {failure.message}")
+        print()
 
     # Environment
     print("[Environment]")

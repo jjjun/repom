@@ -230,6 +230,7 @@ class TestGetLoadedModels:
     def test_get_loaded_models_with_models(self, mock_base, mock_import, mock_config):
         """Test retrieving loaded models."""
         mock_config.model_locations = ['repom.examples.models']
+        mock_import.return_value = []
 
         # Mock a model
         mock_model = Mock()
@@ -243,12 +244,13 @@ class TestGetLoadedModels:
         mock_base.registry.mappers = [mock_mapper]
         mock_base.metadata.tables = {'users': Mock(name='users')}
 
-        models = get_loaded_models()
+        models, failures = get_loaded_models()
 
         assert len(models) == 1
         assert models[0]['model_name'] == 'User'
         assert models[0]['table_name'] == 'users'
         assert models[0]['package'] == 'repom.examples.models.user.User'
+        assert failures == []
 
     @patch('repom.scripts.repom_info.config')
     @patch('repom.scripts.repom_info.import_from_packages')
@@ -259,23 +261,53 @@ class TestGetLoadedModels:
         mock_base.registry.mappers = []
         mock_base.metadata.tables = {}
 
-        models = get_loaded_models()
+        models, failures = get_loaded_models()
 
         assert len(models) == 0
+        assert failures == []
 
     @patch('repom.scripts.repom_info.config')
     @patch('repom.scripts.repom_info.import_from_packages')
     @patch('repom.scripts.repom_info.Base')
     def test_get_loaded_models_import_failure(self, mock_base, mock_import, mock_config):
-        """Test that import failure doesn't crash the function."""
+        """Test that import failure doesn't crash the function and is reported."""
         mock_config.model_locations = ['invalid.module']
         mock_import.side_effect = ImportError("Module not found")
         mock_base.registry.mappers = []
         mock_base.metadata.tables = {}
 
-        models = get_loaded_models()
+        models, failures = get_loaded_models()
 
         assert len(models) == 0
+        assert len(failures) == 1
+        assert failures[0].target == 'invalid.module'
+        assert failures[0].exception_type == 'ImportError'
+        assert failures[0].message == 'Module not found'
+
+    @patch('repom.scripts.repom_info.config')
+    @patch('repom.scripts.repom_info.import_from_packages')
+    @patch('repom.scripts.repom_info.Base')
+    def test_get_loaded_models_returns_discovery_failures(self, mock_base, mock_import, mock_config):
+        """A partial load (some modules failed, others succeeded) is surfaced, not discarded."""
+        from basekit.discovery import DiscoveryFailure
+
+        mock_config.model_locations = ['myapp.models']
+        mock_import.return_value = [
+            DiscoveryFailure(
+                target='myapp.models.broken',
+                target_type='module',
+                exception_type='ImportError',
+                message='cannot import name broken_dependency',
+            )
+        ]
+        mock_base.registry.mappers = []
+        mock_base.metadata.tables = {}
+
+        models, failures = get_loaded_models()
+
+        assert len(failures) == 1
+        assert failures[0].target == 'myapp.models.broken'
+        assert failures[0].message == 'cannot import name broken_dependency'
 
 
 class TestDisplayConfig:
@@ -304,13 +336,16 @@ class TestDisplayConfig:
             'size_mb': '2.50 MB'
         }
         mock_check_conn.return_value = '(Not applicable for SQLite)'
-        mock_get_models.return_value = [
-            {
-                'model_name': 'User',
-                'table_name': 'users',
-                'package': 'repom.examples.models.user.User'
-            }
-        ]
+        mock_get_models.return_value = (
+            [
+                {
+                    'model_name': 'User',
+                    'table_name': 'users',
+                    'package': 'repom.examples.models.user.User'
+                }
+            ],
+            [],
+        )
 
         display_config()
 
@@ -347,7 +382,7 @@ class TestDisplayConfig:
             'user': 'user'
         }
         mock_check_conn.return_value = '[OK] Connected'
-        mock_get_models.return_value = []
+        mock_get_models.return_value = ([], [])
 
         display_config()
 
@@ -385,7 +420,7 @@ class TestDisplayConfig:
 
         mock_check_postgres.return_value = '[OK] Connected'
         mock_check_redis.return_value = '[OK] Connected'
-        mock_get_models.return_value = []
+        mock_get_models.return_value = ([], [])
 
         display_config()
 
@@ -393,6 +428,53 @@ class TestDisplayConfig:
         assert sentinel_password not in captured.out
         assert "p@ssw0rd" not in captured.out
         assert 'localhost' in captured.out
+
+    @patch('repom.scripts.repom_info.config')
+    @patch('repom.scripts.repom_info.get_db_file_info')
+    @patch('repom.scripts.repom_info.test_postgres_connection')
+    @patch('repom.scripts.repom_info.get_loaded_models')
+    def test_repom_info_reports_import_failures(
+        self, mock_get_models, mock_check_conn, mock_get_db_info, mock_config, capsys
+    ):
+        """A model module that failed to import must be named in the output,
+        not silently absent, so a partial load is diagnosable.
+        """
+        from basekit.discovery import DiscoveryFailure
+
+        mock_config.root_path = Path('/test/path')
+        mock_config.db_backup_path = Path('/test/path/data/repom/backups')
+        mock_config.master_data_path = Path('/test/path/data_master')
+        mock_config.db_type = 'sqlite'
+        mock_config.db_url = 'sqlite:///data/repom/db.dev.sqlite3'
+        mock_config.model_locations = ['myapp.models']
+        mock_config.allowed_package_prefixes = {'myapp.'}
+        mock_config.model_excluded_dirs = set()
+
+        mock_get_db_info.return_value = {
+            'file_path': '/test/path/data/repom/db.dev.sqlite3',
+            'exists': True,
+            'size_mb': '2.50 MB'
+        }
+        mock_check_conn.return_value = '(Not applicable for SQLite)'
+        mock_get_models.return_value = (
+            [],
+            [
+                DiscoveryFailure(
+                    target='myapp.models.broken',
+                    target_type='module',
+                    exception_type='ImportError',
+                    message='cannot import name broken_dependency',
+                )
+            ],
+        )
+
+        display_config()
+
+        captured = capsys.readouterr()
+        assert 'Model Import Failures' in captured.out
+        assert 'myapp.models.broken' in captured.out
+        assert 'ImportError' in captured.out
+        assert 'cannot import name broken_dependency' in captured.out
 
 
 class TestMain:

@@ -202,11 +202,15 @@ class TestRepomConfigProperties:
         test_config.allowed_package_prefixes = prefixes
         assert test_config.allowed_package_prefixes == prefixes
 
-    def test_model_import_strict_default_is_false(self):
-        """model_import_strict のデフォルトは False"""
+    def test_model_import_strict_defaults_to_true(self):
+        """model_import_strict のデフォルトは True
+
+        alembic autogenerate や db_create が partial な Base.metadata に対して
+        破壊的な操作を行わないよう、import failure はデフォルトで例外にする。
+        """
         from repom.config import RepomConfig
         test_config = RepomConfig()
-        assert test_config.model_import_strict is False
+        assert test_config.model_import_strict is True
 
     def test_model_import_strict_setter_and_getter(self):
         """model_import_strict の setter/getter が正常に動作"""
@@ -315,8 +319,8 @@ class TestLoadModelsIntegration:
             config.model_import_strict = original_strict
             config.allowed_package_prefixes = original_prefixes
 
-    def test_load_models_default_strict_false(self):
-        """model_import_strict のデフォルト（False）では例外を発生させない"""
+    def test_load_models_strict_false_does_not_raise(self):
+        """model_import_strict を明示的に False にした場合は例外を発生させない"""
         original_locations = config.model_locations
         original_strict = config.model_import_strict
         original_prefixes = config.allowed_package_prefixes
@@ -324,11 +328,42 @@ class TestLoadModelsIntegration:
         try:
             config.model_locations = ['nonexistent.models']
             config.allowed_package_prefixes = {'nonexistent.'}
-            config.model_import_strict = False  # デフォルト
+            config.model_import_strict = False  # 明示的なオプトアウト
 
             # エラーが出ないことを確認（失敗リストは内部で処理される）
             load_models()
             # 成功（例外が発生しない）
+        finally:
+            config.model_locations = original_locations
+            config.model_import_strict = original_strict
+            config.allowed_package_prefixes = original_prefixes
+
+    def test_load_models_logs_and_returns_failures(self, caplog):
+        """import に失敗したモジュールは ERROR ログに記録され、失敗リストに
+        名前が含まれて返される（黙って捨てられない）。
+        """
+        original_locations = config.model_locations
+        original_strict = config.model_import_strict
+        original_prefixes = config.allowed_package_prefixes
+
+        try:
+            config.model_locations = ['tests.fixtures.broken_import']
+            config.allowed_package_prefixes = {'tests.fixtures.'}
+            config.model_import_strict = False
+
+            with caplog.at_level('ERROR', logger='repom.repom.utility'):
+                failures = load_models()
+
+            assert len(failures) == 1
+            assert failures[0].target == 'tests.fixtures.broken_import.broken_model'
+            assert failures[0].exception_type == 'RuntimeError'
+
+            error_records = [
+                record for record in caplog.records
+                if record.name == 'repom.repom.utility' and record.levelname == 'ERROR'
+            ]
+            assert len(error_records) == 1
+            assert 'tests.fixtures.broken_import.broken_model' in error_records[0].getMessage()
         finally:
             config.model_locations = original_locations
             config.model_import_strict = original_strict

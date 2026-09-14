@@ -2,7 +2,7 @@ import os
 import logging
 import time
 import unicodedata
-from typing import Optional
+from typing import List, Optional
 
 import inflect
 
@@ -83,7 +83,9 @@ def normalize_text(s: str) -> str:
     return s.lower()
 
 
-def load_models(context: Optional[str] = None) -> None:
+def load_models(
+    context: Optional[str] = None, *, strict: Optional[bool] = None
+) -> List[DiscoveryFailure]:
     """Import all application models so SQLAlchemy can discover metadata.
 
     This function imports models based on config.model_locations setting.
@@ -91,6 +93,17 @@ def load_models(context: Optional[str] = None) -> None:
 
     Args:
         context: Execution context for logging (e.g., "db_create", "db_delete", "alembic_migration")
+        strict: When True, raise DiscoveryError if any model module failed to
+            import, overriding config.model_import_strict for this call. When
+            None (default), config.model_import_strict decides. Callers whose
+            downstream step is destructive when run against partial metadata
+            (alembic autogenerate, db_create) pass strict=True explicitly so
+            they refuse regardless of the configured default.
+
+    Returns:
+        The list of DiscoveryFailure entries for model modules that failed to
+        import. Empty when model_locations is unset or every module imported
+        successfully.
 
     Usage:
         from repom.utility import load_models
@@ -104,6 +117,10 @@ def load_models(context: Optional[str] = None) -> None:
 
         Uses import_from_packages() from discovery module with SQLAlchemy's
         configure_mappers() as post_import_hook.
+
+        Every import failure is logged at ERROR with the module name and the
+        exception, regardless of model_import_strict, so a partial load is
+        never silent even when the caller chooses to proceed.
 
         Set the ``models.detail`` child logger to DEBUG to include
         the full table-name list in logs.
@@ -119,15 +136,23 @@ def load_models(context: Optional[str] = None) -> None:
     context_prefix = f"[{context}] " if context else ""
     started_at = time.perf_counter()
 
+    failures: List[DiscoveryFailure] = []
     if config.model_locations:
-        # Use generic discovery infrastructure with SQLAlchemy hook
-        import_from_packages(
+        # Use generic discovery infrastructure with SQLAlchemy hook.
+        # fail_on_error is always False here so failures are always captured
+        # and logged before the strict/raise decision below.
+        failures = import_from_packages(
             package_names=config.model_locations,
             excluded_dirs=config.model_excluded_dirs,
             allowed_prefixes=config.allowed_package_prefixes,
-            fail_on_error=config.model_import_strict,
+            fail_on_error=False,
             post_import_hook=configure_mappers
         )
+        for failure in failures:
+            logger.error(
+                "%sFailed to import model module '%s': %s: %s",
+                context_prefix, failure.target, failure.exception_type, failure.message
+            )
     else:
         logger.info(f"{context_prefix}No model locations configured. Skipping model import.")
 
@@ -147,5 +172,11 @@ def load_models(context: Optional[str] = None) -> None:
             )
     except Exception as e:
         logger.warning(f"{context_prefix}Could not retrieve model list: {e}")
+
+    effective_strict = config.model_import_strict if strict is None else strict
+    if failures and effective_strict:
+        raise DiscoveryError(failures)
+
+    return failures
 
 
