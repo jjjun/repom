@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- BREAKING: `alembic/env.py` now validates the `pre_migration_hook` module
+  against `allowed_package_prefixes` before importing it; a hook that lives
+  outside those prefixes raises `ValueError` at migration time. Add the
+  hook's package prefix to `config.allowed_package_prefixes` in your config
+  hook. `AlembicTemplates.generate_alembic_ini` also rejects control
+  characters and non-identifier values in the options it writes.
 - BREAKING: `BaseModel.update_from_dict()` now requires an explicit
   allowlist. Pass `allowed_fields`, or set the class attribute
   `updatable_fields`, or the call raises `ValueError`. Previously every
