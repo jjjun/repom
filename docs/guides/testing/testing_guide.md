@@ -84,7 +84,10 @@ db_engine, db_test = create_test_fixtures(
 )
 ```
 
-- `db_url` 未指定時は `config.db_url` を使う。
+- `db_url` 未指定時は in-memory SQLite（`sqlite:///:memory:`）を使う。EXEC_ENV が
+  `test` でなく、かつ in-memory SQLite でもない `db_url` を渡すと、テスト終了時の
+  `drop_all` が実データベースを壊さないよう `RuntimeError` を送出する。実際にその
+  データベースへ向けたい場合は `allow_destructive=True` を明示する。
 - `model_loader` 未指定時は `repom.utility.load_models()` を使う。
 - `load_models()` は `config.model_locations` を読み、全 import 後に mapper を構成する。
 

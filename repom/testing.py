@@ -23,14 +23,38 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 from typing import Callable, Optional
-from repom.database import Base
+from repom.database import Base, safe_db_url
 from repom.config import config
 from repom.utility import load_models
 
 
+def _is_in_memory_sqlite_url(db_url: str) -> bool:
+    return db_url.startswith("sqlite") and ":memory:" in db_url
+
+
+def _require_test_database(db_url: str, allow_destructive: bool) -> None:
+    """Refuse to proceed unless dropping ``db_url``'s tables at teardown is safe.
+
+    create_test_fixtures / create_async_test_fixtures drop every table in
+    Base.metadata when their session-scoped engine fixture tears down. Without
+    this guard, a consuming project running pytest with EXEC_ENV unset or
+    left at its dev default would create tables in - and then drop - its real
+    dev/prod database (repom#135).
+    """
+    if config.exec_env == "test" or _is_in_memory_sqlite_url(db_url) or allow_destructive:
+        return
+    raise RuntimeError(
+        f"Refusing to create test fixtures against {safe_db_url(db_url)}: "
+        f"EXEC_ENV={config.exec_env!r} is not 'test' and this is not an "
+        "in-memory SQLite database. Pass allow_destructive=True to target "
+        "this database anyway, or set EXEC_ENV=test."
+    )
+
+
 def create_test_fixtures(
     db_url: Optional[str] = None,
-    model_loader: Optional[Callable[[], None]] = None
+    model_loader: Optional[Callable[[], None]] = None,
+    allow_destructive: bool = False
 ):
     """
     Transaction Rollback パターンを使用したテストフィクスチャを作成
@@ -42,9 +66,14 @@ def create_test_fixtures(
     Parameters
     ----------
     db_url : str, optional
-        データベース接続URL。指定しない場合は config.db_url を使用
+        データベース接続URL。指定しない場合は in-memory SQLite（sqlite:///:memory:）を使用
     model_loader : Callable, optional
         モデルロード関数。指定しない場合は load_set_model_hook_function を使用
+    allow_destructive : bool, optional
+        EXEC_ENV が test でなく、かつ in-memory SQLite でもない db_url を明示的に
+        許可する。既定は False で、その場合は RuntimeError を送出する
+        （リアルな dev/prod データベースを誤って drop_all しないための安全策、
+        repom#135）
 
     Returns
     -------
@@ -86,7 +115,8 @@ def create_test_fixtures(
     - **安全**: 例外発生時もトランザクション状態を正しく処理
     """
     # デフォルト値の設定
-    _db_url = db_url or config.db_url
+    _db_url = db_url if db_url is not None else "sqlite:///:memory:"
+    _require_test_database(_db_url, allow_destructive)
     _model_loader = model_loader or load_models
 
     @pytest.fixture(scope='session')
@@ -218,7 +248,8 @@ def convert_to_async_uri(sync_uri: str) -> str:
 
 def create_async_test_fixtures(
     db_url: Optional[str] = None,
-    model_loader: Optional[Callable[[], None]] = None
+    model_loader: Optional[Callable[[], None]] = None,
+    allow_destructive: bool = False
 ):
     """
     async Transaction Rollback パターンを使用したテストフィクスチャを作成
@@ -229,9 +260,11 @@ def create_async_test_fixtures(
     Parameters
     ----------
     db_url : str, optional
-        データベース接続URL。指定しない場合は config.db_url を使用
+        データベース接続URL。指定しない場合は in-memory SQLite（sqlite:///:memory:）を使用
     model_loader : Callable, optional
         モデルロード関数。指定しない場合は load_models を使用
+    allow_destructive : bool, optional
+        create_test_fixtures と同じ安全策（repom#135）。既定は False
 
     Returns
     -------
@@ -298,7 +331,8 @@ def create_async_test_fixtures(
         ) from e
 
     # デフォルト値の設定
-    _db_url = db_url or config.db_url
+    _db_url = db_url if db_url is not None else "sqlite:///:memory:"
+    _require_test_database(_db_url, allow_destructive)
     _async_db_url = convert_to_async_uri(_db_url)
     _model_loader = model_loader or load_models
 

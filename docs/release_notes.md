@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- BREAKING: `create_test_fixtures()` / `create_async_test_fixtures()` now
+  default `db_url` to in-memory SQLite (`sqlite:///:memory:`) instead of
+  `config.db_url`, and raise `RuntimeError` when the resolved database is
+  neither in-memory SQLite nor `EXEC_ENV=test`. A consuming project's test
+  suite running with `EXEC_ENV` unset or left at its `dev` default previously
+  created tables in - and then dropped - its real dev/prod database at
+  session teardown. Pass `allow_destructive=True` to explicitly opt into
+  targeting a real database. `db_delete` and `alembic_reset` now also refuse
+  to run when `EXEC_ENV=prod`, and require an interactive `y` confirmation
+  (or `--yes` when stdin is not a TTY) before dropping tables or resetting
+  migrations; both print the masked target database URL first.
 - BREAKING: `alembic/env.py` now validates the `pre_migration_hook` module
   against `allowed_package_prefixes` before importing it; a hook that lives
   outside those prefixes raises `ValueError` at migration time. Add the
