@@ -1,16 +1,28 @@
 from tests._init import *
 
 from unittest.mock import MagicMock
+import os
 import time
+
+import pytest
 
 from repom.scripts import _backup_utils
 from repom.scripts._backup_utils import (
+    ChecksumError,
+    checksum_path,
     cleanup_incomplete_backups,
+    compute_checksum,
+    ensure_backup_dir,
     format_size,
     get_backups,
+    open_backup_temp_file,
     rotate_backups,
     run_postgres_via_docker_or_host,
+    verify_checksum,
+    write_checksum,
 )
+
+POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="POSIX file mode bits only")
 
 
 def _touch(path, mtime):
@@ -233,3 +245,100 @@ def test_run_postgres_via_docker_or_host_accepts_explicit_container_name(monkeyp
 
     assert result == "docker-result"
     is_running.assert_called_once_with("custom-postgres")
+
+
+@POSIX_ONLY
+def test_ensure_backup_dir_creates_with_mode_0700(tmp_path):
+    backup_dir = tmp_path / "backups"
+
+    result = ensure_backup_dir(backup_dir)
+
+    assert result == backup_dir
+    assert backup_dir.is_dir()
+    assert backup_dir.stat().st_mode & 0o777 == 0o700
+
+
+@POSIX_ONLY
+def test_ensure_backup_dir_tightens_existing_permissive_directory(tmp_path):
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir(mode=0o755)
+    os.chmod(backup_dir, 0o755)
+
+    ensure_backup_dir(backup_dir)
+
+    assert backup_dir.stat().st_mode & 0o777 == 0o700
+
+
+@POSIX_ONLY
+def test_open_backup_temp_file_creates_with_mode_0600(tmp_path):
+    target = tmp_path / "db_20260101_000000.sql.gz.partial"
+
+    with open_backup_temp_file(target) as f:
+        assert target.stat().st_mode & 0o777 == 0o600
+        f.write(b"payload")
+
+    assert target.read_bytes() == b"payload"
+
+
+def test_open_backup_temp_file_refuses_to_reuse_existing_file(tmp_path):
+    target = tmp_path / "db_20260101_000000.sql.gz.partial"
+    target.write_bytes(b"stale")
+
+    with pytest.raises(FileExistsError):
+        open_backup_temp_file(target)
+
+
+def test_write_checksum_and_verify_checksum_round_trip(tmp_path):
+    backup_path = tmp_path / "db_20260101_000000.sql.gz"
+    backup_path.write_bytes(b"backup payload")
+
+    sidecar = write_checksum(backup_path)
+
+    assert sidecar == checksum_path(backup_path)
+    assert sidecar.exists()
+    assert compute_checksum(backup_path) in sidecar.read_text(encoding="utf-8")
+    assert verify_checksum(backup_path) is True
+
+
+def test_verify_checksum_returns_false_when_no_sidecar_exists(tmp_path):
+    backup_path = tmp_path / "db_20260101_000000.sql.gz"
+    backup_path.write_bytes(b"backup payload")
+
+    assert verify_checksum(backup_path) is False
+
+
+def test_verify_checksum_raises_on_mismatch(tmp_path):
+    backup_path = tmp_path / "db_20260101_000000.sql.gz"
+    backup_path.write_bytes(b"backup payload")
+    write_checksum(backup_path)
+
+    backup_path.write_bytes(b"tampered payload")
+
+    with pytest.raises(ChecksumError):
+        verify_checksum(backup_path)
+
+
+def test_rotate_backups_removes_checksum_sidecar_for_rotated_file(tmp_path):
+    old = tmp_path / "db_20260101_000000.sql.gz"
+    new = tmp_path / "db_20260102_000000.sql.gz"
+    _touch(old, 1)
+    _touch(new, 2)
+    write_checksum(old)
+    write_checksum(new)
+
+    removed = rotate_backups(tmp_path, "db_*.sql.gz", max_keep=1)
+
+    assert removed == [old]
+    assert not checksum_path(old).exists()
+    assert checksum_path(new).exists()
+
+
+def test_cleanup_incomplete_backups_removes_checksum_sidecar_for_zero_byte_file(tmp_path):
+    empty = tmp_path / "db_20260101_000000.sql.gz"
+    empty.touch()
+    checksum_path(empty).write_text("deadbeef  db_20260101_000000.sql.gz\n", encoding="utf-8")
+
+    removed = cleanup_incomplete_backups(tmp_path, "db_*.sql.gz")
+
+    assert removed == [empty]
+    assert not checksum_path(empty).exists()

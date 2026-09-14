@@ -9,9 +9,12 @@ from datetime import datetime
 from pathlib import Path
 from repom.scripts._backup_utils import (
     cleanup_incomplete_backups,
+    ensure_backup_dir,
     format_size,
+    open_backup_temp_file,
     rotate_backups,
     run_postgres_via_docker_or_host,
+    write_checksum,
 )
 
 # ロガーを取得
@@ -32,8 +35,8 @@ def backup_sqlite():
     logger.debug(f"Backup directory: {config.db_backup_path}")
     logger.debug(f"Database file: {config.sqlite.db_file_path}")
 
-    # Ensure backup directory exists
-    os.makedirs(config.db_backup_path, exist_ok=True)
+    # Ensure backup directory exists with restrictive permissions
+    ensure_backup_dir(config.db_backup_path)
     logger.debug(f"Backup directory created/verified: {config.db_backup_path}")
 
     # Get original db file name and extension
@@ -51,9 +54,10 @@ def backup_sqlite():
     backup_pattern = f"{name}_*{ext}"
     cleanup_stale_backups(backup_dir, backup_pattern)
 
-    # Copy the file
+    # Copy the file, keeping the backup readable only by its owner from creation
     logger.debug(f"Copying {config.sqlite.db_file_path} to {partial_path}")
-    shutil.copy2(config.sqlite.db_file_path, partial_path)
+    with open(config.sqlite.db_file_path, 'rb') as src_file, open_backup_temp_file(partial_path) as dst_file:
+        shutil.copyfileobj(src_file, dst_file)
     if partial_path.stat().st_size == 0:
         logger.error("Backup file is empty")
         print("Error: Backup file is empty")
@@ -61,6 +65,7 @@ def backup_sqlite():
         return
 
     partial_path.replace(backup_path)
+    write_checksum(backup_path)
     removed = rotate_backups(backup_dir, backup_pattern, MAX_BACKUPS_PER_DB)
     if removed:
         logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
@@ -80,8 +85,8 @@ def backup_postgresql_via_host():
     logger.debug(f"Backup directory: {config.db_backup_path}")
     logger.debug(f"Database: {config.postgres_db}")
 
-    # Ensure backup directory exists
-    os.makedirs(config.db_backup_path, exist_ok=True)
+    # Ensure backup directory exists with restrictive permissions
+    ensure_backup_dir(config.db_backup_path)
     logger.debug(f"Backup directory created/verified: {config.db_backup_path}")
 
     # Create backup file name: db_<datetime>.sql.gz
@@ -123,10 +128,11 @@ def backup_postgresql_via_host():
             env=env
         )
 
-        # gzip 圧縮
-        with gzip.open(partial_path, 'wb') as gz_file:
-            for line in pg_dump_proc.stdout:
-                gz_file.write(line)
+        # gzip 圧縮 (0600 で作成し、一時ファイルが world-readable になる窓を作らない)
+        with open_backup_temp_file(partial_path) as raw_file:
+            with gzip.open(raw_file, 'wb') as gz_file:
+                for line in pg_dump_proc.stdout:
+                    gz_file.write(line)
 
         # pg_dump の終了を待つ
         _, stderr = pg_dump_proc.communicate()
@@ -137,7 +143,7 @@ def backup_postgresql_via_host():
             print(f"Error: pg_dump failed\n{error_msg}")
             if partial_path.exists():
                 partial_path.unlink()  # 失敗したバックアップファイルを削除
-            return
+            raise RuntimeError(f"pg_dump failed with exit code {pg_dump_proc.returncode}: {error_msg}")
 
         # バックアップファイルサイズ確認
         file_size = partial_path.stat().st_size
@@ -150,6 +156,7 @@ def backup_postgresql_via_host():
             return
 
         partial_path.replace(backup_path)
+        write_checksum(backup_path)
         removed = rotate_backups(backup_dir, "db_*.sql.gz", MAX_BACKUPS_PER_DB)
         if removed:
             logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
@@ -164,6 +171,9 @@ def backup_postgresql_via_host():
         print("Error: pg_dump command not found")
         print("Please install PostgreSQL client tools and ensure 'pg_dump' is in your PATH")
         return
+    except RuntimeError:
+        # pg_dump exited non-zero; already logged, printed, and cleaned up above.
+        raise
     except Exception as e:
         logger.error(f"Backup failed: {e}")
         print(f"Error: Backup failed: {e}")
@@ -184,8 +194,8 @@ def backup_postgresql_via_docker():
     container_name = config.postgres.container.get_container_name()
     logger.info(f"Using Docker container: {container_name}")
 
-    # Ensure backup directory exists
-    os.makedirs(config.db_backup_path, exist_ok=True)
+    # Ensure backup directory exists with restrictive permissions
+    ensure_backup_dir(config.db_backup_path)
     logger.debug(f"Backup directory created/verified: {config.db_backup_path}")
 
     # Create backup file name: db_<datetime>.sql.gz
@@ -222,9 +232,10 @@ def backup_postgresql_via_docker():
             capture_output=True
         )
 
-        # gzip 圧縮して保存
-        with gzip.open(partial_path, 'wb') as gz_file:
-            gz_file.write(result.stdout)
+        # gzip 圧縮して保存 (0600 で作成)
+        with open_backup_temp_file(partial_path) as raw_file:
+            with gzip.open(raw_file, 'wb') as gz_file:
+                gz_file.write(result.stdout)
 
         # バックアップファイルサイズ確認
         file_size = partial_path.stat().st_size
@@ -237,6 +248,7 @@ def backup_postgresql_via_docker():
             return
 
         partial_path.replace(backup_path)
+        write_checksum(backup_path)
         removed = rotate_backups(backup_dir, "db_*.sql.gz", MAX_BACKUPS_PER_DB)
         if removed:
             logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")

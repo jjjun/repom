@@ -24,7 +24,9 @@ from typing import Optional
 from repom.scripts._backup_utils import (
     format_size,
     get_backups,
+    open_backup_temp_file,
     run_postgres_via_docker_or_host,
+    verify_checksum,
 )
 
 logger = get_logger(__name__)
@@ -80,6 +82,10 @@ def restore_sqlite(backup_file: Path):
     """
     logger.info(f"Starting SQLite restore from {backup_file.name}")
 
+    if not verify_checksum(backup_file):
+        logger.warning(f"No checksum recorded for {backup_file.name}; skipping integrity check")
+        print(f"Warning: no checksum recorded for {backup_file.name}; skipping integrity check")
+
     current_db = Path(config.sqlite.db_file_path)
 
     # If the current DB exists, create an automatic backup of it first
@@ -90,7 +96,8 @@ def restore_sqlite(backup_file: Path):
 
         logger.info(f"Creating automatic backup of current database: {auto_backup_name}")
         print(f"Creating backup of current database: {auto_backup_name}")
-        shutil.copy2(current_db, auto_backup_path)
+        with open(current_db, 'rb') as src_file, open_backup_temp_file(auto_backup_path) as dst_file:
+            shutil.copyfileobj(src_file, dst_file)
         logger.debug(f"Backup saved to {auto_backup_path}")
 
     # Overwrite the current DB with the backup file
@@ -118,6 +125,10 @@ def restore_postgresql_via_host(backup_file: Path):
     logger.info(f"Starting PostgreSQL restore from {backup_file.name}")
 
     try:
+        if not verify_checksum(backup_file):
+            logger.warning(f"No checksum recorded for {backup_file.name}; skipping integrity check")
+            print(f"Warning: no checksum recorded for {backup_file.name}; skipping integrity check")
+
         # Set PGPASSWORD in the environment
         env = os.environ.copy()
         env['PGPASSWORD'] = config.postgres.password
@@ -156,23 +167,24 @@ def restore_postgresql_via_host(backup_file: Path):
         # Close gunzip's stdout so psql can consume it
         gunzip_proc.stdout.close()
 
-        # Wait for the processes to finish
+        # Wait for both processes to finish and collect their exit status
         psql_stdout, psql_stderr = psql_proc.communicate()
         gunzip_stderr = gunzip_proc.stderr.read()
+        gunzip_proc.wait()
 
         # Check gunzip errors
         if gunzip_proc.returncode != 0:
             error_msg = gunzip_stderr.decode('utf-8')
             logger.error(f"gunzip failed: {error_msg}")
             print(f"\nError: Failed to decompress backup file\n{error_msg}")
-            return
+            raise RuntimeError(f"gunzip failed with exit code {gunzip_proc.returncode}: {error_msg}")
 
         # Check psql errors
         if psql_proc.returncode != 0:
             error_msg = psql_stderr.decode('utf-8')
             logger.error(f"psql restore failed: {error_msg}")
             print(f"\nError: Restore failed\n{error_msg}")
-            return
+            raise RuntimeError(f"psql failed with exit code {psql_proc.returncode}: {error_msg}")
 
         print("\nRestore completed successfully")
         print(f"  Database: {config.postgres_db}")
@@ -212,6 +224,10 @@ def restore_postgresql_via_docker(backup_file: Path):
     logger.info(f"Using Docker container: {container_name}")
 
     try:
+        if not verify_checksum(backup_file):
+            logger.warning(f"No checksum recorded for {backup_file.name}; skipping integrity check")
+            print(f"Warning: no checksum recorded for {backup_file.name}; skipping integrity check")
+
         # Decompress the backup file
         logger.debug("Decompressing backup file")
         with gzip.open(backup_file, 'rb') as gz_file:

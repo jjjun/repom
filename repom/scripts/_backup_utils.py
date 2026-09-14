@@ -1,6 +1,8 @@
 from pathlib import Path
+import hashlib
+import os
 import time
-from typing import Callable, TypeVar
+from typing import BinaryIO, Callable, TypeVar
 
 from basekit.docker_manager import DockerCommandExecutor
 
@@ -10,6 +12,85 @@ from repom.logging import get_logger
 logger = get_logger(__name__)
 T = TypeVar("T")
 STALE_PARTIAL_BACKUP_AGE_SECONDS = 24 * 60 * 60
+
+# Backup artifacts hold a full copy of the database; keep them readable only
+# by the owner so a second local account or unprivileged process cannot read
+# them off disk.
+BACKUP_DIR_MODE = 0o700
+BACKUP_FILE_MODE = 0o600
+CHECKSUM_SUFFIX = ".sha256"
+
+
+class ChecksumError(Exception):
+    """Raised when a backup file does not match its recorded checksum."""
+
+
+def ensure_backup_dir(backup_dir: str | Path) -> Path:
+    """Create ``backup_dir`` if missing and enforce mode 0700.
+
+    Applied on every call, not only on first creation, so a pre-existing and
+    more permissive directory is tightened the next time a backup runs.
+    """
+    path = Path(backup_dir)
+    path.mkdir(mode=BACKUP_DIR_MODE, parents=True, exist_ok=True)
+    os.chmod(path, BACKUP_DIR_MODE)
+    return path
+
+
+def open_backup_temp_file(path: Path) -> BinaryIO:
+    """Create a new backup temp file with mode 0600 from creation.
+
+    Uses O_EXCL so a concurrent or leftover write at ``path`` is never
+    silently truncated and reused with looser permissions.
+    """
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, BACKUP_FILE_MODE)
+    return os.fdopen(fd, "wb")
+
+
+def compute_checksum(path: Path) -> str:
+    """Return the hex-encoded SHA-256 checksum of ``path``."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def checksum_path(backup_path: Path) -> Path:
+    """Return the sidecar checksum path for ``backup_path``."""
+    return backup_path.with_name(f"{backup_path.name}{CHECKSUM_SUFFIX}")
+
+
+def write_checksum(backup_path: Path) -> Path:
+    """Record ``backup_path``'s SHA-256 checksum in a sidecar file."""
+    digest = compute_checksum(backup_path)
+    sidecar = checksum_path(backup_path)
+    fd = os.open(sidecar, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, BACKUP_FILE_MODE)
+    with os.fdopen(fd, "w") as sidecar_file:
+        sidecar_file.write(f"{digest}  {backup_path.name}\n")
+    return sidecar
+
+
+def verify_checksum(backup_path: Path) -> bool:
+    """Verify ``backup_path`` against its recorded checksum, if any.
+
+    Returns False when no sidecar checksum exists (e.g. a backup taken
+    before this feature was added), so callers can warn instead of blocking
+    a restore. Raises ChecksumError when a sidecar exists but no longer
+    matches the backup file, since that indicates corruption or tampering
+    rather than a missing older-format sidecar.
+    """
+    sidecar = checksum_path(backup_path)
+    if not sidecar.exists():
+        return False
+
+    recorded = sidecar.read_text(encoding="utf-8").split()[0]
+    actual = compute_checksum(backup_path)
+    if actual != recorded:
+        raise ChecksumError(
+            f"Checksum mismatch for {backup_path.name}: expected {recorded}, got {actual}"
+        )
+    return True
 
 
 def format_size(size_bytes: int) -> str:
@@ -42,6 +123,7 @@ def cleanup_incomplete_backups(backup_dir: Path, glob_pattern: str) -> list[Path
         try:
             if path.stat().st_size == 0:
                 path.unlink(missing_ok=True)
+                checksum_path(path).unlink(missing_ok=True)
                 incomplete_files.append(path)
         except FileNotFoundError:
             continue
@@ -79,6 +161,7 @@ def rotate_backups(backup_dir: Path, glob_pattern: str, max_keep: int) -> list[P
     old_files = [path for _, path in files[:-max_keep]]
     for old_file in old_files:
         old_file.unlink(missing_ok=True)
+        checksum_path(old_file).unlink(missing_ok=True)
     return removed_files + old_files
 
 
