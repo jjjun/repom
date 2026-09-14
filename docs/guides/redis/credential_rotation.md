@@ -71,8 +71,8 @@ confirmation that the server is up.
 
 ## Notes
 
-- If no Redis password is configured, generated Redis behavior remains
-  unauthenticated.
+- Generated Redis always requires a password: `redis_generate` refuses to
+  run when `REDIS_PASSWORD` is unset or still `CHANGE_ME`.
 - Rotation output masks passwords.
 - A failed rotation raises an error with the password masked instead of a raw
   subprocess traceback.
