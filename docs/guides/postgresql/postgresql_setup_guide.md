@@ -110,6 +110,13 @@ REPOM_DATABASE_URL=postgresql+psycopg://user:password@db.example:5432/myapp
 
 接続先や password を含む URL を log、commit、資料へ残さないでください。
 
+`config.postgres` 経由で `db_url` を組み立てる場合、sslmode は
+`config.postgres.sslmode`（未設定時は exec_env 別の既定値: dev/test は
+`prefer`、prod は `require`）から補われます。`config.postgres.sslrootcert`
+を設定すると `sslrootcert` クエリパラメータも付与され、`verify-full` の検証に
+使えます。`EXEC_ENV=prod` でリモートホストへ接続する場合、`require` 未満の
+sslmode は `db_url` アクセス時に `ValueError` になります。
+
 ## トラブルシューティング
 
 - 有効設定: `uv run repom_info`

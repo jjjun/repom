@@ -9,6 +9,8 @@ config.db_type をデフォルトの 'sqlite' のままにして実行します�
 import pytest
 import os
 
+from sqlalchemy.engine.url import make_url
+
 
 class TestPostgresDBType:
     """DB type property tests"""
@@ -152,7 +154,7 @@ class TestPostgresURL:
         config.postgres.password = 'mypass'
         config.postgres.database = 'mydb'
 
-        expected = 'postgresql+psycopg://myuser:mypass@my-server:5433/mydb'
+        expected = 'postgresql+psycopg://myuser:mypass@my-server:5433/mydb?sslmode=prefer'
         assert config.db_url == expected
 
     def test_db_url_sqlite_unchanged(self):
@@ -185,8 +187,11 @@ class TestEngineKwargs:
         assert kwargs['pool_recycle'] == 3600
         assert kwargs['pool_pre_ping'] is True
 
+        # PostgreSQL 接続タイムアウトと application_name
+        assert kwargs['connect_args']['connect_timeout'] == 10
+        assert kwargs['connect_args']['application_name'] == config.package_name
+
         # SQLite 固有の設定は含まれない
-        assert 'connect_args' not in kwargs
         assert 'poolclass' not in kwargs
 
     def test_engine_kwargs_sqlite_file(self):
@@ -284,3 +289,93 @@ class TestURLOverride:
         config._db_url = 'sqlite:///custom/path/db.sqlite3'
 
         assert config.db_url == 'sqlite:///custom/path/db.sqlite3'
+
+
+class TestPostgresURLEncoding:
+    """db_url が特殊文字を含む値を正しくパーセントエンコードすることを確認"""
+
+    @pytest.mark.parametrize(
+        "password",
+        ["p@ss", "p/ss", "p?ss", "p#ss", "p ss"],
+    )
+    def test_db_url_encodes_special_characters_in_password(self, password):
+        """@ / ? # とスペースを含むパスワードが make_url で正しく復元される"""
+        from repom.config import RepomConfig
+        config = RepomConfig()
+        config.db_type = 'postgres'
+        config.postgres.password = password
+
+        url = make_url(config.db_url)
+
+        assert url.password == password
+
+    @pytest.mark.parametrize(
+        ("postgres_attr", "url_attr", "value"),
+        [
+            ("user", "username", "us@er"),
+            ("database", "database", "db#name"),
+        ],
+    )
+    def test_db_url_encodes_special_characters_in_user_and_database(
+        self, postgres_attr, url_attr, value
+    ):
+        """user / database に含まれる特殊文字も make_url で正しく復元される"""
+        from repom.config import RepomConfig
+        config = RepomConfig()
+        config.db_type = 'postgres'
+        setattr(config.postgres, postgres_attr, value)
+
+        url = make_url(config.db_url)
+
+        assert getattr(url, url_attr) == value
+
+
+class TestPostgresSSLMode:
+    """postgres_sslmode の既定値と prod での検証を確認"""
+
+    def test_db_url_sets_sslmode_from_config(self):
+        """config.postgres.sslmode が db_url の sslmode クエリに反映される"""
+        from repom.config import RepomConfig
+        config = RepomConfig()
+        config.db_type = 'postgres'
+        config.postgres.sslmode = 'verify-full'
+
+        url = make_url(config.db_url)
+
+        assert url.query["sslmode"] == "verify-full"
+
+    def test_postgres_sslmode_defaults_by_exec_env(self):
+        """明示指定がない場合、prod は require、それ以外は prefer"""
+        from repom.config import RepomConfig
+
+        config_dev = RepomConfig(exec_env='dev')
+        config_dev.db_type = 'postgres'
+        assert config_dev.postgres_sslmode == 'prefer'
+
+        config_prod = RepomConfig(exec_env='prod')
+        config_prod.db_type = 'postgres'
+        assert config_prod.postgres_sslmode == 'require'
+
+    def test_prod_requires_ssl_for_remote_host(self):
+        """exec_env=prod + リモートホスト + 弱い sslmode は db_url で拒否される"""
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.db_type = 'postgres'
+        config.postgres.host = 'db.example.com'
+        config.postgres.sslmode = 'prefer'
+
+        with pytest.raises(ValueError, match="sslmode"):
+            config.db_url
+
+    @pytest.mark.parametrize("local_host", ["localhost", "127.0.0.1", "::1"])
+    def test_prod_allows_localhost_without_ssl(self, local_host):
+        """ローカル Docker ワークフローは prod でも sslmode 検証の対象外"""
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.db_type = 'postgres'
+        config.postgres.host = local_host
+        config.postgres.sslmode = 'prefer'
+
+        url = config.db_url
+
+        assert "sslmode=prefer" in url

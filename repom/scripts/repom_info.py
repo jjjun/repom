@@ -99,12 +99,10 @@ def test_postgres_connection() -> str:
     if not database:
         return '[NG] Not configured (database missing)'
 
-    # Build PostgreSQL connection URL (psycopg3)
+    # Build PostgreSQL connection URL (psycopg3) via config.db_url so the
+    # same URL encoding and sslmode handling as the real engine applies here.
     try:
-        pg_url = (
-            f"postgresql+psycopg://{config.postgres.user}:{config.postgres.password}"
-            f"@{config.postgres.host}:{config.postgres.port}/{database}"
-        )
+        pg_url = config.db_url
 
         # Create a temporary engine for testing with a short connect timeout.
         test_engine = create_engine(

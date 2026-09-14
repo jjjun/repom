@@ -14,11 +14,16 @@ from repom.database import (
     convert_to_async_uri,
     DatabaseManager,
 )
+import repom.database as database_module
 from repom.config import config
 import asyncio
+import inspect
 import os
+import ssl
+import asyncpg
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     AsyncEngine,
@@ -86,6 +91,13 @@ class TestConvertToAsyncUri:
         result_pg = convert_to_async_uri(async_url_pg)
         assert "postgresql+asyncpg://" in result_pg
 
+    def test_async_uri_conversion_preserves_query_parameters(self):
+        """sslmode survives the sync-to-async driver swap"""
+        sync_url = "postgresql+psycopg://user:pass@localhost:5432/db?sslmode=require"
+        async_url = convert_to_async_uri(sync_url)
+        assert "postgresql+asyncpg://" in async_url
+        assert "sslmode=require" in async_url
+
 
 class TestGetAsyncEngine:
     """get_async_engine() のテスト"""
@@ -110,6 +122,106 @@ class TestGetAsyncEngine:
         engine = await get_async_engine()
         async with engine.connect() as conn:
             assert conn is not None
+
+
+class TestGetAsyncEngineAsyncpgConnectOptions:
+    """asyncpg 変換時に sslmode/sslrootcert/connect_args を asyncpg 用に翻訳することを確認
+
+    asyncpg.connect() には sslmode/sslrootcert/connect_timeout/application_name の
+    いずれのキーワードも無く **kwargs も無いため、db_url の ?sslmode=... や
+    engine_kwargs の connect_args をそのまま渡すと最初の接続で TypeError になる
+    （回帰防止のためのテスト）。
+    """
+
+    @staticmethod
+    def _patch_postgres_config(monkeypatch, *, sslmode, sslrootcert=None):
+        # Clear any _db_url override so db_url is actually recomputed from
+        # db_type/postgres below (some other test's monkeypatch on the
+        # db_url property setter can otherwise pin a stale cached value).
+        monkeypatch.setattr(config, "_db_url", None)
+        monkeypatch.setattr(config, "db_type", "postgres")
+        monkeypatch.setattr(config.postgres, "sslmode", sslmode)
+        monkeypatch.setattr(config.postgres, "sslrootcert", sslrootcert)
+
+    @staticmethod
+    def _capture_create_async_engine(monkeypatch):
+        captured = {}
+
+        def fake_create_async_engine(url, **kwargs):
+            captured["url"] = url
+            captured["kwargs"] = kwargs
+            return captured
+
+        monkeypatch.setattr(database_module, "create_async_engine", fake_create_async_engine)
+        return captured
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("sslmode", ["disable", "allow", "prefer", "require"])
+    async def test_plain_sslmode_becomes_asyncpg_ssl_string(self, monkeypatch, sslmode):
+        self._patch_postgres_config(monkeypatch, sslmode=sslmode)
+        captured = self._capture_create_async_engine(monkeypatch)
+
+        manager = DatabaseManager()
+        await manager.get_async_engine()
+
+        url = make_url(captured["url"])
+        assert "sslmode" not in url.query
+        assert "sslrootcert" not in url.query
+
+        connect_args = captured["kwargs"]["connect_args"]
+        assert connect_args["ssl"] == sslmode
+        assert connect_args["timeout"] == config.db_connect_timeout
+        assert connect_args["server_settings"] == {
+            "application_name": config.db_application_name
+        }
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("sslmode", "expected_check_hostname"),
+        [("verify-ca", False), ("verify-full", True)],
+    )
+    async def test_sslrootcert_builds_ssl_context(
+        self, monkeypatch, sslmode, expected_check_hostname
+    ):
+        create_default_context_calls = []
+        real_create_default_context = ssl.create_default_context
+
+        def spy_create_default_context(*, cafile=None):
+            create_default_context_calls.append(cafile)
+            return real_create_default_context()
+
+        monkeypatch.setattr(ssl, "create_default_context", spy_create_default_context)
+        self._patch_postgres_config(
+            monkeypatch, sslmode=sslmode, sslrootcert="/tmp/fake-root.crt"
+        )
+        captured = self._capture_create_async_engine(monkeypatch)
+
+        manager = DatabaseManager()
+        await manager.get_async_engine()
+
+        assert create_default_context_calls == ["/tmp/fake-root.crt"]
+
+        url = make_url(captured["url"])
+        assert "sslmode" not in url.query
+        assert "sslrootcert" not in url.query
+
+        ssl_context = captured["kwargs"]["connect_args"]["ssl"]
+        assert isinstance(ssl_context, ssl.SSLContext)
+        assert ssl_context.check_hostname is expected_check_hostname
+
+    @pytest.mark.asyncio
+    async def test_asyncpg_connect_accepts_every_emitted_connect_args_key(self, monkeypatch):
+        """asyncpg.connect が受け付けないキーワードを渡すと最初の接続で TypeError に
+        なるため、シグネチャに対して契約として検証する"""
+        self._patch_postgres_config(monkeypatch, sslmode="require")
+        captured = self._capture_create_async_engine(monkeypatch)
+
+        manager = DatabaseManager()
+        await manager.get_async_engine()
+
+        accepted_params = set(inspect.signature(asyncpg.connect).parameters)
+        connect_args = captured["kwargs"]["connect_args"]
+        assert set(connect_args) <= accepted_params
 
 
 class TestGetAsyncDbSession:

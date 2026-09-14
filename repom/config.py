@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import List, Optional, Set
 
 from basekit.config_hook import Config, get_config_from_hook
+from sqlalchemy.engine import URL
 
 from repom.postgres.config import (
     PgAdminConfig as _PgAdminConfig,
@@ -16,6 +17,13 @@ from repom.postgres.config import (
 )
 from repom.redis.config import RedisConfig as _RedisConfig
 from repom.sqlite.config import SqliteConfig as _SqliteConfig
+
+
+# ローカル接続とみなすホスト名 - prod の sslmode 検証で除外する
+_POSTGRES_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+# 平文フォールバックを許すため prod のリモート接続では拒否する sslmode
+_POSTGRES_WEAK_SSLMODES = frozenset({"disable", "allow", "prefer"})
 
 
 @dataclass
@@ -62,6 +70,10 @@ class RepomConfig(Config):
     _db_pool_timeout: int = field(default=30, init=False, repr=False)
     _db_pool_recycle: int = field(default=3600, init=False, repr=False)
     _db_pool_pre_ping: bool = field(default=True, init=False, repr=False)
+
+    # PostgreSQL 接続タイムアウト・接続元識別設定
+    _db_connect_timeout: int = field(default=10, init=False, repr=False)
+    _db_application_name: Optional[str] = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
         """dataclassの初期化後に実行"""
@@ -172,13 +184,38 @@ class RepomConfig(Config):
             return f"{base}_dev"
 
     @property
+    def postgres_sslmode(self) -> str:
+        """PostgreSQL の sslmode（環境別のデフォルト値）
+
+        デフォルト:
+            prod: require
+            dev/test/その他: prefer
+
+        config.postgres.sslmode を明示的に設定すると、exec_env によらず
+        その値が優先されます。prod でリモートホストへ接続する場合、
+        require 未満（disable/allow/prefer）の値は db_url 生成時に拒否
+        されます。
+        """
+        if self.postgres.sslmode is not None:
+            return self.postgres.sslmode
+        return "require" if self.exec_env == "prod" else "prefer"
+
+    @property
     def db_url(self) -> Optional[str]:
         """データベースURL（SQLite/PostgreSQL 自動切り替え）
 
         db_type プロパティにより自動的に切り替わります:
 
         PostgreSQL (db_type='postgres'):
-            postgresql+psycopg://user:password@host:port/database
+            postgresql+psycopg://user:password@host:port/database?sslmode=...
+
+            user/password/host/database は sqlalchemy.engine.URL.create() で
+            組み立てられ、@ / ? # やスペースを含む値も正しくパーセントエン
+            コードされます。sslmode は postgres_sslmode（exec_env 別の既定値、
+            または config.postgres.sslmode の明示値）から補われ、
+            config.postgres.sslrootcert を設定すると sslrootcert クエリ
+            パラメータも付与されます。prod でリモートホストへ接続する際に
+            sslmode が require 未満の場合は ValueError を送出します。
 
         SQLite (db_type='sqlite', デフォルト):
             sqlite:///path/to/db.sqlite3
@@ -209,10 +246,32 @@ class RepomConfig(Config):
 
         # PostgreSQL
         if self.db_type == "postgres":
-            return (
-                f"postgresql+psycopg://{self.postgres.user}:{self.postgres.password}"
-                f"@{self.postgres.host}:{self.postgres.port}/{self.postgres_db}"
+            sslmode = self.postgres_sslmode
+            if (
+                self.exec_env == "prod"
+                and self.postgres.host not in _POSTGRES_LOCAL_HOSTS
+                and sslmode in _POSTGRES_WEAK_SSLMODES
+            ):
+                raise ValueError(
+                    f"PostgreSQL sslmode {sslmode!r} is not allowed in prod for "
+                    f"a non-local host ({self.postgres.host!r}); set "
+                    "config.postgres.sslmode to 'require' or stronger."
+                )
+
+            query = {"sslmode": sslmode}
+            if self.postgres.sslrootcert:
+                query["sslrootcert"] = self.postgres.sslrootcert
+
+            url = URL.create(
+                drivername="postgresql+psycopg",
+                username=self.postgres.user,
+                password=self.postgres.password,
+                host=self.postgres.host,
+                port=self.postgres.port,
+                database=self.postgres_db,
+                query=query,
             )
+            return url.render_as_string(hide_password=False)
 
         # SQLite: テスト環境では in-memory をデフォルトにする。
         # ファイルベースが必要な場合は config.sqlite.use_in_memory_for_tests
@@ -456,6 +515,38 @@ class RepomConfig(Config):
         self._db_pool_pre_ping = value
 
     @property
+    def db_connect_timeout(self) -> int:
+        """PostgreSQL 接続タイムアウト秒数（デフォルト: 10, 1 以上）
+
+        engine_kwargs の connect_args.connect_timeout に渡される。
+        応答しないホストへの接続試行を無期限にブロックさせないための設定。
+        """
+        return self._db_connect_timeout
+
+    @db_connect_timeout.setter
+    def db_connect_timeout(self, value: int):
+        if value <= 0:
+            raise ValueError(
+                f"Invalid db_connect_timeout: {value}. Must be greater than 0."
+            )
+        self._db_connect_timeout = value
+
+    @property
+    def db_application_name(self) -> str:
+        """PostgreSQL 接続の application_name（デフォルト: package_name）
+
+        engine_kwargs の connect_args.application_name に渡される。
+        pg_stat_activity 上で接続元アプリケーションを識別するために使用される。
+        """
+        if self._db_application_name is not None:
+            return self._db_application_name
+        return self.package_name
+
+    @db_application_name.setter
+    def db_application_name(self, value: Optional[str]):
+        self._db_application_name = value
+
+    @property
     def engine_kwargs(self) -> dict:
         """create_engine に渡す追加パラメータ（DB種別対応）
 
@@ -492,8 +583,12 @@ class RepomConfig(Config):
         - StaticPool により単一 connection を全スレッドで共有することで解決
 
         PostgreSQL 特有の設定:
-        - connect_args は不要（PostgreSQL は自動的にスレッドセーフ）
         - pool_pre_ping=True により、切断された接続を自動検知
+        - connect_args.connect_timeout: 接続タイムアウト秒数（db_connect_timeout,
+          デフォルト: 10）。応答しないホストへの接続を無期限にブロックさせない。
+        - connect_args.application_name: 接続元アプリケーション名
+          （db_application_name, デフォルト: package_name）。pg_stat_activity
+          上で接続を識別するために使用する。
 
         Returns:
             dict: create_engine に渡すキーワード引数
@@ -525,6 +620,10 @@ class RepomConfig(Config):
                 "pool_recycle": self.db_pool_recycle,
                 "pool_pre_ping": self.db_pool_pre_ping,
                 "hide_parameters": self.sqlalchemy_hide_parameters,
+                "connect_args": {
+                    "connect_timeout": self.db_connect_timeout,
+                    "application_name": self.db_application_name,
+                },
             }
 
         # SQLite :memory: DB の場合は、StaticPool を使用して単一接続を全スレッドで共有

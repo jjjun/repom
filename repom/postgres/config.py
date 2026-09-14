@@ -26,13 +26,20 @@ class PostgresContainerConfig:
 
 @dataclass
 class PostgresConfig:
-    """PostgreSQL database settings."""
+    """PostgreSQL database settings.
+
+    ``sslmode`` と ``sslrootcert`` は libpq の SSL 接続パラメータ。``sslmode``
+    が None の場合、``RepomConfig.postgres_sslmode`` が exec_env に応じた
+    既定値（dev/test: prefer, prod: require）を補う。
+    """
 
     host: str = field(default="localhost")
     port: int = field(default=5432)
     user: str = field(default="repom")
     password: str = field(default="repom_dev", repr=False)
     database: Optional[str] = field(default=None)
+    sslmode: Optional[str] = field(default=None)
+    sslrootcert: Optional[str] = field(default=None)
     container: PostgresContainerConfig = field(default_factory=PostgresContainerConfig)
 
     def __repr__(self) -> str:
@@ -40,7 +47,8 @@ class PostgresConfig:
         return (
             f"{self.__class__.__name__}(host={self.host!r}, port={self.port!r}, "
             f"user={self.user!r}, password={password_display}, "
-            f"database={self.database!r}, container={self.container!r})"
+            f"database={self.database!r}, sslmode={self.sslmode!r}, "
+            f"sslrootcert={self.sslrootcert!r}, container={self.container!r})"
         )
 
 

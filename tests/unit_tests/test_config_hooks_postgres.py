@@ -96,7 +96,7 @@ def test_apply_postgres_env_overrides_pins_postgres_database_name(monkeypatch):
     apply_postgres_env_overrides(config)
 
     assert config.postgres_db == "repom_env_1"
-    assert config.db_url.endswith("/repom_env_1")
+    assert "/repom_env_1?" in config.db_url
 
 
 def test_apply_postgres_env_overrides_does_not_affect_sqlite_test_url(monkeypatch):

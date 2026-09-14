@@ -42,6 +42,7 @@ from typing import Optional, AsyncGenerator, Generator, AsyncContextManager, Con
 from contextlib import contextmanager, asynccontextmanager  # Only for DatabaseManager internal use
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import asyncio
+import ssl
 
 from sqlalchemy import create_engine, Engine, inspect
 from sqlalchemy.engine.url import make_url
@@ -401,9 +402,12 @@ class DatabaseManager:
             async with self._lock:
                 if self._async_engine is None:
                     async_url = self._convert_to_async_uri(config.db_url)
+                    async_url, async_engine_kwargs = self._adapt_asyncpg_connect_options(
+                        async_url, config.engine_kwargs
+                    )
                     self._async_engine = create_async_engine(
                         async_url,
-                        **config.engine_kwargs,
+                        **async_engine_kwargs,
                         echo=False
                     )
                     logger.debug(f"Async engine created: {safe_db_url(async_url)}")
@@ -626,6 +630,62 @@ class DatabaseManager:
                 f"Unsupported database URL format: {safe_db_url(sync_url)}\n"
                 f"Supported formats: sqlite://, postgresql://, mysql://"
             )
+
+    @staticmethod
+    def _adapt_asyncpg_connect_options(async_url: str, engine_kwargs: dict) -> "tuple[str, dict]":
+        """Translate libpq-style URL/connect_args into asyncpg's own parameters.
+
+        SQLAlchemy's asyncpg dialect merges the URL query string and connect_args
+        straight into ``asyncpg.connect(**kw)``, which has no ``sslmode``,
+        ``sslrootcert``, ``connect_timeout`` or ``application_name`` parameters
+        and no catch-all ``**kwargs`` - so db_url's ``?sslmode=...`` and
+        engine_kwargs's psycopg-style connect_args would otherwise raise
+        TypeError on the first async connection. Only the asyncpg driver is
+        affected; other drivers are returned unchanged.
+
+        Args:
+            async_url: Async database URL (already converted by _convert_to_async_uri)
+            engine_kwargs: Keyword arguments destined for create_async_engine
+
+        Returns:
+            tuple[str, dict]: (possibly rewritten URL, possibly rewritten kwargs)
+        """
+        url = make_url(async_url)
+        if url.drivername != "postgresql+asyncpg":
+            return async_url, engine_kwargs
+
+        query = dict(url.query)
+        sslmode = query.pop("sslmode", None)
+        sslrootcert = query.pop("sslrootcert", None)
+        url = url.set(query=query)
+
+        asyncpg_connect_args = {}
+        if sslmode is not None:
+            if sslrootcert:
+                ssl_context = ssl.create_default_context(cafile=sslrootcert)
+                if sslmode == "verify-ca":
+                    ssl_context.check_hostname = False
+                elif sslmode == "verify-full":
+                    ssl_context.check_hostname = True
+                asyncpg_connect_args["ssl"] = ssl_context
+            else:
+                asyncpg_connect_args["ssl"] = sslmode
+
+        connect_args = engine_kwargs.get("connect_args") or {}
+        if "connect_timeout" in connect_args:
+            asyncpg_connect_args["timeout"] = connect_args["connect_timeout"]
+        if "application_name" in connect_args:
+            asyncpg_connect_args["server_settings"] = {
+                "application_name": connect_args["application_name"]
+            }
+
+        adapted_kwargs = dict(engine_kwargs)
+        if asyncpg_connect_args:
+            adapted_kwargs["connect_args"] = asyncpg_connect_args
+        else:
+            adapted_kwargs.pop("connect_args", None)
+
+        return url.render_as_string(hide_password=False), adapted_kwargs
 
 
 # ========================================
