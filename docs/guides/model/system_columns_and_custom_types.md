@@ -72,6 +72,40 @@ Custom type behavior can affect migration output and cross-database
 compatibility, so applications should add round-trip tests for every database
 engine they support.
 
+## Mass-assignment and serialization allowlists
+
+`update_from_dict()` requires an explicit allowlist. Pass `allowed_fields`, or
+set the class attribute `updatable_fields`, or the call raises `ValueError`:
+
+```python
+class Profile(BaseModel):
+    __tablename__ = "profiles"
+    updatable_fields = {"display_name", "bio"}
+
+    display_name: Mapped[str] = mapped_column(String(100))
+    bio: Mapped[str] = mapped_column(String(500))
+    is_admin: Mapped[bool] = mapped_column(default=False)
+
+
+profile.update_from_dict(request_json)  # only display_name / bio can change
+```
+
+Primary-key columns (resolved from the mapper, whatever their name),
+`created_at`, `updated_at`, and `deleted_at` (when the model has it) are
+excluded unconditionally, even if listed in `updatable_fields` or
+`allowed_fields`. `exclude_fields` narrows the allowlist further for a single
+call; it cannot widen it.
+
+`to_dict()` still returns every column by default. Set `sensitive_fields` to
+exclude columns such as password hashes from the output, and optionally
+`serializable_fields` to return only an explicit subset:
+
+```python
+class Profile(BaseModel):
+    __tablename__ = "profiles"
+    sensitive_fields = {"password_hash"}
+```
+
 ## Related documentation
 
 - [Soft-delete guide](soft_delete_guide.md)

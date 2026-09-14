@@ -9,6 +9,7 @@ from repom.models.base_model import BaseModel
 class SimpleTestModel(BaseModel):
     """テスト用の単純なモデル"""
     __tablename__ = 'simple_test_model_extra_keys'
+    updatable_fields = {'name', 'age'}
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     age: Mapped[int] = mapped_column(nullable=True)
@@ -17,6 +18,7 @@ class SimpleTestModel(BaseModel):
 class ModelWithProperties(BaseModel):
     """読み取り専用プロパティを持つモデル"""
     __tablename__ = 'model_with_properties'
+    updatable_fields = {'first_name', 'last_name', 'age', 'full_name', 'is_adult'}
 
     first_name: Mapped[str] = mapped_column(String(50), nullable=False)
     last_name: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -43,6 +45,7 @@ class ParentModel(BaseModel):
 class ChildModel(BaseModel):
     """リレーションとプロパティを持つ子モデル"""
     __tablename__ = 'child_model_for_relation_test'
+    updatable_fields = {'name', 'parent_title'}
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     parent_id: Mapped[int] = mapped_column(Integer, ForeignKey("parent_model_for_relation_test.id"), nullable=False)
@@ -59,6 +62,7 @@ class ModelWithTimestamps(BaseModel):
     __tablename__ = 'model_with_timestamps_extra_keys'
     use_created_at = True
     use_updated_at = True
+    updatable_fields = {'id', 'created_at', 'name'}
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 

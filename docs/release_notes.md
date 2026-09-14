@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- BREAKING: `BaseModel.update_from_dict()` now requires an explicit
+  allowlist. Pass `allowed_fields`, or set the class attribute
+  `updatable_fields`, or the call raises `ValueError`. Previously every
+  mapped column except `id`, `created_at`, and `updated_at` was writable,
+  which made the method a mass-assignment sink for any column a consuming
+  project added (`is_admin`, `tenant_id`, `deleted_at`, and so on).
+  Primary-key columns are now resolved from the mapper instead of the
+  literal name `id`, so a primary key declared under any other name is also
+  excluded unconditionally, along with `created_at`, `updated_at`, and
+  `deleted_at` (when the model has it) — even if listed in
+  `updatable_fields` or `allowed_fields`. `BaseModel.to_dict()` still
+  returns every column by default; set the new `sensitive_fields` class
+  attribute to exclude specific columns (such as password hashes) from the
+  output, and optionally `serializable_fields` to return only an explicit
+  subset.
 - BREAKING: `get_all()` now excludes soft-deleted rows by default, matching
   every other read method on the repository, and accepts
   `include_deleted: bool = False` to opt back into the previous behaviour.

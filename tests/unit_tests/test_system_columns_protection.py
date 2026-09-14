@@ -12,6 +12,7 @@ class SystemProtectionModel(BaseModel):
     __tablename__ = 'system_protection_model'
     use_created_at = True
     use_updated_at = True
+    updatable_fields = {'id', 'created_at', 'updated_at', 'name'}
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 

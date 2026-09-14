@@ -27,6 +27,7 @@ from repom.database import Base
 class UuidModel(BaseModel, use_uuid=True, use_created_at=True, use_updated_at=True):
     """UUID を主キーとして使用するモデル"""
     __tablename__ = 'uuid_models'
+    updatable_fields = {'id', 'name'}
 
     name: Mapped[str] = mapped_column(String(100))
 

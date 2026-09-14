@@ -49,6 +49,17 @@ class BaseModel(Base):
     # このクラスは抽象基底クラスとして定義する際に abstract=True を指定する
     __abstract__ = True
 
+    # update_from_dict() が更新を許可するフィールドのアローリスト。
+    # None のままの場合、呼び出し側は allowed_fields を明示的に渡す必要がある
+    # （意図しないフィールドの一括更新を防ぐための安全側のデフォルト）。
+    updatable_fields: set = None
+
+    # to_dict() が常に除外するフィールド（パスワードハッシュなどの機密情報）
+    sensitive_fields: set = frozenset()
+
+    # to_dict() が返すフィールドを絞り込む場合に指定する（None は全カラムが対象）
+    serializable_fields: set = None
+
     def __init_subclass__(
         cls,
         use_id=_UNSET,
@@ -163,29 +174,84 @@ class BaseModel(Base):
             cls.__annotations__['updated_at'] = Mapped[datetime]
 
     def to_dict(self):
-        return {c.key: getattr(self, c.key) for c in inspect(self).mapper.column_attrs}
+        """
+        モデルの属性を辞書に変換します。
 
-    def update_from_dict(self, data: dict, exclude_fields: list = None) -> bool:
+        重要:
+        - デフォルトでは全カラムを返します（後方互換のため）。機密情報を含む
+          カラムがある場合は sensitive_fields で明示的に除外してください
+        - sensitive_fields に列挙したカラムは serializable_fields の指定に
+          関わらず常に除外されます
+        - serializable_fields を指定した場合、そこに含まれるカラムのみを
+          返します（None の場合は全カラムが対象）
+
+        Returns:
+            dict: カラム名をキーとした辞書。
+        """
+        sensitive_fields = self.sensitive_fields or set()
+        serializable_fields = self.serializable_fields
+        column_keys = [c.key for c in inspect(self).mapper.column_attrs]
+        if serializable_fields is not None:
+            column_keys = [key for key in column_keys if key in serializable_fields]
+        return {
+            key: getattr(self, key)
+            for key in column_keys
+            if key not in sensitive_fields
+        }
+
+    def update_from_dict(self, data: dict, allowed_fields: set = None, exclude_fields: list = None) -> bool:
         """
         モデルのフィールドを辞書データで更新します。
-        特定のフィールドは更新を拒否します。
+        アローリスト方式で、許可されたフィールドのみを更新対象とします。
         変更があった場合は True を返します。
 
         重要:
         - 実際のDBカラムのみが更新対象です
         - @property などの読み取り専用属性は自動的に無視されます
         - 辞書に存在しないカラムのキーがあっても問題ありません
+        - allowed_fields を省略した場合、クラス属性 updatable_fields を使用します
+        - allowed_fields も updatable_fields も指定されていない場合は
+          ValueError を送出します（意図しないフィールドの一括更新を防ぐための
+          安全側のデフォルト）
 
         Args:
             data (dict): 更新するデータ。
-            exclude_fields (list, optional): 更新を拒否するフィールドのリスト。デフォルトは None。
+            allowed_fields (set, optional): 更新を許可するフィールドの集合。
+                省略時はクラス属性 updatable_fields を使用します。
+            exclude_fields (list, optional): allowed_fields からさらに除外する
+                フィールドのリスト。
 
         Returns:
             bool: 変更があった場合は True、なければ False。
+
+        Raises:
+            ValueError: allowed_fields も updatable_fields も指定されていない場合。
         """
+        if allowed_fields is None:
+            allowed_fields = self.updatable_fields
+        if allowed_fields is None:
+            raise ValueError(
+                f"{type(self).__name__}.update_from_dict() は allowed_fields を"
+                "明示的に指定するか、クラス属性 updatable_fields を設定する"
+                "必要があります（意図しないフィールドの一括更新を防ぐため）。"
+            )
+        allowed_fields = set(allowed_fields)
+
+        # SQLAlchemy の mapper を使って、実際のDBカラム名のセットを取得
+        mapper = inspect(self.__class__)
+        column_keys = {col.key for col in mapper.column_attrs}
+
         # 更新を拒否するデフォルトのフィールド（システムカラム）
-        # セキュリティ上、これらは常に除外される（exclude_fields で指定しても除外）
-        default_exclude_fields = {'id', 'created_at', 'updated_at'}
+        # セキュリティ上、これらは allowed_fields に含まれていても常に除外される。
+        # 主キーはカラム名ではなく mapper から解決するため、id 以外の名前の
+        # 主キー（uuid など）にも対応する
+        default_exclude_fields = {
+            mapper.get_property_by_column(col).key for col in mapper.primary_key
+        }
+        default_exclude_fields.update({'created_at', 'updated_at'})
+        if 'deleted_at' in column_keys:
+            default_exclude_fields.add('deleted_at')
+
         # 引数で指定されたフィールドを追加
         if exclude_fields:
             exclude_fields = set(exclude_fields)
@@ -193,12 +259,11 @@ class BaseModel(Base):
             exclude_fields = set()
         exclude_fields = exclude_fields.union(default_exclude_fields)
 
-        # SQLAlchemy の mapper を使って、実際のDBカラム名のセットを取得
-        mapper = inspect(self.__class__)
-        column_keys = {col.key for col in mapper.column_attrs}
-
         updated = False
         for key, value in data.items():
+            # アローリストにないフィールドをスキップ
+            if key not in allowed_fields:
+                continue
             # 更新を拒否するフィールドをスキップ
             if key in exclude_fields:
                 continue

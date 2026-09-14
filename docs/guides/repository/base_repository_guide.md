@@ -213,8 +213,9 @@ task = repo.get_by_id(1)
 task.status = 'completed'
 repo.save(task)
 
-# または BaseModel の update_from_dict を使用
-task.update_from_dict({"status": "completed"})
+# または BaseModel の update_from_dict を使用（allowed_fields か
+# クラス属性 updatable_fields でアローリストを指定する必要がある）
+task.update_from_dict({"status": "completed"}, allowed_fields={"status"})
 repo.save(task)
 
 # ID を含む dict で複数行を更新
