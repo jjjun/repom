@@ -2,7 +2,7 @@ import json
 from typing import Any
 
 import pytest
-from sqlalchemy import ARRAY, JSON, TEXT, Integer, String, Text, event, text
+from sqlalchemy import ARRAY, JSON, TEXT, Integer, String, Text, event, inspect, text
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 from sqlalchemy.types import TypeDecorator
 
@@ -10,6 +10,7 @@ from repom import AsyncBaseRepository, BaseRepository, NulByteError
 from repom.custom_types.CustomJSON import CustomJSON
 from repom.custom_types.ListJSON import ListJSON
 from repom.models.base_model import BaseModel
+from repom.nul_bytes import _string_columns, validate_values_no_nul_bytes
 
 
 class PipeJoined(TypeDecorator):
@@ -77,6 +78,14 @@ class DeferredNulByteModel(BaseModel):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(100))
     body: Mapped[str] = mapped_column(Text, deferred=True)
+
+
+class RenamedColumnNulByteModel(BaseModel):
+    __tablename__ = 'renamed_column_nul_byte_models'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(100))
+    body: Mapped[str] = mapped_column('document_body', Text)
 
 
 class NulByteRepository(BaseRepository[NulByteModel]):
@@ -311,6 +320,52 @@ def test_update_skips_untouched_deferred_string_columns(db_test):
     assert not any(
         statement.lstrip().upper().startswith('SELECT') for statement in statements
     )
+
+
+def test_nul_guard_runs_for_renamed_column(db_test):
+    db_test.add(RenamedColumnNulByteModel(title='valid', body='bad\0value'))
+
+    with pytest.raises(NulByteError) as exc_info:
+        db_test.flush()
+
+    assert exc_info.value.column_name == 'renamed_column_nul_byte_models.document_body'
+    assert exc_info.value.offset == 3
+
+
+def test_nul_guard_runs_for_renamed_column_on_update(db_test):
+    record = RenamedColumnNulByteModel(title='valid', body='valid')
+    db_test.add(record)
+    db_test.flush()
+    record.body = 'bad\0value'
+
+    with pytest.raises(NulByteError) as exc_info:
+        db_test.flush()
+
+    assert exc_info.value.column_name == 'renamed_column_nul_byte_models.document_body'
+
+
+def test_nul_guard_runs_for_renamed_column_on_core_update():
+    with pytest.raises(NulByteError) as exc_info:
+        validate_values_no_nul_bytes(RenamedColumnNulByteModel, {'body': 'bad\0value'})
+
+    assert exc_info.value.column_name == 'renamed_column_nul_byte_models.document_body'
+
+
+def test_nul_guard_error_message_uses_db_column_name(db_test):
+    db_test.add(RenamedColumnNulByteModel(title='valid', body='bad\0value'))
+
+    with pytest.raises(NulByteError) as exc_info:
+        db_test.flush()
+
+    assert 'renamed_column_nul_byte_models.document_body' in str(exc_info.value)
+
+
+def test_string_columns_keys_are_orm_attribute_names():
+    mapper = inspect(RenamedColumnNulByteModel).mapper
+    columns = {key: column_name for key, column_name, _ in _string_columns(mapper)}
+
+    assert columns['body'] == 'renamed_column_nul_byte_models.document_body'
+    assert 'document_body' not in columns
 
 
 @pytest.mark.run_benchmark

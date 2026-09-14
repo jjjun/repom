@@ -40,11 +40,15 @@ def _validation_mode(column) -> str | None:
 
 @lru_cache(maxsize=None)
 def _string_columns(mapper) -> tuple[tuple[str, str, str], ...]:
-    return tuple(
-        (column.key, f"{column.table.fullname}.{column.name}", mode)
-        for column in mapper.columns
-        if (mode := _validation_mode(column)) is not None
+    columns = tuple(
+        (attr.key, f"{attr.columns[0].table.fullname}.{attr.columns[0].name}", mode)
+        for attr in mapper.column_attrs
+        if (mode := _validation_mode(attr.columns[0])) is not None
     )
+    assert all(
+        key in mapper.class_.__mapper__.all_orm_descriptors for key, _, _ in columns
+    ), "NUL-byte guard key must match an ORM attribute name"
+    return columns
 
 
 def _child_path(path: str | None, key: str | int) -> str:
