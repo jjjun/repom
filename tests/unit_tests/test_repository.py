@@ -1,4 +1,5 @@
 from tests._init import *
+import inspect
 import warnings
 
 from sqlalchemy import ForeignKey, Integer, String, desc, event, select
@@ -118,6 +119,21 @@ class RefreshingSoftDeleteRepository(BaseRepository[RefreshingSoftDeleteModel]):
 
     def _base_select(self):
         return super()._base_select().execution_options(populate_existing=True)
+
+
+class NoIdModel(BaseModel):
+    """use_id=False で id カラムを持たないモデル（get_all / find の回帰確認用）"""
+
+    __tablename__ = 'no_id_model'
+
+    use_id = False
+
+    name: Mapped[str] = mapped_column(String(100), primary_key=True)
+
+
+class NoIdRepository(BaseRepository[NoIdModel]):
+    def __init__(self, session):
+        super().__init__(NoIdModel, session)
 
 
 def test_create(db_test):
@@ -321,6 +337,55 @@ def test_get_all(db_test):
     repo.save(obj2)
     all_objs = repo.get_all()
     assert len(all_objs) >= 2
+
+
+def test_get_all_excludes_soft_deleted(db_test):
+    """get_all() はデフォルトで削除済みレコードを除外する"""
+    repo = BaseRepository(SoftDeleteCountModel, db_test)
+
+    active = SoftDeleteCountModel(name="active")
+    deleted = SoftDeleteCountModel(name="deleted")
+    db_test.add_all([active, deleted])
+    db_test.commit()
+
+    deleted.soft_delete()
+    db_test.commit()
+
+    assert [item.name for item in repo.get_all()] == ["active"]
+
+
+def test_get_all_include_deleted_returns_all(db_test):
+    """get_all(include_deleted=True) は削除済みレコードも含める"""
+    repo = BaseRepository(SoftDeleteCountModel, db_test)
+
+    active = SoftDeleteCountModel(name="active")
+    deleted = SoftDeleteCountModel(name="deleted")
+    db_test.add_all([active, deleted])
+    db_test.commit()
+
+    deleted.soft_delete()
+    db_test.commit()
+
+    assert {item.name for item in repo.get_all(include_deleted=True)} == {"active", "deleted"}
+
+
+def test_get_all_unaffected_for_models_without_soft_delete(db_test):
+    """deleted_at を持たないモデルでは include_deleted の有無で挙動が変わらない"""
+    repo = SimpleRepository(session=db_test)
+    repo.saves([SimpleModel(value=1), SimpleModel(value=2)])
+
+    assert len(repo.get_all()) == len(repo.get_all(include_deleted=True)) == 2
+
+
+def test_get_all_and_find_work_for_model_without_id_column(db_test):
+    """use_id=False で id カラムを持たないモデルでも get_all() / find(limit=...) が
+    AttributeError を送出しないことを確認する（id 昇順フォールバックの回帰防止）"""
+    repo = NoIdRepository(session=db_test)
+    repo.saves([NoIdModel(name="a"), NoIdModel(name="b")])
+
+    assert {item.name for item in repo.get_all()} == {"a", "b"}
+    assert {item.name for item in repo.find(limit=10)} == {"a", "b"}
+    assert {item.name for item in repo.get_all(include_deleted=True)} == {"a", "b"}
 
 
 def test_remove(db_test):
@@ -683,6 +748,25 @@ def test_count_on_non_soft_deletable_model_accepts_flag(db_test):
 
     assert repo.count() == 2
     assert repo.count(include_deleted=True) == 2
+
+
+def test_public_read_methods_accept_include_deleted():
+    """BaseRepository の公開 read メソッドが include_deleted を受け付けることを保証する
+
+    get_all() が include_deleted を持たず論理削除フィルタを回避していた
+    リグレッションの再発防止用。新しい read メソッドを追加する場合は
+    include_deleted を実装し、このリストにも追加すること。
+    """
+    read_methods = [
+        "get_by", "get_by_id", "get_all",
+        "find", "find_one", "find_by_ids",
+        "count", "count_by_params",
+    ]
+    for method_name in read_methods:
+        parameters = inspect.signature(getattr(BaseRepository, method_name)).parameters
+        assert "include_deleted" in parameters, (
+            f"BaseRepository.{method_name}() must accept include_deleted"
+        )
 
 
 def test_default_session_fallback():

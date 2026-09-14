@@ -311,8 +311,11 @@ def set_find_option(
         # SQLAlchemy のカラムオブジェクトの場合はそのまま使用
         pass
     elif order_by is None:
-        # 指定がない場合はデフォルト（id の昇順）
-        order_by = model.id.asc()
+        # 指定がない場合はデフォルト（id の昇順）。id カラムを持たないモデル
+        # （use_id=False）では、フォールバック先が無いため order_by は None のまま
+        # とし、ORDER BY を付与しない。
+        if hasattr(model, 'id'):
+            order_by = model.id.asc()
 
     if offset is not None:
         if isinstance(offset, bool) or not isinstance(offset, int):

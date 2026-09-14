@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- BREAKING: `get_all()` now excludes soft-deleted rows by default, matching
+  every other read method on the repository, and accepts
+  `include_deleted: bool = False` to opt back into the previous behaviour.
+  `get_all()` also now applies the repository's default ordering
+  (`default_order_by` when set, otherwise `id` asc for models that have an
+  `id` column; models declared with `use_id=False` and no `default_order_by`
+  keep returning rows in unspecified order) instead of always returning rows
+  in unspecified order. Consuming projects that relied on `get_all()`
+  returning soft-deleted rows must pass `include_deleted=True` explicitly.
 - BREAKING: `bulk_update()` and `bulk_delete()` now raise `ValueError` when the
   resolved filter list is empty (`bulk_delete()` with neither `filter_by` nor
   `ids`, or `bulk_update(..., filter_by={})`). Pass `allow_unfiltered=True` to

@@ -4,6 +4,7 @@ AsyncBaseRepository の非同期版テスト
 test_repository.py の全テストケースを非同期版に変換したもの。
 """
 from tests._init import *
+import inspect
 from sqlalchemy import ForeignKey, Integer, desc, event, String, select
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -112,6 +113,21 @@ class RefreshingAsyncSoftDeleteRepository(AsyncBaseRepository[AsyncSoftDeleteBul
 
     def _base_select(self):
         return super()._base_select().execution_options(populate_existing=True)
+
+
+class AsyncNoIdModel(BaseModel):
+    """use_id=False で id カラムを持たないモデル（get_all / find の回帰確認用）"""
+
+    __tablename__ = 'async_no_id_model'
+
+    use_id = False
+
+    name: Mapped[str] = mapped_column(String(100), primary_key=True)
+
+
+class AsyncNoIdRepository(AsyncBaseRepository[AsyncNoIdModel]):
+    def __init__(self, session):
+        super().__init__(AsyncNoIdModel, session)
 
 
 @pytest.mark.asyncio
@@ -298,6 +314,60 @@ async def test_get_all(async_db_test):
     await repo.save(obj2)
     all_objs = await repo.get_all()
     assert len(all_objs) >= 2
+
+
+@pytest.mark.asyncio
+async def test_get_all_excludes_soft_deleted(async_db_test):
+    """get_all() はデフォルトで削除済みレコードを除外する"""
+    repo = AsyncBaseRepository(AsyncSoftDeleteBulkModel, async_db_test)
+
+    active = AsyncSoftDeleteBulkModel(name="active")
+    deleted = AsyncSoftDeleteBulkModel(name="deleted")
+    async_db_test.add_all([active, deleted])
+    await async_db_test.commit()
+
+    deleted.soft_delete()
+    await async_db_test.commit()
+
+    assert [item.name for item in await repo.get_all()] == ["active"]
+
+
+@pytest.mark.asyncio
+async def test_get_all_include_deleted_returns_all(async_db_test):
+    """get_all(include_deleted=True) は削除済みレコードも含める"""
+    repo = AsyncBaseRepository(AsyncSoftDeleteBulkModel, async_db_test)
+
+    active = AsyncSoftDeleteBulkModel(name="active")
+    deleted = AsyncSoftDeleteBulkModel(name="deleted")
+    async_db_test.add_all([active, deleted])
+    await async_db_test.commit()
+
+    deleted.soft_delete()
+    await async_db_test.commit()
+
+    all_objs = await repo.get_all(include_deleted=True)
+    assert {item.name for item in all_objs} == {"active", "deleted"}
+
+
+@pytest.mark.asyncio
+async def test_get_all_unaffected_for_models_without_soft_delete(async_db_test):
+    """deleted_at を持たないモデルでは include_deleted の有無で挙動が変わらない"""
+    repo = AsyncSimpleRepository(session=async_db_test)
+    await repo.saves([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
+
+    assert len(await repo.get_all()) == len(await repo.get_all(include_deleted=True)) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_all_and_find_work_for_model_without_id_column(async_db_test):
+    """use_id=False で id カラムを持たないモデルでも get_all() / find(limit=...) が
+    AttributeError を送出しないことを確認する（id 昇順フォールバックの回帰防止）"""
+    repo = AsyncNoIdRepository(session=async_db_test)
+    await repo.saves([AsyncNoIdModel(name="a"), AsyncNoIdModel(name="b")])
+
+    assert {item.name for item in await repo.get_all()} == {"a", "b"}
+    assert {item.name for item in await repo.find(limit=10)} == {"a", "b"}
+    assert {item.name for item in await repo.get_all(include_deleted=True)} == {"a", "b"}
 
 
 @pytest.mark.asyncio
@@ -677,6 +747,25 @@ async def test_count_respects_soft_delete_flag(async_db_test):
 
     assert await repo.count() == 2
     assert await repo.count(include_deleted=True) == 2
+
+
+def test_public_read_methods_accept_include_deleted():
+    """AsyncBaseRepository の公開 read メソッドが include_deleted を受け付けることを保証する
+
+    get_all() が include_deleted を持たず論理削除フィルタを回避していた
+    リグレッションの再発防止用。新しい read メソッドを追加する場合は
+    include_deleted を実装し、このリストにも追加すること。
+    """
+    read_methods = [
+        "get_by", "get_by_id", "get_all",
+        "find", "find_one", "find_by_ids",
+        "count", "count_by_params",
+    ]
+    for method_name in read_methods:
+        parameters = inspect.signature(getattr(AsyncBaseRepository, method_name)).parameters
+        assert "include_deleted" in parameters, (
+            f"AsyncBaseRepository.{method_name}() must accept include_deleted"
+        )
 
 
 @pytest.mark.asyncio

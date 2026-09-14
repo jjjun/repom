@@ -147,16 +147,17 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
         )
         return results[0] if results else None
 
-    def get_all(self) -> List[T]:
+    def get_all(self, include_deleted: bool = False) -> List[T]:
         """
         全てのインスタンスを取得
+
+        Args:
+            include_deleted (bool): 削除済みレコードも含めるか（デフォルト: False）
 
         Returns:
             List[T]: 全てのインスタンスのリスト
         """
-        with self._session_scope() as session:
-            result = session.execute(self._base_select())
-            return result.scalars().all()
+        return self._find_with_filters([], include_deleted=include_deleted)
 
     def save(self, instance: T) -> T:
         """
