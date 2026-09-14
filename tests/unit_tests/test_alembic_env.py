@@ -4,9 +4,11 @@ import runpy
 from types import SimpleNamespace
 
 from alembic import context
+from alembic.config import Config
 import pytest
 import sqlalchemy
 
+import repom.config
 import repom.utility
 
 
@@ -209,3 +211,42 @@ def test_env_configures_autogenerate_table_exclusions(
     )
     assert include_object(object(), table_name, "table", False, None) is True
     assert include_object(object(), table_name, "column", True, None) is True
+
+
+def test_env_escapes_percent_signs_in_db_url_for_configparser(monkeypatch):
+    """A '%' in the DSN (e.g. a percent-encoded password) must be escaped
+    before reaching ConfigParser.
+
+    Config.set_main_option() feeds the value straight into ConfigParser,
+    which treats '%' as the start of an interpolation sequence. An
+    unescaped '%' therefore makes ConfigParser raise
+    ``ValueError: invalid interpolation syntax in '<the raw DSN>' ...``,
+    embedding the full DSN - including the password - in the exception
+    message. Doubling the '%' before calling set_main_option avoids that
+    while still round-tripping to the original URL via get_main_option().
+    """
+    sentinel_password = "p%40ss"
+    raw_url = f"postgresql://user:{sentinel_password}@localhost:5432/app"
+    real_config = Config()
+    connection = object()
+    connectable = SimpleNamespace(connect=lambda: nullcontext(connection))
+
+    monkeypatch.setattr(context, "config", real_config, raising=False)
+    monkeypatch.setattr(context, "is_offline_mode", lambda: True)
+    monkeypatch.setattr(context, "configure", lambda **options: None)
+    monkeypatch.setattr(context, "begin_transaction", nullcontext)
+    monkeypatch.setattr(context, "run_migrations", lambda: None)
+    monkeypatch.setattr(repom.utility, "load_models", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sqlalchemy,
+        "engine_from_config",
+        lambda *args, **kwargs: connectable,
+    )
+    monkeypatch.setattr(repom.config.config, "db_url", raw_url)
+
+    env_path = Path(__file__).parents[2] / "alembic" / "env.py"
+    # Must not raise: an unescaped '%' would make ConfigParser embed the
+    # raw DSN (password included) in a ValueError here.
+    runpy.run_path(env_path)
+
+    assert real_config.get_main_option("sqlalchemy.url") == raw_url

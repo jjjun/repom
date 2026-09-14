@@ -111,7 +111,8 @@ class TestParsePostgresUrl:
         assert info['host'] == 'localhost'
         assert info['port'] == '5432'
         assert info['database'] == 'dbname'
-        assert info['user'] == 'user'
+        assert 'user' not in info
+        assert 'password' not in info
 
     def test_parse_postgres_url_no_password(self):
         """Test parsing PostgreSQL URL without password."""
@@ -123,7 +124,20 @@ class TestParsePostgresUrl:
         assert info['host'] == 'localhost'
         assert info['port'] == '5432'
         assert info['database'] == 'dbname'
-        assert info['user'] == 'user'
+
+    def test_parse_postgres_url_password_with_at_symbol_does_not_leak(self):
+        """A percent-encoded '@' in the password must not leak or break parsing."""
+        sentinel_password = "p%40ssw0rd"
+        url = f"postgresql://user:{sentinel_password}@localhost:5432/dbname"
+
+        info = parse_postgres_url(url)
+
+        assert info is not None
+        assert info['host'] == 'localhost'
+        assert info['port'] == '5432'
+        assert info['database'] == 'dbname'
+        assert sentinel_password not in str(info)
+        assert "p@ssw0rd" not in str(info)
 
     def test_parse_postgres_url_default_port(self):
         """Test parsing PostgreSQL URL with default port."""
@@ -346,6 +360,39 @@ class TestDisplayConfig:
         assert '[OK] Connected' in captured.out
         assert 'EXEC_ENV          : test' in captured.out
         assert 'CONFIG_HOOK       : test.config:get_config' in captured.out
+
+    @patch('repom.scripts.repom_info.config')
+    @patch('repom.scripts.repom_info.test_postgres_connection')
+    @patch('repom.scripts.repom_info.test_redis_connection')
+    @patch('repom.scripts.repom_info.get_loaded_models')
+    def test_repom_info_does_not_print_password(
+        self, mock_get_models, mock_check_redis, mock_check_postgres, mock_config, capsys
+    ):
+        """A password embedded in the DB URL must never reach stdout, even
+        when it contains a percent-encoded '@'. Uses the real
+        parse_postgres_url() (not mocked) to exercise the actual leak path.
+        """
+        sentinel_password = "p%40ssw0rd"
+        mock_config.root_path = Path('/test/path')
+        mock_config.db_backup_path = Path('/test/path/data/repom/backups')
+        mock_config.master_data_path = Path('/test/path/data_master')
+        mock_config.db_type = 'postgres'
+        mock_config.db_url = f'postgresql://user:{sentinel_password}@localhost:5432/repom_test'
+        mock_config.model_locations = []
+        mock_config.allowed_package_prefixes = set()
+        mock_config.model_excluded_dirs = set()
+        mock_config.pgadmin.container.enabled = False
+
+        mock_check_postgres.return_value = '[OK] Connected'
+        mock_check_redis.return_value = '[OK] Connected'
+        mock_get_models.return_value = []
+
+        display_config()
+
+        captured = capsys.readouterr()
+        assert sentinel_password not in captured.out
+        assert "p@ssw0rd" not in captured.out
+        assert 'localhost' in captured.out
 
 
 class TestMain:

@@ -30,9 +30,17 @@ class RedisConfig:
 
     host: str = field(default="localhost")
     port: int = field(default=6379)
-    password: Optional[str] = field(default=None)
+    password: Optional[str] = field(default=None, repr=False)
     database: int = field(default=0)
     container: RedisContainerConfig = field(default_factory=RedisContainerConfig)
+
+    def __repr__(self) -> str:
+        password_display = "***" if self.password else "None"
+        return (
+            f"{self.__class__.__name__}(host={self.host!r}, port={self.port!r}, "
+            f"password={password_display}, database={self.database!r}, "
+            f"container={self.container!r})"
+        )
 
 
 __all__ = [

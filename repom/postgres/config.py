@@ -31,9 +31,17 @@ class PostgresConfig:
     host: str = field(default="localhost")
     port: int = field(default=5432)
     user: str = field(default="repom")
-    password: str = field(default="repom_dev")
+    password: str = field(default="repom_dev", repr=False)
     database: Optional[str] = field(default=None)
     container: PostgresContainerConfig = field(default_factory=PostgresContainerConfig)
+
+    def __repr__(self) -> str:
+        password_display = "***" if self.password else "None"
+        return (
+            f"{self.__class__.__name__}(host={self.host!r}, port={self.port!r}, "
+            f"user={self.user!r}, password={password_display}, "
+            f"database={self.database!r}, container={self.container!r})"
+        )
 
 
 @dataclass
@@ -60,8 +68,15 @@ class PgAdminConfig:
     """pgAdmin settings."""
 
     email: str = field(default="admin@example.com")
-    password: str = field(default="admin")
+    password: str = field(default="admin", repr=False)
     container: PgAdminContainerConfig = field(default_factory=PgAdminContainerConfig)
+
+    def __repr__(self) -> str:
+        password_display = "***" if self.password else "None"
+        return (
+            f"{self.__class__.__name__}(email={self.email!r}, "
+            f"password={password_display}, container={self.container!r})"
+        )
 
 
 __all__ = [

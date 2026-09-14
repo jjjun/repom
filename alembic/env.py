@@ -16,7 +16,10 @@ config = context.config
 
 # Set runtime database URL from MineDbConfig
 # This allows environment-specific databases (dev/test/prod) via EXEC_ENV
-config.set_main_option("sqlalchemy.url", db_config.db_url)
+# ConfigParser interpolates '%' in option values, so a raw '%' (e.g. from a
+# percent-encoded password) must be escaped as '%%'; otherwise ConfigParser
+# raises InterpolationSyntaxError with the full, unescaped DSN in its message.
+config.set_main_option("sqlalchemy.url", db_config.db_url.replace("%", "%%"))
 
 # NOTE: version_locations is controlled by alembic.ini only.
 # Both file creation (alembic revision) and execution (alembic upgrade)

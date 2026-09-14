@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from basekit.docker_manager import DockerCommandExecutor
@@ -26,9 +26,17 @@ class PgConnParams:
     host: str
     port: int
     user: str
-    password: str | None
+    password: str | None = field(repr=False)
     database: str
     container_name: str | None = None
+
+    def __repr__(self) -> str:
+        password_display = "***" if self.password else "None"
+        return (
+            f"{self.__class__.__name__}(host={self.host!r}, port={self.port!r}, "
+            f"user={self.user!r}, password={password_display}, "
+            f"database={self.database!r}, container_name={self.container_name!r})"
+        )
 
     @classmethod
     def from_config(cls) -> "PgConnParams":

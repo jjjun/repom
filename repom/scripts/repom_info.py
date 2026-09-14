@@ -5,6 +5,7 @@ import sys
 from typing import Dict, List, Optional
 
 from sqlalchemy import text, create_engine
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 from repom.config import config
@@ -63,42 +64,24 @@ def parse_postgres_url(db_url: str) -> Optional[Dict[str, str]]:
         db_url: PostgreSQL connection URL
 
     Returns:
-        Dictionary with host, port, database, and user
+        Dictionary with host, port, and database. The credentials portion of
+        the URL is never returned, since this output is meant for display
+        and logging (a naive split on the first '@' misparses the host when
+        the password itself contains an '@').
     """
     if not db_url.startswith('postgresql'):
         return None
 
-    # Example: postgresql://user:password@localhost:5432/dbname
     try:
-        # Remove password for security
-        url = db_url.split('://', 1)[1]  # Remove scheme
-        if '@' in url:
-            credentials, rest = url.split('@', 1)
-            user = credentials.split(':', 1)[0]  # Get user, ignore password
-        else:
-            user = 'N/A'
-            rest = url
-
-        if '/' in rest:
-            host_port, database = rest.split('/', 1)
-        else:
-            host_port = rest
-            database = 'N/A'
-
-        if ':' in host_port:
-            host, port = host_port.split(':', 1)
-        else:
-            host = host_port
-            port = '5432'
-
-        return {
-            'host': host,
-            'port': port,
-            'database': database,
-            'user': user
-        }
+        url = make_url(db_url)
     except Exception:
         return None
+
+    return {
+        'host': url.host or 'N/A',
+        'port': str(url.port) if url.port is not None else '5432',
+        'database': url.database or 'N/A',
+    }
 
 
 def test_postgres_connection() -> str:
@@ -261,7 +244,6 @@ def display_config():
             print(f"    Host            : {pg_info['host']}")
             print(f"    Port            : {pg_info['port']}")
             print(f"    Database        : {pg_info['database']}")
-            print(f"    User            : {pg_info['user']}")
             print()
 
         # PostgreSQL Container Configuration

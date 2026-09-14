@@ -40,6 +40,7 @@ Example (CLI script - async):
 
 from typing import Optional, AsyncGenerator, Generator, AsyncContextManager, ContextManager, TypeVar, Generic
 from contextlib import contextmanager, asynccontextmanager  # Only for DatabaseManager internal use
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import asyncio
 
 from sqlalchemy import create_engine, Engine, inspect
@@ -61,18 +62,44 @@ logger = get_logger(__name__)
 T = TypeVar('T')
 
 
+_PASSWORD_QUERY_PARAM_NAMES = frozenset({"password", "pgpassword"})
+
+
+def _mask_password_query_params(url: str) -> str:
+    """Mask password-like query parameters (e.g. ``?password=`` or ``?pgpassword=``).
+
+    ``make_url(...).render_as_string(hide_password=True)`` only hides a
+    password carried in the URL's userinfo; a libpq-style ``password=``/
+    ``pgpassword=`` query parameter passes through untouched.
+    """
+    parts = urlsplit(url)
+    if not parts.query:
+        return url
+
+    query_pairs = parse_qsl(parts.query, keep_blank_values=True)
+    if not any(key.lower() in _PASSWORD_QUERY_PARAM_NAMES for key, _ in query_pairs):
+        return url
+
+    masked_pairs = [
+        (key, "***" if key.lower() in _PASSWORD_QUERY_PARAM_NAMES else value)
+        for key, value in query_pairs
+    ]
+    return urlunsplit(parts._replace(query=urlencode(masked_pairs, safe="*")))
+
+
 def safe_db_url(url: str) -> str:
     """Return a database URL suitable for display or logging."""
     scheme, separator, remainder = url.partition("://")
     if separator:
         credentials, at, host = remainder.rpartition("@")
         if at and credentials.count("@"):
-            return f"{scheme}://***@{host}"
+            return _mask_password_query_params(f"{scheme}://***@{host}")
 
     try:
-        return make_url(url).render_as_string(hide_password=True)
+        masked = make_url(url).render_as_string(hide_password=True)
     except Exception:
         return "<invalid database URL>"
+    return _mask_password_query_params(masked)
 
 
 async def _run_shielded(awaitable) -> None:
@@ -596,7 +623,7 @@ class DatabaseManager:
             return url.render_as_string(hide_password=False)
         else:
             raise ValueError(
-                f"Unsupported database URL format: {sync_url}\n"
+                f"Unsupported database URL format: {safe_db_url(sync_url)}\n"
                 f"Supported formats: sqlite://, postgresql://, mysql://"
             )
 
