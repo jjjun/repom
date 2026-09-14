@@ -86,4 +86,7 @@ new pgAdmin password through `setup.py update-user --password` is not acceptable
 - PostgreSQL execution uses `PGPASSWORD` for the current password instead of
   embedding it in the command line, and sends SQL through stdin so the new
   password is not placed in the `psql` process arguments.
+- A failed rotation, including the pgAdmin `update-user` argv exposure noted
+  above, raises an error with the password masked instead of a raw subprocess
+  traceback.
 - Review dry-run output before passing `--execute`.

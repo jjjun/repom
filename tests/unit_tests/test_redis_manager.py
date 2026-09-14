@@ -124,8 +124,8 @@ class TestRedisManagerWaitForService:
             manager.wait_for_service(max_retries=3)
             assert mock_run.call_count == 3
 
-    def test_wait_for_service_authenticates_when_password_is_set(self):
-        """Test wait_for_service uses REDISCLI_AUTH for password-protected Redis."""
+    def test_wait_for_service_never_places_password_in_argv(self):
+        """The readiness poll never carries the password, even when one is set."""
         manager = RedisManager()
 
         with patch.object(manager.config.redis, "password", "secret"):
@@ -138,9 +138,44 @@ class TestRedisManagerWaitForService:
                 manager.wait_for_service(max_retries=2)
 
         command = mock_run.call_args.args[0]
-        assert "-e" in command
-        assert "REDISCLI_AUTH=secret" in command
+        assert "-e" not in command
+        assert "secret" not in " ".join(command)
         assert command[-1] == "ping"
+
+    def test_wait_for_service_password_not_in_argv_across_every_poll(self):
+        """No poll iteration ever places the password in argv, even across retries."""
+        manager = RedisManager()
+        side_effects = [
+            MagicMock(returncode=1, stdout="", stderr="Error: No such container"),
+            MagicMock(returncode=1, stdout="", stderr="Error: No such container"),
+            MagicMock(returncode=1, stdout="", stderr="Error: No such container"),
+        ]
+
+        with patch.object(manager.config.redis, "password", "sentinel-secret"):
+            with patch.object(subprocess, 'run') as mock_run:
+                mock_run.side_effect = side_effects
+
+                with pytest.raises(TimeoutError):
+                    manager.wait_for_service(max_retries=3)
+
+        assert mock_run.call_count == 3
+        for call in mock_run.call_args_list:
+            assert "sentinel-secret" not in " ".join(call.args[0])
+
+    def test_wait_for_service_treats_noauth_response_as_ready(self):
+        """A NOAUTH reply confirms the server is up without ever authenticating."""
+        manager = RedisManager()
+
+        with patch.object(manager.config.redis, "password", "secret"):
+            with patch.object(subprocess, 'run') as mock_run:
+                mock_run.return_value = MagicMock(
+                    returncode=1,
+                    stdout="",
+                    stderr="NOAUTH Authentication required.",
+                )
+
+                # Should not raise: NOAUTH means the server responded.
+                manager.wait_for_service(max_retries=1)
 
 
 class TestRedisManagerConnectionInfo:

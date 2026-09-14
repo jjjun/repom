@@ -62,13 +62,18 @@ After execution, repom regenerates the compose files and the `.env` secrets
 file with the new password so the setting survives restart. The runtime
 command passes the old password through
 `REDISCLI_AUTH` only when `--old-password` is supplied, and sends the new
-password through stdin. `REDISCLI_AUTH` is passed through `docker exec -e`, so
-the old password can still be visible through host process inspection while the
-command runs.
+password through stdin. `REDISCLI_AUTH` is written to a 0600 temporary file
+and passed to the container with `docker exec --env-file`, and the file is
+removed as soon as the command finishes, so the old password is not placed in
+process arguments. The readiness poll used while starting Redis never sends a
+password at all: it pings unauthenticated and treats a NOAUTH reply as
+confirmation that the server is up.
 
 ## Notes
 
 - If no Redis password is configured, generated Redis behavior remains
   unauthenticated.
 - Rotation output masks passwords.
+- A failed rotation raises an error with the password masked instead of a raw
+  subprocess traceback.
 - `CONFIG SET requirepass` affects the running Redis instance immediately.

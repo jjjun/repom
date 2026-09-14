@@ -60,24 +60,28 @@ class RedisManager(DockerManager):
         return self.config.redis.container.get_container_name()
 
     def wait_for_service(self, max_retries: int = 30) -> None:
-        """Wait until redis-cli ping succeeds inside the Redis container."""
+        """Wait until redis-cli ping succeeds inside the Redis container.
+
+        The ping is unauthenticated: a password-protected instance answers
+        with a NOAUTH error once it is up, which is enough to confirm
+        readiness without ever placing the password in the poll's argv.
+        """
 
         container_name = self.get_container_name()
-        password = self.config.redis.password
+        command = build_redis_ping_command(container_name=container_name)
 
         def check_redis_ready():
             try:
                 result = subprocess.run(
-                    build_redis_ping_command(
-                        container_name=container_name,
-                        password=password,
-                    ),
+                    command,
                     capture_output=True,
                     text=True,
                     timeout=2,
                     check=False,
                 )
-                return result.returncode == 0 and "PONG" in result.stdout
+                if result.returncode == 0 and "PONG" in result.stdout:
+                    return True
+                return "NOAUTH" in result.stdout or "NOAUTH" in result.stderr
             except Exception:
                 return False
 

@@ -15,6 +15,10 @@ from repom.credentials import resolve_password
 CommandRunner = Callable[..., subprocess.CompletedProcess]
 
 
+class PgAdminCredentialRotationError(RuntimeError):
+    """Raised when the pgAdmin setup.py update-user command fails."""
+
+
 @dataclass(frozen=True)
 class SqlStep:
     """One SQL statement to run against one database."""
@@ -287,15 +291,32 @@ def rotate_pgadmin_password(
     dry_run: bool = True,
     runner: CommandRunner = subprocess.run,
 ) -> CredentialRotationResult:
-    """Rotate the pgAdmin admin password with setup.py update-user."""
+    """Rotate the pgAdmin admin password with setup.py update-user.
+
+    The new password is unavoidably visible in this command's argv (see
+    ``build_pgadmin_update_password_command``), but a failed run never raises
+    a raw ``CalledProcessError``: the command is checked explicitly and any
+    failure is reported through :class:`PgAdminCredentialRotationError` with
+    the password masked out of both the command and captured stderr.
+    """
 
     command = build_pgadmin_update_password_command(plan)
-    masked_command = mask_secret(" ".join(command), (plan.new_password,))
+    secrets = (plan.new_password,)
+    masked_command = mask_secret(" ".join(command), secrets)
     if not dry_run:
-        runner(command, check=True, text=True)
+        completed = runner(command, check=False, capture_output=True, text=True)
+        if completed.returncode != 0:
+            raise PgAdminCredentialRotationError(
+                mask_secret(
+                    f"pgAdmin update-user failed (exit {completed.returncode}): "
+                    f"command={' '.join(command)} stderr={completed.stderr}",
+                    secrets,
+                )
+            )
+    masked_commands = tuple(mask_secret(part, secrets) for part in command)
     return CredentialRotationResult(
         dry_run=dry_run,
-        commands=(command,),
+        commands=(masked_commands,),
         masked_output=(masked_command,),
     )
 

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from repom.postgres.credentials import (
+    PgAdminCredentialRotationError,
     PgAdminCredentialRotationPlan,
     PostgresCredentialRotationPlan,
     build_pgadmin_update_password_command,
@@ -89,6 +90,32 @@ def test_postgres_rotation_executes_structured_commands_with_pgpassword():
     assert kwargs["check"] is True
 
 
+def test_postgres_rotation_still_uses_stdin_and_env():
+    """Regression guard: the PostgreSQL path stays the correct reference pattern.
+
+    Unlike Redis and pgAdmin, PostgreSQL never had a password in argv: the
+    current password travels through the ``PGPASSWORD`` environment variable
+    and the new password travels through stdin as part of the SQL step.
+    """
+    runner = MagicMock()
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="sentinel-old-secret",
+        new_password="sentinel-new-secret",
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    rotate_postgres_credentials(plan, dry_run=False, runner=runner)
+
+    command = runner.call_args.args[0]
+    kwargs = runner.call_args.kwargs
+    assert "sentinel-old-secret" not in " ".join(command)
+    assert "sentinel-new-secret" not in " ".join(command)
+    assert kwargs["env"]["PGPASSWORD"] == "sentinel-old-secret"
+    assert "sentinel-new-secret" in kwargs["input"]
+
+
 def test_pgadmin_update_password_command_uses_setup_py():
     plan = PgAdminCredentialRotationPlan(
         email="admin@example.com",
@@ -120,9 +147,46 @@ def test_pgadmin_rotation_masks_password_in_output():
 
     result = rotate_pgadmin_password(plan, dry_run=True)
 
-    assert "new-secret" in " ".join(result.commands[0])
+    assert "new-secret" not in " ".join(result.commands[0])
+    assert "***" in " ".join(result.commands[0])
     assert "new-secret" not in result.masked_output[0]
     assert "***" in result.masked_output[0]
+
+
+def test_pgadmin_rotation_failure_masks_password():
+    runner = MagicMock()
+    runner.return_value = MagicMock(
+        returncode=1,
+        stdout="",
+        stderr="setup.py: error updating user with password sentinel-new-secret",
+    )
+    plan = PgAdminCredentialRotationPlan(
+        email="admin@example.com",
+        new_password="sentinel-new-secret",
+        container_name="repom_pgadmin",
+    )
+
+    with pytest.raises(PgAdminCredentialRotationError) as excinfo:
+        rotate_pgadmin_password(plan, dry_run=False, runner=runner)
+
+    assert "sentinel-new-secret" not in str(excinfo.value)
+    assert "***" in str(excinfo.value)
+
+
+def test_rotation_result_commands_are_masked():
+    """No field of a CredentialRotationResult carries the sentinel in cleartext."""
+    plan = PgAdminCredentialRotationPlan(
+        email="admin@example.com",
+        new_password="sentinel-new-secret",
+        container_name="repom_pgadmin",
+    )
+
+    result = rotate_pgadmin_password(plan, dry_run=True)
+
+    for command in result.commands:
+        assert "sentinel-new-secret" not in " ".join(command)
+    for line in result.masked_output:
+        assert "sentinel-new-secret" not in line
 
 
 def test_pgadmin_volume_recreation_is_dry_run_without_confirm():

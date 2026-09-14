@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from repom.redis.credentials import (
+    RedisCredentialRotationError,
     RedisCredentialRotationPlan,
     build_redis_cli_command,
     build_redis_ping_command,
@@ -15,37 +16,34 @@ from repom.redis.credentials import (
 from repom.redis.manage import main_rotate_password, rotate_password
 
 
-def test_redis_cli_command_without_password():
+def test_redis_cli_command_without_env_file():
     command = build_redis_cli_command(container_name="repom_redis")
 
     assert command == ("docker", "exec", "-i", "repom_redis", "redis-cli")
 
 
-def test_redis_cli_command_uses_rediscli_auth_when_password_is_set():
+def test_redis_cli_command_uses_env_file_when_given():
     command = build_redis_cli_command(
         container_name="repom_redis",
-        password="old-secret",
+        env_file="/tmp/repom-redis-auth-xyz.env",
     )
 
     assert command == (
         "docker",
         "exec",
         "-i",
-        "-e",
-        "REDISCLI_AUTH=old-secret",
+        "--env-file",
+        "/tmp/repom-redis-auth-xyz.env",
         "repom_redis",
         "redis-cli",
     )
 
 
-def test_redis_ping_command_appends_ping():
-    command = build_redis_ping_command(
-        container_name="repom_redis",
-        password="old-secret",
-    )
+def test_redis_ping_command_appends_ping_and_never_carries_a_password():
+    command = build_redis_ping_command(container_name="repom_redis")
 
     assert command[-1] == "ping"
-    assert "REDISCLI_AUTH=old-secret" in command
+    assert command == ("docker", "exec", "-i", "repom_redis", "redis-cli", "ping")
 
 
 def test_redis_rotation_masks_passwords_and_keeps_input_for_execution():
@@ -58,16 +56,16 @@ def test_redis_rotation_masks_passwords_and_keeps_input_for_execution():
     result = rotate_redis_password(plan, dry_run=True)
 
     assert result.dry_run is True
-    assert "old-secret" in " ".join(result.command)
+    assert "old-secret" not in " ".join(result.command)
     assert "new-secret" in result.input_text
     assert "old-secret" not in result.masked_command
     assert "new-secret" not in result.masked_input
-    assert "***" in result.masked_command
     assert "***" in result.masked_input
 
 
 def test_redis_rotation_executes_with_stdin():
     runner = MagicMock()
+    runner.return_value = MagicMock(returncode=0, stdout="OK\n", stderr="")
     plan = RedisCredentialRotationPlan(
         old_password="old-secret",
         new_password="new-secret",
@@ -80,8 +78,9 @@ def test_redis_rotation_executes_with_stdin():
     kwargs = runner.call_args.kwargs
     assert command[0:3] == ("docker", "exec", "-i")
     assert kwargs["input"] == "CONFIG SET requirepass new-secret\n"
-    assert kwargs["check"] is True
+    assert kwargs["check"] is False
     assert kwargs["capture_output"] is True
+    assert "old-secret" not in " ".join(command)
 
 
 def test_redis_plan_from_config_does_not_infer_old_password():
@@ -118,7 +117,54 @@ def test_redis_rotation_uses_auth_only_when_old_password_is_explicit():
 
     result = rotate_redis_password(plan, dry_run=True)
 
-    assert "REDISCLI_AUTH=old-secret" in result.command
+    assert "--env-file" in result.command
+    assert "old-secret" not in " ".join(result.command)
+
+
+def test_redis_rotation_password_not_in_argv():
+    """Neither the old nor the new password ever appears in any recorded argv."""
+    calls: list[tuple] = []
+
+    def fake_runner(command, **kwargs):
+        calls.append(command)
+        return MagicMock(returncode=0, stdout="OK\n", stderr="")
+
+    plan = RedisCredentialRotationPlan(
+        old_password="sentinel-old-secret",
+        new_password="sentinel-new-secret",
+        container_name="repom_redis",
+    )
+
+    result = rotate_redis_password(plan, dry_run=False, runner=fake_runner)
+
+    assert calls, "runner was never invoked"
+    for command in calls:
+        joined = " ".join(command)
+        assert "sentinel-old-secret" not in joined
+        assert "sentinel-new-secret" not in joined
+    assert "sentinel-old-secret" not in " ".join(result.command)
+    assert "sentinel-new-secret" not in " ".join(result.command)
+
+
+def test_redis_rotation_failure_masks_password():
+    runner = MagicMock()
+    runner.return_value = MagicMock(
+        returncode=1,
+        stdout="",
+        stderr="ERR invalid password: sentinel-old-secret",
+    )
+    plan = RedisCredentialRotationPlan(
+        old_password="sentinel-old-secret",
+        new_password="sentinel-new-secret",
+        container_name="repom_redis",
+    )
+
+    with pytest.raises(RedisCredentialRotationError) as excinfo:
+        rotate_redis_password(plan, dry_run=False, runner=runner)
+
+    assert "sentinel-old-secret" not in str(excinfo.value)
+    assert "sentinel-new-secret" not in str(excinfo.value)
+    assert "***" in str(excinfo.value)
 
 
 def test_redis_rotate_password_requires_explicit_new_password():
