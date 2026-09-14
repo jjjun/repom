@@ -23,6 +23,7 @@ from pathlib import Path
 def configure_database(config):
     database_path = Path(os.environ["ALEMBIC_HOOK_TEST_DB"]).as_posix()
     config.db_url = f"sqlite:///{database_path}"
+    config.allowed_package_prefixes = {"alembic_test_hooks", "repom."}
     return config
 
 
@@ -172,7 +173,7 @@ def test_raising_pre_migration_hook_does_not_write_to_existing_database(
     ("hook_path", "expected_message"),
     [
         (
-            "missing_alembic_hook_module:validate",
+            "alembic_test_hooks_ghost:validate",
             "Failed to import config hook module",
         ),
         (
@@ -187,12 +188,17 @@ def test_raising_pre_migration_hook_does_not_write_to_existing_database(
             "alembic_test_hooks",
             "must use 'module:function_name' format",
         ),
+        (
+            "totally_unrelated_module:validate",
+            "not in allowed list",
+        ),
     ],
     ids=[
         "missing-module",
         "missing-function",
         "non-callable",
         "implicit-callable",
+        "disallowed-prefix",
     ],
 )
 def test_invalid_pre_migration_hook_reports_its_alembic_option(

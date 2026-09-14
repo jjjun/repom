@@ -117,6 +117,25 @@ online execution and commands that load the migration environment. Consumers
 should account for read-only commands when deciding whether their hook should
 reject a configuration.
 
+The hook's module component must sit under the consuming project's configured
+`allowed_package_prefixes`; `alembic/env.py` validates this before importing
+the module.
+
+### Trust Boundary
+
+`alembic.ini` is trusted configuration, equivalent to source code:
+`pre_migration_hook` is a code-execution setting, and the shared `env.py`
+resolves and calls whatever it names with exceptions left uncaught.
+`AlembicTemplates.generate_alembic_ini` (and `AlembicSetup.create_alembic_ini`,
+which wraps it) must never be fed a value derived from untrusted input - a
+project name, a CI variable, anything an attacker could influence - for
+`script_location`, `version_locations`, `version_table`,
+`version_table_schema`, or `autogenerate_exclude_tables`. Every interpolated
+value is validated to reject a newline, a carriage return, a NUL byte, and a
+leading `[`; `version_table`, `version_table_schema`, and each
+`autogenerate_exclude_tables` entry must additionally match a plain
+identifier pattern (`[A-Za-z_][A-Za-z0-9_]*`).
+
 ### For External Projects (e.g., mine-py)
 
 **Step 1: Create alembic.ini**

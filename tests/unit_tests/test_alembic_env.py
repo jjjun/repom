@@ -1,7 +1,8 @@
 from contextlib import nullcontext
 from pathlib import Path
 import runpy
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 
 from alembic import context
 from alembic.config import Config
@@ -250,3 +251,59 @@ def test_env_escapes_percent_signs_in_db_url_for_configparser(monkeypatch):
     runpy.run_path(env_path)
 
     assert real_config.get_main_option("sqlalchemy.url") == raw_url
+
+
+def _run_env_with_pre_migration_hook(monkeypatch, hook_path):
+    alembic_config = AlembicConfigStub(None)
+    alembic_config.options["pre_migration_hook"] = hook_path
+    connection = object()
+    connectable = SimpleNamespace(connect=lambda: nullcontext(connection))
+
+    monkeypatch.setattr(context, "config", alembic_config, raising=False)
+    monkeypatch.setattr(context, "is_offline_mode", lambda: True)
+    monkeypatch.setattr(context, "configure", lambda **options: None)
+    monkeypatch.setattr(context, "begin_transaction", nullcontext)
+    monkeypatch.setattr(context, "run_migrations", lambda: None)
+    monkeypatch.setattr(repom.utility, "load_models", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sqlalchemy,
+        "engine_from_config",
+        lambda *args, **kwargs: connectable,
+    )
+
+    env_path = Path(__file__).parents[2] / "alembic" / "env.py"
+    return runpy.run_path(env_path)
+
+
+def test_pre_migration_hook_rejects_module_outside_allowed_prefixes(monkeypatch):
+    """A newline injected into a generated alembic.ini could add a
+    pre_migration_hook key naming an arbitrary module. Restricting the
+    hook to allowed_package_prefixes means even a successfully injected
+    key still cannot import an attacker-chosen module.
+    """
+    monkeypatch.setattr(
+        repom.config.config, "allowed_package_prefixes", {"repom."}
+    )
+
+    with pytest.raises(ValueError):
+        _run_env_with_pre_migration_hook(monkeypatch, "evil_module:run")
+
+
+def test_pre_migration_hook_runs_when_module_is_within_allowed_prefixes(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        repom.config.config, "allowed_package_prefixes", {"repom."}
+    )
+    calls = []
+    fake_module = ModuleType("repom.fake_pre_migration_hook")
+    fake_module.run = lambda cfg: calls.append(cfg)
+    monkeypatch.setitem(
+        sys.modules, "repom.fake_pre_migration_hook", fake_module
+    )
+
+    _run_env_with_pre_migration_hook(
+        monkeypatch, "repom.fake_pre_migration_hook:run"
+    )
+
+    assert calls == [repom.config.config]

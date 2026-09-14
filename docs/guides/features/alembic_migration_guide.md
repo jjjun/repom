@@ -10,6 +10,7 @@ repom における Alembic を使ったデータベースマイグレーショ�
   - [マイグレーションのリセット](#マイグレーションのリセット)
 - [repom 単独での使用](#repom-単独での使用)
 - [外部プロジェクトでの使用](#外部プロジェクトでの使用)
+- [セキュリティ上の注意](#セキュリティ上の注意)
 - [よく使うコマンド](#よく使うコマンド)
 - [実践的な例](#実践的な例)
 - [トラブルシューティング](#トラブルシューティング)
@@ -260,6 +261,24 @@ mine-py/
     └── mine_py/                   # CONFIG_HOOK で設定
         └── db.dev.sqlite3
 ```
+
+---
+
+## セキュリティ上の注意
+
+`alembic.ini` はソースコードと同じ信頼レベルで扱う設定ファイルです。
+`pre_migration_hook` は `module:callable` をそのまま解決して呼び出すため、
+攻撃者が制御できる値が混入するとコード実行につながります。
+`AlembicTemplates.generate_alembic_ini`（`AlembicSetup.create_alembic_ini`
+経由の呼び出しも含む）の `script_location`、`version_locations`、
+`version_table`、`version_table_schema`、`autogenerate_exclude_tables` には、
+リポジトリ名や CI 変数など外部由来の値をそのまま渡さないでください。
+改行・復帰・NUL・先頭が `[` の値は例外を送出して拒否されます。
+`version_table` / `version_table_schema` / `autogenerate_exclude_tables` の
+各要素は `[A-Za-z_][A-Za-z0-9_]*` の識別子パターンのみ許可されます。
+`pre_migration_hook` が指すモジュールは `allowed_package_prefixes` で
+許可した prefix 配下である必要があり、`alembic/env.py` がインポート前に
+これを検証します。
 
 ---
 

@@ -5,6 +5,7 @@ from sqlalchemy import pool
 
 from alembic import context
 from basekit import load_hook_function
+from basekit.discovery import validate_package_security
 
 from repom.database import Base
 from repom.config import config as db_config
@@ -46,6 +47,8 @@ config.set_main_option("sqlalchemy.url", db_config.db_url.replace("%", "%%"))
 # pre_migration_hook optionally names a consumer hook using the explicit
 # module:callable form. The hook receives db_config and runs whenever this
 # environment is invoked, before either offline or online migrations begin.
+# The module component must sit under db_config.allowed_package_prefixes;
+# _load_pre_migration_hook validates it before importing.
 
 version_table = config.get_main_option("version_table", "alembic_version")
 version_table_schema = config.get_main_option("version_table_schema")
@@ -67,6 +70,19 @@ autogenerate_exclude_tables = _parse_table_names(
 
 
 def _load_pre_migration_hook(hook_path: str):
+    # alembic.ini is trusted configuration, but pre_migration_hook is a
+    # code-execution setting: validate the target module against
+    # allowed_package_prefixes before importing it, the same boundary
+    # load_models() enforces for model auto-import.
+    module_path = hook_path.split(":", 1)[0]
+    try:
+        validate_package_security(
+            module_path, db_config.allowed_package_prefixes
+        )
+    except ValueError as exc:
+        raise ValueError(
+            f"{exc} (pre_migration_hook='{hook_path}')"
+        ) from exc
     return load_hook_function(
         hook_path,
         source="pre_migration_hook",

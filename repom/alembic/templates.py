@@ -1,10 +1,45 @@
 """Alembic configuration file templates."""
 
+import re
 from collections.abc import Sequence
+
+# alembic.ini is ini syntax and line-oriented: a newline in an interpolated
+# value ends the current key and starts a new one. The shared alembic/env.py
+# trusts keys it reads from this file - including pre_migration_hook, which
+# resolves and calls a module:callable target unconditionally - so a value
+# that can inject a key is a code-execution vector, not just a formatting bug.
+_FORBIDDEN_INI_CHARACTERS = {
+    "\n": "a newline",
+    "\r": "a carriage return",
+    "\x00": "a NUL byte",
+}
+
+_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class AlembicTemplates:
     """Alembic 設定ファイルのテンプレート提供"""
+
+    @staticmethod
+    def _reject_ini_injection(option: str, value: str) -> None:
+        """Reject a value that could inject a new key into alembic.ini."""
+        for character, description in _FORBIDDEN_INI_CHARACTERS.items():
+            if character in value:
+                raise ValueError(
+                    f"{option} must not contain {description}: {value!r}"
+                )
+        if value.startswith("["):
+            raise ValueError(f"{option} must not start with '[': {value!r}")
+
+    @staticmethod
+    def _reject_non_identifier(option: str, value: str) -> None:
+        """Constrain an identifier-shaped option to a conservative pattern."""
+        AlembicTemplates._reject_ini_injection(option, value)
+        if not _IDENTIFIER_PATTERN.match(value):
+            raise ValueError(
+                f"{option} must be a plain identifier matching "
+                f"[A-Za-z_][A-Za-z0-9_]*: {value!r}"
+            )
 
     @staticmethod
     def generate_alembic_ini(
@@ -33,6 +68,33 @@ class AlembicTemplates:
             - version_locations: %(here)s + マイグレーションディレクトリのパス
             - %(here)s により、alembic.ini の配置場所に依存しない相対パス指定が可能
         """
+        AlembicTemplates._reject_ini_injection(
+            "script_location", script_location
+        )
+        AlembicTemplates._reject_ini_injection(
+            "version_locations", version_locations
+        )
+        if version_table is not None:
+            AlembicTemplates._reject_non_identifier(
+                "version_table", version_table
+            )
+        if version_table_schema is not None:
+            AlembicTemplates._reject_non_identifier(
+                "version_table_schema", version_table_schema
+            )
+        if isinstance(autogenerate_exclude_tables, str):
+            exclude_table_names = [
+                name
+                for item in autogenerate_exclude_tables.split(",")
+                if (name := item.strip())
+            ]
+        else:
+            exclude_table_names = list(autogenerate_exclude_tables or [])
+        for name in exclude_table_names:
+            AlembicTemplates._reject_non_identifier(
+                "autogenerate_exclude_tables", name
+            )
+
         version_table_option = (
             f"version_table = {version_table}\n\n"
             if version_table is not None
