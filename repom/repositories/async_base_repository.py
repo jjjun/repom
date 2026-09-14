@@ -83,13 +83,12 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
 
         session_generator = get_async_db_session()
         session = await anext(session_generator)
-        self._scoped_session = session
+        token = self._scoped_session_var.set(session)
         try:
             yield session
         finally:
-            if self._scoped_session is session:
-                session.expunge_all()
-            self._scoped_session = None
+            session.expunge_all()
+            self._scoped_session_var.reset(token)
             await session_generator.aclose()
 
     async def get_by(

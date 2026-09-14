@@ -16,6 +16,7 @@ I/O を伴うメソッド（``find`` / ``save`` など）は await ポイント�
 異なるため各サブクラスに残します。
 """
 
+import contextvars
 import inspect
 import warnings
 from collections.abc import Sequence
@@ -36,6 +37,16 @@ class RepositoryBase(Generic[T]):
     ``BaseRepository`` / ``AsyncBaseRepository`` が継承します。
     セッション種別のガード（``model`` 引数に Session/AsyncSession が
     渡されていないかの検出）はサブクラスがクラス属性で差し替えます。
+
+    スレッド/タスク安全性:
+        ``session`` を明示せずに構築したインスタンスは、複数のリクエスト・
+        タスク・スレッドで共有しても安全です。``_session_scope()`` が内部で
+        開くセッションは ``contextvars.ContextVar`` に保持されるため、
+        タスク/スレッドごとに独立した値を持ち、他の呼び出し元のセッション・
+        未コミットの変更・identity map を参照することはありません。
+        ``session`` を明示したインスタンスは、その呼び出し元が所有する
+        セッションに紐づくため、そのセッションを複数タスクで同時利用しない
+        という通常の SQLAlchemy の制約がそのまま適用されます。
     """
 
     # ``model`` 引数に渡されたら拒否するセッション型（サブクラスで設定）
@@ -87,7 +98,13 @@ class RepositoryBase(Generic[T]):
 
         self.model = model
         self._session_override = session
-        self._scoped_session = None
+        # _session_scope() が内部で開いたセッションを保持する。プレーンな
+        # インスタンス属性にすると、同一インスタンスを複数タスク/スレッドで
+        # 共有した際に他の呼び出し元のセッションを取り合ってしまう
+        # （タスク/スレッドごとに独立した値を持てる contextvars を使う理由）。
+        self._scoped_session_var: contextvars.ContextVar = contextvars.ContextVar(
+            f"{type(self).__name__}._scoped_session"
+        )
         self.default_options: List = []  # デフォルトの eager loading options
 
     @classmethod
@@ -104,6 +121,16 @@ class RepositoryBase(Generic[T]):
                 f"2. Define class as: class {cls.__name__}({base}[YourModel])\n"
                 f"3. Override __init__ and call super().__init__(YourModel, session)"
             ) from None
+
+    @property
+    def _scoped_session(self):
+        """現在のタスク/スレッドで ``_session_scope()`` が開いた内部セッション。
+
+        ``_scoped_session_var`` は contextvars 経由のため、値の設定/解除は
+        ``_session_scope()`` 側で ``set()`` / ``reset(token)`` を使って行う。
+        ここは読み取り専用のアクセサ。
+        """
+        return self._scoped_session_var.get(None)
 
     @property
     def session(self):

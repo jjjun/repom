@@ -118,6 +118,11 @@ tasks = await task_repo.find(limit=10)
 users = await user_repo.find(limit=10)
 ```
 
+`session=` を省略した Repository インスタンスは、この制約の対象外です。
+`_session_scope()` が開く内部セッションは contextvars で task ごとに
+独立して保持されるため、同じインスタンスを複数 task で共有しても
+セッションや identity map を取り合いません。
+
 ## Soft Delete
 
 `SoftDeletableMixin` を持つモデルでは `soft_delete()`、`restore()`、

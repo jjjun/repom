@@ -124,6 +124,20 @@ Advanced long-running code can iterate `get_async_db_transaction()` directly,
 but it must call `dispose_engines()` when the process is finished. The
 standalone context manager is safer for ordinary scripts.
 
+## Repository instance reuse and concurrency
+
+A `BaseRepository` or `AsyncBaseRepository` instance built without an
+explicit `session=` may safely be shared across concurrent requests, tasks,
+or threads. `_session_scope()` keeps the internally-opened session in a
+`contextvars.ContextVar`, so each task and each thread gets its own value;
+concurrent callers on the same instance never observe each other's session,
+uncommitted rows, or identity map.
+
+An instance built with an explicit `session=` is bound to that one
+caller-owned session for its lifetime. The rule below about not sharing one
+`AsyncSession` between concurrently running tasks still applies in that
+case.
+
 ## Ownership rules
 
 - Pass sessions by keyword: `Repository(session=session)`.

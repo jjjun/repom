@@ -57,13 +57,12 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
 
         session_generator = get_db_session()
         session = next(session_generator)
-        self._scoped_session = session
+        token = self._scoped_session_var.set(session)
         try:
             yield session
         finally:
-            if self._scoped_session is session:
-                session.expunge_all()
-            self._scoped_session = None
+            session.expunge_all()
+            self._scoped_session_var.reset(token)
             session_generator.close()
 
     def get_by(
