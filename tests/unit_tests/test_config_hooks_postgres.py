@@ -13,6 +13,7 @@ POSTGRES_ENV_NAMES = (
     "POSTGRES_PORT",
     "POSTGRES_HOST_PORT",
     "REPOM_POSTGRES_DB",
+    "POSTGRES_EXPOSE_TO_LAN",
 )
 
 
@@ -32,6 +33,7 @@ def test_apply_postgres_env_overrides_does_nothing_when_unset():
     assert config.postgres.host == "localhost"
     assert config.postgres.port == 5432
     assert config.postgres.container.host_port == 5432
+    assert config.postgres.container.expose_to_lan is False
 
 
 def test_apply_postgres_env_overrides_keeps_existing_host_port_when_unset():
@@ -120,6 +122,29 @@ def test_apply_postgres_env_overrides_applies_host_port_without_connection_port(
 
     assert config.postgres.port == 5432
     assert config.postgres.container.host_port == 5455
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("true", True), ("false", False)],
+)
+def test_apply_postgres_env_overrides_applies_expose_to_lan(
+    monkeypatch, value, expected
+):
+    monkeypatch.setenv("POSTGRES_EXPOSE_TO_LAN", value)
+    config = RepomConfig()
+
+    apply_postgres_env_overrides(config)
+
+    assert config.postgres.container.expose_to_lan is expected
+
+
+def test_apply_postgres_env_overrides_rejects_invalid_expose_to_lan(monkeypatch):
+    monkeypatch.setenv("POSTGRES_EXPOSE_TO_LAN", "invalid")
+    config = RepomConfig()
+
+    with pytest.raises(ValueError, match="POSTGRES_EXPOSE_TO_LAN must be a boolean"):
+        apply_postgres_env_overrides(config)
 
 
 def test_apply_postgres_env_overrides_rejects_non_integer_port(monkeypatch):

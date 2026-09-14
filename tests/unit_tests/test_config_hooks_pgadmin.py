@@ -10,6 +10,7 @@ PGADMIN_ENV_NAMES = (
     "PGADMIN_DEFAULT_EMAIL",
     "PGADMIN_DEFAULT_PASSWORD",
     "PGADMIN_HOST_PORT",
+    "PGADMIN_EXPOSE_TO_LAN",
 )
 
 
@@ -27,6 +28,7 @@ def test_apply_pgadmin_env_overrides_does_nothing_when_unset():
     assert config.pgadmin.email == "admin@example.com"
     assert config.pgadmin.password == "admin"
     assert config.pgadmin.container.host_port == 5050
+    assert config.pgadmin.container.expose_to_lan is False
 
 
 def test_apply_pgadmin_env_overrides_keeps_existing_host_port_when_unset():
@@ -79,6 +81,29 @@ def test_apply_pgadmin_env_overrides_applies_host_port(monkeypatch):
     apply_pgadmin_env_overrides(config)
 
     assert config.pgadmin.container.host_port == 15050
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("true", True), ("false", False)],
+)
+def test_apply_pgadmin_env_overrides_applies_expose_to_lan(
+    monkeypatch, value, expected
+):
+    monkeypatch.setenv("PGADMIN_EXPOSE_TO_LAN", value)
+    config = RepomConfig()
+
+    apply_pgadmin_env_overrides(config)
+
+    assert config.pgadmin.container.expose_to_lan is expected
+
+
+def test_apply_pgadmin_env_overrides_rejects_invalid_expose_to_lan(monkeypatch):
+    monkeypatch.setenv("PGADMIN_EXPOSE_TO_LAN", "invalid")
+    config = RepomConfig()
+
+    with pytest.raises(ValueError, match="PGADMIN_EXPOSE_TO_LAN must be a boolean"):
+        apply_pgadmin_env_overrides(config)
 
 
 def test_apply_pgadmin_env_overrides_rejects_non_integer_host_port(monkeypatch):

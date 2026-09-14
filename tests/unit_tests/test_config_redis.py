@@ -117,6 +117,18 @@ class TestRedisContainerConfig:
         container = RedisContainerConfig(image='redis:latest')
         assert container.image == 'redis:latest'
 
+    def test_expose_to_lan_default(self):
+        """expose_to_lan デフォルト: False"""
+        from repom.redis.config import RedisContainerConfig
+        container = RedisContainerConfig()
+        assert container.expose_to_lan is False
+
+    def test_expose_to_lan_setter(self):
+        """expose_to_lan Setter で設定"""
+        from repom.redis.config import RedisContainerConfig
+        container = RedisContainerConfig(expose_to_lan=True)
+        assert container.expose_to_lan is True
+
 
 class TestRedisConfigIntegration:
     """Redis config with RepomConfig integration tests"""

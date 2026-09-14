@@ -20,6 +20,7 @@ class TestPostgresContainerConfig:
         assert container.host_port == 5432
         assert container.volume_name is None
         assert container.image == "postgres:16-alpine"
+        assert container.expose_to_lan is False
 
     def test_get_container_name_default(self):
         """デフォルトのコンテナ名を取得"""
@@ -157,6 +158,7 @@ class TestPgAdminContainerConfig:
         assert container.volume_name is None
         assert container.image == "dpage/pgadmin4:latest"
         assert container.enabled is False
+        assert container.expose_to_lan is False
 
     def test_get_container_name_default(self):
         """デフォルトのコンテナ名を取得"""

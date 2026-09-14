@@ -3,8 +3,12 @@
 DockerService, Volume  docker-compose.yml 
 """
 
+import os
+import stat
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+
+import pytest
 
 DATA_PATH = Path("data") / "repom"
 
@@ -30,6 +34,7 @@ class TestGenerateDockerComposePostgresOnly:
         mock_container_config.get_volume_name.return_value = "repom_postgres_data"
         mock_container_config.image = "postgres:16-alpine"
         mock_container_config.host_port = 5432
+        mock_container_config.expose_to_lan = False
 
         mock_pg_config.container = mock_container_config
 
@@ -74,6 +79,7 @@ class TestGenerateDockerComposePgAdminEnabled:
         mock_pg_container.get_volume_name.return_value = "myproject_postgres_data"
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5433
+        mock_pg_container.expose_to_lan = False
 
         mock_pg_config.container = mock_pg_container
 
@@ -83,6 +89,7 @@ class TestGenerateDockerComposePgAdminEnabled:
         mock_pgadmin_container.get_volume_name.return_value = "myproject_pgadmin_data"
         mock_pgadmin_container.image = "dpage/pgadmin4:latest"
         mock_pgadmin_container.host_port = 5051
+        mock_pgadmin_container.expose_to_lan = False
 
         mock_pgadmin_config = MagicMock()
         mock_pgadmin_config.email = "admin@myproject.local"
@@ -128,6 +135,7 @@ class TestGenerateDockerComposePgAdminEnabled:
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
         mock_pg_container.healthcheck = None
+        mock_pg_container.expose_to_lan = False
 
         mock_pg_config.container = mock_pg_container
 
@@ -137,10 +145,11 @@ class TestGenerateDockerComposePgAdminEnabled:
         mock_pgadmin_container.get_volume_name.return_value = "repom_pgadmin_data"
         mock_pgadmin_container.image = "dpage/pgadmin4:latest"
         mock_pgadmin_container.host_port = 5050
+        mock_pgadmin_container.expose_to_lan = False
 
         mock_pgadmin_config = MagicMock()
         mock_pgadmin_config.email = "admin@localhost"
-        mock_pgadmin_config.password = "admin"
+        mock_pgadmin_config.password = "pgadmin-secret"
         mock_pgadmin_config.container = mock_pgadmin_container
 
         mock_config.postgres = mock_pg_config
@@ -157,9 +166,10 @@ class TestGenerateDockerComposePgAdminEnabled:
         assert "  pgadmin:" in yaml_content
         assert "    image: dpage/pgadmin4:latest" in yaml_content
         assert "    container_name: repom_pgadmin" in yaml_content
-        assert "      PGADMIN_DEFAULT_EMAIL: admin@localhost" in yaml_content
-        assert "      PGADMIN_DEFAULT_PASSWORD: admin" in yaml_content
-        assert "      - \"5050:80\"" in yaml_content
+        assert '      PGADMIN_DEFAULT_EMAIL: "admin@localhost"' in yaml_content
+        assert '      PGADMIN_DEFAULT_PASSWORD: "${PGADMIN_DEFAULT_PASSWORD}"' in yaml_content
+        assert "pgadmin-secret" not in yaml_content
+        assert "      - \"127.0.0.1:5050:80\"" in yaml_content
         assert "    depends_on:" in yaml_content
         assert "      postgres:" in yaml_content
 
@@ -278,6 +288,7 @@ class TestDockerComposeFileGeneration:
         mock_pg_container.get_volume_name.return_value = "repom_postgres_data"
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
+        mock_pg_container.expose_to_lan = False
 
         mock_pg_config.container = mock_pg_container
 
@@ -294,18 +305,232 @@ class TestDockerComposeFileGeneration:
         generator = generate_docker_compose()
         yaml_content = generator.generate()
 
-        # YAML 
+        # YAML
         assert "version: '3.8'" in yaml_content
         assert "services:" in yaml_content
         assert "volumes:" in yaml_content
         assert "  postgres:" in yaml_content
         assert "  repom_postgres_data:" in yaml_content
 
-        # 
-        assert "POSTGRES_USER: repom" in yaml_content
-        assert "POSTGRES_PASSWORD: repom_dev" in yaml_content
-        # Note: POSTGRES_DB DB init 
+        #
+        assert '      POSTGRES_USER: "repom"' in yaml_content
+        assert '      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"' in yaml_content
+        assert "repom_dev" not in yaml_content
+        # Note: POSTGRES_DB DB init
         assert "POSTGRES_DB" not in yaml_content
+
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
+    def test_generated_compose_has_no_plaintext_password(self, mock_get_init_dir, mock_config):
+        """The generated compose file never contains the raw password value."""
+        mock_init_dir = Path("/tmp/init")
+        mock_get_init_dir.return_value = mock_init_dir
+
+        mock_pg_config = MagicMock()
+        mock_pg_config.user = "repom"
+        mock_pg_config.password = "s3cret-postgres-password"
+        mock_pg_config.database = None
+
+        mock_pg_container = MagicMock()
+        mock_pg_container.get_container_name.return_value = "repom_postgres"
+        mock_pg_container.get_volume_name.return_value = "repom_postgres_data"
+        mock_pg_container.image = "postgres:16-alpine"
+        mock_pg_container.host_port = 5432
+        mock_pg_container.expose_to_lan = False
+
+        mock_pg_config.container = mock_pg_container
+
+        mock_pgadmin_config = MagicMock()
+        mock_pgadmin_config.container.enabled = False
+
+        mock_config.postgres = mock_pg_config
+        mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
+
+        from repom.postgres.manage import generate_docker_compose
+
+        generator = generate_docker_compose()
+        yaml_content = generator.generate()
+
+        assert "s3cret-postgres-password" not in yaml_content
+        assert '"${POSTGRES_PASSWORD}"' in yaml_content
+
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
+    def test_generate_docker_compose_rejects_newline_in_password(
+        self, mock_get_init_dir, mock_config
+    ):
+        """A newline in the password cannot inject an extra YAML key."""
+        mock_init_dir = Path("/tmp/init")
+        mock_get_init_dir.return_value = mock_init_dir
+
+        mock_pg_config = MagicMock()
+        mock_pg_config.user = "repom"
+        mock_pg_config.password = "hostile\nPOSTGRES_HOST_AUTH_METHOD: trust"
+        mock_pg_config.database = None
+
+        mock_pg_container = MagicMock()
+        mock_pg_container.get_container_name.return_value = "repom_postgres"
+        mock_pg_container.get_volume_name.return_value = "repom_postgres_data"
+        mock_pg_container.image = "postgres:16-alpine"
+        mock_pg_container.host_port = 5432
+        mock_pg_container.expose_to_lan = False
+
+        mock_pg_config.container = mock_pg_container
+
+        mock_pgadmin_config = MagicMock()
+        mock_pgadmin_config.container.enabled = False
+
+        mock_config.postgres = mock_pg_config
+        mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
+
+        from repom.postgres.manage import generate_docker_compose
+
+        with pytest.raises(ValueError, match="postgres.password"):
+            generate_docker_compose()
+
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
+    def test_healthcheck_uses_exec_form(self, mock_get_init_dir, mock_config):
+        """The PostgreSQL healthcheck is an exec-form list, not CMD-SHELL."""
+        mock_init_dir = Path("/tmp/init")
+        mock_get_init_dir.return_value = mock_init_dir
+
+        mock_pg_config = MagicMock()
+        mock_pg_config.user = "repom"
+        mock_pg_config.password = "repom_dev"
+        mock_pg_config.database = None
+
+        mock_pg_container = MagicMock()
+        mock_pg_container.get_container_name.return_value = "repom_postgres"
+        mock_pg_container.get_volume_name.return_value = "repom_postgres_data"
+        mock_pg_container.image = "postgres:16-alpine"
+        mock_pg_container.host_port = 5432
+        mock_pg_container.expose_to_lan = False
+
+        mock_pg_config.container = mock_pg_container
+
+        mock_pgadmin_config = MagicMock()
+        mock_pgadmin_config.container.enabled = False
+
+        mock_config.postgres = mock_pg_config
+        mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
+
+        from repom.postgres.manage import generate_docker_compose
+
+        generator = generate_docker_compose()
+        test = generator.services[0].healthcheck["test"]
+
+        assert test.startswith('["CMD",')
+        assert "CMD-SHELL" not in test
+
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
+    def test_generated_ports_bind_loopback_by_default(self, mock_get_init_dir, mock_config):
+        """Published ports bind to loopback unless expose_to_lan is set."""
+        mock_init_dir = Path("/tmp/init")
+        mock_get_init_dir.return_value = mock_init_dir
+
+        mock_pg_config = MagicMock()
+        mock_pg_config.user = "repom"
+        mock_pg_config.password = "repom_dev"
+        mock_pg_config.database = None
+
+        mock_pg_container = MagicMock()
+        mock_pg_container.get_container_name.return_value = "repom_postgres"
+        mock_pg_container.get_volume_name.return_value = "repom_postgres_data"
+        mock_pg_container.image = "postgres:16-alpine"
+        mock_pg_container.host_port = 5432
+        mock_pg_container.expose_to_lan = False
+
+        mock_pg_config.container = mock_pg_container
+
+        mock_pgadmin_config = MagicMock()
+        mock_pgadmin_config.container.enabled = False
+
+        mock_config.postgres = mock_pg_config
+        mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
+
+        from repom.postgres.manage import generate_docker_compose
+
+        generator = generate_docker_compose()
+
+        for port in generator.services[0].ports:
+            assert port.startswith("127.0.0.1:")
+
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
+    def test_generated_ports_expose_to_lan_when_opted_in(self, mock_get_init_dir, mock_config):
+        """expose_to_lan=True publishes the port on every interface."""
+        mock_init_dir = Path("/tmp/init")
+        mock_get_init_dir.return_value = mock_init_dir
+
+        mock_pg_config = MagicMock()
+        mock_pg_config.user = "repom"
+        mock_pg_config.password = "repom_dev"
+        mock_pg_config.database = None
+
+        mock_pg_container = MagicMock()
+        mock_pg_container.get_container_name.return_value = "repom_postgres"
+        mock_pg_container.get_volume_name.return_value = "repom_postgres_data"
+        mock_pg_container.image = "postgres:16-alpine"
+        mock_pg_container.host_port = 5432
+        mock_pg_container.expose_to_lan = True
+
+        mock_pg_config.container = mock_pg_container
+
+        mock_pgadmin_config = MagicMock()
+        mock_pgadmin_config.container.enabled = False
+
+        mock_config.postgres = mock_pg_config
+        mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
+
+        from repom.postgres.manage import generate_docker_compose
+
+        generator = generate_docker_compose()
+
+        assert generator.services[0].ports == ["0.0.0.0:5432:5432"]
+
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
+    def test_generate_rejects_control_characters_in_identifiers(
+        self, mock_get_init_dir, mock_config
+    ):
+        """A newline in POSTGRES_USER or the container name raises."""
+        mock_init_dir = Path("/tmp/init")
+        mock_get_init_dir.return_value = mock_init_dir
+
+        mock_pgadmin_config = MagicMock()
+        mock_pgadmin_config.container.enabled = False
+        mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
+
+        mock_pg_config = MagicMock()
+        mock_pg_config.password = "repom_dev"
+        mock_pg_config.database = None
+        mock_pg_container = MagicMock()
+        mock_pg_container.get_volume_name.return_value = "repom_postgres_data"
+        mock_pg_container.image = "postgres:16-alpine"
+        mock_pg_container.host_port = 5432
+        mock_pg_container.expose_to_lan = False
+        mock_pg_config.container = mock_pg_container
+        mock_config.postgres = mock_pg_config
+
+        from repom.postgres.manage import generate_docker_compose
+
+        mock_pg_config.user = "repom\nPOSTGRES_HOST_AUTH_METHOD: trust"
+        mock_pg_container.get_container_name.return_value = "repom_postgres"
+        with pytest.raises(ValueError, match="postgres.user"):
+            generate_docker_compose()
+
+        mock_pg_config.user = "repom"
+        mock_pg_container.get_container_name.return_value = "repom_postgres\nprivileged: true"
+        with pytest.raises(ValueError, match="postgres.container.container_name"):
+            generate_docker_compose()
 
     @patch('repom.postgres.manage.config')
     @patch('repom.postgres.manage.PostgresManager.get_compose_dir')
@@ -335,6 +560,7 @@ class TestDockerComposeFileGeneration:
         mock_pg_container.get_volume_name.return_value = "repom_postgres_data"
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
+        mock_pg_container.expose_to_lan = False
         mock_pg_config.container = mock_pg_container
 
         mock_pgadmin_container = MagicMock()
@@ -343,6 +569,7 @@ class TestDockerComposeFileGeneration:
         mock_pgadmin_container.get_volume_name.return_value = "repom_pgadmin_data"
         mock_pgadmin_container.image = "dpage/pgadmin4:latest"
         mock_pgadmin_container.host_port = 5050
+        mock_pgadmin_container.expose_to_lan = False
         mock_pgadmin_config = MagicMock()
         mock_pgadmin_config.email = "admin@example.com"
         mock_pgadmin_config.password = "pgadmin-secret"
@@ -360,6 +587,103 @@ class TestDockerComposeFileGeneration:
         captured = capsys.readouterr()
         assert "postgres-secret" not in captured.out
         assert "pgadmin-secret" not in captured.out
+
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.PostgresManager.get_compose_dir')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
+    def test_generate_writes_password_to_env_file(
+        self,
+        mock_get_init_dir,
+        mock_get_compose_dir,
+        mock_config,
+        tmp_path,
+    ):
+        """The password is written to a .env secrets file, not the compose file."""
+        mock_init_dir = tmp_path / "init"
+        mock_init_dir.mkdir()
+        mock_get_init_dir.return_value = mock_init_dir
+
+        mock_compose_dir = tmp_path / "compose"
+        mock_compose_dir.mkdir()
+        mock_get_compose_dir.return_value = mock_compose_dir
+
+        mock_pg_config = MagicMock()
+        mock_pg_config.user = "repom"
+        mock_pg_config.password = "postgres-secret"
+        mock_pg_container = MagicMock()
+        mock_pg_container.get_container_name.return_value = "repom_postgres"
+        mock_pg_container.get_volume_name.return_value = "repom_postgres_data"
+        mock_pg_container.image = "postgres:16-alpine"
+        mock_pg_container.host_port = 5432
+        mock_pg_container.expose_to_lan = False
+        mock_pg_config.container = mock_pg_container
+
+        mock_pgadmin_config = MagicMock()
+        mock_pgadmin_config.container.enabled = False
+
+        mock_config.db_name = "repom"
+        mock_config.postgres = mock_pg_config
+        mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
+
+        from repom.postgres.manage import COMPOSE_FILENAME, generate
+
+        generate()
+
+        compose_content = (mock_compose_dir / COMPOSE_FILENAME).read_text()
+        assert "postgres-secret" not in compose_content
+
+        env_content = (mock_compose_dir / ".env").read_text()
+        assert env_content == 'POSTGRES_PASSWORD="postgres-secret"\n'
+
+    @pytest.mark.skipif(
+        os.name != "posix",
+        reason="POSIX permission bits are not enforced on Windows",
+    )
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.PostgresManager.get_compose_dir')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
+    def test_generated_env_file_is_0600(
+        self,
+        mock_get_init_dir,
+        mock_get_compose_dir,
+        mock_config,
+        tmp_path,
+    ):
+        """The generated .env secrets file is owner-read/write only."""
+        mock_init_dir = tmp_path / "init"
+        mock_init_dir.mkdir()
+        mock_get_init_dir.return_value = mock_init_dir
+
+        mock_compose_dir = tmp_path / "compose"
+        mock_compose_dir.mkdir()
+        mock_get_compose_dir.return_value = mock_compose_dir
+
+        mock_pg_config = MagicMock()
+        mock_pg_config.user = "repom"
+        mock_pg_config.password = "postgres-secret"
+        mock_pg_container = MagicMock()
+        mock_pg_container.get_container_name.return_value = "repom_postgres"
+        mock_pg_container.get_volume_name.return_value = "repom_postgres_data"
+        mock_pg_container.image = "postgres:16-alpine"
+        mock_pg_container.host_port = 5432
+        mock_pg_container.expose_to_lan = False
+        mock_pg_config.container = mock_pg_container
+
+        mock_pgadmin_config = MagicMock()
+        mock_pgadmin_config.container.enabled = False
+
+        mock_config.db_name = "repom"
+        mock_config.postgres = mock_pg_config
+        mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
+
+        from repom.postgres.manage import generate
+
+        generate()
+
+        env_file = mock_compose_dir / ".env"
+        assert stat.S_IMODE(env_file.stat().st_mode) == 0o600
 
 
 class TestPgAdminServersJson:

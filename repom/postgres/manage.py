@@ -13,6 +13,13 @@ import json
 import subprocess
 
 from repom.config import config
+from repom.docker_compose_safety import (
+    format_bound_port,
+    format_env_file,
+    quote_yaml_string,
+    reject_control_characters,
+    write_secret_file,
+)
 from repom.postgres.credentials import mask_secret, quote_identifier, quote_literal
 from basekit.docker_compose import (
     DockerComposeGenerator,
@@ -130,21 +137,32 @@ def generate_docker_compose() -> DockerComposeGenerator:
     container = pg.container
     init_dir = manager.get_init_dir()
 
+    user = reject_control_characters(pg.user, field_name="postgres.user")
+    reject_control_characters(pg.password, field_name="postgres.password")
+    container_name = reject_control_characters(
+        container.get_container_name(), field_name="postgres.container.container_name"
+    )
+    volume_name = reject_control_characters(
+        container.get_volume_name(), field_name="postgres.container.volume_name"
+    )
+
     postgres_service = DockerService(
         name="postgres",
         image=container.image,
-        container_name=container.get_container_name(),
+        container_name=container_name,
         environment={
-            "POSTGRES_USER": pg.user,
-            "POSTGRES_PASSWORD": pg.password,
+            "POSTGRES_USER": quote_yaml_string(user),
+            "POSTGRES_PASSWORD": quote_yaml_string("${POSTGRES_PASSWORD}"),
         },
-        ports=[f"{container.host_port}:5432"],
+        ports=[
+            format_bound_port(container.host_port, 5432, expose_to_lan=container.expose_to_lan)
+        ],
         volumes=[
-            f"{container.get_volume_name()}:/var/lib/postgresql/data",
+            f"{volume_name}:/var/lib/postgresql/data",
             f"{init_dir.absolute()}:/docker-entrypoint-initdb.d",
         ],
         healthcheck={
-            "test": f'["CMD-SHELL", "pg_isready -U {pg.user}"]',
+            "test": f'["CMD", "pg_isready", "-U", {quote_yaml_string(user)}]',
             "interval": "5s",
             "timeout": "5s",
             "retries": 5,
@@ -154,23 +172,43 @@ def generate_docker_compose() -> DockerComposeGenerator:
 
     generator = DockerComposeGenerator()
     generator.add_service(postgres_service)
-    generator.add_volume(DockerVolume(name=container.get_volume_name()))
+    generator.add_volume(DockerVolume(name=volume_name))
 
     if config.pgadmin.container.enabled:
         pgadmin_container = config.pgadmin.container
+        pgadmin_email = reject_control_characters(
+            config.pgadmin.email, field_name="pgadmin.email"
+        )
+        reject_control_characters(config.pgadmin.password, field_name="pgadmin.password")
+        pgadmin_container_name = reject_control_characters(
+            pgadmin_container.get_container_name(),
+            field_name="pgadmin.container.container_name",
+        )
+        pgadmin_volume_name = reject_control_characters(
+            pgadmin_container.get_volume_name(),
+            field_name="pgadmin.container.volume_name",
+        )
         servers_json_path = manager.get_compose_dir() / "servers.json"
 
         pgadmin_service = DockerService(
             name="pgadmin",
             image=pgadmin_container.image,
-            container_name=pgadmin_container.get_container_name(),
+            container_name=pgadmin_container_name,
             environment={
-                "PGADMIN_DEFAULT_EMAIL": config.pgadmin.email,
-                "PGADMIN_DEFAULT_PASSWORD": config.pgadmin.password,
+                "PGADMIN_DEFAULT_EMAIL": quote_yaml_string(pgadmin_email),
+                "PGADMIN_DEFAULT_PASSWORD": quote_yaml_string(
+                    "${PGADMIN_DEFAULT_PASSWORD}"
+                ),
             },
-            ports=[f"{pgadmin_container.host_port}:80"],
+            ports=[
+                format_bound_port(
+                    pgadmin_container.host_port,
+                    80,
+                    expose_to_lan=pgadmin_container.expose_to_lan,
+                )
+            ],
             volumes=[
-                f"{pgadmin_container.get_volume_name()}:/var/lib/pgadmin",
+                f"{pgadmin_volume_name}:/var/lib/pgadmin",
                 f"{servers_json_path}:/pgadmin4/servers.json",
             ],
             depends_on={
@@ -180,7 +218,7 @@ def generate_docker_compose() -> DockerComposeGenerator:
             },
         )
         generator.add_service(pgadmin_service)
-        generator.add_volume(DockerVolume(name=pgadmin_container.get_volume_name()))
+        generator.add_volume(DockerVolume(name=pgadmin_volume_name))
 
     return generator
 
@@ -188,8 +226,8 @@ def generate_docker_compose() -> DockerComposeGenerator:
 def generate_init_sql() -> str:
     """Generate SQL that creates the project PostgreSQL databases."""
 
-    base = config.db_name
-    user = config.postgres.user
+    base = reject_control_characters(config.db_name, field_name="db_name")
+    user = reject_control_characters(config.postgres.user, field_name="postgres.user")
     databases = (base, f"{base}_dev", f"{base}_test")
     create_lines = []
     grant_lines = []
@@ -225,12 +263,18 @@ def generate():
     manager = PostgresManager()
     init_dir = manager.get_init_dir()
     init_sql = generate_init_sql()
-    (init_dir / "01_init_databases.sql").write_text(init_sql, encoding="utf-8")
+    init_sql_path = init_dir / "01_init_databases.sql"
+    init_sql_path.write_text(init_sql, encoding="utf-8")
 
     generator = generate_docker_compose()
     compose_dir = manager.get_compose_dir()
     output_path = compose_dir / COMPOSE_FILENAME
     generator.write_to_file(output_path)
+
+    secrets = {"POSTGRES_PASSWORD": config.postgres.password}
+    if config.pgadmin.container.enabled:
+        secrets["PGADMIN_DEFAULT_PASSWORD"] = config.pgadmin.password
+    write_secret_file(compose_dir / ".env", format_env_file(secrets))
 
     if config.pgadmin.container.enabled:
         servers_json_path = compose_dir / "servers.json"
@@ -242,7 +286,7 @@ def generate():
         print(f"pgAdmin servers config: {servers_json_path}")
 
     print(f"Generated: {output_path}")
-    print(f"   Init SQL: {init_dir / '01_init_databases.sql'}")
+    print(f"   Init SQL: {init_sql_path}")
     print("\n PostgreSQL Service:")
     print(f"   Container: {config.postgres.container.get_container_name()}")
     print(f"   Port: {config.postgres.container.host_port}")

@@ -43,12 +43,19 @@ POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_HOST_PORT=5432
 # REPOM_POSTGRES_DB=myapp_dev
+# POSTGRES_EXPOSE_TO_LAN=true
 
 # pgAdmin を使う場合
 PGADMIN_DEFAULT_EMAIL=admin@example.com
 PGADMIN_DEFAULT_PASSWORD=change-me
 PGADMIN_HOST_PORT=5050
+# PGADMIN_EXPOSE_TO_LAN=true
 ```
+
+`POSTGRES_EXPOSE_TO_LAN` / `PGADMIN_EXPOSE_TO_LAN` は既定で無効です。無効な間は
+生成した container の port を `127.0.0.1` にのみ公開し、有効にすると
+`0.0.0.0` へ公開して LAN 上の他ホストからも到達可能になります。LAN 公開が
+本当に必要なプロジェクトでのみ有効にしてください。
 
 `POSTGRES_PORT` はアプリケーションの接続先 port、
 `POSTGRES_HOST_PORT` は生成する container の host mapping です。両者を変更する
@@ -71,12 +78,16 @@ uv run repom_info
 ```text
 <data_path>/postgres/
 ├── docker-compose.generated.yml
+├── .env                          # POSTGRES_PASSWORD 等、生成した secrets（0600）
 ├── postgresql_init/
 │   └── 01_init_databases.sql
 └── servers.json                 # pgAdmin 有効時
 ```
 
-生成物は runtime artifact です。設定の正本は `CONFIG_HOOK` と環境変数です。
+`docker-compose.generated.yml` は `POSTGRES_PASSWORD` / `PGADMIN_DEFAULT_PASSWORD`
+の実値を含みません。これらは同じディレクトリの `.env` に書き出され、compose
+は `${POSTGRES_PASSWORD}` のような変数参照でこれを読み込みます。生成物は
+runtime artifact です。設定の正本は `CONFIG_HOOK` と環境変数です。
 
 ## 停止と削除
 

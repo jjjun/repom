@@ -8,6 +8,7 @@ Tests verify that redis/manage.py correctly uses config values for:
 """
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -95,6 +96,55 @@ class TestGenerateDockerCompose:
         assert generator is not None
         assert expected_image == "redis:7-alpine"  # Default value
 
+    def test_compose_ports_bind_loopback_by_default(self):
+        """Published ports bind to 127.0.0.1 unless expose_to_lan is set."""
+        with patch.object(config.redis.container, "expose_to_lan", False):
+            generator = generate_docker_compose()
+
+        for port in generator.services[0].ports:
+            assert port.startswith("127.0.0.1:")
+
+    def test_compose_exposes_to_lan_when_configured(self):
+        """expose_to_lan=True publishes the port on every interface."""
+        with patch.object(config.redis.container, "expose_to_lan", True):
+            generator = generate_docker_compose()
+
+        for port in generator.services[0].ports:
+            assert port.startswith("0.0.0.0:")
+
+    def test_compose_rejects_newline_in_password(self):
+        """A newline in the password cannot inject an extra YAML key."""
+        with patch.object(
+            config.redis, "password", "hostile\nPOSTGRES_HOST_AUTH_METHOD: trust"
+        ):
+            with pytest.raises(ValueError, match="redis.password"):
+                generate_docker_compose()
+
+    def test_compose_rejects_newline_in_container_name(self):
+        """A newline in the container name raises before it reaches the YAML."""
+        with patch.object(
+            config.redis.container, "container_name", "repom_redis\nprivileged: true"
+        ):
+            with pytest.raises(ValueError, match="redis.container.container_name"):
+                generate_docker_compose()
+
+    def test_compose_command_reads_password_from_environment_when_set(self):
+        """The command asks the container's own shell to expand the password
+        instead of the compose generator inlining it."""
+        with patch.object(config.redis, "password", "s3cret"):
+            generator = generate_docker_compose()
+
+        command = generator.services[0].command
+        assert "$$REDIS_PASSWORD" in command
+        assert "s3cret" not in command
+
+    def test_compose_command_is_plain_redis_server_without_password(self):
+        """Without a password, the command runs redis-server directly."""
+        with patch.object(config.redis, "password", ""):
+            generator = generate_docker_compose()
+
+        assert generator.services[0].command == "redis-server /usr/local/etc/redis/redis.conf"
+
 
 class TestGenerateRedisConf:
     """Tests for generate_redis_conf function."""
@@ -114,17 +164,23 @@ class TestGenerateRedisConf:
         conf = generate_redis_conf()
         assert len(conf) > 100  # Should have reasonable content
 
-    def test_conf_includes_requirepass_when_password_is_configured(self):
-        """redis.conf includes requirepass when Redis password is set."""
+    def test_conf_never_includes_requirepass_even_when_password_is_configured(self):
+        """redis.conf is bind-mounted, so the password never lands in it."""
         conf = generate_redis_conf(password="secret")
 
-        assert 'requirepass "secret"' in conf
+        assert "requirepass" not in conf
+        assert "secret" not in conf
 
     def test_conf_omits_requirepass_when_password_is_empty(self):
         """redis.conf keeps unauthenticated Redis behavior by default."""
         conf = generate_redis_conf(password="")
 
         assert "requirepass" not in conf
+
+    def test_conf_rejects_newline_in_password(self):
+        """A newline in the password cannot inject an extra redis.conf directive."""
+        with pytest.raises(ValueError, match="redis.password"):
+            generate_redis_conf(password="hostile\nrequirepass forced")
 
 
 class TestConfigIntegration:
@@ -202,6 +258,30 @@ class TestDirectoryManagement:
 
         with pytest.raises(ImportError):
             from repom.redis.manage import get_init_dir  # noqa: F401
+
+
+class TestRedisSecretFilePermissions:
+    """Tests for generated secret file permissions and content."""
+
+    def test_generate_writes_password_to_env_file(self, tmp_path):
+        """The Redis password is written to a .env secrets file, not the compose file."""
+        compose_dir = tmp_path / "compose"
+        compose_dir.mkdir()
+        init_dir = compose_dir / "redis_init"
+        init_dir.mkdir()
+
+        from repom.redis.manage import generate
+
+        with patch.object(config.redis, "password", "redis-secret"):
+            with patch.object(RedisManager, "get_compose_dir", return_value=compose_dir):
+                with patch.object(RedisManager, "get_init_dir", return_value=init_dir):
+                    generate()
+
+        compose_content = (compose_dir / "docker-compose.generated.yml").read_text()
+        assert "redis-secret" not in compose_content
+
+        env_content = (compose_dir / ".env").read_text()
+        assert env_content == 'REDIS_PASSWORD="redis-secret"\n'
 
 
 class TestRedisEnsureRunning:

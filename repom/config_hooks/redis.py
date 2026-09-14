@@ -5,13 +5,14 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from repom.config_hooks._parsing import parse_int_env, parse_port_env
+from repom.config_hooks._parsing import parse_bool_env, parse_int_env, parse_port_env
 
 
 def apply_redis_env_overrides(config: Any) -> None:
     """Apply Redis runtime overrides from environment variables.
 
-    Reads: REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB, REDIS_HOST_PORT.
+    Reads: REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB, REDIS_HOST_PORT,
+    REDIS_EXPOSE_TO_LAN.
     """
     redis = getattr(config, "redis", None)
     if redis is None:
@@ -34,6 +35,13 @@ def apply_redis_env_overrides(config: Any) -> None:
         redis.container.host_port = parse_port_env(
             "REDIS_HOST_PORT",
             raw_host_port,
+        )
+
+    raw_expose_to_lan = os.getenv("REDIS_EXPOSE_TO_LAN")
+    if raw_expose_to_lan is not None:
+        redis.container.expose_to_lan = parse_bool_env(
+            "REDIS_EXPOSE_TO_LAN",
+            raw_expose_to_lan,
         )
 
     raw_db = os.getenv("REDIS_DB")

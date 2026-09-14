@@ -14,6 +14,7 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=
 REDIS_DB=0
+# REDIS_EXPOSE_TO_LAN=true
 ```
 
 `REDIS_PORT` は接続先と生成 Compose の公開 port です。利用側 hook では、
@@ -43,8 +44,9 @@ uv run repom_info
 ```text
 <data_path>/redis/
 ├── docker-compose.generated.yml
+├── .env                          # REDIS_PASSWORD 設定時のみ生成される secrets（0600）
 └── redis_init/
-    └── redis.conf
+    └── redis.conf                # secret を含まない（password は環境変数経由で渡す）
 ```
 
 設定の正本は `CONFIG_HOOK` と環境変数です。生成物を手編集しても、次の

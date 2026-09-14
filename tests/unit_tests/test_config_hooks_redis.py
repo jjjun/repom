@@ -13,6 +13,7 @@ REDIS_ENV_NAMES = (
     "REDIS_PASSWORD",
     "REDIS_DB",
     "REDIS_HOST_PORT",
+    "REDIS_EXPOSE_TO_LAN",
 )
 
 
@@ -32,6 +33,7 @@ def test_apply_redis_env_overrides_does_nothing_when_unset():
     assert config.redis.password is None
     assert config.redis.database == 0
     assert config.redis.container.host_port == 6379
+    assert config.redis.container.expose_to_lan is False
 
 
 def test_apply_redis_env_overrides_keeps_existing_host_port_when_unset():
@@ -100,6 +102,27 @@ def test_apply_redis_env_overrides_applies_all_envs(monkeypatch):
     assert config.redis.container.host_port == 6382
     assert config.redis.password == "secret"
     assert config.redis.database == 2
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("true", True), ("false", False)],
+)
+def test_apply_redis_env_overrides_applies_expose_to_lan(monkeypatch, value, expected):
+    monkeypatch.setenv("REDIS_EXPOSE_TO_LAN", value)
+    config = RepomConfig()
+
+    apply_redis_env_overrides(config)
+
+    assert config.redis.container.expose_to_lan is expected
+
+
+def test_apply_redis_env_overrides_rejects_invalid_expose_to_lan(monkeypatch):
+    monkeypatch.setenv("REDIS_EXPOSE_TO_LAN", "invalid")
+    config = RepomConfig()
+
+    with pytest.raises(ValueError, match="REDIS_EXPOSE_TO_LAN must be a boolean"):
+        apply_redis_env_overrides(config)
 
 
 def test_apply_redis_env_overrides_rejects_non_integer(monkeypatch):

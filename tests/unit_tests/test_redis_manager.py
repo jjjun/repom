@@ -179,12 +179,13 @@ class TestRedisManagerGenerate:
         assert "Memory" in config
 
     def test_generate_redis_conf_with_password(self):
-        """Test generate_redis_conf includes requirepass when configured."""
+        """Test generate_redis_conf never writes the password to the file."""
         from repom.redis.manage import generate_redis_conf
 
         config = generate_redis_conf(password="secret")
 
-        assert 'requirepass "secret"' in config
+        assert "requirepass" not in config
+        assert "secret" not in config
 
 
 class TestRedisManagerInheritance:
@@ -322,7 +323,8 @@ class TestRedisDockerCompose:
 
         yaml_content = generator.generate()
 
-        assert "REDIS_PASSWORD: secret" in yaml_content
+        assert '      REDIS_PASSWORD: "${REDIS_PASSWORD}"' in yaml_content
+        assert "secret" not in yaml_content
         assert "$$REDIS_PASSWORD" in yaml_content
 
 

@@ -66,3 +66,13 @@
   not be found until they are rewritten. To rewrite existing rows:
   - SQLite: `UPDATE t SET col = json(json_extract(col, '$')) WHERE json_type(col) = 'text'`
   - PostgreSQL `json`: `UPDATE t SET col = (col #>> '{}')::json WHERE json_typeof(col) = 'string'`
+- BREAKING: `postgres_generate` and `redis_generate` now publish container
+  ports on `127.0.0.1` by default instead of `0.0.0.0`; set
+  `POSTGRES_EXPOSE_TO_LAN` / `PGADMIN_EXPOSE_TO_LAN` / `REDIS_EXPOSE_TO_LAN`
+  to restore LAN-wide access for projects that need it. `POSTGRES_PASSWORD`,
+  `PGADMIN_DEFAULT_PASSWORD`, and `REDIS_PASSWORD` are no longer written into
+  the generated `docker-compose.generated.yml`; they are written to a
+  generated `.env` file (mode 0600) that Compose loads from the same
+  directory. The generated `redis.conf` no longer contains `requirepass`;
+  when a Redis password is configured, the container's `command` reads it
+  from the service environment (`--requirepass "$$REDIS_PASSWORD"`) instead.

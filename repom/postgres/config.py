@@ -14,6 +14,10 @@ class PostgresContainerConfig:
     host_port: int = field(default=5432)
     volume_name: Optional[str] = field(default=None)
     image: str = field(default="postgres:16-alpine")
+    # Bind the published port to 0.0.0.0 instead of 127.0.0.1. Only enable
+    # this for a project that genuinely needs LAN access to this container;
+    # the default keeps it reachable from the developer machine only.
+    expose_to_lan: bool = field(default=False)
 
     def get_container_name(self) -> str:
         """Return the container name."""
@@ -61,6 +65,10 @@ class PgAdminContainerConfig:
     volume_name: Optional[str] = field(default=None)
     image: str = field(default="dpage/pgadmin4:latest")
     enabled: bool = field(default=False)
+    # Bind the published port to 0.0.0.0 instead of 127.0.0.1. Only enable
+    # this for a project that genuinely needs LAN access to this container;
+    # the default keeps it reachable from the developer machine only.
+    expose_to_lan: bool = field(default=False)
 
     def get_container_name(self) -> str:
         """Return the container name."""

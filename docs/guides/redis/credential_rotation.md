@@ -2,8 +2,9 @@
 
 `REDIS_PASSWORD` is applied to repom's Redis config when
 `repom.config_hooks.redis.apply_redis_env_overrides()` is called. Generated
-Redis instances now persist that value in `redis.conf` with `requirepass`, and
-health checks authenticate when a password is configured.
+Redis instances pass that value to the container via the service environment
+and start Redis with `--requirepass`; the generated `redis.conf` never
+contains it. Health checks authenticate when a password is configured.
 
 ## Fresh Or Regenerated Config
 
@@ -57,8 +58,9 @@ printf '%s\n%s\n' 'new-password' 'old-password' | uv run redis_rotate_password \
   --execute
 ```
 
-After execution, repom regenerates `redis.conf` with the new password so the
-setting survives restart. The runtime command passes the old password through
+After execution, repom regenerates the compose files and the `.env` secrets
+file with the new password so the setting survives restart. The runtime
+command passes the old password through
 `REDISCLI_AUTH` only when `--old-password` is supplied, and sends the new
 password through stdin. `REDISCLI_AUTH` is passed through `docker exec -e`, so
 the old password can still be visible through host process inspection while the
