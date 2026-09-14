@@ -150,6 +150,20 @@ class RepositoryBase(Generic[T]):
         """
         return has_soft_delete(self.model)
 
+    def _uses_internal_session(self, session) -> bool:
+        """``session`` が ``_session_scope()`` の内部生成セッションか判定する。
+
+        True の場合のみ commit/rollback の責任を repository 側が持つ。
+        呼び出し元が明示的に渡した（または呼び出し元のスコープで既に開かれて
+        いる）外部セッションの場合は False を返し、commit/rollback は呼び出し
+        元に委ねる。save / saves / remove などの書き込み系メソッドと
+        soft_delete / restore / permanent_delete で共通に使うためのヘルパー。
+
+        Returns:
+            bool: 内部セッションの場合 True
+        """
+        return self._session_override is None and self._scoped_session is session
+
     def _bulk_filters(self, filter_by: Optional[dict]) -> list[ColumnElement]:
         if not filter_by:
             return []

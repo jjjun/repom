@@ -175,7 +175,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             非同期版（AsyncBaseRepository.save）では refresh() が必須です。
         """
         with self._session_scope() as session:
-            using_internal_session = self._session_override is None and self._scoped_session is session
+            using_internal_session = self._uses_internal_session(session)
             try:
                 session.add(instance)
                 if using_internal_session:
@@ -214,7 +214,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             非同期版（AsyncBaseRepository.saves）では各インスタンスの refresh() が必須です。
         """
         with self._session_scope() as session:
-            using_internal_session = self._session_override is None and self._scoped_session is session
+            using_internal_session = self._uses_internal_session(session)
             try:
                 session.add_all(instances)
                 if using_internal_session:
@@ -245,7 +245,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
 
         instances = list(objects)
         with self._session_scope() as session:
-            using_internal_session = self._session_override is None and self._scoped_session is session
+            using_internal_session = self._uses_internal_session(session)
             try:
                 session.add_all(instances)
                 if using_internal_session:
@@ -282,7 +282,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             )
 
         with self._session_scope() as session:
-            using_internal_session = self._session_override is None and self._scoped_session is session
+            using_internal_session = self._uses_internal_session(session)
             rowcount = 0
             try:
                 for row in values:
@@ -340,7 +340,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             )
 
         with self._session_scope() as session:
-            using_internal_session = self._session_override is None and self._scoped_session is session
+            using_internal_session = self._uses_internal_session(session)
             try:
                 if self._has_soft_delete():
                     filters.append(self.model.deleted_at.is_(None))
@@ -377,7 +377,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             instance (T): 削除するインスタンス
         """
         with self._session_scope() as session:
-            using_internal_session = self._session_override is None and self._scoped_session is session
+            using_internal_session = self._uses_internal_session(session)
             try:
                 managed_instance = session.merge(instance)
                 session.delete(managed_instance)

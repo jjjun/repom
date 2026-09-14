@@ -207,7 +207,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
                   自動的にデータベースから再読み込みが発生するため。
         """
         async with self._session_scope() as session:
-            using_internal_session = self._session_override is None and self._scoped_session is session
+            using_internal_session = self._uses_internal_session(session)
             try:
                 session.add(instance)
                 if using_internal_session:
@@ -245,7 +245,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             保存後に get_by_id() で再取得する方法も検討してください。
         """
         async with self._session_scope() as session:
-            using_internal_session = self._session_override is None and self._scoped_session is session
+            using_internal_session = self._uses_internal_session(session)
             try:
                 session.add_all(instances)
                 if using_internal_session:
@@ -276,7 +276,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
 
         instances = list(objects)
         async with self._session_scope() as session:
-            using_internal_session = self._session_override is None and self._scoped_session is session
+            using_internal_session = self._uses_internal_session(session)
             try:
                 session.add_all(instances)
                 if using_internal_session:
@@ -315,7 +315,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             )
 
         async with self._session_scope() as session:
-            using_internal_session = self._session_override is None and self._scoped_session is session
+            using_internal_session = self._uses_internal_session(session)
             rowcount = 0
             try:
                 for row in values:
@@ -372,7 +372,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             )
 
         async with self._session_scope() as session:
-            using_internal_session = self._session_override is None and self._scoped_session is session
+            using_internal_session = self._uses_internal_session(session)
             try:
                 if self._has_soft_delete():
                     filters.append(self.model.deleted_at.is_(None))
@@ -407,7 +407,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             instance (T): 削除するインスタンス
         """
         async with self._session_scope() as session:
-            using_internal_session = self._session_override is None and self._scoped_session is session
+            using_internal_session = self._uses_internal_session(session)
             try:
                 managed_instance = await session.merge(instance)
                 await session.delete(managed_instance)
