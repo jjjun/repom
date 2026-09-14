@@ -12,10 +12,13 @@ uv sync --extra redis
 ```dotenv
 REDIS_HOST=localhost
 REDIS_PORT=6379
-REDIS_PASSWORD=
+REDIS_PASSWORD=CHANGE_ME
 REDIS_DB=0
 # REDIS_EXPOSE_TO_LAN=true
 ```
+
+`REDIS_PASSWORD` が未設定、または `CHANGE_ME` のままだと `redis_generate` は
+エラーで停止します。
 
 `REDIS_PORT` は接続先と生成 Compose の公開 port です。利用側 hook では、
 プロジェクト既定値の後に environment override を適用します。
@@ -44,7 +47,7 @@ uv run repom_info
 ```text
 <data_path>/redis/
 ├── docker-compose.generated.yml
-├── .env                          # REDIS_PASSWORD 設定時のみ生成される secrets（0600）
+├── .env                          # REDIS_PASSWORD の secrets（0600）
 └── redis_init/
     └── redis.conf                # secret を含まない（password は環境変数経由で渡す）
 ```

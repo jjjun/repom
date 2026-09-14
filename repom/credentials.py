@@ -37,3 +37,24 @@ def resolve_password(
     if not resolved_password and not allow_empty:
         raise ValueError(f"{option_name} must not be empty")
     return resolved_password
+
+
+DEFAULT_CREDENTIAL_PLACEHOLDER = "CHANGE_ME"
+
+
+def reject_default_credential(value: str | None, *, env_var: str) -> str:
+    """Raise when a credential was never set to a real value.
+
+    A holder that still carries its dataclass default, or the literal
+    placeholder copied verbatim from ``.env.example``, is indistinguishable
+    from "nobody configured this" - so both are rejected here rather than
+    silently generating a service that is reachable with a known password.
+    """
+
+    if not value or value == DEFAULT_CREDENTIAL_PLACEHOLDER:
+        raise ValueError(
+            f"{env_var} is not set. Set {env_var} to a real value before "
+            f"generating this service; {DEFAULT_CREDENTIAL_PLACEHOLDER!r} is "
+            "a non-functional placeholder."
+        )
+    return value

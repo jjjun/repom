@@ -753,10 +753,17 @@ class TestDirectorySeparation:
 
     def test_postgres_generate_creates_in_postgres_subdir(self):
         """postgres_generate data/repom/postgres/  docker-compose.yml """
+        from repom.postgres import manage as postgres_manage
         from repom.postgres.manage import PostgresManager, generate
 
-        # Generate files
-        generate()
+        # Generate files. Patching the manage module's own config reference
+        # (rather than a freshly re-imported repom.config.config) keeps this
+        # correct even if another test reloaded repom.config first.
+        with (
+            patch.object(postgres_manage.config.postgres, "password", "test-postgres-password"),
+            patch.object(postgres_manage.config.pgadmin, "password", "test-pgadmin-password"),
+        ):
+            generate()
 
         # Verify files are in postgres subdirectory
         compose_file = PostgresManager().get_compose_dir() / "docker-compose.generated.yml"
@@ -765,12 +772,19 @@ class TestDirectorySeparation:
 
     def test_postgres_redis_no_conflict(self):
         """postgres_generate  redis_generate """
+        from repom.postgres import manage as postgres_manage
         from repom.postgres.manage import PostgresManager, generate as postgres_generate
+        from repom.redis import manage as redis_manage
         from repom.redis.manage import RedisManager, generate as redis_generate
 
         # Generate both
-        postgres_generate()
-        redis_generate()
+        with (
+            patch.object(postgres_manage.config.postgres, "password", "test-postgres-password"),
+            patch.object(postgres_manage.config.pgadmin, "password", "test-pgadmin-password"),
+            patch.object(redis_manage.config.redis, "password", "test-redis-password"),
+        ):
+            postgres_generate()
+            redis_generate()
 
         # Verify both files exist in their respective directories
         postgres_compose = PostgresManager().get_compose_dir() / "docker-compose.generated.yml"
@@ -959,6 +973,107 @@ class TestPostgresEnsureRunning:
                     ):
                         with pytest.raises(RuntimeError, match="Failed to start PostgreSQL"):
                             manage.ensure_running()
+
+
+class TestGenerateFailsClosedOnDefaultCredentials:
+    """postgres_generate must not stand up a database with a known password."""
+
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
+    def test_generate_raises_when_postgres_password_unset(
+        self, mock_get_init_dir, mock_config, tmp_path
+    ):
+        """With POSTGRES_PASSWORD left at its default, generation raises and
+        writes no file."""
+        init_dir = tmp_path / "init"
+        init_dir.mkdir()
+        mock_get_init_dir.return_value = init_dir
+
+        mock_pg_config = MagicMock()
+        mock_pg_config.user = "repom"
+        mock_pg_config.password = "CHANGE_ME"
+
+        mock_config.postgres = mock_pg_config
+        mock_config.data_path = DATA_PATH
+
+        from repom.postgres.manage import generate
+
+        with pytest.raises(ValueError, match="POSTGRES_PASSWORD"):
+            generate()
+
+        assert list(init_dir.iterdir()) == []
+
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
+    def test_generate_rejects_placeholder_password(
+        self, mock_get_init_dir, mock_config, tmp_path
+    ):
+        """CHANGE_ME, copied verbatim from .env.example, is rejected too."""
+        init_dir = tmp_path / "init"
+        init_dir.mkdir()
+        mock_get_init_dir.return_value = init_dir
+
+        mock_pg_config = MagicMock()
+        mock_pg_config.user = "repom"
+        mock_pg_config.password = "CHANGE_ME"
+
+        mock_config.postgres = mock_pg_config
+        mock_config.data_path = DATA_PATH
+
+        from repom.postgres.manage import generate_docker_compose
+
+        with pytest.raises(ValueError, match="POSTGRES_PASSWORD"):
+            generate_docker_compose()
+
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
+    def test_generate_rejects_pgadmin_default_password_when_enabled(
+        self, mock_get_init_dir, mock_config
+    ):
+        """pgAdmin's admin@example.com / admin pair is rejected once enabled."""
+        mock_get_init_dir.return_value = Path("/tmp/init")
+
+        mock_pg_config = MagicMock()
+        mock_pg_config.user = "repom"
+        mock_pg_config.password = "a-real-postgres-password"
+        mock_pg_container = MagicMock()
+        mock_pg_container.get_container_name.return_value = "repom_postgres"
+        mock_pg_container.get_volume_name.return_value = "repom_postgres_data"
+        mock_pg_container.image = "postgres:16-alpine"
+        mock_pg_container.host_port = 5432
+        mock_pg_container.expose_to_lan = False
+        mock_pg_config.container = mock_pg_container
+
+        mock_pgadmin_config = MagicMock()
+        mock_pgadmin_config.container.enabled = True
+        mock_pgadmin_config.password = "CHANGE_ME"
+
+        mock_config.postgres = mock_pg_config
+        mock_config.pgadmin = mock_pgadmin_config
+        mock_config.data_path = DATA_PATH
+
+        from repom.postgres.manage import generate_docker_compose
+
+        with pytest.raises(ValueError, match="PGADMIN_DEFAULT_PASSWORD"):
+            generate_docker_compose()
+
+    @patch('repom.postgres.manage.config')
+    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
+    def test_prod_env_refuses_default_credentials(self, mock_get_init_dir, mock_config):
+        """exec_env=prod does not relax the fail-closed check."""
+        mock_get_init_dir.return_value = Path("/tmp/init")
+        mock_config.exec_env = "prod"
+        mock_config.data_path = DATA_PATH
+
+        mock_pg_config = MagicMock()
+        mock_pg_config.user = "repom"
+        mock_pg_config.password = "CHANGE_ME"
+        mock_config.postgres = mock_pg_config
+
+        from repom.postgres.manage import generate_docker_compose
+
+        with pytest.raises(ValueError, match="POSTGRES_PASSWORD"):
+            generate_docker_compose()
 
 
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+from repom.credentials import DEFAULT_CREDENTIAL_PLACEHOLDER
+
 
 @dataclass
 class PostgresContainerConfig:
@@ -40,7 +42,7 @@ class PostgresConfig:
     host: str = field(default="localhost")
     port: int = field(default=5432)
     user: str = field(default="repom")
-    password: str = field(default="repom_dev", repr=False)
+    password: str = field(default=DEFAULT_CREDENTIAL_PLACEHOLDER, repr=False)
     database: Optional[str] = field(default=None)
     sslmode: Optional[str] = field(default=None)
     sslrootcert: Optional[str] = field(default=None)
@@ -84,7 +86,7 @@ class PgAdminConfig:
     """pgAdmin settings."""
 
     email: str = field(default="admin@example.com")
-    password: str = field(default="admin", repr=False)
+    password: str = field(default=DEFAULT_CREDENTIAL_PLACEHOLDER, repr=False)
     container: PgAdminContainerConfig = field(default_factory=PgAdminContainerConfig)
 
     def __repr__(self) -> str:

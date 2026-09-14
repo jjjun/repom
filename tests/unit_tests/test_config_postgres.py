@@ -95,11 +95,11 @@ class TestPostgresProperties:
         assert config.postgres.user == 'myuser'
 
     def test_postgres_password_default(self):
-        """デフォルトは repom_dev"""
+        """デフォルトは CHANGE_ME"""
         from repom.config import RepomConfig
         config = RepomConfig()
         os.environ.pop('POSTGRES_PASSWORD', None)
-        assert config.postgres.password == 'repom_dev'
+        assert config.postgres.password == 'CHANGE_ME'
 
     def test_postgres_password_setter(self):
         """Setter で設定"""
@@ -141,7 +141,7 @@ class TestPostgresURL:
         # デフォルト値を使用
         url = config.db_url
         assert url.startswith('postgresql+psycopg://')
-        assert 'repom:repom_dev@localhost:5432/' in url
+        assert 'repom:CHANGE_ME@localhost:5432/' in url
 
     def test_db_url_postgres_custom(self):
         """PostgreSQL のカスタム設定"""

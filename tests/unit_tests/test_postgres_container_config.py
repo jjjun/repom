@@ -73,7 +73,7 @@ class TestPostgresConfig:
         assert config.host == 'localhost'
         assert config.port == 5432
         assert config.user == 'repom'
-        assert config.password == 'repom_dev'
+        assert config.password == 'CHANGE_ME'
         assert config.database is None
         assert isinstance(config.container, PostgresContainerConfig)
 
@@ -209,7 +209,7 @@ class TestPgAdminConfig:
         admin = PgAdminConfig()
 
         assert admin.email == "admin@example.com"
-        assert admin.password == "admin"
+        assert admin.password == "CHANGE_ME"
         assert isinstance(admin.container, PgAdminContainerConfig)
 
     def test_container_default(self):
@@ -252,7 +252,7 @@ class TestRepomConfigPgAdmin:
 
         assert isinstance(config.pgadmin, PgAdminConfig)
         assert config.pgadmin.email == "admin@example.com"
-        assert config.pgadmin.password == "admin"
+        assert config.pgadmin.password == "CHANGE_ME"
         assert isinstance(config.pgadmin.container, PgAdminContainerConfig)
 
     def test_pgadmin_default_disabled(self):

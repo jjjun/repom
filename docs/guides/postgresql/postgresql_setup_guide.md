@@ -38,7 +38,7 @@ def hook_config(config):
 ```dotenv
 DB_TYPE=postgres
 POSTGRES_USER=repom
-POSTGRES_PASSWORD=change-me
+POSTGRES_PASSWORD=CHANGE_ME
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_HOST_PORT=5432
@@ -47,7 +47,7 @@ POSTGRES_HOST_PORT=5432
 
 # pgAdmin を使う場合
 PGADMIN_DEFAULT_EMAIL=admin@example.com
-PGADMIN_DEFAULT_PASSWORD=change-me
+PGADMIN_DEFAULT_PASSWORD=CHANGE_ME
 PGADMIN_HOST_PORT=5050
 # PGADMIN_EXPOSE_TO_LAN=true
 ```
@@ -63,7 +63,8 @@ PGADMIN_HOST_PORT=5050
 [runtime_env_overrides.md](runtime_env_overrides.md) を参照してください。
 
 秘密値は `.env` または deployment secret に置き、`.env.example` や生成済み資料へ
-実 credential を記録しないでください。
+実 credential を記録しないでください。`POSTGRES_PASSWORD` / `PGADMIN_DEFAULT_PASSWORD`
+が未設定、または `CHANGE_ME` のままだと `postgres_generate` はエラーで停止します。
 
 ## 生成と起動
 

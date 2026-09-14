@@ -26,7 +26,7 @@ def test_apply_pgadmin_env_overrides_does_nothing_when_unset():
     apply_pgadmin_env_overrides(config)
 
     assert config.pgadmin.email == "admin@example.com"
-    assert config.pgadmin.password == "admin"
+    assert config.pgadmin.password == "CHANGE_ME"
     assert config.pgadmin.container.host_port == 5050
     assert config.pgadmin.container.expose_to_lan is False
 

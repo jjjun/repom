@@ -29,7 +29,7 @@ def test_apply_postgres_env_overrides_does_nothing_when_unset():
     apply_postgres_env_overrides(config)
 
     assert config.postgres.user == "repom"
-    assert config.postgres.password == "repom_dev"
+    assert config.postgres.password == "CHANGE_ME"
     assert config.postgres.host == "localhost"
     assert config.postgres.port == 5432
     assert config.postgres.container.host_port == 5432

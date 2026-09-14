@@ -13,6 +13,7 @@ import json
 import subprocess
 
 from repom.config import config
+from repom.credentials import reject_default_credential
 from repom.docker_compose_safety import (
     format_bound_port,
     format_env_file,
@@ -138,6 +139,7 @@ def generate_docker_compose() -> DockerComposeGenerator:
     init_dir = manager.get_init_dir()
 
     user = reject_control_characters(pg.user, field_name="postgres.user")
+    reject_default_credential(pg.password, env_var="POSTGRES_PASSWORD")
     reject_control_characters(pg.password, field_name="postgres.password")
     container_name = reject_control_characters(
         container.get_container_name(), field_name="postgres.container.container_name"
@@ -179,6 +181,7 @@ def generate_docker_compose() -> DockerComposeGenerator:
         pgadmin_email = reject_control_characters(
             config.pgadmin.email, field_name="pgadmin.email"
         )
+        reject_default_credential(config.pgadmin.password, env_var="PGADMIN_DEFAULT_PASSWORD")
         reject_control_characters(config.pgadmin.password, field_name="pgadmin.password")
         pgadmin_container_name = reject_control_characters(
             pgadmin_container.get_container_name(),
@@ -261,12 +264,13 @@ def generate():
     """Write PostgreSQL compose and initialization files."""
 
     manager = PostgresManager()
+    generator = generate_docker_compose()
+
     init_dir = manager.get_init_dir()
     init_sql = generate_init_sql()
     init_sql_path = init_dir / "01_init_databases.sql"
     init_sql_path.write_text(init_sql, encoding="utf-8")
 
-    generator = generate_docker_compose()
     compose_dir = manager.get_compose_dir()
     output_path = compose_dir / COMPOSE_FILENAME
     generator.write_to_file(output_path)

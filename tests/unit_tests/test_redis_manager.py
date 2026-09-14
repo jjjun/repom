@@ -7,7 +7,20 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+from repom.config import config
 from repom.redis.manage import RedisManager
+
+
+@pytest.fixture(autouse=True)
+def _redis_password_configured():
+    """Give every test a real password by default.
+
+    ``generate_redis_conf()``/``generate_docker_compose()`` now fail closed
+    on an unconfigured password; tests that care about that behavior
+    override this with their own ``patch.object(config.redis, "password", ...)``.
+    """
+    with patch.object(config.redis, "password", "test-redis-password"):
+        yield
 
 
 class TestRedisManagerInitialization:
@@ -179,7 +192,8 @@ class TestRedisManagerGenerate:
         assert "Memory" in config
 
     def test_generate_redis_conf_with_password(self):
-        """Test generate_redis_conf never writes the password to the file."""
+        """redis.conf is bind-mounted into the container, so the password
+        never lands in it even when one is configured."""
         from repom.redis.manage import generate_redis_conf
 
         config = generate_redis_conf(password="secret")

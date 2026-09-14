@@ -13,12 +13,25 @@ from unittest.mock import patch
 import pytest
 
 from repom.config import config
+from repom.credentials import DEFAULT_CREDENTIAL_PLACEHOLDER
 from repom.redis import RedisConfig, RedisContainerConfig
 from repom.redis.manage import (
     RedisManager,
     generate_docker_compose,
     generate_redis_conf,
 )
+
+
+@pytest.fixture(autouse=True)
+def _redis_password_configured():
+    """Give every test a real password by default.
+
+    ``generate_redis_conf()``/``generate_docker_compose()`` now fail closed
+    on an unconfigured password; tests that care about that behavior
+    override this with their own ``patch.object(config.redis, "password", ...)``.
+    """
+    with patch.object(config.redis, "password", "test-redis-password"):
+        yield
 
 
 def test_redis_package_exports_config_classes_only():
@@ -128,9 +141,9 @@ class TestGenerateDockerCompose:
             with pytest.raises(ValueError, match="redis.container.container_name"):
                 generate_docker_compose()
 
-    def test_compose_command_reads_password_from_environment_when_set(self):
-        """The command asks the container's own shell to expand the password
-        instead of the compose generator inlining it."""
+    def test_compose_command_authenticates_via_requirepass_flag(self):
+        """The command passes --requirepass with the environment-expanded
+        password; it never inlines the actual value."""
         with patch.object(config.redis, "password", "s3cret"):
             generator = generate_docker_compose()
 
@@ -138,12 +151,26 @@ class TestGenerateDockerCompose:
         assert "$$REDIS_PASSWORD" in command
         assert "s3cret" not in command
 
-    def test_compose_command_is_plain_redis_server_without_password(self):
-        """Without a password, the command runs redis-server directly."""
-        with patch.object(config.redis, "password", ""):
+    def test_compose_healthcheck_authenticates_via_environment(self):
+        """The healthcheck reads the password from the container environment,
+        never from the compose file itself."""
+        with patch.object(config.redis, "password", "s3cret"):
             generator = generate_docker_compose()
 
-        assert generator.services[0].command == "redis-server /usr/local/etc/redis/redis.conf"
+        healthcheck_test = generator.services[0].healthcheck["test"]
+        assert "$$REDIS_PASSWORD" in healthcheck_test
+        assert "s3cret" not in healthcheck_test
+
+    def test_compose_rejects_unset_password(self):
+        """generate_docker_compose() fails closed when no real password is configured."""
+        with patch.object(config.redis, "password", DEFAULT_CREDENTIAL_PLACEHOLDER):
+            with pytest.raises(ValueError, match="REDIS_PASSWORD"):
+                generate_docker_compose()
+
+    def test_compose_rejects_empty_password(self):
+        with patch.object(config.redis, "password", ""):
+            with pytest.raises(ValueError, match="REDIS_PASSWORD"):
+                generate_docker_compose()
 
 
 class TestGenerateRedisConf:
@@ -164,23 +191,40 @@ class TestGenerateRedisConf:
         conf = generate_redis_conf()
         assert len(conf) > 100  # Should have reasonable content
 
-    def test_conf_never_includes_requirepass_even_when_password_is_configured(self):
-        """redis.conf is bind-mounted, so the password never lands in it."""
+    def test_generated_redis_conf_never_sets_requirepass(self):
+        """redis.conf is bind-mounted into the container, so the password
+        never lands in it; the container reads it from the environment via
+        --requirepass instead."""
         conf = generate_redis_conf(password="secret")
 
         assert "requirepass" not in conf
         assert "secret" not in conf
 
-    def test_conf_omits_requirepass_when_password_is_empty(self):
-        """redis.conf keeps unauthenticated Redis behavior by default."""
-        conf = generate_redis_conf(password="")
+    def test_generated_redis_conf_omits_bind_loopback(self):
+        """bind 127.0.0.1 inside the container would restrict Redis to the
+        container's own loopback; host-side loopback restriction is enforced
+        by the published port mapping instead."""
+        conf = generate_redis_conf(password="secret")
 
-        assert "requirepass" not in conf
+        assert "bind 127.0.0.1" not in conf
+
+    def test_generated_redis_conf_sets_protected_mode(self):
+        conf = generate_redis_conf(password="secret")
+
+        assert "protected-mode yes" in conf
 
     def test_conf_rejects_newline_in_password(self):
         """A newline in the password cannot inject an extra redis.conf directive."""
         with pytest.raises(ValueError, match="redis.password"):
             generate_redis_conf(password="hostile\nrequirepass forced")
+
+    def test_conf_rejects_unset_password(self):
+        with pytest.raises(ValueError, match="REDIS_PASSWORD"):
+            generate_redis_conf(password=DEFAULT_CREDENTIAL_PLACEHOLDER)
+
+    def test_conf_rejects_empty_password(self):
+        with pytest.raises(ValueError, match="REDIS_PASSWORD"):
+            generate_redis_conf(password="")
 
 
 class TestConfigIntegration:

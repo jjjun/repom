@@ -3,7 +3,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from repom.credentials import resolve_password
+from repom.credentials import (
+    DEFAULT_CREDENTIAL_PLACEHOLDER,
+    reject_default_credential,
+    resolve_password,
+)
 
 
 def test_resolve_password_prefers_explicit_password():
@@ -93,3 +97,22 @@ def test_resolve_password_rejects_empty_tty_password():
                 option_name="--password",
                 stdin=stdin,
             )
+
+
+def test_reject_default_credential_rejects_the_placeholder():
+    with pytest.raises(ValueError, match="POSTGRES_PASSWORD"):
+        reject_default_credential(DEFAULT_CREDENTIAL_PLACEHOLDER, env_var="POSTGRES_PASSWORD")
+
+
+def test_reject_default_credential_rejects_empty_string():
+    with pytest.raises(ValueError, match="REDIS_PASSWORD"):
+        reject_default_credential("", env_var="REDIS_PASSWORD")
+
+
+def test_reject_default_credential_rejects_none():
+    with pytest.raises(ValueError, match="REDIS_PASSWORD"):
+        reject_default_credential(None, env_var="REDIS_PASSWORD")
+
+
+def test_reject_default_credential_accepts_a_real_value():
+    assert reject_default_credential("s3cret", env_var="POSTGRES_PASSWORD") == "s3cret"

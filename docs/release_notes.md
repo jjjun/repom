@@ -76,3 +76,10 @@
   directory. The generated `redis.conf` no longer contains `requirepass`;
   when a Redis password is configured, the container's `command` reads it
   from the service environment (`--requirepass "$$REDIS_PASSWORD"`) instead.
+- BREAKING: `postgres_generate` and `redis_generate` refuse to run when the
+  configured password is unset or still the literal `CHANGE_ME` placeholder,
+  raising a `ValueError` that names the environment variable to set.
+  `PostgresConfig.password` and `PgAdminConfig.password` now default to
+  `CHANGE_ME`, a non-functional placeholder, instead of the working literals
+  `repom_dev` and `admin`. Generated Redis services now always require a
+  password.
