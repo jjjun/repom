@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Fixed `listjson_filter()` on PostgreSQL. It built its per-value filter with
+  `func.json_each(model_column).table_valued(...)`, but PostgreSQL's
+  `json_each()`/`json_each_text()` only accept JSON objects and raise
+  `cannot deconstruct an array as an object` against a `ListJSON` column's
+  JSON array, and `json_each()`'s `value` column is typed `json`, which has
+  no equality operator against a bound string
+  (`operator does not exist: json = character varying`). The empty-list
+  branch (`model_column == []`) hit the same missing `json` equality
+  operator. `listjson_filter()` now compiles to `json_array_elements_text()`
+  for the element match and `json_array_length(...) == 0` for the empty-list
+  match on PostgreSQL, resolved at SQL-compile time so callers do not need to
+  branch on dialect; SQLite is unaffected and keeps using `json_each()`.
 - `postgres_sslmode` now picks its prod default per host. When `postgres.host`
   is `localhost`, `127.0.0.1` or `::1` the default is `prefer` even in prod;
   any other host still defaults to `require`. The PostgreSQL container that

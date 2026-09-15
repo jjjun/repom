@@ -129,6 +129,49 @@ class TestPostgreSQLIntegration:
             for conn in connections:
                 conn.close()
 
+    def test_listjson_filter_element_and_empty_match(self):
+        """listjson_filter() が PostgreSQL 上で要素一致・空リスト一致とも動作すること。
+        json_each()/json_each_text() は配列を扱えず (cannot deconstruct an array
+        as an object)、json_each() の value は json 型のため文字列との比較も
+        できない (operator does not exist: json = character varying)。
+        json_array_elements_text() / json_array_length() 経由の実装がこれらを
+        回避することを確認する。"""
+        from repom.database import get_sync_engine
+        from repom.custom_types.ListJSON import ListJSON, listjson_filter
+        from sqlalchemy import Column, Integer, MetaData, Table, select
+
+        engine = get_sync_engine()
+        metadata = MetaData()
+        table = Table(
+            "listjson_filter_integration_test",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("option_list", ListJSON),
+        )
+
+        with engine.begin() as conn:
+            table.drop(conn, checkfirst=True)
+            table.create(conn)
+            try:
+                conn.execute(
+                    table.insert(),
+                    [
+                        {"option_list": ["foo", "bar"]},
+                        {"option_list": ["baz", "qux"]},
+                        {"option_list": []},
+                    ],
+                )
+
+                filters = listjson_filter(table.c.option_list, ["foo"])
+                rows = conn.execute(select(table).where(*filters)).fetchall()
+                assert [row.option_list for row in rows] == [["foo", "bar"]]
+
+                empty_filters = listjson_filter(table.c.option_list, [])
+                empty_rows = conn.execute(select(table).where(*empty_filters)).fetchall()
+                assert [row.option_list for row in empty_rows] == [[]]
+            finally:
+                table.drop(conn, checkfirst=True)
+
     def test_json_nul_escape_fails_on_text_extraction(self):
         from repom.database import get_sync_engine
 

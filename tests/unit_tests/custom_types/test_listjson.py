@@ -1,7 +1,9 @@
 from tests._init import *
-from sqlalchemy import Integer
+import warnings
+from sqlalchemy import Integer, select
+from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.exc import StatementError
+from sqlalchemy.exc import StatementError, SAWarning
 from repom.custom_types.ListJSON import ListJSON, listjson_filter
 from repom.models.base_model import BaseModel
 from repom.repositories import BaseRepository
@@ -108,3 +110,53 @@ def test_listjson_find_empty_option_list(db_test):
     assert log2.id in ids
     assert log1.id not in ids
     assert log3.id not in ids
+
+
+def test_listjson_filter_compiles_json_array_elements_text_for_postgresql():
+    """PostgreSQL の json_each()/json_each_text() は JSON オブジェクト専用で
+    ListJSON の配列には使えない (cannot deconstruct an array as an object) ため、
+    配列の要素展開には json_array_elements_text() を使うこと。"""
+    filters = listjson_filter(ListModel.option_list, ["Action"])
+    stmt = select(ListModel).filter(*filters)
+    compiled = str(stmt.compile(dialect=postgresql.dialect()))
+    assert "json_array_elements_text(" in compiled
+    assert "json_each(" not in compiled
+
+
+def test_listjson_filter_compiles_json_each_for_sqlite():
+    """SQLite には json_array_elements_text() が無いため、従来どおり json_each() を使うこと。"""
+    filters = listjson_filter(ListModel.option_list, ["Action"])
+    stmt = select(ListModel).filter(*filters)
+    compiled = str(stmt.compile(dialect=sqlite.dialect()))
+    assert "json_each(" in compiled
+    assert "json_array_elements_text(" not in compiled
+
+
+def test_listjson_filter_empty_list_compiles_json_array_length():
+    """空リスト検索は json = json 比較ではなく json_array_length() = 0 を使うこと。"""
+    filters = listjson_filter(ListModel.option_list, [])
+    stmt = select(ListModel).filter(*filters)
+    pg_compiled = str(stmt.compile(dialect=postgresql.dialect()))
+    sqlite_compiled = str(stmt.compile(dialect=sqlite.dialect()))
+    assert "json_array_length(" in pg_compiled
+    assert "json_array_length(" in sqlite_compiled
+
+
+def test_listjson_filter_empty_list_no_cache_warning_with_sqlalchemy_utils(db_test):
+    """sqlalchemy_utils.expressions は inherit_cache 未設定の json_array_length を
+    SQLAlchemy のグローバル関数レジストリに登録するため、同モジュールが
+    プロセス内で import された状態で func.json_array_length(...) を使うと
+    SQL コンパイルキャッシュが無効化され SAWarning が発生する。listjson_filter()
+    の空リスト一致は専用の _ListjsonArrayLength を使うため、その import 後でも
+    警告が出ないことを確認する。"""
+    pytest.importorskip("sqlalchemy_utils.expressions")
+    log = ListModel(option_list=[])
+    db_test.add(log)
+    db_test.commit()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", SAWarning)
+        repo = ListModelRepository(session=db_test)
+        results = repo.find(ListModelFilterParams(option_list=[]))
+    ids = [item.id for item in results]
+    assert log.id in ids

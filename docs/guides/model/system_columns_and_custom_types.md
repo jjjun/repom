@@ -72,6 +72,15 @@ Custom type behavior can affect migration output and cross-database
 compatibility, so applications should add round-trip tests for every database
 engine they support.
 
+`ListJSON` ships a `listjson_filter(model_column, values)` helper that builds
+filter conditions for "column contains each of these values" queries. It is
+dialect-aware: PostgreSQL's `json_each()`/`json_each_text()` only accept JSON
+objects and its `json` type has no equality operator, so on PostgreSQL the
+element match compiles to `json_array_elements_text()` and the empty-list
+match compiles to `json_array_length(...) == 0`. SQLite keeps using
+`json_each()`, which already handles arrays and compares dynamically typed
+values directly. Callers do not need to branch on dialect themselves.
+
 ## Mass-assignment and serialization allowlists
 
 `update_from_dict()` requires an explicit allowlist. Pass `allowed_fields`, or
