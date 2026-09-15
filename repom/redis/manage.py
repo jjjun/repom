@@ -96,7 +96,7 @@ class RedisManager(DockerManager):
 
         print()
         print(" Redis Connection:")
-        print("  Host: localhost")
+        print("  Host: 127.0.0.1")
         print(f"  Port: {self.config.redis.port}")
         if self.config.redis.password:
             print("  Auth: enabled")

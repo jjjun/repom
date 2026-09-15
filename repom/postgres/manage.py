@@ -84,7 +84,7 @@ class PostgresManager(DockerManager):
 
         print()
         print(" PostgreSQL Connection:")
-        print("  Host: localhost")
+        print("  Host: 127.0.0.1")
         print(f"  Port: {self.config.postgres.container.host_port}")
         print(f"  User: {self.config.postgres.user}")
         postgres_password = mask_secret(
@@ -98,7 +98,7 @@ class PostgresManager(DockerManager):
         if self.config.pgadmin.container.enabled:
             print()
             print(" pgAdmin Access:")
-            print(f"  URL: http://localhost:{self.config.pgadmin.container.host_port}")
+            print(f"  URL: http://127.0.0.1:{self.config.pgadmin.container.host_port}")
             print(f"  Email: {self.config.pgadmin.email}")
             pgadmin_password = mask_secret(
                 self.config.pgadmin.password,

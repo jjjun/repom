@@ -188,7 +188,7 @@ class TestRedisManagerConnectionInfo:
 
         captured = capsys.readouterr()
         assert "Redis Connection" in captured.out
-        assert "localhost" in captured.out
+        assert "127.0.0.1" in captured.out
         assert str(manager.config.redis.port) in captured.out
 
     def test_print_connection_info_contains_cli_command(self, capsys):

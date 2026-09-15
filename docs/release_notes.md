@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- `PostgresConfig.host` and `RedisConfig.host` now default to `127.0.0.1`
+  instead of `localhost`. `postgres_generate` / `redis_generate` already
+  publish container ports on `127.0.0.1` only, but a client default of
+  `localhost` still resolves through the OS, and on hosts where `localhost`
+  resolves to `::1` before `127.0.0.1` (Windows, and many Linux setups with
+  `::1` in `/etc/hosts`) every connection first tries `::1`, is refused, and
+  only then falls back to `127.0.0.1`. That round trip alone can exceed a
+  short client-side connect timeout (arq's `RedisSettings.conn_timeout`
+  defaults to 1s) and made a freshly generated container look unreachable.
+  `POSTGRES_HOST` / `REDIS_HOST` environment overrides and config hooks keep
+  working unchanged; a project that pins `config.postgres.host` or
+  `config.redis.host` back to `localhost` explicitly should set it to
+  `127.0.0.1` instead (or otherwise account for the IPv6-first delay).
+  `_POSTGRES_LOCAL_HOSTS` still treats `localhost`, `127.0.0.1`, and `::1` as
+  equivalent for the prod `sslmode` exemption.
 - Fixed `listjson_filter()` on PostgreSQL. It built its per-value filter with
   `func.json_each(model_column).table_valued(...)`, but PostgreSQL's
   `json_each()`/`json_each_text()` only accept JSON objects and raise

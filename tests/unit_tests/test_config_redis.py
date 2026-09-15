@@ -11,11 +11,11 @@ class TestRedisProperties:
     """Redis connection properties tests"""
 
     def test_redis_host_default(self):
-        """デフォルトは localhost"""
+        """デフォルトは 127.0.0.1"""
         from repom.config import RepomConfig
         config = RepomConfig()
         os.environ.pop('REDIS_HOST', None)
-        assert config.redis.host == 'localhost'
+        assert config.redis.host == '127.0.0.1'
 
     def test_redis_host_setter(self):
         """Setter で設定"""
@@ -138,7 +138,7 @@ class TestRedisConfigIntegration:
         from repom.config import RepomConfig
         config = RepomConfig()
         assert hasattr(config, 'redis')
-        assert config.redis.host == 'localhost'
+        assert config.redis.host == '127.0.0.1'
         assert config.redis.port == 6379
 
     def test_redis_container_in_redis_config(self):

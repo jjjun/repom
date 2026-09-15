@@ -98,7 +98,7 @@ class TestPostgresManagerConnectionInfo:
 
         captured = capsys.readouterr()
         assert "PostgreSQL Connection" in captured.out
-        assert "localhost" in captured.out
+        assert "127.0.0.1" in captured.out
         # Port should be in output
         assert str(manager.config.postgres.container.host_port) in captured.out
 

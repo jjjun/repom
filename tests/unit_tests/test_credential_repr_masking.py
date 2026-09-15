@@ -26,7 +26,7 @@ def test_postgres_config_repr_masks_password():
 
     assert sentinel not in result
     assert "***" in result
-    assert "localhost" in result
+    assert "127.0.0.1" in result
 
 
 def test_pgadmin_config_repr_masks_password():

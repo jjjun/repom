@@ -32,7 +32,7 @@ class RedisContainerConfig:
 class RedisConfig:
     """Redis connection and container settings."""
 
-    host: str = field(default="localhost")
+    host: str = field(default="127.0.0.1")
     port: int = field(default=6379)
     password: Optional[str] = field(default=None, repr=False)
     database: int = field(default=0)

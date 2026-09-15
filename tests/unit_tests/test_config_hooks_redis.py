@@ -28,7 +28,7 @@ def test_apply_redis_env_overrides_does_nothing_when_unset():
 
     apply_redis_env_overrides(config)
 
-    assert config.redis.host == "localhost"
+    assert config.redis.host == "127.0.0.1"
     assert config.redis.port == 6379
     assert config.redis.password is None
     assert config.redis.database == 0

@@ -39,7 +39,7 @@ class PostgresConfig:
     既定値（dev/test: prefer, prod: require）を補う。
     """
 
-    host: str = field(default="localhost")
+    host: str = field(default="127.0.0.1")
     port: int = field(default=5432)
     user: str = field(default="repom")
     password: str = field(default=DEFAULT_CREDENTIAL_PLACEHOLDER, repr=False)

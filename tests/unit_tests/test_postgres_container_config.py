@@ -70,7 +70,7 @@ class TestPostgresConfig:
         """デフォルト値を確認"""
         config = PostgresConfig()
 
-        assert config.host == 'localhost'
+        assert config.host == '127.0.0.1'
         assert config.port == 5432
         assert config.user == 'repom'
         assert config.password == 'CHANGE_ME'
@@ -107,7 +107,7 @@ class TestRepomConfigPostgres:
         config = RepomConfig()
 
         assert isinstance(config.postgres, PostgresConfig)
-        assert config.postgres.host == 'localhost'
+        assert config.postgres.host == '127.0.0.1'
         assert config.postgres.port == 5432
         assert config.postgres.user == 'repom'
         assert isinstance(config.postgres.container, PostgresContainerConfig)

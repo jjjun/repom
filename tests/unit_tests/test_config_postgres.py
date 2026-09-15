@@ -53,11 +53,11 @@ class TestPostgresProperties:
     """PostgreSQL connection properties tests"""
 
     def test_postgres_host_default(self):
-        """デフォルトは localhost"""
+        """デフォルトは 127.0.0.1"""
         from repom.config import RepomConfig
         config = RepomConfig()
         os.environ.pop('POSTGRES_HOST', None)
-        assert config.postgres.host == 'localhost'
+        assert config.postgres.host == '127.0.0.1'
 
     def test_postgres_host_setter(self):
         """Setter で設定"""
@@ -141,7 +141,7 @@ class TestPostgresURL:
         # デフォルト値を使用
         url = config.db_url
         assert url.startswith('postgresql+psycopg://')
-        assert 'repom:CHANGE_ME@localhost:5432/' in url
+        assert 'repom:CHANGE_ME@127.0.0.1:5432/' in url
 
     def test_db_url_postgres_custom(self):
         """PostgreSQL のカスタム設定"""

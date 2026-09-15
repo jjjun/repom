@@ -10,7 +10,7 @@ uv sync --extra redis
 ## 設定
 
 ```dotenv
-REDIS_HOST=localhost
+REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
 REDIS_PASSWORD=CHANGE_ME
 REDIS_DB=0
