@@ -188,17 +188,28 @@ class RepomConfig(Config):
         """PostgreSQL の sslmode（環境別のデフォルト値）
 
         デフォルト:
-            prod: require
+            prod + postgres.host が _POSTGRES_LOCAL_HOSTS（localhost/127.0.0.1/::1）
+                の場合: prefer
+            prod + それ以外のホスト: require
             dev/test/その他: prefer
 
-        config.postgres.sslmode を明示的に設定すると、exec_env によらず
+        postgres_generate が生成する PostgreSQL コンテナ（postgres:16-alpine）は
+        SSL を有効化していないため、prod でもローカルホストへ接続する場合まで
+        require を既定にすると、そのコンテナへの接続が SSL 未対応エラーで
+        失敗する。リモートホストへの接続は引き続き require を既定とする。
+
+        config.postgres.sslmode を明示的に設定すると、exec_env や host によらず
         その値が優先されます。prod でリモートホストへ接続する場合、
         require 未満（disable/allow/prefer）の値は db_url 生成時に拒否
         されます。
         """
         if self.postgres.sslmode is not None:
             return self.postgres.sslmode
-        return "require" if self.exec_env == "prod" else "prefer"
+        if self.exec_env != "prod":
+            return "prefer"
+        if self.postgres.host in _POSTGRES_LOCAL_HOSTS:
+            return "prefer"
+        return "require"
 
     @property
     def db_url(self) -> Optional[str]:

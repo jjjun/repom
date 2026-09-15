@@ -345,7 +345,7 @@ class TestPostgresSSLMode:
         assert url.query["sslmode"] == "verify-full"
 
     def test_postgres_sslmode_defaults_by_exec_env(self):
-        """明示指定がない場合、prod は require、それ以外は prefer"""
+        """明示指定がない場合、prod はリモートホストで require、それ以外は prefer"""
         from repom.config import RepomConfig
 
         config_dev = RepomConfig(exec_env='dev')
@@ -354,7 +354,44 @@ class TestPostgresSSLMode:
 
         config_prod = RepomConfig(exec_env='prod')
         config_prod.db_type = 'postgres'
+        config_prod.postgres.host = 'db.example.com'
         assert config_prod.postgres_sslmode == 'require'
+
+    @pytest.mark.parametrize("local_host", ["localhost", "127.0.0.1", "::1"])
+    def test_prod_local_host_defaults_to_prefer(self, local_host):
+        """prod + ローカルホスト + 明示指定なしは prefer を既定とし、
+        repom-generated なコンテナ（SSL 未対応）への接続を壊さない"""
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.db_type = 'postgres'
+        config.postgres.host = local_host
+
+        assert config.postgres_sslmode == 'prefer'
+
+        url = config.db_url
+
+        assert "sslmode=prefer" in url
+
+    def test_prod_remote_host_defaults_to_require(self):
+        """prod + リモートホスト + 明示指定なしは require を既定とする"""
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.db_type = 'postgres'
+        config.postgres.host = 'db.example.com'
+
+        assert config.postgres_sslmode == 'require'
+        assert "sslmode=require" in config.db_url
+
+    def test_explicit_sslmode_overrides_prod_local_default(self):
+        """prod + ローカルホストでも config.postgres.sslmode の明示値が優先される"""
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.db_type = 'postgres'
+        config.postgres.host = 'localhost'
+        config.postgres.sslmode = 'verify-full'
+
+        assert config.postgres_sslmode == 'verify-full'
+        assert "sslmode=verify-full" in config.db_url
 
     def test_prod_requires_ssl_for_remote_host(self):
         """exec_env=prod + リモートホスト + 弱い sslmode は db_url で拒否される"""

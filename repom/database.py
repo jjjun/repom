@@ -103,6 +103,26 @@ def safe_db_url(url: str) -> str:
     return _mask_password_query_params(masked)
 
 
+def _warn_if_prod_sslmode_not_enforced() -> None:
+    """Log a warning when a prod PostgreSQL engine resolves to a non-require sslmode.
+
+    This only happens for a local host - config.postgres_sslmode already
+    requires 'require' or stronger in prod for any other host - but operators
+    should still be able to see that TLS is not enforced for that connection.
+    """
+    sslmode = config.postgres_sslmode
+    if (
+        config.db_type == "postgres"
+        and config.exec_env == "prod"
+        and sslmode != "require"
+        and not sslmode.startswith("verify")
+    ):
+        logger.warning(
+            f"PostgreSQL sslmode={sslmode!r} in prod for host "
+            f"{config.postgres.host!r}; TLS is not enforced for this connection."
+        )
+
+
 async def _run_shielded(awaitable) -> None:
     """Run *awaitable* to completion even if the surrounding task is cancelled.
 
@@ -244,6 +264,7 @@ class DatabaseManager:
                 config.db_url,
                 **config.engine_kwargs
             )
+            _warn_if_prod_sslmode_not_enforced()
             logger.debug(f"Sync engine created: {safe_db_url(config.db_url)}")
         return self._sync_engine
 
@@ -410,6 +431,7 @@ class DatabaseManager:
                         **async_engine_kwargs,
                         echo=False
                     )
+                    _warn_if_prod_sslmode_not_enforced()
                     logger.debug(f"Async engine created: {safe_db_url(async_url)}")
         return self._async_engine
 

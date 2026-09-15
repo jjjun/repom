@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `postgres_sslmode` の prod 既定値が host 別になりました。`postgres.host` が
+  `localhost` / `127.0.0.1` / `::1` の場合は prod でも `prefer` を既定とし、
+  それ以外のリモートホストでは引き続き `require` を既定とします。
+  `postgres_generate` が生成する PostgreSQL コンテナ (`postgres:16-alpine`)
+  は SSL を有効化していないため、host を問わず prod で `require` を既定に
+  すると、そのコンテナへ接続する prod デプロイが次回再起動時に
+  `server does not support SSL, but SSL was required` で起動できなくなって
+  いました。`config.postgres.sslmode` を明示的に設定していれば、この変更の
+  影響を受けません。
 - BREAKING: `config.model_import_strict` now defaults to `True` instead of
   `False`. `load_models()` discarded the failure list `import_from_packages()`
   returned, so a model module that failed to import was silently absent from
