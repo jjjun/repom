@@ -29,6 +29,14 @@
   for the element match and `json_array_length(...) == 0` for the empty-list
   match on PostgreSQL, resolved at SQL-compile time so callers do not need to
   branch on dialect; SQLite is unaffected and keeps using `json_each()`.
+- Fixed `listjson_filter()` duplicating model rows. It added one table-valued
+  `json_each`/`json_array_elements_text()` expansion per requested value
+  directly to the outer query, so a repeated array element or several
+  requested values multiplied the outer row for each match instead of
+  filtering it. This inflated `count()` and could push a matching row past a
+  `limit`/`offset` page. Each distinct requested value now compiles to a
+  correlated `EXISTS` against the expansion instead, so the outer query's
+  `FROM` still lists only the model table and matches are never duplicated.
 - `postgres_sslmode` now picks its prod default per host. When `postgres.host`
   is `localhost`, `127.0.0.1` or `::1` the default is `prefer` even in prod;
   any other host still defaults to `require`. The PostgreSQL container that

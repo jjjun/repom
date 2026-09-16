@@ -172,6 +172,53 @@ class TestPostgreSQLIntegration:
             finally:
                 table.drop(conn, checkfirst=True)
 
+    def test_listjson_filter_duplicate_elements_do_not_duplicate_rows(self):
+        """listjson_filter() が PostgreSQL 上でも重複した配列要素や複数の要求値で
+        外側クエリの行を増やさないこと（repom#150）。相関 EXISTS を使う前は
+        一致した要素の組み合わせごとに行が重複し、count() や LIMIT/OFFSET の
+        ページングが壊れていた。"""
+        from repom.database import get_sync_engine
+        from repom.custom_types.ListJSON import ListJSON, listjson_filter
+        from sqlalchemy import Column, Integer, MetaData, Table, func, select
+
+        engine = get_sync_engine()
+        metadata = MetaData()
+        table = Table(
+            "listjson_filter_duplicate_integration_test",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("option_list", ListJSON),
+        )
+
+        with engine.begin() as conn:
+            table.drop(conn, checkfirst=True)
+            table.create(conn)
+            try:
+                conn.execute(
+                    table.insert(),
+                    [
+                        {"option_list": ["a", "a", "b", "b"]},
+                        {"option_list": ["a", "b"]},
+                        {"option_list": ["a"]},
+                    ],
+                )
+
+                filters = listjson_filter(table.c.option_list, ["a", "b"])
+                rows = conn.execute(select(table).where(*filters)).fetchall()
+                assert sorted(row.option_list for row in rows) == [["a", "a", "b", "b"], ["a", "b"]]
+
+                count = conn.execute(
+                    select(func.count()).select_from(table).where(*filters)
+                ).scalar()
+                assert count == 2
+
+                limited_rows = conn.execute(
+                    select(table).where(*filters).order_by(table.c.id).limit(2)
+                ).fetchall()
+                assert len(limited_rows) == 2
+            finally:
+                table.drop(conn, checkfirst=True)
+
     def test_json_nul_escape_fails_on_text_extraction(self):
         from repom.database import get_sync_engine
 

@@ -142,6 +142,104 @@ def test_listjson_filter_empty_list_compiles_json_array_length():
     assert "json_array_length(" in sqlite_compiled
 
 
+def test_listjson_filter_duplicate_array_elements_do_not_duplicate_find_results(db_test):
+    """配列内の重複要素や複数の要求値があっても find() の結果行が増えないこと（repom#150）。"""
+    repo = ListModelRepository(session=db_test)
+    log1 = ListModel(option_list=["a", "a", "b", "b"])
+    log2 = ListModel(option_list=["a", "b"])
+    db_test.add_all([log1, log2])
+    db_test.commit()
+
+    results = repo.find(
+        ListModelFilterParams(option_list=["a", "b"]), order_by="id:asc", limit=10
+    )
+    assert [item.id for item in results] == [log1.id, log2.id]
+
+
+def test_listjson_filter_duplicate_array_elements_do_not_break_pagination(db_test):
+    """重複要素による行の増殖が limit/offset のページングから一致モデルを
+    こぼさないこと（repom#150）。修正前は limit=2 でも id=1 の重複行が
+    2 件返り、id=2 のモデルがページから漏れていた。"""
+    repo = ListModelRepository(session=db_test)
+    log1 = ListModel(option_list=["a", "a", "b", "b"])
+    log2 = ListModel(option_list=["a", "b"])
+    db_test.add_all([log1, log2])
+    db_test.commit()
+
+    first_page = repo.find(
+        ListModelFilterParams(option_list=["a", "b"]), order_by="id:asc", limit=2
+    )
+    assert [item.id for item in first_page] == [log1.id, log2.id]
+
+    second_row = repo.find(
+        ListModelFilterParams(option_list=["a", "b"]), order_by="id:asc", limit=1, offset=1
+    )
+    assert [item.id for item in second_row] == [log2.id]
+
+
+def test_listjson_filter_duplicate_array_elements_do_not_inflate_count(db_test):
+    """count() が重複した組み合わせの数ではなく、一致したモデルの数を返すこと（repom#150）。"""
+    repo = ListModelRepository(session=db_test)
+    log1 = ListModel(option_list=["a", "a", "b", "b"])
+    log2 = ListModel(option_list=["a", "b"])
+    db_test.add_all([log1, log2])
+    db_test.commit()
+
+    filters = listjson_filter(ListModel.option_list, ["a", "b"])
+    assert repo.count(filters=filters) == 2
+
+
+def test_listjson_filter_single_value_against_repeated_elements(db_test):
+    """要求値が1つだけでも、配列内でその値が繰り返されていれば同じ問題が
+    起きること（repom#150 のトリアージで確認）。"""
+    repo = ListModelRepository(session=db_test)
+    log1 = ListModel(option_list=["a", "a", "b", "b"])
+    log2 = ListModel(option_list=["a"])
+    log3 = ListModel(option_list=["b"])
+    db_test.add_all([log1, log2, log3])
+    db_test.commit()
+
+    results = repo.find(
+        ListModelFilterParams(option_list=["a"]), order_by="id:asc", limit=10
+    )
+    assert [item.id for item in results] == [log1.id, log2.id]
+
+    filters = listjson_filter(ListModel.option_list, ["a"])
+    assert repo.count(filters=filters) == 2
+
+
+def test_listjson_filter_repeated_requested_values_collapse_to_single_clause(db_test):
+    """重複した要求値 (["a", "a"]) は冗長な EXISTS 句を追加しないこと。"""
+    filters = listjson_filter(ListModel.option_list, ["a", "a"])
+    assert len(filters) == 1
+
+    repo = ListModelRepository(session=db_test)
+    log = ListModel(option_list=["a", "a"])
+    db_test.add(log)
+    db_test.commit()
+
+    results = repo.find(
+        ListModelFilterParams(option_list=["a", "a"]), order_by="id:asc", limit=10
+    )
+    assert [item.id for item in results] == [log.id]
+
+
+def test_listjson_filter_compiles_to_exists_with_only_model_table_in_outer_from():
+    """listjson_filter() が相関 EXISTS を使い、外側クエリの FROM に
+    テーブル値関数の JOIN を持ち込まないこと（repom#150）。"""
+    filters = listjson_filter(ListModel.option_list, ["Action", "Comedy"])
+    stmt = select(ListModel).filter(*filters)
+    compiled = str(stmt.compile(dialect=postgresql.dialect()))
+
+    outer_clause, _, _ = compiled.partition("WHERE")
+    assert outer_clause.count("FROM") == 1
+    assert "JOIN" not in outer_clause
+    assert "test_model_listjson" in outer_clause
+
+    assert compiled.count("EXISTS (SELECT") == 2
+    assert "json_array_elements_text(" in compiled
+
+
 def test_listjson_filter_empty_list_no_cache_warning_with_sqlalchemy_utils(db_test):
     """sqlalchemy_utils.expressions は inherit_cache 未設定の json_array_length を
     SQLAlchemy のグローバル関数レジストリに登録するため、同モジュールが

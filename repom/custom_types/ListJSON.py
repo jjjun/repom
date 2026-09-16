@@ -1,5 +1,5 @@
 from sqlalchemy.types import TypeDecorator, JSON
-from sqlalchemy import func
+from sqlalchemy import func, literal, select
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.functions import GenericFunction
 import json
@@ -88,7 +88,15 @@ def listjson_filter(model_column, values):
     """
     Generate SQLAlchemy filter conditions for ListJSON columns.
     - If values == [], filter for empty lists.
-    - If values is a non-empty list, filter for each value using json_each.
+    - If values is a non-empty list, filter for each distinct value using a
+      correlated EXISTS against the json_each expansion, so the caller keeps
+      "every requested value is present" semantics without multiplying outer
+      model rows: a row's array elements matching more than once, or several
+      requested values each matching, would otherwise duplicate the row in
+      the outer query (one row per matching table-valued expansion), which
+      also inflates count() and can push matching rows past a limit/offset
+      page. Repeated requested values (e.g. ["a", "a"]) collapse to a single
+      EXISTS clause since they add no additional constraint.
     - Each value is matched by exact equality against an array element, so
       element boundaries are respected (e.g. a filter of "admin" does not
       match an element of "superadministrator") and no LIKE wildcard
@@ -106,7 +114,9 @@ def listjson_filter(model_column, values):
     if values == []:
         return [_ListjsonArrayLength(model_column) == 0]
     filters = []
-    for value in values:
-        fields_func = _ListjsonEachValue(model_column).table_valued("value", joins_implicitly=True)
-        filters.append(fields_func.c.value == value)
+    for value in dict.fromkeys(values):
+        elements = _ListjsonEachValue(model_column).table_valued("value")
+        filters.append(
+            select(literal(1)).select_from(elements).where(elements.c.value == value).exists()
+        )
     return filters
