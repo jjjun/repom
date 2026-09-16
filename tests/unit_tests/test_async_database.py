@@ -10,12 +10,14 @@ from repom.database import (
     get_async_engine,
     get_async_db_session,
     get_async_db_transaction,
+    get_reusable_async_transaction,
     get_standalone_async_transaction,
     convert_to_async_uri,
     DatabaseManager,
 )
 import repom.database as database_module
 from repom.config import config
+from contextlib import asynccontextmanager
 import asyncio
 import inspect
 import os
@@ -779,6 +781,181 @@ class TestShieldedCleanup:
             assert engine.pool.checkedout() == 0
         finally:
             await manager.dispose_async()
+
+
+def _recording_async_session_cm(events, *, commits):
+    """Build a fake ``_db_manager`` context manager that records open/commit-or-
+    rollback/close order, mirroring the real ``get_async_session`` /
+    ``get_async_transaction`` contract for a given dependency."""
+
+    @asynccontextmanager
+    async def cm():
+        events.append('open')
+        try:
+            yield object()
+        except BaseException as exc:
+            events.append(f'rollback({type(exc).__name__})')
+            raise
+        else:
+            if commits:
+                events.append('commit')
+        finally:
+            events.append('close')
+
+    return cm()
+
+
+class TestDependencyExceptionForwarding:
+    """An exception raised inside the FastAPI dependency scope must be
+    forwarded into the underlying async context manager (so rollback/close
+    run with the original exception) before it reaches the caller, instead of
+    being deferred to async-generator finalization (which used to run
+    rollback with GeneratorExit, in a background task, after the caller had
+    already handled the error)."""
+
+    @pytest.mark.asyncio
+    async def test_get_async_db_session_forwards_exception_before_caller_sees_it(self, monkeypatch):
+        events = []
+        monkeypatch.setattr(
+            database_module._db_manager, "get_async_session",
+            lambda: _recording_async_session_cm(events, commits=True)
+        )
+
+        with pytest.raises(ValueError):
+            async with asynccontextmanager(get_async_db_session)() as session:
+                raise ValueError("boom")
+        events.append('exception seen by caller')
+
+        assert events == ['open', 'rollback(ValueError)', 'close', 'exception seen by caller']
+
+    @pytest.mark.asyncio
+    async def test_get_async_db_transaction_forwards_exception_before_caller_sees_it(self, monkeypatch):
+        events = []
+        monkeypatch.setattr(
+            database_module._db_manager, "get_async_transaction",
+            lambda: _recording_async_session_cm(events, commits=True)
+        )
+
+        with pytest.raises(ValueError):
+            async with asynccontextmanager(get_async_db_transaction)() as session:
+                raise ValueError("boom")
+        events.append('exception seen by caller')
+
+        assert events == ['open', 'rollback(ValueError)', 'close', 'exception seen by caller']
+
+    @pytest.mark.asyncio
+    async def test_get_async_db_session_success_commits_and_closes(self, monkeypatch):
+        events = []
+        monkeypatch.setattr(
+            database_module._db_manager, "get_async_session",
+            lambda: _recording_async_session_cm(events, commits=True)
+        )
+
+        async with asynccontextmanager(get_async_db_session)() as session:
+            pass
+
+        assert events == ['open', 'commit', 'close']
+
+    @pytest.mark.asyncio
+    async def test_get_async_db_transaction_success_commits_and_closes(self, monkeypatch):
+        events = []
+        monkeypatch.setattr(
+            database_module._db_manager, "get_async_transaction",
+            lambda: _recording_async_session_cm(events, commits=True)
+        )
+
+        async with asynccontextmanager(get_async_db_transaction)() as session:
+            pass
+
+        assert events == ['open', 'commit', 'close']
+
+
+class TestReusableAsyncTransaction:
+    """Tests for get_reusable_async_transaction() public API.
+
+    Each test builds and swaps in its own DatabaseManager (rather than relying
+    on the module-level _db_manager singleton) because TestStandaloneAsyncTransaction
+    disposes that singleton's engine as part of exercising
+    get_standalone_async_transaction(); tests here would otherwise depend on
+    test-ordering to find a live engine with tables.
+    """
+
+    @staticmethod
+    async def _build_manager_with_tables():
+        manager = DatabaseManager()
+        engine = await manager.get_async_engine()
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        return manager
+
+    def test_returns_async_context_manager(self):
+        """get_reusable_async_transaction() should return an async context manager."""
+        result = get_reusable_async_transaction()
+        assert hasattr(result, '__aenter__')
+        assert hasattr(result, '__aexit__')
+        assert not hasattr(result, '__anext__')
+
+    @pytest.mark.asyncio
+    async def test_auto_commit(self, monkeypatch):
+        """Should auto-commit when context exits normally."""
+        manager = await self._build_manager_with_tables()
+        monkeypatch.setattr(database_module, "_db_manager", manager)
+
+        try:
+            async with get_reusable_async_transaction() as session:
+                item = SampleModel(value="reusable_async_tx_commit")
+                session.add(item)
+
+            async with get_reusable_async_transaction() as session:
+                result = await session.execute(
+                    select(SampleModel).where(SampleModel.value == "reusable_async_tx_commit")
+                )
+                found = result.scalar_one_or_none()
+                assert found is not None
+        finally:
+            await manager.dispose_async()
+
+    @pytest.mark.asyncio
+    async def test_auto_rollback_on_exception(self, monkeypatch):
+        """Should rollback when an exception is raised in context."""
+        manager = await self._build_manager_with_tables()
+        monkeypatch.setattr(database_module, "_db_manager", manager)
+
+        try:
+            with pytest.raises(ValueError):
+                async with get_reusable_async_transaction() as session:
+                    item = SampleModel(value="reusable_async_tx_rollback")
+                    session.add(item)
+                    raise ValueError("force rollback")
+
+            async with get_reusable_async_transaction() as session:
+                result = await session.execute(
+                    select(SampleModel).where(SampleModel.value == "reusable_async_tx_rollback")
+                )
+                found = result.scalar_one_or_none()
+                assert found is None
+        finally:
+            await manager.dispose_async()
+
+    @pytest.mark.asyncio
+    async def test_does_not_dispose_engine_on_exit(self, monkeypatch):
+        """Reusable transaction should not dispose engine when context exits,
+        and the engine must remain usable for a later transaction."""
+        manager = DatabaseManager()
+        await manager.get_async_engine()
+        assert manager._async_engine is not None
+        monkeypatch.setattr(database_module, "_db_manager", manager)
+
+        async with get_reusable_async_transaction() as session:
+            assert isinstance(session, AsyncSession)
+
+        assert manager._async_engine is not None
+
+        async with get_reusable_async_transaction() as session:
+            result = await session.execute(text("SELECT 1"))
+            assert result.scalar() == 1
+
+        await manager.dispose_async()
 
 
 if __name__ == "__main__":

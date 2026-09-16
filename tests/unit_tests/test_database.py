@@ -11,9 +11,11 @@ from repom.database import (
     get_sync_engine,
     get_inspector,
     DatabaseManager,
+    _db_manager,
 )
 from repom.config import config
 from repom.models.base_model import BaseModel
+from contextlib import contextmanager
 import os
 import pytest
 from sqlalchemy import Column, String, Engine
@@ -420,3 +422,84 @@ class TestFastAPIDependsPattern:
         result = session.execute(select(DatabaseTestModel))
         items = result.scalars().all()
         assert isinstance(items, list)
+
+
+def _recording_sync_session_cm(events, *, commits):
+    """Build a fake ``_db_manager`` context manager that records open/commit-or-
+    rollback/close order, mirroring the real ``get_sync_session`` /
+    ``get_sync_transaction`` contract for a given dependency."""
+
+    @contextmanager
+    def cm():
+        events.append('open')
+        try:
+            yield object()
+        except BaseException as exc:
+            events.append(f'rollback({type(exc).__name__})')
+            raise
+        else:
+            if commits:
+                events.append('commit')
+        finally:
+            events.append('close')
+
+    return cm()
+
+
+class TestDependencyExceptionForwarding:
+    """An exception raised inside the FastAPI dependency scope must be
+    forwarded into the underlying context manager (so rollback/close run with
+    the original exception) before it reaches the caller, instead of being
+    deferred to generator finalization."""
+
+    def test_get_db_session_forwards_exception_before_caller_sees_it(self, monkeypatch):
+        events = []
+        monkeypatch.setattr(
+            _db_manager, "get_sync_session",
+            lambda: _recording_sync_session_cm(events, commits=False)
+        )
+
+        with pytest.raises(ValueError):
+            with contextmanager(get_db_session)() as session:
+                raise ValueError("boom")
+        events.append('exception seen by caller')
+
+        assert events == ['open', 'rollback(ValueError)', 'close', 'exception seen by caller']
+
+    def test_get_db_transaction_forwards_exception_before_caller_sees_it(self, monkeypatch):
+        events = []
+        monkeypatch.setattr(
+            _db_manager, "get_sync_transaction",
+            lambda: _recording_sync_session_cm(events, commits=True)
+        )
+
+        with pytest.raises(ValueError):
+            with contextmanager(get_db_transaction)() as session:
+                raise ValueError("boom")
+        events.append('exception seen by caller')
+
+        assert events == ['open', 'rollback(ValueError)', 'close', 'exception seen by caller']
+
+    def test_get_db_session_success_closes_without_commit(self, monkeypatch):
+        events = []
+        monkeypatch.setattr(
+            _db_manager, "get_sync_session",
+            lambda: _recording_sync_session_cm(events, commits=False)
+        )
+
+        with contextmanager(get_db_session)() as session:
+            pass
+
+        assert events == ['open', 'close']
+
+    def test_get_db_transaction_success_commits_and_closes(self, monkeypatch):
+        events = []
+        monkeypatch.setattr(
+            _db_manager, "get_sync_transaction",
+            lambda: _recording_sync_session_cm(events, commits=True)
+        )
+
+        with contextmanager(get_db_transaction)() as session:
+            pass
+
+        assert events == ['open', 'commit', 'close']

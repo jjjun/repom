@@ -25,6 +25,8 @@ repo = AsyncBaseRepository(Task, session=async_session)
 
 読み取りだけなら `get_async_db_session()`、複数の書き込みを1トランザクションに
 まとめるなら `get_async_db_transaction()` を dependency として使います。
+`get_async_db_session()` は同期版の `get_db_session()` と異なり、成功時に commit
+し、例外発生時は rollback します。
 アプリ終了時の engine cleanup には `get_lifespan_manager()` を指定します。
 
 ```python
@@ -68,7 +70,7 @@ async def main():
 ```
 
 同じプロセスでトランザクションを繰り返す worker は、engine を毎回破棄しない
-`get_async_db_transaction()` を `async for` で利用し、終了時に
+`get_reusable_async_transaction()` を `async with` で利用し、終了時に
 `dispose_engines()` を呼びます。
 
 ## 主要 API

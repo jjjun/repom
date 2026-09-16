@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+- Fixed `get_async_db_session()` and `get_async_db_transaction()` losing the
+  caller's exception during cleanup. Both `Depends` dependencies drove their
+  underlying async context manager through a private adapter class with
+  `async for`; when the consumer raised inside the dependency's scope (as
+  FastAPI does at the `yield` when an endpoint raises), the exception was
+  never forwarded into the adapter's inner async generator. The adapter's
+  `async with` block then only exited later, when the event loop's
+  async-generator finalizer ran `aclose()` in a background task, so the
+  session was rolled back with `GeneratorExit` instead of the endpoint's
+  exception, after the response had already been sent. Both dependencies are
+  now plain async generators that wrap the context manager directly
+  (`async with ...: yield ...`), so a thrown exception enters the
+  `async with` block immediately and rollback runs, with the original
+  exception, before it reaches the caller. `get_db_session()` and
+  `get_db_transaction()` did not have this bug - they used `yield from` over
+  the adapter, which already forwarded thrown exceptions into the delegated
+  generator - but are simplified to the same `with ...: yield ...` shape with
+  no behavior change. The now-unused private adapter classes
+  `_ContextManagerIterable` and `_AsyncContextManagerIterable` are removed.
+  Commit-on-success and rollback-on-error semantics are unchanged.
+- Added `get_reusable_async_transaction()`, the async counterpart of
+  `get_reusable_sync_transaction()`. It returns
+  `DatabaseManager.get_async_transaction()` directly (an async context
+  manager that commits on success and rolls back on error) without disposing
+  the engine on exit, for worker/task code that runs multiple transactions
+  in the same process. The async repository guide now recommends
+  `async with get_reusable_async_transaction() as session:` for that case
+  instead of iterating `get_async_db_transaction()` with `async for`, which
+  had the same delayed-cleanup problem as the dependency bug above whenever
+  the loop body raised.
 - Fixed `AutoDateTime` silently shifting timezone-aware values with a non-UTC
   offset. `process_bind_param` only attached `timezone.utc` to naive values
   and passed aware values through unchanged; on a backend that cannot retain

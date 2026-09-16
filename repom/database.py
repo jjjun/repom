@@ -38,7 +38,7 @@ Example (CLI script - async):
     >>>     asyncio.run(main())
 """
 
-from typing import Optional, AsyncGenerator, Generator, AsyncContextManager, ContextManager, TypeVar, Generic
+from typing import Optional, AsyncGenerator, Generator
 from contextlib import contextmanager, asynccontextmanager  # Only for DatabaseManager internal use
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import asyncio
@@ -58,9 +58,6 @@ from repom.config import config
 from repom.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-T = TypeVar('T')
 
 
 _PASSWORD_QUERY_PARAM_NAMES = frozenset({"password", "pgpassword"})
@@ -150,43 +147,6 @@ async def _run_shielded(awaitable) -> None:
             pending_cancel = exc
     if pending_cancel is not None:
         raise pending_cancel
-
-
-class _ContextManagerIterable(Generic[T]):
-    """Adapter to allow generator delegation to context managers."""
-
-    def __init__(self, context_manager: ContextManager[T]):
-        self._context_manager = context_manager
-
-    def __enter__(self) -> T:
-        return self._context_manager.__enter__()
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        return self._context_manager.__exit__(exc_type, exc_value, traceback)
-
-    def __iter__(self) -> Generator[T, None, None]:
-        with self._context_manager as value:
-            yield value
-
-
-class _AsyncContextManagerIterable(Generic[T]):
-    """Adapter to allow async generator delegation to async context managers."""
-
-    def __init__(self, context_manager: AsyncContextManager[T]):
-        self._context_manager = context_manager
-
-    async def __aenter__(self) -> T:
-        return await self._context_manager.__aenter__()
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        return await self._context_manager.__aexit__(exc_type, exc_value, traceback)
-
-    def __aiter__(self) -> AsyncGenerator[T, None]:
-        async def generator():
-            async with self._context_manager as value:
-                yield value
-
-        return generator()
 
 
 # ========================================
@@ -299,8 +259,9 @@ class DatabaseManager:
             Session: SQLAlchemy synchronous session
 
         Example:
-            >>> from repom.database import _db_manager
-            >>> with _db_manager.get_sync_session() as session:
+            >>> from repom.database import DatabaseManager
+            >>> manager = DatabaseManager()
+            >>> with manager.get_sync_session() as session:
             >>>     user = session.execute(select(User)).scalar_one()
             >>>     session.commit()
         """
@@ -326,8 +287,9 @@ class DatabaseManager:
             Exception: Any exception raised within the context
 
         Example:
-            >>> from repom.database import _db_manager
-            >>> with _db_manager.get_sync_transaction() as session:
+            >>> from repom.database import DatabaseManager
+            >>> manager = DatabaseManager()
+            >>> with manager.get_sync_transaction() as session:
             >>>     user = User(name="test")
             >>>     session.add(user)
             >>>     # Auto commit on exit
@@ -351,16 +313,17 @@ class DatabaseManager:
         Automatically disposes the engine on exit, making it suitable for
         CLI tools, batch scripts, and other standalone applications.
 
-        For FastAPI, use get_sync_transaction() with Depends instead.
+        For FastAPI, use get_db_transaction() with Depends instead.
 
         Yields:
             Session: SQLAlchemy synchronous session
 
         Example:
-            >>> from repom.database import _db_manager
+            >>> from repom.database import DatabaseManager
+            >>> manager = DatabaseManager()
             >>> 
             >>> def main():
-            >>>     with _db_manager.get_standalone_sync_transaction() as session:
+            >>>     with manager.get_standalone_sync_transaction() as session:
             >>>         result = session.execute(select(User))
             >>>         users = result.scalars().all()
             >>> 
@@ -467,7 +430,9 @@ class DatabaseManager:
             AsyncSession: SQLAlchemy asynchronous session
 
         Example:
-            >>> async with get_async_db_session() as session:
+            >>> from repom.database import DatabaseManager
+            >>> manager = DatabaseManager()
+            >>> async with manager.get_async_session() as session:
             >>>     result = await session.execute(select(User))
             >>>     users = result.scalars().all()
         """
@@ -494,7 +459,9 @@ class DatabaseManager:
             AsyncSession: SQLAlchemy asynchronous session
 
         Example:
-            >>> async with get_async_db_transaction() as session:
+            >>> from repom.database import DatabaseManager
+            >>> manager = DatabaseManager()
+            >>> async with manager.get_async_transaction() as session:
             >>>     user = User(name="test")
             >>>     session.add(user)
             >>>     # Auto commit on exit
@@ -527,10 +494,11 @@ class DatabaseManager:
 
         Example:
             >>> import asyncio
-            >>> from repom.database import _db_manager
+            >>> from repom.database import DatabaseManager
+            >>> manager = DatabaseManager()
             >>> 
             >>> async def main():
-            >>>     async with _db_manager.get_standalone_async_transaction() as session:
+            >>>     async with manager.get_standalone_async_transaction() as session:
             >>>         result = await session.execute(select(User))
             >>>         users = result.scalars().all()
             >>> 
@@ -777,7 +745,8 @@ def get_db_session() -> Generator[Session, None, None]:
         >>>     result = session.execute(select(User))
         >>>     return result.scalars().all()
     """
-    yield from _ContextManagerIterable(_db_manager.get_sync_session())
+    with _db_manager.get_sync_session() as session:
+        yield session
 
 
 def get_db_transaction() -> Generator[Session, None, None]:
@@ -801,7 +770,8 @@ def get_db_transaction() -> Generator[Session, None, None]:
         >>>     # Auto commit on exit
         >>>     return user
     """
-    yield from _ContextManagerIterable(_db_manager.get_sync_transaction())
+    with _db_manager.get_sync_transaction() as session:
+        yield session
 
 
 def get_standalone_sync_transaction():
@@ -901,7 +871,7 @@ async def get_async_db_session():
         >>>     result = await session.execute(select(User))
         >>>     return result.scalars().all()
     """
-    async for session in _AsyncContextManagerIterable(_db_manager.get_async_session()):
+    async with _db_manager.get_async_session() as session:
         yield session
 
 
@@ -912,7 +882,7 @@ async def get_async_db_transaction():
     Yields:
         AsyncSession: SQLAlchemy asynchronous session with auto-commit/rollback
     """
-    async for session in _AsyncContextManagerIterable(_db_manager.get_async_transaction()):
+    async with _db_manager.get_async_transaction() as session:
         yield session
 
 
@@ -946,6 +916,31 @@ def get_standalone_async_transaction():
         >>>     asyncio.run(main())
     """
     return _db_manager.get_standalone_async_transaction()
+
+
+def get_reusable_async_transaction():
+    """
+    Get a reusable asynchronous transaction context manager.
+
+    This API is designed for task/worker/CLI code that executes multiple
+    transactions within the same process. Unlike
+    get_standalone_async_transaction(), this function does not dispose the
+    engine on exit.
+
+    For FastAPI applications, use get_async_db_transaction() with Depends.
+
+    Returns:
+        AsyncContextManager[AsyncSession]: Async context manager that yields AsyncSession
+
+    Example:
+        >>> from repom.database import get_reusable_async_transaction
+        >>> from sqlalchemy import select
+        >>>
+        >>> async with get_reusable_async_transaction() as session:
+        >>>     result = await session.execute(select(User).limit(10))
+        >>>     users = result.scalars().all()
+    """
+    return _db_manager.get_async_transaction()
 
 
 # ========================================
@@ -999,6 +994,7 @@ __all__ = [
     'get_async_engine',
     'get_async_db_session',
     'get_async_db_transaction',
+    'get_reusable_async_transaction',
     'get_standalone_async_transaction',
     'convert_to_async_uri',
     # Lifecycle
