@@ -65,6 +65,19 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             self._scoped_session_var.reset(token)
             session_generator.close()
 
+    def _execute_scalars_unique(self, query) -> List[T]:
+        """モデルエンティティを返す SELECT を実行し、重複のない結果を返す。
+
+        コレクションに対する joinedload はエンティティごとに行が重複し、
+        SQLAlchemy はその場合 Result.unique() の呼び出しを要求する
+        （呼ばないと InvalidRequestError になる）。unique() はそれ以外の
+        クエリでは無害な no-op なので、常に呼んでよい。副作用として、
+        _base_select() を override して一対多の関連を eager load せずに
+        JOIN した場合の重複行も同様に排除される。
+        """
+        with self._session_scope() as session:
+            return session.execute(query).scalars().unique().all()
+
     def get_by(
         self,
         column_name: str,
@@ -418,6 +431,11 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
         Overrides must accept and merge ``filters`` and ``include_deleted``.
         Callers rely on those arguments to constrain results and enforce the
         soft-delete policy.
+
+        Results are deduplicated via ``Result.unique()``, so ``options`` may
+        include a ``joinedload()`` of a collection relationship (each parent
+        is returned once with its full collection) in addition to scalar
+        joinedload/selectinload.
         Example:
             >>> from sqlalchemy.orm import selectinload
             >>> # 複数レコード取得（relationship も eager load）
@@ -447,8 +465,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             query = query.where(and_(*all_filters))
 
         query = self.set_find_option(query, **kwargs)
-        with self._session_scope() as session:
-            return session.execute(query).scalars().all()
+        return self._execute_scalars_unique(query)
 
     def _find_with_filters(
         self,
@@ -466,8 +483,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             query = query.where(and_(*all_filters))
 
         query = self.set_find_option(query, **kwargs)
-        with self._session_scope() as session:
-            return session.execute(query).scalars().all()
+        return self._execute_scalars_unique(query)
 
     def find_one(self, filters: list, include_deleted: bool = False, **kwargs) -> Optional[T]:
         """
@@ -558,5 +574,4 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
 
         query = self._base_select().where(and_(*filters))
         query = self.set_find_option(query, **kwargs)
-        with self._session_scope() as session:
-            return session.execute(query).scalars().all()
+        return self._execute_scalars_unique(query)

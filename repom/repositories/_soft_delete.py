@@ -212,8 +212,7 @@ class SoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
             return []
 
         query = self._find_deleted_query(filters, **kwargs)
-        with self._session_scope() as session:
-            return session.execute(query).scalars().all()
+        return self._execute_scalars_unique(query)
 
     def find_deleted_before(self, before_date: datetime, **kwargs) -> List[T]:
         """指定日時より前に削除されたレコードを取得
@@ -241,8 +240,7 @@ class SoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
             return []
 
         query = self._find_deleted_before_query(before_date, **kwargs)
-        with self._session_scope() as session:
-            return session.execute(query).scalars().all()
+        return self._execute_scalars_unique(query)
 
 
 class AsyncSoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
@@ -411,9 +409,7 @@ class AsyncSoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
             return []
 
         query = self._find_deleted_query(filters, **kwargs)
-        async with self._session_scope() as session:
-            result = await session.execute(query)
-            return result.scalars().all()
+        return await self._execute_scalars_unique(query)
 
     async def find_deleted_before(self, before_date: datetime, **kwargs) -> List[T]:
         """指定日時より前に削除されたレコードを取得
@@ -441,6 +437,4 @@ class AsyncSoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
             return []
 
         query = self._find_deleted_before_query(before_date, **kwargs)
-        async with self._session_scope() as session:
-            result = await session.execute(query)
-            return result.scalars().all()
+        return await self._execute_scalars_unique(query)

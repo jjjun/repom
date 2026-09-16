@@ -91,6 +91,20 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             self._scoped_session_var.reset(token)
             await session_generator.aclose()
 
+    async def _execute_scalars_unique(self, query) -> List[T]:
+        """モデルエンティティを返す SELECT を実行し、重複のない結果を返す。
+
+        コレクションに対する joinedload はエンティティごとに行が重複し、
+        SQLAlchemy はその場合 Result.unique() の呼び出しを要求する
+        （呼ばないと InvalidRequestError になる）。unique() はそれ以外の
+        クエリでは無害な no-op なので、常に呼んでよい。副作用として、
+        _base_select() を override して一対多の関連を eager load せずに
+        JOIN した場合の重複行も同様に排除される。
+        """
+        async with self._session_scope() as session:
+            result = await session.execute(query)
+            return result.scalars().unique().all()
+
     async def get_by(
         self,
         column_name: str,
@@ -449,6 +463,11 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
         Overrides must accept and merge ``filters`` and ``include_deleted``.
         Callers rely on those arguments to constrain results and enforce the
         soft-delete policy.
+
+        Results are deduplicated via ``Result.unique()``, so ``options`` may
+        include a ``joinedload()`` of a collection relationship (each parent
+        is returned once with its full collection) in addition to scalar
+        joinedload/selectinload.
         Example:
             >>> from sqlalchemy.orm import selectinload
             >>> # 複数レコード取得（relationship も eager load）
@@ -478,9 +497,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             query = query.where(and_(*all_filters))
 
         query = self.set_find_option(query, **kwargs)
-        async with self._session_scope() as session:
-            result = await session.execute(query)
-            return result.scalars().all()
+        return await self._execute_scalars_unique(query)
 
     async def _find_with_filters(
         self,
@@ -498,9 +515,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             query = query.where(and_(*all_filters))
 
         query = self.set_find_option(query, **kwargs)
-        async with self._session_scope() as session:
-            result = await session.execute(query)
-            return result.scalars().all()
+        return await self._execute_scalars_unique(query)
 
     async def find_one(self, filters: list, include_deleted: bool = False, **kwargs) -> Optional[T]:
         """find の最初の1件取得版
@@ -601,6 +616,4 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
 
         query = self._base_select().where(and_(*filters))
         query = self.set_find_option(query, **kwargs)
-        async with self._session_scope() as session:
-            result = await session.execute(query)
-            return result.scalars().all()
+        return await self._execute_scalars_unique(query)

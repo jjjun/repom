@@ -95,7 +95,8 @@ deleted = await repo.bulk_delete(ids=[1, 2])
 
 `options` と `default_options` には `selectinload()` や `joinedload()` を指定できます。
 非同期 ORM では暗黙の lazy load を避け、必要な relationship を明示的に
-eager load してください。
+eager load してください。コレクション関連への `joinedload()` も指定でき、
+結果は `Result.unique()` で重複排除されるため各レコードは1回だけ返ります。
 
 ```python
 from sqlalchemy.orm import selectinload

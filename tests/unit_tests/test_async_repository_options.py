@@ -656,3 +656,174 @@ async def test_default_order_by_applied_when_order_by_not_specified(async_db_tes
     titles = [book.title for book in await repo.find()]
 
     assert titles == ["Book 3", "Book 2", "Book 1"]
+
+
+# =============================================================================
+# joinedload をコレクション（1対多）関連に指定した場合のテスト（Result.unique）
+# =============================================================================
+
+@pytest.mark.asyncio
+async def test_find_with_joinedload_collection_relationship(async_db_test, setup_async_test_data):
+    """
+    joinedload をコレクション関連（1対多）に指定しても、各親レコードが
+    重複せずに1回だけ返り、コレクション全体がロードされることを確認
+    """
+    repo = AsyncAuthorRepository(session=async_db_test)
+
+    authors = await repo.find(
+        options=[joinedload(AsyncEagerAuthorModel.books)]
+    )
+
+    assert len(authors) == 2
+    author1 = next(a for a in authors if a.name == "Author One")
+    author2 = next(a for a in authors if a.name == "Author Two")
+    assert len(author1.books) == 2
+    assert len(author2.books) == 1
+
+
+@pytest.mark.asyncio
+async def test_find_with_joinedload_collection_and_limit(async_db_test, setup_async_test_data):
+    """
+    limit=1 と collection joinedload を組み合わせても、1件の親が
+    そのコレクション全体を伴って返ることを確認
+    """
+    repo = AsyncAuthorRepository(session=async_db_test)
+
+    authors = await repo.find(
+        options=[joinedload(AsyncEagerAuthorModel.books)],
+        limit=1,
+        order_by='id:asc'
+    )
+
+    assert len(authors) == 1
+    assert authors[0].name == "Author One"
+    assert len(authors[0].books) == 2
+
+
+@pytest.mark.asyncio
+async def test_find_with_joinedload_collection_and_pagination(async_db_test, setup_async_test_data):
+    """
+    collection joinedload + offset/limit を組み合わせても、
+    重複排除後の親の件数でページングされることを確認
+    """
+    repo = AsyncAuthorRepository(session=async_db_test)
+
+    authors = await repo.find(
+        options=[joinedload(AsyncEagerAuthorModel.books)],
+        offset=1,
+        limit=1,
+        order_by='id:asc'
+    )
+
+    assert len(authors) == 1
+    assert authors[0].name == "Author Two"
+    assert len(authors[0].books) == 1
+
+
+@pytest.mark.asyncio
+async def test_find_with_joinedload_collection_empty_result(async_db_test, setup_async_test_data):
+    """
+    条件に一致するレコードがない場合、collection joinedload 指定でも
+    空リストが返ることを確認
+    """
+    repo = AsyncAuthorRepository(session=async_db_test)
+
+    authors = await repo.find(
+        filters=[AsyncEagerAuthorModel.name == "Nonexistent"],
+        options=[joinedload(AsyncEagerAuthorModel.books)]
+    )
+
+    assert authors == []
+
+
+@pytest.mark.asyncio
+async def test_get_by_id_with_joinedload_collection(async_db_test, setup_async_test_data):
+    """
+    get_by_id() で collection joinedload を指定しても
+    InvalidRequestError を送出せず、コレクション全体がロードされることを確認
+    """
+    data = setup_async_test_data
+    author_id = data['authors'][0].id
+    repo = AsyncAuthorRepository(session=async_db_test)
+
+    author = await repo.get_by_id(
+        author_id,
+        options=[joinedload(AsyncEagerAuthorModel.books)]
+    )
+
+    assert author is not None
+    assert len(author.books) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_by_with_joinedload_collection_multiple(async_db_test, setup_async_test_data):
+    """
+    get_by() の複数件取得で collection joinedload を指定できることを確認
+    """
+    repo = AsyncAuthorRepository(session=async_db_test)
+
+    authors = await repo.get_by(
+        'name', 'Author One',
+        options=[joinedload(AsyncEagerAuthorModel.books)]
+    )
+
+    assert isinstance(authors, list)
+    assert len(authors) == 1
+    assert len(authors[0].books) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_by_with_joinedload_collection_single(async_db_test, setup_async_test_data):
+    """
+    get_by() の single=True で collection joinedload を指定できることを確認
+    """
+    repo = AsyncAuthorRepository(session=async_db_test)
+
+    author = await repo.get_by(
+        'name', 'Author One',
+        single=True,
+        options=[joinedload(AsyncEagerAuthorModel.books)]
+    )
+
+    assert author is not None
+    assert len(author.books) == 2
+
+
+@pytest.mark.asyncio
+async def test_find_by_ids_with_joinedload_collection(async_db_test, setup_async_test_data):
+    """
+    find_by_ids() で collection joinedload を指定しても、各親レコードが
+    重複せずに返ることを確認
+    """
+    data = setup_async_test_data
+    ids = [author.id for author in data['authors']]
+    repo = AsyncAuthorRepository(session=async_db_test)
+
+    authors = await repo.find_by_ids(
+        ids,
+        options=[joinedload(AsyncEagerAuthorModel.books)]
+    )
+
+    assert len(authors) == 2
+    total_books = sum(len(author.books) for author in authors)
+    assert total_books == 3
+
+
+@pytest.mark.asyncio
+async def test_default_options_with_joinedload_collection(async_db_test, setup_async_test_data):
+    """
+    default_options に collection joinedload を設定した場合も、
+    find() で重複なく適用されることを確認
+    """
+    class AuthorRepositoryWithDefaults(AsyncBaseRepository[AsyncEagerAuthorModel]):
+        def __init__(self, session):
+            super().__init__(AsyncEagerAuthorModel, session)
+            self.default_options = [joinedload(AsyncEagerAuthorModel.books)]
+
+    repo = AuthorRepositoryWithDefaults(session=async_db_test)
+
+    authors = await repo.find()
+
+    assert len(authors) == 2
+    total_books = sum(len(author.books) for author in authors)
+    assert total_books == 3

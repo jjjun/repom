@@ -204,6 +204,8 @@ Alternatively, set `config.autoflush = True` in the application's
 `CONFIG_HOOK` to restore SQLAlchemy's default query-time flush behavior.
 
 **関連モデルの取得（N+1 問題の解決）** については [上級編](repository_advanced_guide.md#eager-loadingn1問題の解決) を参照してください。
+`options` にコレクション関連への `joinedload()` を渡した場合も、結果は
+`Result.unique()` で重複排除されるため、各レコードは1回だけ返ります。
 
 ### Update（更新）
 

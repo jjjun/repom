@@ -13,8 +13,8 @@ SoftDeletableMixin と BaseRepository の論理削除機能をテストします
 
 import pytest
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship, joinedload
 from repom.models.base_model import BaseModel
 from repom.repositories import AsyncBaseRepository, BaseRepository
 from repom.mixins import SoftDeletableMixin
@@ -33,6 +33,24 @@ class NormalTestModel(BaseModel):
     __tablename__ = "normal_test_items"
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class SoftDeleteParentModel(BaseModel, SoftDeletableMixin):
+    """論理削除対応かつコレクション関連を持つテストモデル"""
+    __tablename__ = "soft_delete_test_parents"
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    children: Mapped[list["SoftDeleteChildModel"]] = relationship(back_populates="parent")
+
+
+class SoftDeleteChildModel(BaseModel):
+    """SoftDeleteParentModel の子テストモデル"""
+    __tablename__ = "soft_delete_test_children"
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    parent_id: Mapped[int] = mapped_column(ForeignKey("soft_delete_test_parents.id"))
+
+    parent: Mapped[SoftDeleteParentModel] = relationship(back_populates="children")
 
 
 # フィクスチャ定義
@@ -448,6 +466,139 @@ class TestFindDeleted:
         threshold = datetime.now(timezone.utc) - timedelta(days=30)
         results = repo.find_deleted_before(threshold)
         assert len(results) == 0
+
+
+class TestFindDeletedWithJoinedloadCollection:
+    """find_deleted() / find_deleted_before() に collection joinedload を渡した場合のテスト"""
+
+    def test_find_deleted_with_joinedload_collection(self, db_test):
+        """
+        削除済みの親レコードを collection joinedload 付きで取得しても、
+        重複なく1回だけ返り、コレクション全体がロードされることを確認
+        """
+        repo = BaseRepository(SoftDeleteParentModel, db_test)
+
+        parent = SoftDeleteParentModel(name="parent")
+        db_test.add(parent)
+        db_test.flush()
+        db_test.add_all([
+            SoftDeleteChildModel(name="child1", parent_id=parent.id),
+            SoftDeleteChildModel(name="child2", parent_id=parent.id),
+        ])
+        db_test.commit()
+
+        parent.soft_delete()
+        db_test.commit()
+
+        results = repo.find_deleted(options=[joinedload(SoftDeleteParentModel.children)])
+
+        assert len(results) == 1
+        assert len(results[0].children) == 2
+
+    def test_find_deleted_before_with_joinedload_collection(self, db_test):
+        """find_deleted_before() でも collection joinedload が重複なく適用されることを確認"""
+        repo = BaseRepository(SoftDeleteParentModel, db_test)
+
+        parent = SoftDeleteParentModel(name="parent")
+        db_test.add(parent)
+        db_test.flush()
+        db_test.add_all([
+            SoftDeleteChildModel(name="child1", parent_id=parent.id),
+            SoftDeleteChildModel(name="child2", parent_id=parent.id),
+        ])
+        db_test.commit()
+
+        parent.deleted_at = datetime.now(timezone.utc) - timedelta(days=31)
+        db_test.commit()
+
+        threshold = datetime.now(timezone.utc) - timedelta(days=30)
+        results = repo.find_deleted_before(
+            threshold,
+            options=[joinedload(SoftDeleteParentModel.children)]
+        )
+
+        assert len(results) == 1
+        assert len(results[0].children) == 2
+
+    def test_find_deleted_with_joinedload_collection_empty_result(self, db_test):
+        """削除済みレコードが存在しない場合、collection joinedload 指定でも空リストが返ることを確認"""
+        repo = BaseRepository(SoftDeleteParentModel, db_test)
+
+        parent = SoftDeleteParentModel(name="active_parent")
+        db_test.add(parent)
+        db_test.commit()
+
+        results = repo.find_deleted(options=[joinedload(SoftDeleteParentModel.children)])
+
+        assert results == []
+
+
+class TestAsyncFindDeletedWithJoinedloadCollection:
+    """非同期版 find_deleted() / find_deleted_before() に collection joinedload を渡した場合のテスト"""
+
+    @pytest.mark.asyncio
+    async def test_find_deleted_with_joinedload_collection(self, async_db_test):
+        """
+        削除済みの親レコードを collection joinedload 付きで取得しても、
+        重複なく1回だけ返り、コレクション全体がロードされることを確認
+        """
+        repo = AsyncBaseRepository(SoftDeleteParentModel, async_db_test)
+
+        parent = SoftDeleteParentModel(name="parent")
+        async_db_test.add(parent)
+        await async_db_test.flush()
+        async_db_test.add_all([
+            SoftDeleteChildModel(name="child1", parent_id=parent.id),
+            SoftDeleteChildModel(name="child2", parent_id=parent.id),
+        ])
+        await async_db_test.commit()
+
+        parent.soft_delete()
+        await async_db_test.commit()
+
+        results = await repo.find_deleted(options=[joinedload(SoftDeleteParentModel.children)])
+
+        assert len(results) == 1
+        assert len(results[0].children) == 2
+
+    @pytest.mark.asyncio
+    async def test_find_deleted_before_with_joinedload_collection(self, async_db_test):
+        """非同期版 find_deleted_before() でも collection joinedload が重複なく適用されることを確認"""
+        repo = AsyncBaseRepository(SoftDeleteParentModel, async_db_test)
+
+        parent = SoftDeleteParentModel(name="parent")
+        async_db_test.add(parent)
+        await async_db_test.flush()
+        async_db_test.add_all([
+            SoftDeleteChildModel(name="child1", parent_id=parent.id),
+            SoftDeleteChildModel(name="child2", parent_id=parent.id),
+        ])
+        await async_db_test.commit()
+
+        parent.deleted_at = datetime.now(timezone.utc) - timedelta(days=31)
+        await async_db_test.commit()
+
+        threshold = datetime.now(timezone.utc) - timedelta(days=30)
+        results = await repo.find_deleted_before(
+            threshold,
+            options=[joinedload(SoftDeleteParentModel.children)]
+        )
+
+        assert len(results) == 1
+        assert len(results[0].children) == 2
+
+    @pytest.mark.asyncio
+    async def test_find_deleted_with_joinedload_collection_empty_result(self, async_db_test):
+        """削除済みレコードが存在しない場合、collection joinedload 指定でも空リストが返ることを確認"""
+        repo = AsyncBaseRepository(SoftDeleteParentModel, async_db_test)
+
+        parent = SoftDeleteParentModel(name="active_parent")
+        async_db_test.add(parent)
+        await async_db_test.commit()
+
+        results = await repo.find_deleted(options=[joinedload(SoftDeleteParentModel.children)])
+
+        assert results == []
 
 
 class TestSoftDeleteIntegration:

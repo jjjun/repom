@@ -288,6 +288,8 @@ SQLAlchemy の `options` パラメータを使用して、N+1 問題を解決で
 - ✅ `find_one()` - 単一レコード取得
 - ✅ `get_by_id()` - ID で単一レコード取得
 - ✅ `get_by()` - カラム条件で取得（単一/複数両対応）
+- ✅ `find_by_ids()` - ID リストで一括取得
+- ✅ `find_deleted()` / `find_deleted_before()` - 削除済みレコードの検索
 
 ### 基本的な使い方
 
@@ -397,6 +399,31 @@ tasks = await repo.find(
 for task in tasks:
     print(task.user.department.name)  # N+1 なし
 ```
+
+### コレクションに対する joinedload
+
+`joinedload()` はコレクション（1対多）関連にも指定できます。`find()` /
+`get_by()` / `get_by_id()` / `find_by_ids()` / `find_deleted()` /
+`find_deleted_before()` は結果を `Result.unique()` で重複排除してから
+返すため、各親レコードは1回だけ、そのコレクション全体を伴って返ります。
+
+```python
+from sqlalchemy.orm import joinedload
+
+# コレクションを JOIN で一括取得
+users = await user_repo.find(
+    options=[joinedload(User.tasks)]
+)
+
+for user in users:  # 各 user は1回だけ
+    for task in user.tasks:  # コレクション全体がロード済み
+        print(task.title)
+```
+
+`unique()` はコレクションを含まないクエリでは無害な no-op なので、既存の
+scalar joinedload / selectinload の挙動には影響しません。副作用として、
+`_base_select()` を override して一対多の関連を eager load せずに JOIN
+した場合に生じる重複行も、同じ仕組みで排除されます。
 
 ### デフォルト Eager Loading（default_options）
 
