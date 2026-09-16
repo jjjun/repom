@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -11,7 +10,7 @@ from pathlib import Path
 from basekit.docker_manager import DockerCommandExecutor
 
 from repom.config import config
-from repom.scripts._backup_utils import run_postgres_via_docker_or_host
+from repom.scripts._backup_utils import build_host_pg_env, run_postgres_via_docker_or_host
 
 VERSION_MISMATCH_HINT = (
     "Hint: PostgreSQL client/server versions appear to differ. Start the "
@@ -29,18 +28,22 @@ class PgConnParams:
     password: str | None = field(repr=False)
     database: str
     container_name: str | None = None
+    sslmode: str | None = None
+    sslrootcert: str | None = None
 
     def __repr__(self) -> str:
         password_display = "***" if self.password else "None"
         return (
             f"{self.__class__.__name__}(host={self.host!r}, port={self.port!r}, "
             f"user={self.user!r}, password={password_display}, "
-            f"database={self.database!r}, container_name={self.container_name!r})"
+            f"database={self.database!r}, container_name={self.container_name!r}, "
+            f"sslmode={self.sslmode!r}, sslrootcert={self.sslrootcert!r})"
         )
 
     @classmethod
     def from_config(cls) -> "PgConnParams":
         """Build connection parameters from the active repom config."""
+        tls = config.postgres_tls_settings()
         return cls(
             host=config.postgres.host,
             port=config.postgres.port,
@@ -48,6 +51,8 @@ class PgConnParams:
             password=config.postgres.password,
             database=config.postgres_db,
             container_name=config.postgres.container.get_container_name(),
+            sslmode=tls.sslmode,
+            sslrootcert=tls.sslrootcert,
         )
 
 
@@ -207,9 +212,7 @@ def _pg_restore_custom_via_host(params: PgConnParams, dump_path: Path) -> PgTool
 
 
 def _run_host_command(command: list[str], params: PgConnParams) -> subprocess.CompletedProcess:
-    env = os.environ.copy()
-    if params.password is not None:
-        env["PGPASSWORD"] = params.password
+    env = build_host_pg_env(params.password, params.sslmode, params.sslrootcert)
 
     try:
         return subprocess.run(

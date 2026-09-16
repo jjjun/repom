@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from repom.config import PostgresTlsSettings
 from repom.scripts import db_restore
 from repom.scripts._backup_utils import ChecksumError, write_checksum
 
@@ -39,7 +40,7 @@ def _make_popen(gunzip_returncode=0, gunzip_stderr=b"", psql_returncode=0, psql_
     return _popen
 
 
-def _mock_postgres_config(backup_dir):
+def _mock_postgres_config(backup_dir, sslmode="prefer", sslrootcert=None):
     config = MagicMock()
     config.db_backup_path = str(backup_dir)
     config.postgres.host = "localhost"
@@ -47,6 +48,9 @@ def _mock_postgres_config(backup_dir):
     config.postgres.user = "postgres"
     config.postgres.password = "test-password"
     config.postgres_db = "repom_test"
+    config.postgres_tls_settings.return_value = PostgresTlsSettings(
+        sslmode=sslmode, sslrootcert=sslrootcert
+    )
     return config
 
 
@@ -132,3 +136,62 @@ def test_restore_warns_but_proceeds_when_checksum_is_missing(monkeypatch, tmp_pa
 
     captured = capsys.readouterr()
     assert "no checksum recorded" in captured.out.lower()
+
+
+def _make_recording_popen(popen_calls):
+    def _popen(cmd, **kwargs):
+        popen_calls.append((cmd, kwargs))
+        return _FakeProc()
+
+    return _popen
+
+
+def test_restore_postgresql_via_host_passes_tls_settings_in_env(monkeypatch, tmp_path):
+    backup_file = _make_backup_file(tmp_path)
+    config = _mock_postgres_config(
+        tmp_path, sslmode="verify-full", sslrootcert="/etc/ssl/certs/test-ca.pem"
+    )
+    monkeypatch.setattr(db_restore, "config", config)
+    popen_calls = []
+    monkeypatch.setattr(db_restore.subprocess, "Popen", _make_recording_popen(popen_calls))
+
+    db_restore.restore_postgresql_via_host(backup_file)
+
+    psql_cmd, psql_kwargs = next(call for call in popen_calls if call[0][0] == "psql")
+    assert psql_kwargs["env"]["PGPASSWORD"] == "test-password"
+    assert psql_kwargs["env"]["PGSSLMODE"] == "verify-full"
+    assert psql_kwargs["env"]["PGSSLROOTCERT"] == "/etc/ssl/certs/test-ca.pem"
+
+
+def test_restore_postgresql_via_host_overrides_inherited_sslmode(monkeypatch, tmp_path):
+    monkeypatch.setenv("PGSSLMODE", "disable")
+    backup_file = _make_backup_file(tmp_path)
+    config = _mock_postgres_config(tmp_path, sslmode="require")
+    monkeypatch.setattr(db_restore, "config", config)
+    popen_calls = []
+    monkeypatch.setattr(db_restore.subprocess, "Popen", _make_recording_popen(popen_calls))
+
+    db_restore.restore_postgresql_via_host(backup_file)
+
+    psql_cmd, psql_kwargs = next(call for call in popen_calls if call[0][0] == "psql")
+    assert psql_kwargs["env"]["PGSSLMODE"] == "require"
+
+
+def test_restore_postgresql_via_host_raises_before_launching_process_on_invalid_tls(
+    monkeypatch, tmp_path
+):
+    backup_file = _make_backup_file(tmp_path)
+    config = _mock_postgres_config(tmp_path)
+    config.postgres_tls_settings.side_effect = ValueError(
+        "PostgreSQL sslmode 'prefer' is not allowed in prod for a non-local host "
+        "('db.example.com')"
+    )
+    monkeypatch.setattr(db_restore, "config", config)
+    popen_calls = []
+    monkeypatch.setattr(db_restore.subprocess, "Popen", _make_recording_popen(popen_calls))
+
+    with pytest.raises(ValueError, match="sslmode") as exc_info:
+        db_restore.restore_postgresql_via_host(backup_file)
+
+    assert popen_calls == []
+    assert "test-password" not in str(exc_info.value)

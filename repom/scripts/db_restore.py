@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from repom.scripts._backup_utils import (
+    build_host_pg_env,
     format_size,
     get_backups,
     open_backup_temp_file,
@@ -124,14 +125,18 @@ def restore_postgresql_via_host(backup_file: Path):
     """
     logger.info(f"Starting PostgreSQL restore from {backup_file.name}")
 
+    # sslmode / sslrootcert を解決・検証する（db_url と同じロジックを共有）。
+    # subprocess を起動する前に検証することで、prod での弱い sslmode を
+    # プロセス起動前に拒否する。
+    tls = config.postgres_tls_settings()
+
     try:
         if not verify_checksum(backup_file):
             logger.warning(f"No checksum recorded for {backup_file.name}; skipping integrity check")
             print(f"Warning: no checksum recorded for {backup_file.name}; skipping integrity check")
 
-        # Set PGPASSWORD in the environment
-        env = os.environ.copy()
-        env['PGPASSWORD'] = config.postgres.password
+        # Set PGPASSWORD and TLS settings in the environment
+        env = build_host_pg_env(config.postgres.password, tls.sslmode, tls.sslrootcert)
 
         # Restore with gunzip + psql
         logger.debug("Decompressing backup file")

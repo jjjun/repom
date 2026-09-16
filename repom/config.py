@@ -26,6 +26,19 @@ _POSTGRES_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _POSTGRES_WEAK_SSLMODES = frozenset({"disable", "allow", "prefer"})
 
 
+@dataclass(frozen=True)
+class PostgresTlsSettings:
+    """解決済みの PostgreSQL TLS 設定（sslmode と sslrootcert）。
+
+    ``RepomConfig.postgres_tls_settings()`` が返す。db_url と、pg_dump /
+    pg_restore / psql をホストから直接起動する各スクリプトの両方で共有し、
+    同じ既定値・prod 検証ロジックを適用するために使う。
+    """
+
+    sslmode: str
+    sslrootcert: Optional[str]
+
+
 @dataclass
 class RepomConfig(Config):
     package_name: str = field(default="repom", init=False)
@@ -211,6 +224,33 @@ class RepomConfig(Config):
             return "prefer"
         return "require"
 
+    def postgres_tls_settings(self) -> PostgresTlsSettings:
+        """PostgreSQL の TLS 設定を解決・検証する
+
+        postgres_sslmode で解決した sslmode に、prod でリモートホストへ
+        接続する際の weak-mode 検証（disable/allow/prefer を拒否）を適用し、
+        sslmode と sslrootcert をまとめて返す。db_url と、pg_dump /
+        pg_restore / psql をホストから直接起動するスクリプト（PgConnParams
+        や db_backup / db_restore の host 経路）の両方がこのメソッドを呼び、
+        同じ既定値と検証ロジックを共有する。
+
+        Raises:
+            ValueError: prod でリモートホストへ接続し、sslmode が require
+                未満（disable/allow/prefer）の場合。
+        """
+        sslmode = self.postgres_sslmode
+        if (
+            self.exec_env == "prod"
+            and self.postgres.host not in _POSTGRES_LOCAL_HOSTS
+            and sslmode in _POSTGRES_WEAK_SSLMODES
+        ):
+            raise ValueError(
+                f"PostgreSQL sslmode {sslmode!r} is not allowed in prod for "
+                f"a non-local host ({self.postgres.host!r}); set "
+                "config.postgres.sslmode to 'require' or stronger."
+            )
+        return PostgresTlsSettings(sslmode=sslmode, sslrootcert=self.postgres.sslrootcert)
+
     @property
     def db_url(self) -> Optional[str]:
         """データベースURL（SQLite/PostgreSQL 自動切り替え）
@@ -257,21 +297,11 @@ class RepomConfig(Config):
 
         # PostgreSQL
         if self.db_type == "postgres":
-            sslmode = self.postgres_sslmode
-            if (
-                self.exec_env == "prod"
-                and self.postgres.host not in _POSTGRES_LOCAL_HOSTS
-                and sslmode in _POSTGRES_WEAK_SSLMODES
-            ):
-                raise ValueError(
-                    f"PostgreSQL sslmode {sslmode!r} is not allowed in prod for "
-                    f"a non-local host ({self.postgres.host!r}); set "
-                    "config.postgres.sslmode to 'require' or stronger."
-                )
+            tls = self.postgres_tls_settings()
 
-            query = {"sslmode": sslmode}
-            if self.postgres.sslrootcert:
-                query["sslrootcert"] = self.postgres.sslrootcert
+            query = {"sslmode": tls.sslmode}
+            if tls.sslrootcert:
+                query["sslrootcert"] = tls.sslrootcert
 
             url = URL.create(
                 drivername="postgresql+psycopg",

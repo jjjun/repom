@@ -8,6 +8,7 @@ import gzip
 from datetime import datetime
 from pathlib import Path
 from repom.scripts._backup_utils import (
+    build_host_pg_env,
     cleanup_incomplete_backups,
     ensure_backup_dir,
     format_size,
@@ -85,6 +86,11 @@ def backup_postgresql_via_host():
     logger.debug(f"Backup directory: {config.db_backup_path}")
     logger.debug(f"Database: {config.postgres_db}")
 
+    # sslmode / sslrootcert を解決・検証する（db_url と同じロジックを共有）。
+    # subprocess を起動する前に検証することで、prod での弱い sslmode を
+    # プロセス起動前に拒否する。
+    tls = config.postgres_tls_settings()
+
     # Ensure backup directory exists with restrictive permissions
     ensure_backup_dir(config.db_backup_path)
     logger.debug(f"Backup directory created/verified: {config.db_backup_path}")
@@ -102,8 +108,7 @@ def backup_postgresql_via_host():
     # pg_dump コマンド実行
     try:
         logger.info("Starting pg_dump process")
-        env = os.environ.copy()
-        env['PGPASSWORD'] = config.postgres.password
+        env = build_host_pg_env(config.postgres.password, tls.sslmode, tls.sslrootcert)
 
         # pg_dump コマンド
         pg_dump_cmd = [

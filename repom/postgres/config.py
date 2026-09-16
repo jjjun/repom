@@ -36,7 +36,8 @@ class PostgresConfig:
 
     ``sslmode`` と ``sslrootcert`` は libpq の SSL 接続パラメータ。``sslmode``
     が None の場合、``RepomConfig.postgres_sslmode`` が exec_env に応じた
-    既定値（dev/test: prefer, prod: require）を補う。
+    既定値（dev/test: prefer, prod でローカルホスト: prefer, prod でリモート
+    ホスト: require）を補う。
     """
 
     host: str = field(default="127.0.0.1")

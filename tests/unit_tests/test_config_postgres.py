@@ -416,3 +416,63 @@ class TestPostgresSSLMode:
         url = config.db_url
 
         assert "sslmode=prefer" in url
+
+
+class TestPostgresTlsSettings:
+    """postgres_tls_settings() は db_url とホストクライアントツールで共有される"""
+
+    def test_local_default_is_prefer(self):
+        """明示指定なし + ローカルホストは prefer で、sslrootcert は None"""
+        from repom.config import PostgresTlsSettings, RepomConfig
+        config = RepomConfig(exec_env='dev')
+        config.postgres.host = 'localhost'
+
+        tls = config.postgres_tls_settings()
+
+        assert tls == PostgresTlsSettings(sslmode='prefer', sslrootcert=None)
+
+    def test_remote_prod_default_is_require(self):
+        """明示指定なし + prod + リモートホストは require"""
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.postgres.host = 'db.example.com'
+
+        tls = config.postgres_tls_settings()
+
+        assert tls.sslmode == 'require'
+        assert tls.sslrootcert is None
+
+    def test_explicit_verify_full_and_sslrootcert(self):
+        """明示指定した sslmode / sslrootcert がそのまま反映される"""
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.postgres.host = 'db.example.com'
+        config.postgres.sslmode = 'verify-full'
+        config.postgres.sslrootcert = '/etc/ssl/certs/test-ca.pem'
+
+        tls = config.postgres_tls_settings()
+
+        assert tls.sslmode == 'verify-full'
+        assert tls.sslrootcert == '/etc/ssl/certs/test-ca.pem'
+
+    def test_remote_prod_weak_sslmode_raises(self):
+        """prod + リモートホスト + 弱い sslmode は ValueError を送出する"""
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.postgres.host = 'db.example.com'
+        config.postgres.sslmode = 'prefer'
+
+        with pytest.raises(ValueError, match="sslmode"):
+            config.postgres_tls_settings()
+
+    def test_matches_db_url_sslmode(self):
+        """db_url が使う sslmode と postgres_tls_settings() の結果が一致する"""
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.db_type = 'postgres'
+        config.postgres.host = 'db.example.com'
+        config.postgres.sslmode = 'verify-full'
+
+        tls = config.postgres_tls_settings()
+
+        assert f"sslmode={tls.sslmode}" in config.db_url

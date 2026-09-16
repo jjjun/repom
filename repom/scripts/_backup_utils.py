@@ -165,6 +165,30 @@ def rotate_backups(backup_dir: Path, glob_pattern: str, max_keep: int) -> list[P
     return removed_files + old_files
 
 
+def build_host_pg_env(
+    password: str | None,
+    sslmode: str | None = None,
+    sslrootcert: str | None = None,
+) -> dict[str, str]:
+    """Build the environment for a host libpq client tool (pg_dump/pg_restore/psql).
+
+    Shared by pg_dump_tools._run_host_command and the db_backup / db_restore
+    host paths so all three carry the same effective PGPASSWORD / PGSSLMODE /
+    PGSSLROOTCERT instead of each copying os.environ separately. sslmode and
+    sslrootcert are only set when provided, so a caller that has not resolved
+    them (e.g. a directly constructed PgConnParams) leaves any inherited
+    PGSSLMODE / PGSSLROOTCERT untouched.
+    """
+    env = os.environ.copy()
+    if password is not None:
+        env["PGPASSWORD"] = password
+    if sslmode is not None:
+        env["PGSSLMODE"] = sslmode
+    if sslrootcert is not None:
+        env["PGSSLROOTCERT"] = sslrootcert
+    return env
+
+
 def run_postgres_via_docker_or_host(
     *,
     via_docker: Callable[[], T],

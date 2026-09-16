@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from repom.config import RepomConfig
 from repom.scripts import pg_dump_tools
 from repom.scripts.pg_dump_tools import (
     PgConnParams,
@@ -13,7 +14,11 @@ from repom.scripts.pg_dump_tools import (
 )
 
 
-def _params(password: str | None = "secret") -> PgConnParams:
+def _params(
+    password: str | None = "secret",
+    sslmode: str | None = None,
+    sslrootcert: str | None = None,
+) -> PgConnParams:
     return PgConnParams(
         host="localhost",
         port=5435,
@@ -21,6 +26,8 @@ def _params(password: str | None = "secret") -> PgConnParams:
         password=password,
         database="mine_py",
         container_name="managed-postgres",
+        sslmode=sslmode,
+        sslrootcert=sslrootcert,
     )
 
 
@@ -189,3 +196,126 @@ def test_pg_tool_result_redacts_password_and_adds_version_mismatch_hint(
     assert "secret" not in result.stderr
     assert "***" in result.stderr
     assert "matching PostgreSQL client tools" in result.stderr
+
+
+def test_pg_conn_params_repr_includes_tls_fields():
+    params = _params(sslmode="verify-full", sslrootcert="/etc/ssl/certs/test-ca.pem")
+
+    text = repr(params)
+
+    assert "sslmode='verify-full'" in text
+    assert "sslrootcert='/etc/ssl/certs/test-ca.pem'" in text
+    assert "secret" not in text
+
+
+def test_pg_dump_custom_via_host_passes_tls_settings_in_env(monkeypatch, tmp_path: Path):
+    dump_path = tmp_path / "db.dump"
+    params = _params(sslmode="verify-full", sslrootcert="/etc/ssl/certs/test-ca.pem")
+    run_calls = []
+
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(return_value=False),
+    )
+
+    def fake_run(command, **kwargs):
+        run_calls.append((command, kwargs))
+        if command == ["pg_dump", "--version"]:
+            return subprocess.CompletedProcess(command, 0, "pg_dump (PostgreSQL) 16.3\n", "")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(pg_dump_tools.subprocess, "run", fake_run)
+
+    pg_dump_custom(params, dump_path)
+
+    command, kwargs = run_calls[-1]
+    assert kwargs["env"]["PGSSLMODE"] == "verify-full"
+    assert kwargs["env"]["PGSSLROOTCERT"] == "/etc/ssl/certs/test-ca.pem"
+    assert "verify-full" not in command
+
+
+def test_pg_dump_custom_via_host_leaves_inherited_sslmode_untouched_without_tls_fields(
+    monkeypatch, tmp_path: Path
+):
+    """directly constructed PgConnParams without sslmode/sslrootcert leaves the
+    inherited libpq environment untouched (compatibility for direct construction)."""
+    monkeypatch.setenv("PGSSLMODE", "disable")
+    dump_path = tmp_path / "db.dump"
+    run_calls = []
+
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(return_value=False),
+    )
+
+    def fake_run(command, **kwargs):
+        run_calls.append((command, kwargs))
+        if command == ["pg_dump", "--version"]:
+            return subprocess.CompletedProcess(command, 0, "pg_dump (PostgreSQL) 16.3\n", "")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(pg_dump_tools.subprocess, "run", fake_run)
+
+    pg_dump_custom(_params(), dump_path)
+
+    command, kwargs = run_calls[-1]
+    assert kwargs["env"]["PGSSLMODE"] == "disable"
+    assert "PGSSLROOTCERT" not in kwargs["env"]
+
+
+class TestPgConnParamsFromConfig:
+    """PgConnParams.from_config() は RepomConfig.postgres_tls_settings() を共有する"""
+
+    def _cfg(self, exec_env="dev", host="localhost", sslmode=None, sslrootcert=None):
+        cfg = RepomConfig(exec_env=exec_env)
+        cfg.db_type = "postgres"
+        cfg.postgres.host = host
+        cfg.postgres.sslmode = sslmode
+        cfg.postgres.sslrootcert = sslrootcert
+        return cfg
+
+    def test_local_default_uses_prefer(self, monkeypatch):
+        monkeypatch.setattr(pg_dump_tools, "config", self._cfg(host="localhost"))
+
+        params = PgConnParams.from_config()
+
+        assert params.sslmode == "prefer"
+        assert params.sslrootcert is None
+
+    def test_remote_prod_default_uses_require(self, monkeypatch):
+        monkeypatch.setattr(
+            pg_dump_tools, "config", self._cfg(exec_env="prod", host="db.example.com")
+        )
+
+        params = PgConnParams.from_config()
+
+        assert params.sslmode == "require"
+
+    def test_explicit_verify_full_and_sslrootcert(self, monkeypatch):
+        monkeypatch.setattr(
+            pg_dump_tools,
+            "config",
+            self._cfg(
+                exec_env="prod",
+                host="db.example.com",
+                sslmode="verify-full",
+                sslrootcert="/etc/ssl/certs/test-ca.pem",
+            ),
+        )
+
+        params = PgConnParams.from_config()
+
+        assert params.sslmode == "verify-full"
+        assert params.sslrootcert == "/etc/ssl/certs/test-ca.pem"
+
+    def test_remote_prod_weak_sslmode_raises_before_process(self, monkeypatch):
+        monkeypatch.setattr(
+            pg_dump_tools,
+            "config",
+            self._cfg(exec_env="prod", host="db.example.com", sslmode="prefer"),
+        )
+
+        with pytest.raises(ValueError, match="sslmode"):
+            PgConnParams.from_config()
