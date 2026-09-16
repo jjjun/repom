@@ -51,9 +51,9 @@ final values.
 ## Custom SQLAlchemy types
 
 Reusable types live in [`repom/custom_types`](../../../repom/custom_types).
-They include date/time conversion helpers, JSON-backed values, and encoded
-array helpers. Import a concrete type from its module and inspect its
-implementation and tests before selecting it for a persistent schema:
+They include date/time conversion helpers and JSON-backed values. Import a
+concrete type from its module and inspect its implementation and tests before
+selecting it for a persistent schema:
 
 ```python
 from sqlalchemy.orm import Mapped, mapped_column
@@ -79,6 +79,18 @@ the stored instant correct even on backends that cannot retain a UTC offset
 (SQLite stores the wall-clock component only). On read, a naive value coming
 back from such a backend is labelled `timezone.utc`; a value that already
 carries tzinfo (for example PostgreSQL `timestamptz`) is returned unchanged.
+
+`ISO8601DateTime` (`impl = DateTime`) stores a `datetime` using the dialect's
+native `DateTime` column type; it does not emit an ISO 8601 string. Binding
+passes a `datetime` value through unchanged (`None` stays `None`; any other
+type raises `ValueError`), and reading passes the dialect's `datetime` result
+through unchanged, only parsing with `datetime.fromisoformat()` when the
+driver hands back a `str`. `ISO8601DateTimeStr` (`impl = String`) is the
+distinct string-storage type: it serializes a `datetime` with `.isoformat()`
+on bind and parses it back with `datetime.fromisoformat()` on read, so the
+column stores an ISO 8601 string. Choose `ISO8601DateTimeStr` when the schema
+needs a text column; choose `ISO8601DateTime` (or `AutoDateTime`) for a native
+datetime column.
 
 `ListJSON` ships a `listjson_filter(model_column, values)` helper that builds
 filter conditions for "column contains each of these values" queries. Each

@@ -10,12 +10,12 @@ class ISO8601DateTime(TypeDecorator):
     def process_bind_param(self, value, dialect):
         if value is not None:
             if isinstance(value, datetime):
-                return value.isoformat()
+                return value
             else:
                 raise ValueError("Value should be a datetime object.")
         return value
 
     def process_result_value(self, value, dialect):
-        if value is not None:
+        if isinstance(value, str):
             return datetime.fromisoformat(value)
         return value
