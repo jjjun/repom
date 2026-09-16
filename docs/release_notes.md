@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Fixed `AutoDateTime` silently shifting timezone-aware values with a non-UTC
+  offset. `process_bind_param` only attached `timezone.utc` to naive values
+  and passed aware values through unchanged; on a backend that cannot retain
+  an offset (SQLite stores only the wall-clock component of `DateTime`), an
+  input such as `2026-01-01T12:00:00+09:00` came back as
+  `2026-01-01T12:00:00+00:00` — the same wall time relabelled as UTC, nine
+  hours off the original instant. This also affected comparison filters (for
+  example `Model.created_at >= <aware value>`) on SQLite, since the bound
+  value went through the same unconverted path as stored values. Aware values
+  are now normalized with `value.astimezone(timezone.utc)` before binding, so
+  the instant is preserved regardless of the input offset. Naive and `None`
+  inputs, and all `process_result_value` behavior, are unchanged. Rows written
+  before this fix keep their already-shifted wall time; there is no data
+  migration for existing rows.
 - `PostgresConfig.host` and `RedisConfig.host` now default to `127.0.0.1`
   instead of `localhost`. `postgres_generate` / `redis_generate` already
   publish container ports on `127.0.0.1` only, but a client default of

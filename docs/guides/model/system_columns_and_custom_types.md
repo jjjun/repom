@@ -72,6 +72,14 @@ Custom type behavior can affect migration output and cross-database
 compatibility, so applications should add round-trip tests for every database
 engine they support.
 
+`AutoDateTime` normalizes every value to UTC before it reaches the DBAPI: a
+timezone-aware value is converted with `astimezone(timezone.utc)`, and a naive
+value is treated as already UTC and only gets `tzinfo` attached. This keeps
+the stored instant correct even on backends that cannot retain a UTC offset
+(SQLite stores the wall-clock component only). On read, a naive value coming
+back from such a backend is labelled `timezone.utc`; a value that already
+carries tzinfo (for example PostgreSQL `timestamptz`) is returned unchanged.
+
 `ListJSON` ships a `listjson_filter(model_column, values)` helper that builds
 filter conditions for "column contains each of these values" queries. Each
 distinct requested value becomes a correlated `EXISTS` against the
