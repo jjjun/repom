@@ -210,6 +210,41 @@ class TestGetLogger:
         assert (log_file.parent / f"test_{date.today().isoformat()}.log").exists()
 
 
+class TestGetLoggerModuleNaming:
+    """__name__ を渡す通常の呼び出しで "repom." が二重に付かないことを確認する（repom#162）。"""
+
+    def test_get_logger_does_not_double_prefix_repom_names(self):
+        """name が既に "repom" / "repom." の場合はそのまま使われる。"""
+        assert get_logger('repom').name == 'repom'
+        assert get_logger('repom.database').name == 'repom.database'
+
+    def test_database_module_logger_matches_getLogger(self):
+        """repom/database.py の logger は logging.getLogger("repom.database") と同一。"""
+        import repom.database as database_module
+
+        assert database_module.logger.name == 'repom.database'
+        assert database_module.logger is logging.getLogger('repom.database')
+
+    def test_setting_repom_database_level_to_critical_suppresses_records(self, caplog):
+        """logging.getLogger("repom.database") への level 設定が実際に効く。"""
+        import repom.database as database_module
+
+        target_logger = logging.getLogger('repom.database')
+        original_level = target_logger.level
+        try:
+            with caplog.at_level(logging.DEBUG):
+                database_module.logger.info('visible before CRITICAL is set')
+            assert 'visible before CRITICAL is set' in caplog.text
+            caplog.clear()
+
+            target_logger.setLevel(logging.CRITICAL)
+            with caplog.at_level(logging.DEBUG):
+                database_module.logger.info('suppressed by repom.database level')
+            assert 'suppressed by repom.database level' not in caplog.text
+        finally:
+            target_logger.setLevel(original_level)
+
+
 class TestDateNamedDailyFileHandler:
     """日付付きアクティブログファイル handler の動作確認。"""
 

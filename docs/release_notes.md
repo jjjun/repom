@@ -289,3 +289,18 @@
   same way when creating version directories. Raised the minimum supported
   Alembic version to `1.16.0`, which added
   `Config.get_version_locations_list()`.
+- BREAKING: `repom.logging.get_logger(name)` no longer adds a second
+  `"repom."` prefix when `name` already equals `"repom"` or starts with
+  `"repom."`. Every internal caller passes `__name__`, which already starts
+  with `"repom."`, so loggers were actually named `"repom.repom.database"`,
+  `"repom.repom.utility"`, and so on; module-level configuration such as
+  `logging.getLogger("repom.database").setLevel(...)` had no effect on them.
+  Those loggers are now named `"repom.<module>"` as documented. Callers that
+  pass a short name unrelated to `"repom"` keep the existing `"repom.<name>"`
+  behavior. Also fixed `config.enable_sqlalchemy_echo` /
+  `config.sqlalchemy_echo_level` not taking effect when set after
+  `repom.database` has already been imported: the setters now call the new
+  `repom.logging.apply_sqlalchemy_echo_state()` to (re)configure the
+  `"sqlalchemy.engine.Engine"` logger immediately, and set its level back to
+  `WARNING` when echo is turned off. Removed the private
+  `_setup_sqlalchemy_logging` from `repom.logging.__all__`.

@@ -406,6 +406,14 @@ class RepomConfig(Config):
     def enable_sqlalchemy_echo(self, value: bool):
         self._enable_sqlalchemy_echo = value
 
+        from repom.logging import apply_sqlalchemy_echo_state
+
+        apply_sqlalchemy_echo_state(
+            enabled=value,
+            echo_level=self._sqlalchemy_echo_level,
+            log_file_path=self.log_file_path,
+        )
+
     @property
     def sqlalchemy_echo_level(self) -> str:
         """SQLAlchemy ログのレベル（INFO/DEBUG）
@@ -440,6 +448,14 @@ class RepomConfig(Config):
         if value not in ("INFO", "DEBUG"):
             raise ValueError(f"Invalid log level: {value}. Must be 'INFO' or 'DEBUG'.")
         self._sqlalchemy_echo_level = value
+
+        from repom.logging import apply_sqlalchemy_echo_state
+
+        apply_sqlalchemy_echo_state(
+            enabled=self._enable_sqlalchemy_echo,
+            echo_level=value,
+            log_file_path=self.log_file_path,
+        )
 
     @property
     def sqlalchemy_hide_parameters(self) -> bool:

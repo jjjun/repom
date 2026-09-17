@@ -228,13 +228,13 @@ class TestLoadModelsIntegration:
     """Test load_models() function integration with config"""
 
     def test_load_models_logs_one_summary_without_model_names(self, caplog):
-        with caplog.at_level('DEBUG', logger='repom.repom.utility'):
+        with caplog.at_level('DEBUG', logger='repom.utility'):
             load_models()
 
         summary_records = [
             record
             for record in caplog.records
-            if record.name == 'repom.repom.utility'
+            if record.name == 'repom.utility'
             and record.levelname == 'DEBUG'
             and record.getMessage().startswith('Loaded ')
         ]
@@ -351,7 +351,7 @@ class TestLoadModelsIntegration:
             config.allowed_package_prefixes = {'tests.fixtures.'}
             config.model_import_strict = False
 
-            with caplog.at_level('ERROR', logger='repom.repom.utility'):
+            with caplog.at_level('ERROR', logger='repom.utility'):
                 failures = load_models()
 
             assert len(failures) == 1
@@ -360,7 +360,7 @@ class TestLoadModelsIntegration:
 
             error_records = [
                 record for record in caplog.records
-                if record.name == 'repom.repom.utility' and record.levelname == 'ERROR'
+                if record.name == 'repom.utility' and record.levelname == 'ERROR'
             ]
             assert len(error_records) == 1
             assert 'tests.fixtures.broken_import.broken_model' in error_records[0].getMessage()
