@@ -14,7 +14,6 @@ from repom.config import config
 from repom.logging import get_logger
 from basekit.docker_manager import DockerCommandExecutor
 import os
-import shutil
 import subprocess
 import gzip
 from datetime import datetime
@@ -27,7 +26,10 @@ from repom.scripts._backup_utils import (
     get_backups,
     open_backup_temp_file,
     run_postgres_via_docker_or_host,
+    snapshot_sqlite_database,
+    sqlite_backup_into,
     verify_checksum,
+    write_checksum,
 )
 
 logger = get_logger(__name__)
@@ -89,22 +91,37 @@ def restore_sqlite(backup_file: Path):
 
     current_db = Path(config.sqlite.db_file_path)
 
-    # If the current DB exists, create an automatic backup of it first
+    # If the current DB exists, create an automatic backup of it first. This
+    # goes through the same snapshot -> partial -> replace -> checksum path
+    # as a regular backup (see db_backup.backup_sqlite), kept outside the
+    # regular rotation glob so a restore never rotates away good backups.
     if current_db.exists():
         now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         auto_backup_name = f"restore_backup_{now_str}.sqlite3"
         auto_backup_path = Path(config.db_backup_path) / auto_backup_name
+        auto_partial_path = auto_backup_path.with_name(f"{auto_backup_path.name}.partial")
 
         logger.info(f"Creating automatic backup of current database: {auto_backup_name}")
         print(f"Creating backup of current database: {auto_backup_name}")
-        with open(current_db, 'rb') as src_file, open_backup_temp_file(auto_backup_path) as dst_file:
-            shutil.copyfileobj(src_file, dst_file)
+        open_backup_temp_file(auto_partial_path).close()
+        try:
+            snapshot_sqlite_database(current_db, auto_partial_path)
+        except Exception:
+            auto_partial_path.unlink(missing_ok=True)
+            raise
+        auto_partial_path.replace(auto_backup_path)
+        write_checksum(auto_backup_path)
         logger.debug(f"Backup saved to {auto_backup_path}")
 
-    # Overwrite the current DB with the backup file
+    # Overwrite the current DB with the backup file through SQLite's backup
+    # API instead of replacing the live file, so the restore goes through
+    # SQLite's own locking, keeps the destination journal mode, and other
+    # connections see the restored content on their next read transaction.
+    # immutable=True: the backup file is static, so this reads a WAL-flagged
+    # legacy backup without SQLite creating -shm/-wal files next to it.
     try:
         logger.info(f"Restoring {backup_file.name} to {current_db}")
-        shutil.copy2(backup_file, current_db)
+        sqlite_backup_into(backup_file, current_db, immutable=True)
         print("\nRestore completed successfully")
         print(f"  Database: {current_db}")
         logger.info("SQLite restore completed successfully")

@@ -1,6 +1,7 @@
 from pathlib import Path
 import hashlib
 import os
+import sqlite3
 import time
 from typing import BinaryIO, Callable, TypeVar
 
@@ -45,6 +46,87 @@ def open_backup_temp_file(path: Path) -> BinaryIO:
     """
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, BACKUP_FILE_MODE)
     return os.fdopen(fd, "wb")
+
+
+def sqlite_source_uri(path: Path, mode: str = "ro", *, immutable: bool = False) -> str:
+    """Return a SQLite URI opening ``path`` in ``mode`` without creating it.
+
+    ``sqlite3.connect()`` silently creates a missing file as a new empty
+    database; connecting through this URI instead makes a missing source
+    surface as sqlite3.OperationalError.
+
+    ``immutable`` tells SQLite the file will not change while open, so a
+    WAL-flagged file can be read without SQLite creating -shm/-wal sidecars
+    next to it. Only safe for a static backup file; a live database's WAL
+    must stay visible, so a live source leaves this False.
+    """
+    uri = f"{path.resolve().as_uri()}?mode={mode}"
+    if immutable:
+        uri += "&immutable=1"
+    return uri
+
+
+def remove_sqlite_sidecars(db_path: Path) -> None:
+    """Remove ``-journal``/``-wal``/``-shm`` sidecars next to ``db_path``.
+
+    Keeps a published backup file self-contained instead of depending on
+    sidecars that a later copy or move would leave behind.
+    """
+    for suffix in ("-journal", "-wal", "-shm"):
+        db_path.with_name(f"{db_path.name}{suffix}").unlink(missing_ok=True)
+
+
+def sqlite_backup_into(
+    source_path: Path,
+    dest_path: Path,
+    *,
+    source_mode: str = "ro",
+    immutable: bool = False,
+    reset_journal_mode: bool = False,
+) -> None:
+    """Copy ``source_path`` into ``dest_path`` via SQLite's online backup API.
+
+    Opens ``source_path`` in ``source_mode`` (default read-only, never
+    creating a missing file) so a writer's committed-but-uncheckpointed WAL
+    pages are included, and connects to ``dest_path`` with a normal
+    read-write connection so SQLite's own locking and journal mode govern
+    the write.
+
+    ``immutable`` opens the source as an immutable SQLite URI; only pass it
+    for a static backup file (see ``sqlite_source_uri``), never for a live
+    database source, or its WAL would be ignored and uncheckpointed rows
+    lost.
+
+    ``reset_journal_mode`` runs ``PRAGMA journal_mode=DELETE`` on ``dest``
+    after the copy. The backup API copies page 1 verbatim, so a snapshot
+    taken from a WAL-mode source would otherwise publish a WAL-flagged
+    file; only set this when publishing a standalone snapshot, never when
+    restoring into a live database whose own journal mode must be kept.
+    """
+    source_conn = sqlite3.connect(
+        sqlite_source_uri(source_path, source_mode, immutable=immutable), uri=True
+    )
+    try:
+        dest_conn = sqlite3.connect(str(dest_path))
+        try:
+            source_conn.backup(dest_conn)
+            if reset_journal_mode:
+                dest_conn.execute("PRAGMA journal_mode=DELETE")
+        finally:
+            dest_conn.close()
+    finally:
+        source_conn.close()
+
+
+def snapshot_sqlite_database(source_path: Path, dest_path: Path) -> None:
+    """Snapshot ``source_path`` into the already-created ``dest_path``.
+
+    Shared by regular SQLite backups and the pre-restore safety snapshot, so
+    both go through SQLite's backup API and end up as self-contained files
+    with no leftover -journal/-wal/-shm sidecars.
+    """
+    sqlite_backup_into(source_path, dest_path, reset_journal_mode=True)
+    remove_sqlite_sidecars(dest_path)
 
 
 def compute_checksum(path: Path) -> str:

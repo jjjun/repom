@@ -2,7 +2,6 @@ from repom.config import config
 from repom.logging import get_logger
 from basekit.docker_manager import DockerCommandExecutor
 import os
-import shutil
 import subprocess
 import gzip
 from datetime import datetime
@@ -15,6 +14,7 @@ from repom.scripts._backup_utils import (
     open_backup_temp_file,
     rotate_backups,
     run_postgres_via_docker_or_host,
+    snapshot_sqlite_database,
     write_checksum,
 )
 
@@ -55,10 +55,17 @@ def backup_sqlite():
     backup_pattern = f"{name}_*{ext}"
     cleanup_stale_backups(backup_dir, backup_pattern)
 
-    # Copy the file, keeping the backup readable only by its owner from creation
-    logger.debug(f"Copying {config.sqlite.db_file_path} to {partial_path}")
-    with open(config.sqlite.db_file_path, 'rb') as src_file, open_backup_temp_file(partial_path) as dst_file:
-        shutil.copyfileobj(src_file, dst_file)
+    # Snapshot through SQLite's backup API, keeping the backup readable only
+    # by its owner from creation, so committed-but-uncheckpointed WAL data is
+    # included instead of copying a raw file that may not be a consistent
+    # point-in-time image while another connection holds it open.
+    logger.debug(f"Backing up {config.sqlite.db_file_path} to {partial_path}")
+    open_backup_temp_file(partial_path).close()
+    try:
+        snapshot_sqlite_database(Path(config.sqlite.db_file_path), partial_path)
+    except Exception:
+        partial_path.unlink(missing_ok=True)
+        raise
     if partial_path.stat().st_size == 0:
         logger.error("Backup file is empty")
         print("Error: Backup file is empty")

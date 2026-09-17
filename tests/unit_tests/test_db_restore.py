@@ -2,13 +2,14 @@ from tests._init import *
 
 import gzip
 import io
+import sqlite3
 from unittest.mock import MagicMock
 
 import pytest
 
 from repom.config import PostgresTlsSettings
 from repom.scripts import db_restore
-from repom.scripts._backup_utils import ChecksumError, write_checksum
+from repom.scripts._backup_utils import ChecksumError, checksum_path, write_checksum
 
 
 class _FakeProc:
@@ -195,3 +196,215 @@ def test_restore_postgresql_via_host_raises_before_launching_process_on_invalid_
 
     assert popen_calls == []
     assert "test-password" not in str(exc_info.value)
+
+
+def _mock_sqlite_config(backup_dir, db_file_path):
+    config = MagicMock()
+    config.db_backup_path = str(backup_dir)
+    config.sqlite.db_file_path = str(db_file_path)
+    return config
+
+
+def _make_sqlite_db(path, row_id, table="items"):
+    conn = sqlite3.connect(str(path))
+    conn.execute(f"CREATE TABLE {table} (id INTEGER)")
+    conn.execute(f"INSERT INTO {table} VALUES (?)", (row_id,))
+    conn.commit()
+    return conn
+
+
+def _make_wal_db_with_uncheckpointed_row(db_path, row_id=42):
+    """Create a WAL-mode SQLite db with a committed row still sitting in the WAL.
+
+    Mirrors the repom#145 repro: wal_autocheckpoint=0, a checkpoint taken
+    before the row is inserted, and the writer connection left open.
+    """
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA wal_autocheckpoint=0")
+    conn.execute("CREATE TABLE items (id INTEGER)")
+    conn.commit()
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    conn.execute("INSERT INTO items VALUES (?)", (row_id,))
+    conn.commit()
+    return conn
+
+
+def test_restore_sqlite_visible_to_open_connection_after_next_query(monkeypatch, tmp_path):
+    current_db = tmp_path / "app.sqlite3"
+    other_conn = _make_sqlite_db(current_db, row_id=1)
+    try:
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        backup_file = backup_dir / "app_20260101_000000.sqlite3"
+        restore_source = _make_sqlite_db(backup_file, row_id=99)
+        restore_source.close()
+        write_checksum(backup_file)
+
+        config = _mock_sqlite_config(backup_dir, current_db)
+        monkeypatch.setattr(db_restore, "config", config)
+
+        db_restore.restore_sqlite(backup_file)
+
+        assert other_conn.execute("SELECT id FROM items").fetchall() == [(99,)]
+    finally:
+        other_conn.close()
+
+
+def test_restore_sqlite_pre_restore_snapshot_includes_uncheckpointed_wal_data(monkeypatch, tmp_path):
+    current_db = tmp_path / "app.sqlite3"
+    writer = _make_wal_db_with_uncheckpointed_row(current_db, row_id=42)
+    try:
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        backup_file = backup_dir / "app_20260101_000000.sqlite3"
+        restore_source = _make_sqlite_db(backup_file, row_id=99)
+        restore_source.close()
+        write_checksum(backup_file)
+
+        config = _mock_sqlite_config(backup_dir, current_db)
+        monkeypatch.setattr(db_restore, "config", config)
+
+        db_restore.restore_sqlite(backup_file)
+
+        snapshots = list(backup_dir.glob("restore_backup_*.sqlite3"))
+        assert len(snapshots) == 1
+        assert checksum_path(snapshots[0]).exists()
+
+        snapshot_conn = sqlite3.connect(str(snapshots[0]))
+        try:
+            assert snapshot_conn.execute("SELECT id FROM items").fetchall() == [(42,)]
+        finally:
+            snapshot_conn.close()
+    finally:
+        writer.close()
+
+
+def _sqlite_format_version_bytes(path):
+    """Return header bytes 18-19 (file format write/read version).
+
+    1 means a rollback-journal database, 2 means the file was last written
+    in WAL mode.
+    """
+    with open(path, "rb") as f:
+        f.seek(18)
+        return f.read(2)
+
+
+def test_restore_sqlite_pre_restore_snapshot_publishes_rollback_journal_file(monkeypatch, tmp_path):
+    current_db = tmp_path / "app.sqlite3"
+    writer = _make_wal_db_with_uncheckpointed_row(current_db, row_id=42)
+    try:
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        backup_file = backup_dir / "app_20260101_000000.sqlite3"
+        restore_source = _make_sqlite_db(backup_file, row_id=99)
+        restore_source.close()
+        write_checksum(backup_file)
+
+        config = _mock_sqlite_config(backup_dir, current_db)
+        monkeypatch.setattr(db_restore, "config", config)
+
+        db_restore.restore_sqlite(backup_file)
+
+        snapshots = list(backup_dir.glob("restore_backup_*.sqlite3"))
+        assert len(snapshots) == 1
+        assert _sqlite_format_version_bytes(snapshots[0]) == b"\x01\x01"
+
+        snapshot_conn = sqlite3.connect(str(snapshots[0]))
+        try:
+            snapshot_conn.execute("SELECT id FROM items").fetchall()
+        finally:
+            snapshot_conn.close()
+
+        assert list(backup_dir.glob("*-shm")) == []
+        assert list(backup_dir.glob("*-wal")) == []
+    finally:
+        writer.close()
+
+
+def test_restore_sqlite_from_wal_flagged_backup_leaves_no_sidecars(monkeypatch, tmp_path):
+    current_db = tmp_path / "app.sqlite3"
+    live_conn = _make_sqlite_db(current_db, row_id=1)
+    try:
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        backup_file = backup_dir / "app_20260101_000000.sqlite3"
+
+        # A legacy WAL-flagged backup: created directly with journal_mode=WAL
+        # and closed, mirroring a backup published before this fix.
+        wal_conn = sqlite3.connect(str(backup_file))
+        wal_conn.execute("PRAGMA journal_mode=WAL")
+        wal_conn.execute("CREATE TABLE items (id INTEGER)")
+        wal_conn.execute("INSERT INTO items VALUES (99)")
+        wal_conn.commit()
+        wal_conn.close()
+        write_checksum(backup_file)
+
+        config = _mock_sqlite_config(backup_dir, current_db)
+        monkeypatch.setattr(db_restore, "config", config)
+
+        db_restore.restore_sqlite(backup_file)
+
+        assert list(backup_dir.glob("*-shm")) == []
+        assert list(backup_dir.glob("*-wal")) == []
+    finally:
+        live_conn.close()
+
+
+def test_restore_sqlite_into_live_wal_database_keeps_wal_mode_and_reaches_open_writer(
+    monkeypatch, tmp_path
+):
+    current_db = tmp_path / "app.sqlite3"
+    writer = _make_wal_db_with_uncheckpointed_row(current_db, row_id=1)
+    try:
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        backup_file = backup_dir / "app_20260101_000000.sqlite3"
+        restore_source = _make_sqlite_db(backup_file, row_id=99)
+        restore_source.close()
+        write_checksum(backup_file)
+
+        config = _mock_sqlite_config(backup_dir, current_db)
+        monkeypatch.setattr(db_restore, "config", config)
+
+        db_restore.restore_sqlite(backup_file)
+
+        assert writer.execute("SELECT id FROM items").fetchall() == [(99,)]
+        assert writer.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+
+        fresh_conn = sqlite3.connect(str(current_db))
+        try:
+            assert fresh_conn.execute("SELECT id FROM items").fetchall() == [(99,)]
+            assert fresh_conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        finally:
+            fresh_conn.close()
+    finally:
+        writer.close()
+
+
+def test_restore_sqlite_aborts_on_checksum_mismatch_without_touching_db(monkeypatch, tmp_path):
+    current_db = tmp_path / "app.sqlite3"
+    live_conn = _make_sqlite_db(current_db, row_id=1)
+    try:
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        backup_file = backup_dir / "app_20260101_000000.sqlite3"
+        restore_source = _make_sqlite_db(backup_file, row_id=99)
+        restore_source.close()
+        write_checksum(backup_file)
+
+        # Corrupt the file after recording its checksum.
+        with open(backup_file, "ab") as f:
+            f.write(b"garbage")
+
+        config = _mock_sqlite_config(backup_dir, current_db)
+        monkeypatch.setattr(db_restore, "config", config)
+
+        with pytest.raises(ChecksumError):
+            db_restore.restore_sqlite(backup_file)
+
+        assert live_conn.execute("SELECT id FROM items").fetchall() == [(1,)]
+        assert list(backup_dir.glob("restore_backup_*.sqlite3")) == []
+    finally:
+        live_conn.close()
