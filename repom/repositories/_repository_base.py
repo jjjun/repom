@@ -150,6 +150,20 @@ class RepositoryBase(Generic[T]):
         """
         return has_soft_delete(self.model)
 
+    def _append_soft_delete_filter(self, filters: list, include_deleted: bool = False) -> None:
+        """論理削除フィルタ（deleted_at IS NULL）を filters に追加する（in-place）
+
+        モデルが論理削除に対応し、かつ include_deleted が False の場合のみ
+        追加する。find / count / find_by_ids / bulk_delete など、論理削除
+        フィルタを組み立てる全ての箇所で共通して使う。
+
+        Args:
+            filters (list): フィルタ条件のリスト。ここに直接追加する。
+            include_deleted (bool): 削除済みレコードも含めるか（デフォルト: False）
+        """
+        if self._has_soft_delete() and not include_deleted:
+            filters.append(self.model.deleted_at.is_(None))
+
     def _uses_internal_session(self, session) -> bool:
         """``session`` が ``_session_scope()`` の内部生成セッションか判定する。
 

@@ -2,7 +2,6 @@ from datetime import datetime
 from typing import Callable, Generic, List, Optional, TypeVar
 
 from sqlalchemy import and_
-from sqlalchemy.exc import SQLAlchemyError
 
 import logging
 
@@ -23,8 +22,7 @@ class _SoftDeleteQueryBuilder(Generic[T]):
     def _get_by_id_query(self, id: int, include_deleted: bool = False):
         """ID 指定で 1 件取得するクエリを構築する。"""
         filters = [self.model.id == id]
-        if self._has_soft_delete() and not include_deleted:
-            filters.append(self.model.deleted_at.is_(None))
+        self._append_soft_delete_filter(filters, include_deleted)
 
         return self._base_select().where(and_(*filters)).limit(1)
 
@@ -84,18 +82,9 @@ class SoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
             if not item:
                 return False
 
-            item.soft_delete()
-            using_internal_session = self._uses_internal_session(session)
-            try:
-                if using_internal_session:
-                    session.commit()
-                else:
-                    session.flush()
-                return True
-            except SQLAlchemyError:
-                if using_internal_session:
-                    session.rollback()
-                raise
+            with self._commit_or_flush(session):
+                item.soft_delete()
+            return True
 
     def restore(self, id: int) -> bool:
         """削除を復元
@@ -127,18 +116,9 @@ class SoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
             if not item or not item.is_deleted:
                 return False
 
-            item.restore()
-            using_internal_session = self._uses_internal_session(session)
-            try:
-                if using_internal_session:
-                    session.commit()
-                else:
-                    session.flush()
-                return True
-            except SQLAlchemyError:
-                if using_internal_session:
-                    session.rollback()
-                raise
+            with self._commit_or_flush(session):
+                item.restore()
+            return True
 
     def permanent_delete(self, id: int) -> bool:
         """物理削除
@@ -160,32 +140,17 @@ class SoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
             if repo.permanent_delete(1):
                 print("物理削除成功")
         """
-        # 削除済みレコードも含めて取得
-        if self._has_soft_delete():
-            item = self.get_by_id(id, include_deleted=True)
-        else:
-            item = self.get_by_id(id)
-
-        if not item:
-            return False
-
         with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
-            try:
-                managed_item = session.merge(item)
-                session.delete(managed_item)
-                if using_internal_session:
-                    session.commit()
-                else:
-                    session.flush()
-                logger.warning(
-                    f"Permanently deleted: {self.model.__name__} id={id}"
-                )
-                return True
-            except SQLAlchemyError:
-                if using_internal_session:
-                    session.rollback()
-                raise
+            item = self._get_by_id_in_session(session, id, include_deleted=True)
+            if not item:
+                return False
+
+            with self._commit_or_flush(session):
+                session.delete(item)
+            logger.warning(
+                f"Permanently deleted: {self.model.__name__} id={id}"
+            )
+            return True
 
     def _get_by_id_in_session(self, session, id: int, include_deleted: bool = False) -> Optional[T]:
         query = self._get_by_id_query(id, include_deleted=include_deleted)
@@ -280,18 +245,9 @@ class AsyncSoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
             if not item:
                 return False
 
-            item.soft_delete()
-            using_internal_session = self._uses_internal_session(session)
-            try:
-                if using_internal_session:
-                    await session.commit()
-                else:
-                    await session.flush()
-                return True
-            except SQLAlchemyError:
-                if using_internal_session:
-                    await session.rollback()
-                raise
+            async with self._commit_or_flush(session):
+                item.soft_delete()
+            return True
 
     async def restore(self, id: int) -> bool:
         """削除を復元
@@ -323,18 +279,9 @@ class AsyncSoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
             if not item or not item.is_deleted:
                 return False
 
-            item.restore()
-            using_internal_session = self._uses_internal_session(session)
-            try:
-                if using_internal_session:
-                    await session.commit()
-                else:
-                    await session.flush()
-                return True
-            except SQLAlchemyError:
-                if using_internal_session:
-                    await session.rollback()
-                raise
+            async with self._commit_or_flush(session):
+                item.restore()
+            return True
 
     async def permanent_delete(self, id: int) -> bool:
         """物理削除
@@ -356,32 +303,17 @@ class AsyncSoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
             if await repo.permanent_delete(1):
                 print("物理削除成功")
         """
-        # 削除済みレコードも含めて取得
-        if self._has_soft_delete():
-            item = await self.get_by_id(id, include_deleted=True)
-        else:
-            item = await self.get_by_id(id)
-
-        if not item:
-            return False
-
         async with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
-            try:
-                managed_item = await session.merge(item)
-                await session.delete(managed_item)
-                if using_internal_session:
-                    await session.commit()
-                else:
-                    await session.flush()
-                logger.warning(
-                    f"Permanently deleted: {self.model.__name__} id={id}"
-                )
-                return True
-            except SQLAlchemyError:
-                if using_internal_session:
-                    await session.rollback()
-                raise
+            item = await self._get_by_id_in_session(session, id, include_deleted=True)
+            if not item:
+                return False
+
+            async with self._commit_or_flush(session):
+                await session.delete(item)
+            logger.warning(
+                f"Permanently deleted: {self.model.__name__} id={id}"
+            )
+            return True
 
     async def _get_by_id_in_session(self, session, id: int, include_deleted: bool = False) -> Optional[T]:
         query = self._get_by_id_query(id, include_deleted=include_deleted)

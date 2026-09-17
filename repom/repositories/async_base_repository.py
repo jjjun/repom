@@ -91,6 +91,37 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             self._scoped_session_var.reset(token)
             await session_generator.aclose()
 
+    @asynccontextmanager
+    async def _commit_or_flush(self, session):
+        """内部セッションは commit、外部セッションは flush する共通処理。
+
+        save / saves / bulk_insert / bulk_update / bulk_delete / remove と
+        soft_delete / restore / permanent_delete（_soft_delete.py）に共通する
+        書き込み系の commit-flush-rollback パターンを一元化するコンテキスト
+        マネージャ。SQLAlchemyError が発生した場合は内部セッションのみ
+        rollback してから re-raise する（外部セッションの rollback は呼び出し
+        元の責任のため行わない）。
+
+        Args:
+            session: 対象のセッション（_session_scope() で取得したもの）
+
+        Yields:
+            bool: session が _session_scope() の内部生成セッションかどうか
+                （using_internal_session）。commit/flush 後の後処理
+                （refresh など）を内部セッション限定にする際に使う。
+        """
+        using_internal_session = self._uses_internal_session(session)
+        try:
+            yield using_internal_session
+            if using_internal_session:
+                await session.commit()
+            else:
+                await session.flush()
+        except SQLAlchemyError:
+            if using_internal_session:
+                await session.rollback()
+            raise
+
     async def _execute_scalars_unique(self, query) -> List[T]:
         """モデルエンティティを返す SELECT を実行し、重複のない結果を返す。
 
@@ -222,19 +253,11 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
                   自動的にデータベースから再読み込みが発生するため。
         """
         async with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
-            try:
+            async with self._commit_or_flush(session) as using_internal_session:
                 session.add(instance)
-                if using_internal_session:
-                    await session.commit()
-                    # 非同期環境では refresh() が必須（AutoDateTime等のDB自動設定値を反映）
-                    await session.refresh(instance)
-                else:
-                    await session.flush()
-            except SQLAlchemyError:
-                if using_internal_session:
-                    await session.rollback()
-                raise
+            if using_internal_session:
+                # 非同期環境では refresh() が必須（AutoDateTime等のDB自動設定値を反映）
+                await session.refresh(instance)
         return instance
 
     async def dict_save(self, data: Dict) -> T:
@@ -260,20 +283,12 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             保存後に get_by_id() で再取得する方法も検討してください。
         """
         async with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
-            try:
+            async with self._commit_or_flush(session) as using_internal_session:
                 session.add_all(instances)
-                if using_internal_session:
-                    await session.commit()
-                    # 非同期環境では各インスタンスの refresh() が必須
-                    for instance in instances:
-                        await session.refresh(instance)
-                else:
-                    await session.flush()
-            except SQLAlchemyError:
-                if using_internal_session:
-                    await session.rollback()
-                raise
+            if using_internal_session:
+                # 非同期環境では各インスタンスの refresh() が必須
+                for instance in instances:
+                    await session.refresh(instance)
 
     async def dict_saves(self, data_list: List[Dict]) -> None:
         """Listの中に入ったdict型のデータをモデルインスタンスにして保存
@@ -291,19 +306,11 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
 
         instances = list(objects)
         async with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
-            try:
+            async with self._commit_or_flush(session) as using_internal_session:
                 session.add_all(instances)
-                if using_internal_session:
-                    await session.commit()
-                    for instance in instances:
-                        await session.refresh(instance)
-                else:
-                    await session.flush()
-            except SQLAlchemyError:
-                if using_internal_session:
-                    await session.rollback()
-                raise
+            if using_internal_session:
+                for instance in instances:
+                    await session.refresh(instance)
         return instances
 
     async def bulk_update(
@@ -330,9 +337,8 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             )
 
         async with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
             rowcount = 0
-            try:
+            async with self._commit_or_flush(session):
                 for row in values:
                     update_values = dict(row)
                     filters = self._bulk_filters(filter_by)
@@ -350,15 +356,8 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
                         .execution_options(synchronize_session="fetch")
                     )
                     rowcount += result.rowcount or 0
-
-                if using_internal_session:
-                    await session.commit()
-                else:
-                    await session.flush()
-            except SQLAlchemyError:
-                if using_internal_session:
-                    await session.rollback()
-                raise
+            # 同期版と異なり expire_all() は呼ばない: AsyncSession では expire された
+            # 属性への遅延ロードが同期的な I/O を要求して失敗するため。
         return rowcount
 
     async def bulk_delete(
@@ -387,10 +386,10 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             )
 
         async with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
-            try:
+            rowcount = 0
+            async with self._commit_or_flush(session):
                 if self._has_soft_delete():
-                    filters.append(self.model.deleted_at.is_(None))
+                    self._append_soft_delete_filter(filters)
                     statement = (
                         update(self.model)
                         .where(and_(*filters) if filters else true())
@@ -405,14 +404,8 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
                     )
                 result = await session.execute(statement)
                 rowcount = result.rowcount or 0
-                if using_internal_session:
-                    await session.commit()
-                else:
-                    await session.flush()
-            except SQLAlchemyError:
-                if using_internal_session:
-                    await session.rollback()
-                raise
+            # 同期版と異なり expire_all() は呼ばない: AsyncSession では expire された
+            # 属性への遅延ロードが同期的な I/O を要求して失敗するため。
         return rowcount
 
     async def remove(self, instance: T) -> None:
@@ -422,18 +415,9 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             instance (T): 削除するインスタンス
         """
         async with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
-            try:
+            async with self._commit_or_flush(session):
                 managed_instance = await session.merge(instance)
                 await session.delete(managed_instance)
-                if using_internal_session:
-                    await session.commit()
-                else:
-                    await session.flush()
-            except SQLAlchemyError:
-                if using_internal_session:
-                    await session.rollback()
-                raise
 
     async def find(
         self,
@@ -485,19 +469,8 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
                 stacklevel=2,
             )
 
-        query = self._base_select()
-
-        # 論理削除フィルタを追加
         base_filters = filters if filters is not None else self._build_filters(params)
-        all_filters = list(base_filters) if base_filters else []
-        if self._has_soft_delete() and not include_deleted:
-            all_filters.append(self.model.deleted_at.is_(None))
-
-        if all_filters:
-            query = query.where(and_(*all_filters))
-
-        query = self.set_find_option(query, **kwargs)
-        return await self._execute_scalars_unique(query)
+        return await self._find_with_filters(base_filters, include_deleted=include_deleted, **kwargs)
 
     async def _find_with_filters(
         self,
@@ -508,8 +481,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
     ) -> List[T]:
         query = self._base_select()
         all_filters = list(filters)
-        if self._has_soft_delete() and not include_deleted:
-            all_filters.append(self.model.deleted_at.is_(None))
+        self._append_soft_delete_filter(all_filters, include_deleted)
 
         if all_filters:
             query = query.where(and_(*all_filters))
@@ -553,8 +525,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
 
         query = select(func.count()).select_from(self.model)
         all_filters = list(filters) if filters else []
-        if self._has_soft_delete() and not include_deleted:
-            all_filters.append(self.model.deleted_at.is_(None))
+        self._append_soft_delete_filter(all_filters, include_deleted)
 
         if all_filters:
             query = query.where(and_(*all_filters))
@@ -609,11 +580,4 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
 
         # ID フィルタ
         filters = [self.model.id.in_(ids)]
-
-        # 論理削除フィルタ
-        if self._has_soft_delete() and not include_deleted:
-            filters.append(self.model.deleted_at.is_(None))
-
-        query = self._base_select().where(and_(*filters))
-        query = self.set_find_option(query, **kwargs)
-        return await self._execute_scalars_unique(query)
+        return await self._find_with_filters(filters, include_deleted=include_deleted, **kwargs)

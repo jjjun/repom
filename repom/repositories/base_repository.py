@@ -65,6 +65,37 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             self._scoped_session_var.reset(token)
             session_generator.close()
 
+    @contextmanager
+    def _commit_or_flush(self, session):
+        """内部セッションは commit、外部セッションは flush する共通処理。
+
+        save / saves / bulk_insert / bulk_update / bulk_delete / remove と
+        soft_delete / restore / permanent_delete（_soft_delete.py）に共通する
+        書き込み系の commit-flush-rollback パターンを一元化するコンテキスト
+        マネージャ。SQLAlchemyError が発生した場合は内部セッションのみ
+        rollback してから re-raise する（外部セッションの rollback は呼び出し
+        元の責任のため行わない）。
+
+        Args:
+            session: 対象のセッション（_session_scope() で取得したもの）
+
+        Yields:
+            bool: session が _session_scope() の内部生成セッションかどうか
+                （using_internal_session）。commit/flush 後の後処理
+                （refresh・expire_all など）を内部セッション限定にする際に使う。
+        """
+        using_internal_session = self._uses_internal_session(session)
+        try:
+            yield using_internal_session
+            if using_internal_session:
+                session.commit()
+            else:
+                session.flush()
+        except SQLAlchemyError:
+            if using_internal_session:
+                session.rollback()
+            raise
+
     def _execute_scalars_unique(self, query) -> List[T]:
         """モデルエンティティを返す SELECT を実行し、重複のない結果を返す。
 
@@ -189,18 +220,10 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             非同期版（AsyncBaseRepository.save）では refresh() が必須です。
         """
         with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
-            try:
+            with self._commit_or_flush(session) as using_internal_session:
                 session.add(instance)
-                if using_internal_session:
-                    session.commit()
-                    session.refresh(instance)
-                else:
-                    session.flush()
-            except SQLAlchemyError:
-                if using_internal_session:
-                    session.rollback()
-                raise
+            if using_internal_session:
+                session.refresh(instance)
         return instance
 
     def dict_save(self, data: Dict) -> T:
@@ -228,19 +251,11 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             非同期版（AsyncBaseRepository.saves）では各インスタンスの refresh() が必須です。
         """
         with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
-            try:
+            with self._commit_or_flush(session) as using_internal_session:
                 session.add_all(instances)
-                if using_internal_session:
-                    session.commit()
-                    for instance in instances:
-                        session.refresh(instance)
-                else:
-                    session.flush()
-            except SQLAlchemyError:
-                if using_internal_session:
-                    session.rollback()
-                raise
+            if using_internal_session:
+                for instance in instances:
+                    session.refresh(instance)
 
     def dict_saves(self, data_list: List[Dict]) -> None:
         """
@@ -259,19 +274,11 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
 
         instances = list(objects)
         with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
-            try:
+            with self._commit_or_flush(session) as using_internal_session:
                 session.add_all(instances)
-                if using_internal_session:
-                    session.commit()
-                    for instance in instances:
-                        session.refresh(instance)
-                else:
-                    session.flush()
-            except SQLAlchemyError:
-                if using_internal_session:
-                    session.rollback()
-                raise
+            if using_internal_session:
+                for instance in instances:
+                    session.refresh(instance)
         return instances
 
     def bulk_update(self, values: Sequence[dict], *, filter_by: dict | None = None, allow_unfiltered: bool = False) -> int:
@@ -296,9 +303,8 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             )
 
         with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
             rowcount = 0
-            try:
+            with self._commit_or_flush(session):
                 for row in values:
                     update_values = dict(row)
                     filters = self._bulk_filters(filter_by)
@@ -316,16 +322,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
                         .execution_options(synchronize_session="fetch")
                     )
                     rowcount += result.rowcount or 0
-
-                if using_internal_session:
-                    session.commit()
-                else:
-                    session.flush()
-                session.expire_all()
-            except SQLAlchemyError:
-                if using_internal_session:
-                    session.rollback()
-                raise
+            session.expire_all()
         return rowcount
 
     def bulk_delete(
@@ -354,10 +351,10 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             )
 
         with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
-            try:
+            rowcount = 0
+            with self._commit_or_flush(session):
                 if self._has_soft_delete():
-                    filters.append(self.model.deleted_at.is_(None))
+                    self._append_soft_delete_filter(filters)
                     statement = (
                         update(self.model)
                         .where(and_(*filters) if filters else true())
@@ -372,15 +369,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
                     )
                 result = session.execute(statement)
                 rowcount = result.rowcount or 0
-                if using_internal_session:
-                    session.commit()
-                else:
-                    session.flush()
-                session.expire_all()
-            except SQLAlchemyError:
-                if using_internal_session:
-                    session.rollback()
-                raise
+            session.expire_all()
         return rowcount
 
     def remove(self, instance: T) -> None:
@@ -391,18 +380,9 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             instance (T): 削除するインスタンス
         """
         with self._session_scope() as session:
-            using_internal_session = self._uses_internal_session(session)
-            try:
+            with self._commit_or_flush(session):
                 managed_instance = session.merge(instance)
                 session.delete(managed_instance)
-                if using_internal_session:
-                    session.commit()
-                else:
-                    session.flush()
-            except SQLAlchemyError:
-                if using_internal_session:
-                    session.rollback()
-                raise
 
     def find(
         self,
@@ -453,19 +433,8 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
                 stacklevel=2,
             )
 
-        query = self._base_select()
-
-        # 論理削除フィルタを追加
         base_filters = filters if filters is not None else self._build_filters(params)
-        all_filters = list(base_filters) if base_filters else []
-        if self._has_soft_delete() and not include_deleted:
-            all_filters.append(self.model.deleted_at.is_(None))
-
-        if all_filters:
-            query = query.where(and_(*all_filters))
-
-        query = self.set_find_option(query, **kwargs)
-        return self._execute_scalars_unique(query)
+        return self._find_with_filters(base_filters, include_deleted=include_deleted, **kwargs)
 
     def _find_with_filters(
         self,
@@ -476,8 +445,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
     ) -> List[T]:
         query = self._base_select()
         all_filters = list(filters)
-        if self._has_soft_delete() and not include_deleted:
-            all_filters.append(self.model.deleted_at.is_(None))
+        self._append_soft_delete_filter(all_filters, include_deleted)
 
         if all_filters:
             query = query.where(and_(*all_filters))
@@ -521,8 +489,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
         """
         query = select(func.count()).select_from(self.model)
         all_filters = list(filters) if filters else []
-        if self._has_soft_delete() and not include_deleted:
-            all_filters.append(self.model.deleted_at.is_(None))
+        self._append_soft_delete_filter(all_filters, include_deleted)
 
         if all_filters:
             query = query.where(and_(*all_filters))
@@ -567,11 +534,4 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
 
         # ID フィルタ
         filters = [self.model.id.in_(ids)]
-
-        # 論理削除フィルタ
-        if self._has_soft_delete() and not include_deleted:
-            filters.append(self.model.deleted_at.is_(None))
-
-        query = self._base_select().where(and_(*filters))
-        query = self.set_find_option(query, **kwargs)
-        return self._execute_scalars_unique(query)
+        return self._find_with_filters(filters, include_deleted=include_deleted, **kwargs)

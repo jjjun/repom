@@ -417,3 +417,51 @@ async def test_async_permanent_delete_does_not_rollback_external_session(monkeyp
         result = await session.execute(stmt)
         found = result.scalar_one_or_none()
         assert found is not None
+
+
+# ---------------------------------------------------------------------------
+# does_not_flush_when_not_found: 存在しない ID では flush/commit をしない
+# （呼び出し元セッションが保持する未flush な pending 変更を巻き込まない）
+# ---------------------------------------------------------------------------
+
+
+def test_soft_delete_missing_id_does_not_flush_external_session(db_test, monkeypatch):
+    """外部セッション: 存在しない ID の soft_delete() は flush を呼ばない
+    （見つからない場合は commit/flush の前に False を返すことの回帰ガード）"""
+    with get_reusable_sync_transaction() as session:
+        repo = ExternalSessionSoftDeleteRepository(session)
+
+        unrelated = ExternalSessionSoftDeleteModel(name="soft_delete_missing_id_unrelated_pending")
+        session.add(unrelated)
+
+        original_flush = session.flush
+
+        def _boom(*args, **kwargs):
+            raise AssertionError("flush should not be called when id is not found")
+
+        monkeypatch.setattr(session, "flush", _boom)
+        try:
+            assert repo.soft_delete(999999999) is False
+        finally:
+            monkeypatch.setattr(session, "flush", original_flush)
+
+
+@pytest.mark.asyncio
+async def test_async_soft_delete_missing_id_does_not_flush_external_session(monkeypatch):
+    """外部セッション（非同期）: 存在しない ID の soft_delete() は flush を呼ばない"""
+    async with _external_async_transaction() as session:
+        repo = AsyncExternalSessionSoftDeleteRepository(session)
+
+        unrelated = ExternalSessionSoftDeleteModel(name="async_soft_delete_missing_id_unrelated_pending")
+        session.add(unrelated)
+
+        original_flush = session.flush
+
+        async def _boom(*args, **kwargs):
+            raise AssertionError("flush should not be called when id is not found")
+
+        monkeypatch.setattr(session, "flush", _boom)
+        try:
+            assert await repo.soft_delete(999999999) is False
+        finally:
+            monkeypatch.setattr(session, "flush", original_flush)

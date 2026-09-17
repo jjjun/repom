@@ -5,6 +5,8 @@ test_repository_pagination_limits.py の全テストケースを非同期版に�
 """
 from tests._init import *
 from unittest.mock import patch
+import sys
+import warnings
 
 from sqlalchemy import Integer
 from sqlalchemy.orm import Mapped, mapped_column
@@ -141,6 +143,19 @@ async def test_omitted_limit_returns_all_rows_and_logs_warning(seeded_repo):
         results = await seeded_repo.find()
 
     assert len(results) == 5
+
+
+@pytest.mark.asyncio
+async def test_omitted_limit_warning_points_to_caller(seeded_repo):
+    """find() の RuntimeWarning が呼び出し元のファイル・行を指すことを確認
+    （_find_with_filters() への委譲後も stacklevel=2 が維持されていることの回帰ガード、repom#161）"""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        await seeded_repo.find(); expected_lineno = sys._getframe().f_lineno  # noqa: E702
+
+    assert len(caught) == 1
+    assert caught[0].filename == __file__
+    assert caught[0].lineno == expected_lineno
 
 
 @pytest.mark.asyncio
