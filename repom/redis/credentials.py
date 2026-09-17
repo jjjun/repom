@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import os
-import stat
 import subprocess
-import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Callable, Iterator
+from typing import Iterator
 
 from repom.config import config
-
-
-CommandRunner = Callable[..., subprocess.CompletedProcess]
+from repom.credentials import (
+    CommandRunner,
+    mask_secret as _mask_secret,
+    run_masked_command,
+    secret_env_file,
+)
 
 
 class RedisCredentialRotationError(RuntimeError):
@@ -56,11 +56,7 @@ class RedisCredentialRotationResult:
 def mask_secret(text: str, *secrets: str | None) -> str:
     """Mask all non-empty secrets in text."""
 
-    masked = text
-    for secret in secrets:
-        if secret:
-            masked = masked.replace(secret, "***")
-    return masked
+    return _mask_secret(text, secrets)
 
 
 def build_redis_cli_command(
@@ -107,21 +103,8 @@ def _rediscli_auth_env_file(password: str | None) -> Iterator[str | None]:
     window in which the password exists on disk as short as possible.
     """
 
-    if not password:
-        yield None
-        return
-
-    fd, path = tempfile.mkstemp(prefix="repom-redis-auth-", suffix=".env")
-    try:
-        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
-        with os.fdopen(fd, "w") as handle:
-            handle.write(f"REDISCLI_AUTH={password}\n")
+    with secret_env_file("REDISCLI_AUTH", password, prefix="repom-redis-auth-") as path:
         yield path
-    finally:
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            pass
 
 
 def rotate_redis_password(
@@ -139,21 +122,13 @@ def rotate_redis_password(
     if not dry_run:
         with _rediscli_auth_env_file(plan.old_password) as env_file:
             command = build_redis_cli_command(container_name=container_name, env_file=env_file)
-            completed = runner(
+            run_masked_command(
                 command,
+                runner=runner,
+                secrets=secrets,
+                error_type=RedisCredentialRotationError,
+                action="redis-cli rotation",
                 input=input_text,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-
-        if completed.returncode != 0:
-            raise RedisCredentialRotationError(
-                mask_secret(
-                    f"redis-cli rotation failed (exit {completed.returncode}): "
-                    f"command={' '.join(command)} stderr={completed.stderr}",
-                    *secrets,
-                )
             )
     else:
         placeholder_env_file = "<redis-auth-env-file>" if plan.old_password else None

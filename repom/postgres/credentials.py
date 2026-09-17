@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 import argparse
 from dataclasses import dataclass, field
-from typing import Callable, Iterable, Sequence
+from typing import Iterable, Sequence
 
 from repom.config import config
-from repom.credentials import resolve_password
+from repom.credentials import (
+    CommandRunner,
+    mask_secret as _mask_secret,
+    resolve_password,
+    run_masked_command,
+    secret_env_file,
+)
 
 
-CommandRunner = Callable[..., subprocess.CompletedProcess]
+class PostgresCredentialRotationError(RuntimeError):
+    """Raised when a PostgreSQL rotation psql command fails."""
 
 
 class PgAdminCredentialRotationError(RuntimeError):
@@ -114,11 +120,7 @@ def quote_literal(value: str) -> str:
 def mask_secret(text: str, secrets: Iterable[str]) -> str:
     """Mask all non-empty secrets in text."""
 
-    masked = text
-    for secret in secrets:
-        if secret:
-            masked = masked.replace(secret, "***")
-    return masked
+    return _mask_secret(text, secrets)
 
 
 def build_postgres_rotation_steps(
@@ -208,27 +210,35 @@ def build_postgres_rotation_steps(
 def build_postgres_psql_command(
     plan: PostgresCredentialRotationPlan,
     step: SqlStep,
+    *,
+    env_file: str | None = None,
 ) -> tuple[str, ...]:
     """Build a structured docker/psql command for one SQL step.
 
     SQL is sent through stdin by ``rotate_postgres_credentials`` so new
-    passwords do not appear in process arguments.
+    passwords do not appear in process arguments. When ``env_file`` is
+    supplied it is passed to ``docker exec --env-file``, so the container
+    reads PGPASSWORD from that file's contents instead of the value
+    appearing as a docker exec argument or on the host process environment.
     """
 
     container_name = plan.container_name or config.postgres.container.get_container_name()
-    return (
-        "docker",
-        "exec",
-        "-i",
-        container_name,
-        "psql",
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-U",
-        plan.current_user,
-        "-d",
-        step.database,
+    command = ["docker", "exec", "-i"]
+    if env_file:
+        command.extend(["--env-file", env_file])
+    command.extend(
+        [
+            container_name,
+            "psql",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-U",
+            plan.current_user,
+            "-d",
+            step.database,
+        ]
     )
+    return tuple(command)
 
 
 def rotate_postgres_credentials(
@@ -240,18 +250,33 @@ def rotate_postgres_credentials(
     """Execute or dry-run a PostgreSQL credential rotation plan."""
 
     steps = build_postgres_rotation_steps(plan)
-    commands = tuple(build_postgres_psql_command(plan, step) for step in steps)
-    secrets = (plan.current_password or "", plan.new_password)
+    secrets = (plan.current_password, plan.new_password)
     masked_output = tuple(
         mask_secret(f"{step.database}: {step.sql}", secrets) for step in steps
     )
 
     if not dry_run:
-        env = os.environ.copy()
-        if plan.current_password:
-            env["PGPASSWORD"] = plan.current_password
-        for command, step in zip(commands, steps):
-            runner(command, check=True, text=True, env=env, input=step.sql)
+        with secret_env_file(
+            "PGPASSWORD", plan.current_password, prefix="repom-postgres-auth-"
+        ) as env_file:
+            commands = tuple(
+                build_postgres_psql_command(plan, step, env_file=env_file) for step in steps
+            )
+            for command, step in zip(commands, steps):
+                run_masked_command(
+                    command,
+                    runner=runner,
+                    secrets=secrets,
+                    error_type=PostgresCredentialRotationError,
+                    action="psql rotation",
+                    input=step.sql,
+                )
+    else:
+        placeholder_env_file = "<postgres-auth-env-file>" if plan.current_password else None
+        commands = tuple(
+            build_postgres_psql_command(plan, step, env_file=placeholder_env_file)
+            for step in steps
+        )
 
     return CredentialRotationResult(
         dry_run=dry_run,
@@ -304,15 +329,13 @@ def rotate_pgadmin_password(
     secrets = (plan.new_password,)
     masked_command = mask_secret(" ".join(command), secrets)
     if not dry_run:
-        completed = runner(command, check=False, capture_output=True, text=True)
-        if completed.returncode != 0:
-            raise PgAdminCredentialRotationError(
-                mask_secret(
-                    f"pgAdmin update-user failed (exit {completed.returncode}): "
-                    f"command={' '.join(command)} stderr={completed.stderr}",
-                    secrets,
-                )
-            )
+        run_masked_command(
+            command,
+            runner=runner,
+            secrets=secrets,
+            error_type=PgAdminCredentialRotationError,
+            action="pgAdmin update-user",
+        )
     masked_commands = tuple(mask_secret(part, secrets) for part in command)
     return CredentialRotationResult(
         dry_run=dry_run,

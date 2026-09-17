@@ -1,6 +1,7 @@
 """Tests for PostgreSQL and pgAdmin credential helpers."""
 
 from io import StringIO
+import os
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -9,6 +10,7 @@ import pytest
 from repom.postgres.credentials import (
     PgAdminCredentialRotationError,
     PgAdminCredentialRotationPlan,
+    PostgresCredentialRotationError,
     PostgresCredentialRotationPlan,
     build_pgadmin_update_password_command,
     build_postgres_rotation_steps,
@@ -69,8 +71,9 @@ def test_replacement_user_plan_is_non_destructive_and_grants_access():
     assert "DROP ROLE" not in sql
 
 
-def test_postgres_rotation_executes_structured_commands_with_pgpassword():
+def test_postgres_rotation_executes_structured_commands_through_env_file():
     runner = MagicMock()
+    runner.return_value = MagicMock(returncode=0, stdout="", stderr="")
     plan = PostgresCredentialRotationPlan(
         current_user="repom",
         current_password="old-secret",
@@ -83,21 +86,53 @@ def test_postgres_rotation_executes_structured_commands_with_pgpassword():
 
     command = runner.call_args.args[0]
     kwargs = runner.call_args.kwargs
-    assert command[:4] == ("docker", "exec", "-i", "repom_postgres")
+    assert command[:3] == ("docker", "exec", "-i")
+    assert command[3] == "--env-file"
+    assert command[5] == "repom_postgres"
+    assert "old-secret" not in " ".join(command)
     assert "new-secret" not in " ".join(command)
     assert kwargs["input"] == 'ALTER ROLE "repom" WITH PASSWORD \'new-secret\';'
-    assert kwargs["env"]["PGPASSWORD"] == "old-secret"
-    assert kwargs["check"] is True
+    assert kwargs["check"] is False
+    assert kwargs["capture_output"] is True
+    assert "env" not in kwargs
 
 
-def test_postgres_rotation_still_uses_stdin_and_env():
-    """Regression guard: the PostgreSQL path stays the correct reference pattern.
+def test_postgres_rotation_env_file_holds_pgpassword_only_during_the_call():
+    captured = {}
 
-    Unlike Redis and pgAdmin, PostgreSQL never had a password in argv: the
-    current password travels through the ``PGPASSWORD`` environment variable
-    and the new password travels through stdin as part of the SQL step.
+    def fake_runner(command, **kwargs):
+        env_file = command[command.index("--env-file") + 1]
+        captured["env_file"] = env_file
+        captured["exists_during_call"] = os.path.exists(env_file)
+        with open(env_file, "r", encoding="utf-8") as handle:
+            captured["contents"] = handle.read()
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="old-secret",
+        new_password="new-secret",
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    rotate_postgres_credentials(plan, dry_run=False, runner=fake_runner)
+
+    assert captured["exists_during_call"] is True
+    assert captured["contents"] == "PGPASSWORD=old-secret\n"
+    assert not os.path.exists(captured["env_file"])
+
+
+def test_postgres_rotation_still_uses_stdin_and_env_file():
+    """Regression guard: PostgreSQL passwords never appear in argv.
+
+    The current password travels through a short-lived ``docker exec
+    --env-file`` (mirroring the Redis path's REDISCLI_AUTH handling) instead
+    of the host process environment, and the new password travels through
+    stdin as part of the SQL step.
     """
     runner = MagicMock()
+    runner.return_value = MagicMock(returncode=0, stdout="", stderr="")
     plan = PostgresCredentialRotationPlan(
         current_user="repom",
         current_password="sentinel-old-secret",
@@ -112,8 +147,59 @@ def test_postgres_rotation_still_uses_stdin_and_env():
     kwargs = runner.call_args.kwargs
     assert "sentinel-old-secret" not in " ".join(command)
     assert "sentinel-new-secret" not in " ".join(command)
-    assert kwargs["env"]["PGPASSWORD"] == "sentinel-old-secret"
+    assert "--env-file" in command
     assert "sentinel-new-secret" in kwargs["input"]
+
+
+def test_postgres_rotation_failure_masks_password():
+    runner = MagicMock()
+    runner.return_value = MagicMock(
+        returncode=1,
+        stdout="",
+        stderr="ERROR: syntax error near sentinel-new-secret",
+    )
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="sentinel-old-secret",
+        new_password="sentinel-new-secret",
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    with pytest.raises(PostgresCredentialRotationError) as excinfo:
+        rotate_postgres_credentials(plan, dry_run=False, runner=runner)
+
+    assert "sentinel-old-secret" not in str(excinfo.value)
+    assert "sentinel-new-secret" not in str(excinfo.value)
+    assert "***" in str(excinfo.value)
+
+
+def test_postgres_dry_run_shows_env_file_placeholder_when_current_password_set():
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="old-secret",
+        new_password="new-secret",
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    result = rotate_postgres_credentials(plan, dry_run=True)
+
+    assert "--env-file" in result.commands[0]
+    assert "<postgres-auth-env-file>" in result.commands[0]
+
+
+def test_postgres_dry_run_omits_env_file_without_current_password():
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        new_password="new-secret",
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    result = rotate_postgres_credentials(plan, dry_run=True)
+
+    assert "--env-file" not in result.commands[0]
 
 
 def test_pgadmin_update_password_command_uses_setup_py():

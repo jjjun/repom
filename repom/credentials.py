@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import getpass
+import os
+import stat
+import subprocess
 import sys
-from typing import TextIO
+import tempfile
+from contextlib import contextmanager
+from typing import Callable, Iterable, Iterator, Sequence, TextIO
 
 
 def resolve_password(
@@ -58,3 +63,81 @@ def reject_default_credential(value: str | None, *, env_var: str) -> str:
             "a non-functional placeholder."
         )
     return value
+
+
+CommandRunner = Callable[..., subprocess.CompletedProcess]
+
+
+def mask_secret(text: str, secrets: Iterable[str | None]) -> str:
+    """Mask all non-empty secrets in text."""
+
+    masked = text
+    for secret in secrets:
+        if secret:
+            masked = masked.replace(secret, "***")
+    return masked
+
+
+@contextmanager
+def secret_env_file(
+    env_var: str,
+    secret: str | None,
+    *,
+    prefix: str = "repom-secret-",
+) -> Iterator[str | None]:
+    """Yield a 0600 temp file path holding one ``env_var=secret`` line, or None.
+
+    Pass the path to ``docker exec --env-file`` so the container reads the
+    secret from the file's contents instead of the value appearing as a
+    docker exec argument or on the host process environment. The file is
+    removed as soon as the caller is done with it, keeping the window in
+    which the secret exists on disk as short as possible.
+    """
+
+    if not secret:
+        yield None
+        return
+
+    fd, path = tempfile.mkstemp(prefix=prefix, suffix=".env")
+    try:
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        with os.fdopen(fd, "w") as handle:
+            handle.write(f"{env_var}={secret}\n")
+        yield path
+    finally:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+
+def run_masked_command(
+    command: Sequence[str],
+    *,
+    runner: CommandRunner,
+    secrets: Iterable[str | None],
+    error_type: type[Exception],
+    action: str,
+    input: str | None = None,
+) -> subprocess.CompletedProcess:
+    """Run a command, raising ``error_type`` with masked output on failure.
+
+    The command always runs with ``check=False, capture_output=True,
+    text=True`` so a failing step never raises a raw ``CalledProcessError``
+    with unmasked stderr; ``error_type`` is raised instead with the command,
+    exit code, and stderr masked.
+    """
+
+    kwargs: dict[str, object] = {"check": False, "capture_output": True, "text": True}
+    if input is not None:
+        kwargs["input"] = input
+    completed = runner(command, **kwargs)
+    if completed.returncode != 0:
+        raise error_type(
+            mask_secret(
+                f"{action} failed (exit {completed.returncode}): "
+                f"command={' '.join(command)} stderr={completed.stderr}",
+                secrets,
+            )
+        )
+    return completed

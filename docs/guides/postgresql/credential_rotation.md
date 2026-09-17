@@ -83,9 +83,11 @@ new pgAdmin password through `setup.py update-user --password` is not acceptable
 ## Notes
 
 - Rotation output masks passwords.
-- PostgreSQL execution uses `PGPASSWORD` for the current password instead of
-  embedding it in the command line, and sends SQL through stdin so the new
-  password is not placed in the `psql` process arguments.
+- PostgreSQL execution passes `PGPASSWORD` for the current password to the
+  container with `docker exec --env-file`, not the command line or the host
+  process environment: the value is written to a 0600 temporary file that is
+  removed as soon as the rotation finishes. SQL is sent through stdin so the
+  new password is not placed in the `psql` process arguments either.
 - A failed rotation, including the pgAdmin `update-user` argv exposure noted
   above, raises an error with the password masked instead of a raw subprocess
   traceback.
