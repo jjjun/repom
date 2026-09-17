@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Fixed `get_lifespan_manager()` so `FastAPI(lifespan=get_lifespan_manager())`
+  actually works. It previously returned an already-created
+  `_db_manager.lifespan_context()` context manager instance; FastAPI/Starlette
+  call the `lifespan` value with the app and use the result as an async
+  context manager, and calling that instance (itself also a decorator)
+  returned a wrapper function instead, so startup raised `TypeError: 'function'
+  object does not support the asynchronous context manager protocol`.
+  `get_lifespan_manager()` now returns a lifespan callable - the bound
+  `_db_manager.lifespan_context` method, whose `app` parameter is now optional
+  so `async with _db_manager.lifespan_context():` keeps working too.
 - BREAKING: PostgreSQL backups are now named `<postgres_db>_<YYYYmmdd_HHMMSS>.sql.gz`
   (the effective database name from `config.postgres_db`) instead of the fixed
   `db_<YYYYmmdd_HHMMSS>.sql.gz`, in both the host `pg_dump` and Docker exec

@@ -13,10 +13,13 @@ from repom.database import (
     DatabaseManager,
     _db_manager,
 )
+import repom.database as database_module
 from repom.config import config
 from repom.models.base_model import BaseModel
 from contextlib import contextmanager
 import os
+import threading
+import time
 import pytest
 from sqlalchemy import Column, String, Engine
 from sqlalchemy.orm import Session
@@ -219,6 +222,47 @@ class TestDatabaseManager:
         """DatabaseManager から Inspector を取得"""
         inspector = get_inspector()
         assert isinstance(inspector, Inspector)
+
+
+class TestSyncEngineThreadSafety:
+    """get_sync_engine() の check-then-create レースに対する回帰テスト。
+
+    FastAPI は同期の Depends(get_db_session) をスレッドプールで実行するため、
+    ロックが無いと複数スレッドが同時に ``self._sync_engine is None`` を観測し、
+    それぞれ別の Engine（と別のコネクションプール）を作ってしまい、呼び出し元は
+    それらを一切 dispose できない。"""
+
+    def test_concurrent_calls_create_exactly_one_engine(self, monkeypatch):
+        """8 スレッドが同時に get_sync_engine() を呼んでも Engine は1つだけ作られる"""
+        thread_count = 8
+        manager = DatabaseManager()
+        barrier = threading.Barrier(thread_count)
+        real_create_engine = database_module.create_engine
+
+        def slow_create_engine(*args, **kwargs):
+            # レースウィンドウを広げ、ロック無しでは確実に複数 Engine が
+            # 作られるようにする。
+            time.sleep(0.01)
+            return real_create_engine(*args, **kwargs)
+
+        monkeypatch.setattr(database_module, "create_engine", slow_create_engine)
+
+        engines = [None] * thread_count
+
+        def worker(index):
+            barrier.wait()
+            engines[index] = manager.get_sync_engine()
+
+        threads = [
+            threading.Thread(target=worker, args=(i,)) for i in range(thread_count)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len({id(engine) for engine in engines}) == 1
+        manager.dispose_sync()
 
 
 class TestSessionIsolation:

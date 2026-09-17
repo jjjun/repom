@@ -43,6 +43,7 @@ from contextlib import contextmanager, asynccontextmanager  # Only for DatabaseM
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import asyncio
 import ssl
+import threading
 
 from sqlalchemy import create_engine, Engine, inspect
 from sqlalchemy.engine.url import make_url
@@ -190,7 +191,9 @@ class DatabaseManager:
         _async_engine: Cached asynchronous engine instance
         _sync_session_factory: Cached synchronous session factory
         _async_session_factory: Cached asynchronous session factory
-        _lock: Async lock for thread-safe async engine initialization
+        _lock: Thread lock guarding lazy engine/session-factory creation and
+            disposal, so concurrent callers (e.g. FastAPI's sync Depends
+            running in a thread pool) never create more than one engine.
     """
 
     def __init__(self):
@@ -199,7 +202,7 @@ class DatabaseManager:
         self._async_engine: Optional[AsyncEngine] = None
         self._sync_session_factory: Optional[sessionmaker] = None
         self._async_session_factory: Optional[async_sessionmaker] = None
-        self._lock = asyncio.Lock()
+        self._lock = threading.Lock()
 
     # ========================================
     # Sync Engine/Session Management
@@ -220,12 +223,14 @@ class DatabaseManager:
             >>> Base.metadata.create_all(bind=engine)
         """
         if self._sync_engine is None:
-            self._sync_engine = create_engine(
-                config.db_url,
-                **config.engine_kwargs
-            )
-            _warn_if_prod_sslmode_not_enforced()
-            logger.debug(f"Sync engine created: {safe_db_url(config.db_url)}")
+            with self._lock:
+                if self._sync_engine is None:
+                    self._sync_engine = create_engine(
+                        config.db_url,
+                        **config.engine_kwargs
+                    )
+                    _warn_if_prod_sslmode_not_enforced()
+                    logger.debug(f"Sync engine created: {safe_db_url(config.db_url)}")
         return self._sync_engine
 
     def get_sync_session_factory(self) -> sessionmaker:
@@ -237,14 +242,16 @@ class DatabaseManager:
         """
         if self._sync_session_factory is None:
             engine = self.get_sync_engine()
-            # Sync retains SQLAlchemy's expire_on_commit=True default; see
-            # AsyncBaseRepository.save() for the async refresh rationale.
-            self._sync_session_factory = sessionmaker(
-                bind=engine,
-                autocommit=False,
-                # The inherited False default is documented in the repository guide.
-                autoflush=config.autoflush
-            )
+            with self._lock:
+                if self._sync_session_factory is None:
+                    # Sync retains SQLAlchemy's expire_on_commit=True default; see
+                    # AsyncBaseRepository.save() for the async refresh rationale.
+                    self._sync_session_factory = sessionmaker(
+                        bind=engine,
+                        autocommit=False,
+                        # The inherited False default is documented in the repository guide.
+                        autoflush=config.autoflush
+                    )
         return self._sync_session_factory
 
     @contextmanager
@@ -359,10 +366,12 @@ class DatabaseManager:
         Should be called on application shutdown.
         """
         if self._sync_engine is not None:
-            self._sync_engine.dispose()
-            self._sync_engine = None
-            self._sync_session_factory = None
-            logger.debug("Sync engine disposed")
+            with self._lock:
+                if self._sync_engine is not None:
+                    self._sync_engine.dispose()
+                    self._sync_engine = None
+                    self._sync_session_factory = None
+                    logger.debug("Sync engine disposed")
 
     # ========================================
     # Async Engine/Session Management
@@ -372,7 +381,9 @@ class DatabaseManager:
         """
         Get or create the asynchronous database engine.
 
-        Lazy initialization with async lock for thread-safety.
+        Lazy initialization guarded by a thread lock, since the engine may be
+        created from several event loops running on separate threads. The
+        created engine is bound to whichever event loop first uses it.
 
         Returns:
             AsyncEngine: SQLAlchemy asynchronous engine
@@ -383,7 +394,11 @@ class DatabaseManager:
             >>>     await conn.run_sync(Base.metadata.create_all)
         """
         if self._async_engine is None:
-            async with self._lock:
+            # create_async_engine() does not await, so holding a plain
+            # threading.Lock here (instead of asyncio.Lock, which is bound to
+            # the event loop that created it and cannot be shared safely
+            # across event loops running on different threads) is safe.
+            with self._lock:
                 if self._async_engine is None:
                     async_url = self._convert_to_async_uri(config.db_url)
                     async_url, async_engine_kwargs = self._adapt_asyncpg_connect_options(
@@ -391,8 +406,7 @@ class DatabaseManager:
                     )
                     self._async_engine = create_async_engine(
                         async_url,
-                        **async_engine_kwargs,
-                        echo=False
+                        **async_engine_kwargs
                     )
                     _warn_if_prod_sslmode_not_enforced()
                     logger.debug(f"Async engine created: {safe_db_url(async_url)}")
@@ -407,15 +421,17 @@ class DatabaseManager:
         """
         if self._async_session_factory is None:
             engine = await self.get_async_engine()
-            self._async_session_factory = async_sessionmaker(
-                engine,
-                class_=AsyncSession,
-                # See AsyncBaseRepository.save() for the async refresh rationale.
-                expire_on_commit=False,
-                autocommit=False,
-                # The inherited False default is documented in the repository guide.
-                autoflush=config.autoflush
-            )
+            with self._lock:
+                if self._async_session_factory is None:
+                    self._async_session_factory = async_sessionmaker(
+                        engine,
+                        class_=AsyncSession,
+                        # See AsyncBaseRepository.save() for the async refresh rationale.
+                        expire_on_commit=False,
+                        autocommit=False,
+                        # The inherited False default is documented in the repository guide.
+                        autoflush=config.autoflush
+                    )
         return self._async_session_factory
 
     @asynccontextmanager
@@ -518,10 +534,16 @@ class DatabaseManager:
         This closes all connections in the connection pool.
         Should be called on application shutdown.
         """
-        if self._async_engine is not None:
-            await self._async_engine.dispose()
+        # The engine reference is cleared under the lock and disposed
+        # afterwards, so the lock is never held across an ``await`` (doing so
+        # would risk deadlocking the event loop against another coroutine
+        # blocked on the same threading.Lock).
+        with self._lock:
+            engine = self._async_engine
             self._async_engine = None
             self._async_session_factory = None
+        if engine is not None:
+            await engine.dispose()
             logger.debug("Async engine disposed")
 
     # ========================================
@@ -539,12 +561,23 @@ class DatabaseManager:
         logger.debug("All engines disposed")
 
     @asynccontextmanager
-    async def lifespan_context(self):
+    async def lifespan_context(self, app=None):
         """
         FastAPI lifespan context manager.
 
-        Use this as the lifespan parameter for FastAPI applications
-        to ensure proper cleanup on shutdown.
+        FastAPI/Starlette call the ``lifespan`` callable with the ``app`` and
+        use the return value as an async context manager, so ``app`` is
+        accepted (and ignored) here for that call signature. The bound method
+        also keeps working when called with no arguments, e.g.
+        ``async with _db_manager.lifespan_context():``.
+
+        Use ``get_lifespan_manager()`` to obtain the callable to pass as the
+        ``lifespan`` parameter for FastAPI applications, to ensure proper
+        cleanup on shutdown.
+
+        Args:
+            app: The FastAPI/Starlette application (unused). Optional so this
+                method can also be called directly with no arguments.
 
         Yields:
             None
@@ -958,10 +991,16 @@ async def dispose_engines():
 
 def get_lifespan_manager():
     """
-    Get FastAPI lifespan context manager.
+    Get the FastAPI lifespan callable.
+
+    FastAPI/Starlette call the returned callable with the app instance and
+    use the result as an async context manager, so this must return the
+    bound method itself - not an already-created context manager (calling an
+    ``_AsyncGeneratorContextManager`` instance, which is also a decorator,
+    returns a wrapper function rather than entering the context).
 
     Returns:
-        AsyncContextManager: Lifespan context manager for FastAPI
+        Callable[[Optional[Any]], AsyncContextManager]: Lifespan callable for FastAPI
 
     Example:
         >>> from fastapi import FastAPI
@@ -969,7 +1008,7 @@ def get_lifespan_manager():
         >>> 
         >>> app = FastAPI(lifespan=get_lifespan_manager())
     """
-    return _db_manager.lifespan_context()
+    return _db_manager.lifespan_context
 
 
 # ========================================

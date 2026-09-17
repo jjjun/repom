@@ -12,16 +12,19 @@ from repom.database import (
     get_async_db_transaction,
     get_reusable_async_transaction,
     get_standalone_async_transaction,
+    get_lifespan_manager,
     convert_to_async_uri,
     DatabaseManager,
 )
 import repom.database as database_module
-from repom.config import config
+from repom.config import config, RepomConfig
 from contextlib import asynccontextmanager
 import asyncio
 import inspect
 import os
 import ssl
+import threading
+import time
 import asyncpg
 import pytest
 from sqlalchemy import select, text
@@ -126,6 +129,64 @@ class TestGetAsyncEngine:
             assert conn is not None
 
 
+class TestAsyncEngineThreadSafety:
+    """get_async_engine() のロックがイベントループに束縛されないことの回帰テスト。
+
+    以前は ``__init__`` で作成した asyncio.Lock を使っており、最初に取得した
+    スレッドのイベントループに束縛される。別スレッドが自分のイベントループ
+    （``asyncio.run()``）から、その Lock が保持されている最中に取得しようと
+    すると ``RuntimeError: ... is bound to a different event loop`` になる
+    （デバッグ環境で確認済み）か、release() 側の ``Future.set_result()`` が別
+    スレッドのループへ安全に通知できず、そのスレッドが永久にハングする
+    （手元の Windows 環境ではこちらを再現）。
+
+    そのため、ここではワーカーを daemon thread にして ``join(timeout=...)``
+    で待ち、ハングした場合もテスト自体は有限時間で失敗するようにする。"""
+
+    def test_concurrent_asyncio_run_from_threads_raises_no_event_loop_error(
+        self, monkeypatch
+    ):
+        manager = DatabaseManager()
+        monkeypatch.setattr(database_module, "_db_manager", manager)
+
+        thread_count = 5
+        barrier = threading.Barrier(thread_count)
+        real_create_async_engine = database_module.create_async_engine
+
+        def slow_create_async_engine(*args, **kwargs):
+            # ロック保持中に他スレッドの acquire() と重なるよう、臨界区間を
+            # 広げる。
+            time.sleep(0.05)
+            return real_create_async_engine(*args, **kwargs)
+
+        monkeypatch.setattr(database_module, "create_async_engine", slow_create_async_engine)
+
+        errors = []
+        errors_lock = threading.Lock()
+
+        def worker():
+            barrier.wait()
+            try:
+                asyncio.run(get_async_engine())
+            except Exception as exc:
+                with errors_lock:
+                    errors.append(exc)
+
+        threads = [
+            threading.Thread(target=worker, daemon=True) for _ in range(thread_count)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        hung_threads = [t for t in threads if t.is_alive()]
+
+        assert errors == []
+        assert hung_threads == []
+        asyncio.run(manager.dispose_async())
+
+
 class TestGetAsyncEngineAsyncpgConnectOptions:
     """asyncpg 変換時に sslmode/sslrootcert/connect_args を asyncpg 用に翻訳することを確認
 
@@ -224,6 +285,33 @@ class TestGetAsyncEngineAsyncpgConnectOptions:
         accepted_params = set(inspect.signature(asyncpg.connect).parameters)
         connect_args = captured["kwargs"]["connect_args"]
         assert set(connect_args) <= accepted_params
+
+
+class TestGetAsyncEngineEchoKwarg:
+    """RepomConfig.engine_kwargs の docstring はサブクラスでのオーバーライドを
+    案内しており、echo もその対象になりうる。get_async_engine() はかつて
+    ``**async_engine_kwargs`` の横で ``echo=False`` を明示的に渡しており、
+    engine_kwargs に echo が含まれると
+    ``got multiple values for keyword argument 'echo'`` になっていた
+    （同期版は元から echo を明示していないため問題なかった）。"""
+
+    @pytest.mark.asyncio
+    async def test_engine_kwargs_echo_does_not_conflict(self, monkeypatch):
+        class EchoRepomConfig(RepomConfig):
+            @property
+            def engine_kwargs(self):
+                kwargs = dict(super().engine_kwargs)
+                kwargs["echo"] = True
+                return kwargs
+
+        monkeypatch.setattr(database_module, "config", EchoRepomConfig())
+
+        manager = DatabaseManager()
+        try:
+            engine = await manager.get_async_engine()
+            assert engine.echo is True
+        finally:
+            await manager.dispose_async()
 
 
 class TestGetAsyncDbSession:
@@ -341,6 +429,51 @@ class TestDatabaseManager:
 
         # すべて破棄
         await manager.dispose_all()
+
+        assert manager._sync_engine is None
+        assert manager._async_engine is None
+
+
+class TestLifespanManager:
+    """get_lifespan_manager() が FastAPI 互換の lifespan callable を返すことの
+    回帰テスト。以前は ``_db_manager.lifespan_context()`` という生成済みの
+    context manager インスタンスを返しており、FastAPI/Starlette がそれを
+    ``lifespan(app)`` として呼び出すと（``_AsyncGeneratorContextManager`` 自体も
+    デコレータであるため）ラッパー関数が返ってしまい、
+    ``TypeError: 'function' object does not support the asynchronous context
+    manager protocol`` で起動に失敗していた。"""
+
+    @pytest.mark.asyncio
+    async def test_fastapi_style_call_disposes_engines(self, monkeypatch):
+        """Starlette の呼び出し方 ``async with lifespan(app):`` を再現する"""
+        manager = DatabaseManager()
+        monkeypatch.setattr(database_module, "_db_manager", manager)
+
+        manager.get_sync_engine()
+        await manager.get_async_engine()
+        assert manager._sync_engine is not None
+        assert manager._async_engine is not None
+
+        lifespan = get_lifespan_manager()
+        app = object()
+        async with lifespan(app):
+            pass
+
+        assert manager._sync_engine is None
+        assert manager._async_engine is None
+
+    @pytest.mark.asyncio
+    async def test_bound_method_still_works_with_no_arguments(self, monkeypatch):
+        """引数なしの呼び出し ``async with _db_manager.lifespan_context():`` も
+        引き続き動作する"""
+        manager = DatabaseManager()
+        monkeypatch.setattr(database_module, "_db_manager", manager)
+
+        manager.get_sync_engine()
+        await manager.get_async_engine()
+
+        async with database_module._db_manager.lifespan_context():
+            pass
 
         assert manager._sync_engine is None
         assert manager._async_engine is None
