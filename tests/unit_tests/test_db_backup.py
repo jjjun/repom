@@ -2,13 +2,15 @@ from tests._init import *
 
 import os
 import sqlite3
+import subprocess
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
 
 from repom.config import PostgresTlsSettings
-from repom.scripts import db_backup
-from repom.scripts._backup_utils import checksum_path
+from repom.scripts import _backup_utils, db_backup
+from repom.scripts._backup_utils import BackupError, checksum_path
 
 POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="POSIX file mode bits only")
 
@@ -238,11 +240,40 @@ def test_backup_sqlite_missing_source_fails_without_creating_file(monkeypatch, t
     config = _mock_sqlite_config(backup_dir, db_file)
     monkeypatch.setattr(db_backup, "config", config)
 
-    with pytest.raises(sqlite3.OperationalError):
+    with pytest.raises(BackupError) as exc_info:
         db_backup.backup_sqlite()
 
+    assert isinstance(exc_info.value.__cause__, sqlite3.OperationalError)
     assert not db_file.exists()
     assert list(backup_dir.glob("missing_*")) == []
+
+
+def test_backup_sqlite_does_not_delete_other_runs_partial_file(monkeypatch, tmp_path):
+    db_file = tmp_path / "app.sqlite3"
+    writer = _make_wal_db_with_uncheckpointed_row(db_file)
+    try:
+        backup_dir = tmp_path / "backups"
+        config = _mock_sqlite_config(backup_dir, db_file)
+        monkeypatch.setattr(db_backup, "config", config)
+
+        class _FixedDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2024, 1, 1, 12, 0, 0)
+
+        monkeypatch.setattr(db_backup, "datetime", _FixedDatetime)
+
+        backup_dir.mkdir(parents=True)
+        partial_path = backup_dir / "app_20240101_120000.sqlite3.partial"
+        partial_path.write_bytes(b"other run's in-progress data")
+
+        with pytest.raises(BackupError):
+            db_backup.backup_sqlite()
+
+        assert partial_path.exists()
+        assert partial_path.read_bytes() == b"other run's in-progress data"
+    finally:
+        writer.close()
 
 
 def _sqlite_format_version_bytes(path):
@@ -298,3 +329,148 @@ def test_backup_sqlite_file_is_0600(monkeypatch, tmp_path):
         assert backups[0].stat().st_mode & 0o777 == 0o600
     finally:
         writer.close()
+
+
+def _mock_postgres_config_for_main(backup_dir, sslmode="prefer", sslrootcert=None):
+    config = _mock_postgres_config(backup_dir, sslmode=sslmode, sslrootcert=sslrootcert)
+    config.db_type = "postgres"
+    return config
+
+
+def test_main_raises_backup_error_when_host_pg_dump_fails(monkeypatch, tmp_path):
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
+    monkeypatch.setattr(
+        db_backup.subprocess,
+        "Popen",
+        lambda *a, **k: _FakePgDumpProc(returncode=1, stderr=b"pg_dump: connection failed"),
+    )
+
+    with pytest.raises(BackupError, match="pg_dump"):
+        db_backup.main()
+
+    assert list(tmp_path.glob("db_*.sql.gz")) == []
+    assert list(tmp_path.glob("*.partial")) == []
+
+
+def test_main_raises_backup_error_when_docker_pg_dump_fails(monkeypatch, tmp_path):
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=True))
+    monkeypatch.setattr(
+        db_backup.DockerCommandExecutor,
+        "exec_command",
+        MagicMock(
+            side_effect=subprocess.CalledProcessError(
+                1, ["pg_dump"], stderr=b"pg_dump: connection failed"
+            )
+        ),
+    )
+
+    with pytest.raises(BackupError, match="pg_dump"):
+        db_backup.main()
+
+    assert list(tmp_path.glob("db_*.sql.gz")) == []
+    assert list(tmp_path.glob("*.partial")) == []
+
+
+def test_main_raises_backup_error_when_pg_dump_missing(monkeypatch, tmp_path):
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
+    monkeypatch.setattr(
+        db_backup.subprocess,
+        "Popen",
+        MagicMock(side_effect=FileNotFoundError("pg_dump")),
+    )
+
+    with pytest.raises(BackupError, match="pg_dump"):
+        db_backup.main()
+
+
+def test_main_raises_backup_error_on_write_error_while_compressing(monkeypatch, tmp_path):
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
+
+    def _broken_stdout():
+        yield b"SELECT 1;\n"
+        raise OSError("disk full")
+
+    class _BrokenProc:
+        returncode = 0
+        stdout = _broken_stdout()
+
+        def communicate(self):
+            return b"", b""
+
+    monkeypatch.setattr(db_backup.subprocess, "Popen", lambda *a, **k: _BrokenProc())
+
+    with pytest.raises(BackupError, match="disk full"):
+        db_backup.main()
+
+    assert list(tmp_path.glob("db_*.sql.gz")) == []
+    assert list(tmp_path.glob("*.partial")) == []
+
+
+def test_main_raises_backup_error_on_empty_dump_output_via_host(monkeypatch, tmp_path):
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
+    monkeypatch.setattr(
+        db_backup.subprocess, "Popen", lambda *a, **k: _FakePgDumpProc(stdout_lines=())
+    )
+
+    with pytest.raises(BackupError, match="empty"):
+        db_backup.main()
+
+    assert list(tmp_path.glob("db_*.sql.gz")) == []
+    assert list(tmp_path.glob("*.partial")) == []
+
+
+def test_main_raises_backup_error_on_empty_dump_output_via_docker(monkeypatch, tmp_path):
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=True))
+    monkeypatch.setattr(
+        db_backup.DockerCommandExecutor,
+        "exec_command",
+        MagicMock(return_value=subprocess.CompletedProcess(["pg_dump"], 0, b"", b"")),
+    )
+
+    with pytest.raises(BackupError, match="empty"):
+        db_backup.main()
+
+    assert list(tmp_path.glob("db_*.sql.gz")) == []
+    assert list(tmp_path.glob("*.partial")) == []
+
+
+def test_main_returns_normally_on_successful_backup(monkeypatch, tmp_path):
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
+    monkeypatch.setattr(db_backup.subprocess, "Popen", lambda *a, **k: _FakePgDumpProc())
+
+    db_backup.main()
+
+    assert len(list(tmp_path.glob("db_*.sql.gz"))) == 1
+
+
+def _mock_sqlite_config_for_main(backup_dir, db_file_path):
+    config = _mock_sqlite_config(backup_dir, db_file_path)
+    config.db_type = "sqlite"
+    return config
+
+
+def test_main_raises_backup_error_when_sqlite_source_missing(monkeypatch, tmp_path):
+    db_file = tmp_path / "missing.sqlite3"
+    backup_dir = tmp_path / "backups"
+    config = _mock_sqlite_config_for_main(backup_dir, db_file)
+    monkeypatch.setattr(db_backup, "config", config)
+
+    with pytest.raises(BackupError) as exc_info:
+        db_backup.main()
+
+    assert isinstance(exc_info.value.__cause__, sqlite3.OperationalError)
+    assert list(backup_dir.glob("missing_*")) == []

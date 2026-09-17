@@ -7,6 +7,7 @@ import gzip
 from datetime import datetime
 from pathlib import Path
 from repom.scripts._backup_utils import (
+    BackupError,
     build_host_pg_env,
     cleanup_incomplete_backups,
     ensure_backup_dir,
@@ -37,7 +38,12 @@ def backup_sqlite():
     logger.debug(f"Database file: {config.sqlite.db_file_path}")
 
     # Ensure backup directory exists with restrictive permissions
-    ensure_backup_dir(config.db_backup_path)
+    try:
+        ensure_backup_dir(config.db_backup_path)
+    except Exception as e:
+        logger.error(f"Backup failed: {e}")
+        print(f"Error: Backup failed: {e}")
+        raise BackupError(f"Backup failed: {e}") from e
     logger.debug(f"Backup directory created/verified: {config.db_backup_path}")
 
     # Get original db file name and extension
@@ -60,20 +66,34 @@ def backup_sqlite():
     # included instead of copying a raw file that may not be a consistent
     # point-in-time image while another connection holds it open.
     logger.debug(f"Backing up {config.sqlite.db_file_path} to {partial_path}")
-    open_backup_temp_file(partial_path).close()
+    try:
+        open_backup_temp_file(partial_path).close()
+    except OSError as e:
+        logger.error(f"Backup failed: {e}")
+        print(f"Error: Backup failed: {e}")
+        raise BackupError(f"Backup failed: {e}") from e
+
     try:
         snapshot_sqlite_database(Path(config.sqlite.db_file_path), partial_path)
-    except Exception:
-        partial_path.unlink(missing_ok=True)
-        raise
-    if partial_path.stat().st_size == 0:
-        logger.error("Backup file is empty")
-        print("Error: Backup file is empty")
-        partial_path.unlink()
-        return
 
-    partial_path.replace(backup_path)
-    write_checksum(backup_path)
+        if partial_path.stat().st_size == 0:
+            logger.error("Backup file is empty")
+            print("Error: Backup file is empty")
+            partial_path.unlink()
+            raise BackupError("SQLite backup produced an empty file")
+
+        partial_path.replace(backup_path)
+        write_checksum(backup_path)
+    except BackupError:
+        # Empty backup file; already logged, printed, and cleaned up above.
+        raise
+    except Exception as e:
+        logger.error(f"Backup failed: {e}")
+        print(f"Error: Backup failed: {e}")
+        if partial_path.exists():
+            partial_path.unlink()
+        raise BackupError(f"Backup failed: {e}") from e
+
     removed = rotate_backups(backup_dir, backup_pattern, MAX_BACKUPS_PER_DB)
     if removed:
         logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
@@ -141,10 +161,12 @@ def backup_postgresql_via_host():
         )
 
         # gzip 圧縮 (0600 で作成し、一時ファイルが world-readable になる窓を作らない)
+        bytes_written = 0
         with open_backup_temp_file(partial_path) as raw_file:
             with gzip.open(raw_file, 'wb') as gz_file:
                 for line in pg_dump_proc.stdout:
                     gz_file.write(line)
+                    bytes_written += len(line)
 
         # pg_dump の終了を待つ
         _, stderr = pg_dump_proc.communicate()
@@ -155,17 +177,17 @@ def backup_postgresql_via_host():
             print(f"Error: pg_dump failed\n{error_msg}")
             if partial_path.exists():
                 partial_path.unlink()  # 失敗したバックアップファイルを削除
-            raise RuntimeError(f"pg_dump failed with exit code {pg_dump_proc.returncode}: {error_msg}")
+            raise BackupError(f"pg_dump failed with exit code {pg_dump_proc.returncode}: {error_msg}")
 
-        # バックアップファイルサイズ確認
-        file_size = partial_path.stat().st_size
-        logger.info(f"Backup file size: {format_size(file_size)}")
+        # バックアップファイルサイズ確認 (gzip ヘッダーで常に非ゼロになるため、
+        # 空判定は pg_dump から読んだ生バイト数で行う)
+        logger.info(f"Backup file size: {format_size(partial_path.stat().st_size)}")
 
-        if file_size == 0:
+        if bytes_written == 0:
             logger.error("Backup file is empty")
             print("Error: Backup file is empty")
             partial_path.unlink()
-            return
+            raise BackupError("pg_dump produced an empty backup")
 
         partial_path.replace(backup_path)
         write_checksum(backup_path)
@@ -178,20 +200,21 @@ def backup_postgresql_via_host():
         print(f"Backup created: {backup_path}")
         logger.info(f"Backup created successfully: {backup_name}")
 
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         logger.error("pg_dump command not found. Please install PostgreSQL client tools.")
         print("Error: pg_dump command not found")
         print("Please install PostgreSQL client tools and ensure 'pg_dump' is in your PATH")
-        return
-    except RuntimeError:
-        # pg_dump exited non-zero; already logged, printed, and cleaned up above.
+        raise BackupError("pg_dump command not found") from e
+    except BackupError:
+        # pg_dump exited non-zero or produced an empty backup; already logged,
+        # printed, and cleaned up above.
         raise
     except Exception as e:
         logger.error(f"Backup failed: {e}")
         print(f"Error: Backup failed: {e}")
         if partial_path.exists():
             partial_path.unlink()
-        return
+        raise BackupError(f"Backup failed: {e}") from e
 
 
 def backup_postgresql_via_docker():
@@ -249,15 +272,15 @@ def backup_postgresql_via_docker():
             with gzip.open(raw_file, 'wb') as gz_file:
                 gz_file.write(result.stdout)
 
-        # バックアップファイルサイズ確認
-        file_size = partial_path.stat().st_size
-        logger.info(f"Backup file size: {format_size(file_size)}")
+        # バックアップファイルサイズ確認 (gzip ヘッダーで常に非ゼロになるため、
+        # 空判定は pg_dump の生出力バイト数で行う)
+        logger.info(f"Backup file size: {format_size(partial_path.stat().st_size)}")
 
-        if file_size == 0:
+        if len(result.stdout) == 0:
             logger.error("Backup file is empty")
             print("Error: Backup file is empty")
             partial_path.unlink()
-            return
+            raise BackupError("pg_dump produced an empty backup")
 
         partial_path.replace(backup_path)
         write_checksum(backup_path)
@@ -270,26 +293,30 @@ def backup_postgresql_via_docker():
         print(f"Backup created: {backup_path}")
         logger.info(f"Backup created successfully: {backup_name}")
 
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         logger.error("docker command not found. Please install Docker Desktop.")
         print("Error: docker command not found")
         print("Please install Docker Desktop: https://www.docker.com/products/docker-desktop")
         if partial_path.exists():
             partial_path.unlink()
-        return
+        raise BackupError("docker command not found") from e
+    except BackupError:
+        # pg_dump produced an empty backup; already logged, printed, and
+        # cleaned up above.
+        raise
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.decode('utf-8') if e.stderr else str(e)
         logger.error(f"pg_dump failed: {error_msg}")
         print(f"Error: pg_dump failed\n{error_msg}")
         if partial_path.exists():
             partial_path.unlink()
-        return
+        raise BackupError(f"pg_dump failed: {error_msg}") from e
     except Exception as e:
         logger.error(f"Backup failed: {e}")
         print(f"Error: Backup failed: {e}")
         if partial_path.exists():
             partial_path.unlink()
-        return
+        raise BackupError(f"Backup failed: {e}") from e
 
 
 def backup_postgresql():
@@ -313,10 +340,6 @@ def main():
         backup_sqlite()
     elif config.db_type == 'postgres':
         backup_postgresql()
-    else:
-        logger.error(f"Unsupported database type: {config.db_type}")
-        print(f"Error: Unsupported database type: {config.db_type}")
-        return
 
     logger.info("Database backup process completed")
 

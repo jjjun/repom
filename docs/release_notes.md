@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- BREAKING: `repom.scripts.db_backup.main()` and
+  `repom.scripts.db_restore.main()` now raise on failure instead of printing
+  an error and returning normally. Previously, most backup and restore
+  failures (a missing `pg_dump`/`psql`/`gunzip` binary, `pg_dump` or `psql`
+  exiting non-zero, an empty dump, a Docker daemon error, a checksum
+  mismatch, a missing backup directory, or no backups found) were caught,
+  printed to the console, and swallowed, so the console scripts exited 0 and
+  a caller invoking `main()` directly (for example from a scheduled task)
+  could not tell the operation had failed. Every backup/restore path
+  function now raises `BackupError` / `RestoreError` (both `RuntimeError`
+  subclasses, defined in `repom.scripts._backup_utils`) for these failures,
+  after removing any partial file it created, with the original exception
+  chained via `from` and never including the configured database password;
+  `main()` lets these propagate instead of catching them. User cancellation
+  in `db_restore` (answering `q` or anything other than `y`) still returns
+  normally. The empty-dump check for PostgreSQL backups now counts the
+  uncompressed bytes read from `pg_dump` (or `len(result.stdout)` for the
+  Docker path) instead of the gzip file size, which always has a non-zero
+  header and could never detect an empty dump. Two now-unreachable branches
+  are removed: the "unsupported db_type" branch in `db_backup.main()`
+  (`RepomConfig.db_type` only ever accepts `sqlite`/`postgres`) and the
+  "Backup file type mismatch" branch in `db_restore.main()` (`get_backups()`
+  already filters backups by `db_type`, so the file it returns always
+  matches).
 - Fixed `get_async_db_session()` and `get_async_db_transaction()` losing the
   caller's exception during cleanup. Both `Depends` dependencies drove their
   underlying async context manager through a private adapter class with

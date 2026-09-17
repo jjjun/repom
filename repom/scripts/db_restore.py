@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Optional
 
 from repom.scripts._backup_utils import (
+    RestoreError,
     build_host_pg_env,
     format_size,
     get_backups,
@@ -85,41 +86,41 @@ def restore_sqlite(backup_file: Path):
     """
     logger.info(f"Starting SQLite restore from {backup_file.name}")
 
-    if not verify_checksum(backup_file):
-        logger.warning(f"No checksum recorded for {backup_file.name}; skipping integrity check")
-        print(f"Warning: no checksum recorded for {backup_file.name}; skipping integrity check")
-
-    current_db = Path(config.sqlite.db_file_path)
-
-    # If the current DB exists, create an automatic backup of it first. This
-    # goes through the same snapshot -> partial -> replace -> checksum path
-    # as a regular backup (see db_backup.backup_sqlite), kept outside the
-    # regular rotation glob so a restore never rotates away good backups.
-    if current_db.exists():
-        now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        auto_backup_name = f"restore_backup_{now_str}.sqlite3"
-        auto_backup_path = Path(config.db_backup_path) / auto_backup_name
-        auto_partial_path = auto_backup_path.with_name(f"{auto_backup_path.name}.partial")
-
-        logger.info(f"Creating automatic backup of current database: {auto_backup_name}")
-        print(f"Creating backup of current database: {auto_backup_name}")
-        open_backup_temp_file(auto_partial_path).close()
-        try:
-            snapshot_sqlite_database(current_db, auto_partial_path)
-        except Exception:
-            auto_partial_path.unlink(missing_ok=True)
-            raise
-        auto_partial_path.replace(auto_backup_path)
-        write_checksum(auto_backup_path)
-        logger.debug(f"Backup saved to {auto_backup_path}")
-
-    # Overwrite the current DB with the backup file through SQLite's backup
-    # API instead of replacing the live file, so the restore goes through
-    # SQLite's own locking, keeps the destination journal mode, and other
-    # connections see the restored content on their next read transaction.
-    # immutable=True: the backup file is static, so this reads a WAL-flagged
-    # legacy backup without SQLite creating -shm/-wal files next to it.
     try:
+        if not verify_checksum(backup_file):
+            logger.warning(f"No checksum recorded for {backup_file.name}; skipping integrity check")
+            print(f"Warning: no checksum recorded for {backup_file.name}; skipping integrity check")
+
+        current_db = Path(config.sqlite.db_file_path)
+
+        # If the current DB exists, create an automatic backup of it first. This
+        # goes through the same snapshot -> partial -> replace -> checksum path
+        # as a regular backup (see db_backup.backup_sqlite), kept outside the
+        # regular rotation glob so a restore never rotates away good backups.
+        if current_db.exists():
+            now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            auto_backup_name = f"restore_backup_{now_str}.sqlite3"
+            auto_backup_path = Path(config.db_backup_path) / auto_backup_name
+            auto_partial_path = auto_backup_path.with_name(f"{auto_backup_path.name}.partial")
+
+            logger.info(f"Creating automatic backup of current database: {auto_backup_name}")
+            print(f"Creating backup of current database: {auto_backup_name}")
+            open_backup_temp_file(auto_partial_path).close()
+            try:
+                snapshot_sqlite_database(current_db, auto_partial_path)
+            except Exception:
+                auto_partial_path.unlink(missing_ok=True)
+                raise
+            auto_partial_path.replace(auto_backup_path)
+            write_checksum(auto_backup_path)
+            logger.debug(f"Backup saved to {auto_backup_path}")
+
+        # Overwrite the current DB with the backup file through SQLite's backup
+        # API instead of replacing the live file, so the restore goes through
+        # SQLite's own locking, keeps the destination journal mode, and other
+        # connections see the restored content on their next read transaction.
+        # immutable=True: the backup file is static, so this reads a WAL-flagged
+        # legacy backup without SQLite creating -shm/-wal files next to it.
         logger.info(f"Restoring {backup_file.name} to {current_db}")
         sqlite_backup_into(backup_file, current_db, immutable=True)
         print("\nRestore completed successfully")
@@ -128,7 +129,7 @@ def restore_sqlite(backup_file: Path):
     except Exception as e:
         logger.error(f"Restore failed: {e}")
         print(f"\nRestore failed: {e}")
-        raise
+        raise RestoreError(f"Restore failed: {e}") from e
 
 
 def restore_postgresql_via_host(backup_file: Path):
@@ -199,14 +200,14 @@ def restore_postgresql_via_host(backup_file: Path):
             error_msg = gunzip_stderr.decode('utf-8')
             logger.error(f"gunzip failed: {error_msg}")
             print(f"\nError: Failed to decompress backup file\n{error_msg}")
-            raise RuntimeError(f"gunzip failed with exit code {gunzip_proc.returncode}: {error_msg}")
+            raise RestoreError(f"gunzip failed with exit code {gunzip_proc.returncode}: {error_msg}")
 
         # Check psql errors
         if psql_proc.returncode != 0:
             error_msg = psql_stderr.decode('utf-8')
             logger.error(f"psql restore failed: {error_msg}")
             print(f"\nError: Restore failed\n{error_msg}")
-            raise RuntimeError(f"psql failed with exit code {psql_proc.returncode}: {error_msg}")
+            raise RestoreError(f"psql failed with exit code {psql_proc.returncode}: {error_msg}")
 
         print("\nRestore completed successfully")
         print(f"  Database: {config.postgres_db}")
@@ -224,11 +225,14 @@ def restore_postgresql_via_host(backup_file: Path):
         else:
             logger.error(f"Command not found: {e}")
             print(f"\nError: Required command not found: {e}")
-        return
+        raise RestoreError(f"Required command not found: {e}") from e
+    except RestoreError:
+        # gunzip/psql exited non-zero; already logged and printed above.
+        raise
     except Exception as e:
         logger.error(f"Restore failed: {e}")
         print(f"\nError: Restore failed: {e}")
-        raise
+        raise RestoreError(f"Restore failed: {e}") from e
 
 
 def restore_postgresql_via_docker(backup_file: Path):
@@ -280,24 +284,24 @@ def restore_postgresql_via_docker(backup_file: Path):
         print(f"  Database: {config.postgres_db}")
         logger.info("PostgreSQL restore completed successfully")
 
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         logger.error("docker command not found. Please install Docker Desktop.")
         print("\nError: docker command not found")
         print("Please install Docker Desktop: https://www.docker.com/products/docker-desktop")
-        return
+        raise RestoreError("docker command not found") from e
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.decode('utf-8') if e.stderr else str(e)
         logger.error(f"psql restore failed: {error_msg}")
         print(f"\nError: Restore failed\n{error_msg}")
-        return
-    except gzip.BadGzipFile:
+        raise RestoreError(f"psql restore failed: {error_msg}") from e
+    except gzip.BadGzipFile as e:
         logger.error("Invalid gzip file")
         print("\nError: Invalid backup file (not a gzip file)")
-        return
+        raise RestoreError("Invalid backup file (not a gzip file)") from e
     except Exception as e:
         logger.error(f"Restore failed: {e}")
         print(f"\nError: Restore failed: {e}")
-        raise
+        raise RestoreError(f"Restore failed: {e}") from e
 
 
 def restore_postgresql(backup_file: Path):
@@ -323,7 +327,7 @@ def main():
     if not os.path.exists(config.db_backup_path):
         print(f"Error: Backup directory not found: {config.db_backup_path}")
         logger.error(f"Backup directory not found: {config.db_backup_path}")
-        return
+        raise RestoreError(f"Backup directory not found: {config.db_backup_path}")
 
     # Get the backup files
     backups = get_backups(config.db_backup_path, config.db_type)
@@ -331,7 +335,7 @@ def main():
     if not backups:
         print(f"No backups found in {config.db_backup_path}")
         logger.info("No backups found")
-        return
+        raise RestoreError(f"No backups found in {config.db_backup_path}")
 
     # Let the user select a backup
     selected = display_backups(backups)
@@ -354,22 +358,10 @@ def main():
     is_postgres = selected.name.endswith('.sql.gz')
 
     # Run the restore
-    try:
-        if is_sqlite and config.db_type == 'sqlite':
-            restore_sqlite(selected)
-        elif is_postgres and config.db_type == 'postgres':
-            restore_postgresql(selected)
-        else:
-            print("\nError: Backup file type mismatch")
-            print(f"  Current db_type: {config.db_type}")
-            print(f"  Backup file: {selected.name}")
-            logger.error(f"Backup file type mismatch: {config.db_type} vs {selected.name}")
-            return
-
-    except Exception as e:
-        logger.error(f"Restore process failed: {e}")
-        print("\nRestore process failed")
-        return
+    if is_sqlite and config.db_type == 'sqlite':
+        restore_sqlite(selected)
+    elif is_postgres and config.db_type == 'postgres':
+        restore_postgresql(selected)
 
     logger.info("Database restore process completed")
 

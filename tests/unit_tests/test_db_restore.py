@@ -3,13 +3,14 @@ from tests._init import *
 import gzip
 import io
 import sqlite3
+import subprocess
 from unittest.mock import MagicMock
 
 import pytest
 
 from repom.config import PostgresTlsSettings
-from repom.scripts import db_restore
-from repom.scripts._backup_utils import ChecksumError, checksum_path, write_checksum
+from repom.scripts import _backup_utils, db_restore
+from repom.scripts._backup_utils import ChecksumError, RestoreError, checksum_path, write_checksum
 
 
 class _FakeProc:
@@ -111,8 +112,10 @@ def test_restore_verifies_checksum_and_raises_on_mismatch(monkeypatch, tmp_path)
     monkeypatch.setattr(db_restore, "config", config)
     monkeypatch.setattr(db_restore.subprocess, "Popen", _make_popen())
 
-    with pytest.raises(ChecksumError):
+    with pytest.raises(RestoreError) as exc_info:
         db_restore.restore_postgresql_via_host(backup_file)
+
+    assert isinstance(exc_info.value.__cause__, ChecksumError)
 
 
 def test_restore_succeeds_when_checksum_matches(monkeypatch, tmp_path):
@@ -401,10 +404,176 @@ def test_restore_sqlite_aborts_on_checksum_mismatch_without_touching_db(monkeypa
         config = _mock_sqlite_config(backup_dir, current_db)
         monkeypatch.setattr(db_restore, "config", config)
 
-        with pytest.raises(ChecksumError):
+        with pytest.raises(RestoreError) as exc_info:
             db_restore.restore_sqlite(backup_file)
 
+        assert isinstance(exc_info.value.__cause__, ChecksumError)
         assert live_conn.execute("SELECT id FROM items").fetchall() == [(1,)]
         assert list(backup_dir.glob("restore_backup_*.sqlite3")) == []
     finally:
         live_conn.close()
+
+
+def _mock_postgres_config_for_main(backup_dir, sslmode="prefer", sslrootcert=None):
+    config = _mock_postgres_config(backup_dir, sslmode=sslmode, sslrootcert=sslrootcert)
+    config.db_type = "postgres"
+    return config
+
+
+def _make_popen_missing(missing_cmd):
+    def _popen(cmd, **kwargs):
+        if cmd[0] == missing_cmd:
+            raise FileNotFoundError(missing_cmd)
+        return _FakeProc()
+
+    return _popen
+
+
+def test_main_raises_restore_error_when_host_psql_fails(monkeypatch, tmp_path):
+    _make_backup_file(tmp_path)
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
+    monkeypatch.setattr(
+        db_restore.subprocess,
+        "Popen",
+        _make_popen(psql_returncode=1, psql_stderr=b"psql: FATAL"),
+    )
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "y"]))
+
+    with pytest.raises(RestoreError, match="psql"):
+        db_restore.main()
+
+
+def test_main_raises_restore_error_when_docker_psql_fails(monkeypatch, tmp_path):
+    _make_backup_file(tmp_path)
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=True))
+    monkeypatch.setattr(
+        db_restore.DockerCommandExecutor,
+        "exec_command",
+        MagicMock(
+            side_effect=subprocess.CalledProcessError(1, ["psql"], stderr=b"psql: FATAL")
+        ),
+    )
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "y"]))
+
+    with pytest.raises(RestoreError, match="psql"):
+        db_restore.main()
+
+
+def test_main_raises_restore_error_when_gunzip_missing(monkeypatch, tmp_path):
+    _make_backup_file(tmp_path)
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
+    monkeypatch.setattr(db_restore.subprocess, "Popen", _make_popen_missing("gunzip"))
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "y"]))
+
+    with pytest.raises(RestoreError):
+        db_restore.main()
+
+
+def test_main_raises_restore_error_when_psql_missing(monkeypatch, tmp_path):
+    _make_backup_file(tmp_path)
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
+    monkeypatch.setattr(db_restore.subprocess, "Popen", _make_popen_missing("psql"))
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "y"]))
+
+    with pytest.raises(RestoreError):
+        db_restore.main()
+
+
+def test_main_raises_restore_error_on_checksum_mismatch(monkeypatch, tmp_path):
+    backup_file = _make_backup_file(tmp_path)
+    write_checksum(backup_file)
+    with gzip.open(backup_file, "ab") as f:
+        f.write(b"DROP TABLE users;\n")
+
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
+    monkeypatch.setattr(db_restore.subprocess, "Popen", _make_popen())
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "y"]))
+
+    with pytest.raises(RestoreError) as exc_info:
+        db_restore.main()
+
+    assert isinstance(exc_info.value.__cause__, ChecksumError)
+
+
+def test_main_raises_restore_error_when_backup_directory_missing(monkeypatch, tmp_path):
+    config = _mock_postgres_config_for_main(tmp_path / "missing")
+    monkeypatch.setattr(db_restore, "config", config)
+
+    with pytest.raises(RestoreError, match="not found"):
+        db_restore.main()
+
+
+def test_main_raises_restore_error_when_no_backups_found(monkeypatch, tmp_path):
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+
+    with pytest.raises(RestoreError, match="No backups"):
+        db_restore.main()
+
+
+def test_main_returns_normally_on_successful_restore(monkeypatch, tmp_path):
+    _make_backup_file(tmp_path)
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
+    monkeypatch.setattr(db_restore.subprocess, "Popen", _make_popen())
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "y"]))
+
+    db_restore.main()
+
+
+def test_main_returns_normally_when_restore_cancelled_at_selection(monkeypatch, tmp_path):
+    _make_backup_file(tmp_path)
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["q"]))
+
+    db_restore.main()
+
+
+def test_main_returns_normally_when_restore_cancelled_at_confirmation(monkeypatch, tmp_path):
+    _make_backup_file(tmp_path)
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "n"]))
+
+    db_restore.main()
+
+
+def _mock_sqlite_config_for_main(backup_dir, db_file_path):
+    config = _mock_sqlite_config(backup_dir, db_file_path)
+    config.db_type = "sqlite"
+    return config
+
+
+def test_main_raises_restore_error_on_sqlite_checksum_mismatch(monkeypatch, tmp_path):
+    current_db = tmp_path / "app.sqlite3"
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    backup_file = backup_dir / "app_20260101_000000.sqlite3"
+    restore_source = _make_sqlite_db(backup_file, row_id=99)
+    restore_source.close()
+    write_checksum(backup_file)
+
+    # Corrupt the file after recording its checksum.
+    with open(backup_file, "ab") as f:
+        f.write(b"garbage")
+
+    config = _mock_sqlite_config_for_main(backup_dir, current_db)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "y"]))
+
+    with pytest.raises(RestoreError) as exc_info:
+        db_restore.main()
+
+    assert isinstance(exc_info.value.__cause__, ChecksumError)

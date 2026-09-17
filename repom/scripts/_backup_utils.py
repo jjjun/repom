@@ -25,6 +25,14 @@ class ChecksumError(Exception):
     """Raised when a backup file does not match its recorded checksum."""
 
 
+class BackupError(RuntimeError):
+    """Raised when a backup operation fails, after any partial file is removed."""
+
+
+class RestoreError(RuntimeError):
+    """Raised when a restore operation fails, after any partial file is removed."""
+
+
 def ensure_backup_dir(backup_dir: str | Path) -> Path:
     """Create ``backup_dir`` if missing and enforce mode 0700.
 
