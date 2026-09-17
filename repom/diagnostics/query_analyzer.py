@@ -14,8 +14,8 @@ Usage:
     with analyzer.capture():
         with get_reusable_sync_transaction() as session:
             users = session.query(User).all()
-        for user in users:
-            print(user.posts)  # May trigger N+1 if not eager loaded
+            for user in users:
+                print(user.posts)  # May trigger N+1 if not eager loaded
     
     analyzer.print_report()
 """
@@ -71,14 +71,11 @@ def list_all_models() -> List[str]:
         >>> models = list_all_models()
         >>> print(f"Available models: {', '.join(models)}")
     """
-    from repom.models.base_model import Base
+    from repom.utility import describe_loaded_models
 
-    model_names = []
-    for mapper in Base.registry.mappers:
-        model_class = mapper.class_
-        model_names.append(model_class.__name__)
+    models, _failures = describe_loaded_models()
 
-    return sorted(model_names)
+    return [model.name for model in models]
 
 
 class QueryAnalyzer:

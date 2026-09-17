@@ -341,25 +341,23 @@ class TestRedisConnectionTest:
 class TestGetLoadedModels:
     """Tests for get_loaded_models function."""
 
-    @patch('repom.scripts.repom_info.config')
-    @patch('repom.scripts.repom_info.import_from_packages')
-    @patch('repom.scripts.repom_info.Base')
-    def test_get_loaded_models_with_models(self, mock_base, mock_import, mock_config):
+    @patch('repom.scripts.repom_info.describe_loaded_models')
+    def test_get_loaded_models_with_models(self, mock_describe):
         """Test retrieving loaded models."""
-        mock_config.model_locations = ['repom.examples.models']
-        mock_import.return_value = []
+        from repom.utility import ModelInfo
 
-        # Mock a model
-        mock_model = Mock()
-        mock_model.__name__ = 'User'
-        mock_model.__module__ = 'repom.examples.models.user'
-
-        mock_mapper = Mock()
-        mock_mapper.class_ = mock_model
-        mock_mapper.mapped_table.name = 'users'
-
-        mock_base.registry.mappers = [mock_mapper]
-        mock_base.metadata.tables = {'users': Mock(name='users')}
+        mock_describe.return_value = (
+            [
+                ModelInfo(
+                    name='User',
+                    qualified_name='repom.examples.models.user.User',
+                    table_name='users',
+                    primary_key=['id'],
+                    column_count=3,
+                )
+            ],
+            [],
+        )
 
         models, failures = get_loaded_models()
 
@@ -369,62 +367,100 @@ class TestGetLoadedModels:
         assert models[0]['package'] == 'repom.examples.models.user.User'
         assert failures == []
 
-    @patch('repom.scripts.repom_info.config')
-    @patch('repom.scripts.repom_info.import_from_packages')
-    @patch('repom.scripts.repom_info.Base')
-    def test_get_loaded_models_empty(self, mock_base, mock_import, mock_config):
+    @patch('repom.scripts.repom_info.describe_loaded_models')
+    def test_get_loaded_models_empty(self, mock_describe):
         """Test retrieving when no models loaded."""
-        mock_config.model_locations = []
-        mock_base.registry.mappers = []
-        mock_base.metadata.tables = {}
+        mock_describe.return_value = ([], [])
 
         models, failures = get_loaded_models()
 
         assert len(models) == 0
         assert failures == []
 
-    @patch('repom.scripts.repom_info.config')
-    @patch('repom.scripts.repom_info.import_from_packages')
-    @patch('repom.scripts.repom_info.Base')
-    def test_get_loaded_models_import_failure(self, mock_base, mock_import, mock_config):
-        """Test that import failure doesn't crash the function and is reported."""
-        mock_config.model_locations = ['invalid.module']
-        mock_import.side_effect = ImportError("Module not found")
-        mock_base.registry.mappers = []
-        mock_base.metadata.tables = {}
-
-        models, failures = get_loaded_models()
-
-        assert len(models) == 0
-        assert len(failures) == 1
-        assert failures[0].target == 'invalid.module'
-        assert failures[0].exception_type == 'ImportError'
-        assert failures[0].message == 'Module not found'
-
-    @patch('repom.scripts.repom_info.config')
-    @patch('repom.scripts.repom_info.import_from_packages')
-    @patch('repom.scripts.repom_info.Base')
-    def test_get_loaded_models_returns_discovery_failures(self, mock_base, mock_import, mock_config):
+    @patch('repom.scripts.repom_info.describe_loaded_models')
+    def test_get_loaded_models_returns_discovery_failures(self, mock_describe):
         """A partial load (some modules failed, others succeeded) is surfaced, not discarded."""
         from basekit.discovery import DiscoveryFailure
 
-        mock_config.model_locations = ['myapp.models']
-        mock_import.return_value = [
-            DiscoveryFailure(
-                target='myapp.models.broken',
-                target_type='module',
-                exception_type='ImportError',
-                message='cannot import name broken_dependency',
-            )
-        ]
-        mock_base.registry.mappers = []
-        mock_base.metadata.tables = {}
+        mock_describe.return_value = (
+            [],
+            [
+                DiscoveryFailure(
+                    target='myapp.models.broken',
+                    target_type='module',
+                    exception_type='ImportError',
+                    message='cannot import name broken_dependency',
+                )
+            ],
+        )
 
         models, failures = get_loaded_models()
 
         assert len(failures) == 1
         assert failures[0].target == 'myapp.models.broken'
         assert failures[0].message == 'cannot import name broken_dependency'
+
+    def test_get_loaded_models_schema_qualified_table_has_no_deprecation_warning(self):
+        """A model whose table lives in a non-default schema must be reported
+        under its real class name and "schema.table" full name. The old
+        implementation matched Base.metadata.tables (keyed "schema.table")
+        against the deprecated Mapper.mapped_table.name (just "table"), so it
+        never matched and fell back to model_name=table_name,
+        package='Unknown' while also emitting a SADeprecationWarning
+        (repom#165).
+        """
+        import warnings
+
+        from sqlalchemy import Integer
+        from sqlalchemy.exc import SADeprecationWarning
+        from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+        class ScratchBase(DeclarativeBase):
+            pass
+
+        class AuditThing(ScratchBase):
+            __tablename__ = 'audit_things'
+            __table_args__ = {'schema': 'aux'}
+
+            id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+        with patch('repom.models.base_model.Base', ScratchBase):
+            with warnings.catch_warnings():
+                warnings.simplefilter('error', SADeprecationWarning)
+                models, failures = get_loaded_models()
+
+        assert failures == []
+        assert len(models) == 1
+        assert models[0]['model_name'] == 'AuditThing'
+        assert models[0]['table_name'] == 'aux.audit_things'
+
+    def test_get_loaded_models_disallowed_location_reports_failure(self):
+        """A model location outside allowed_package_prefixes raises a
+        security ValueError from import_from_packages. It must be caught
+        and reported as a DiscoveryFailure, not left to propagate, so the
+        diagnostic command still prints its report (repom#165).
+        """
+        from repom.config import config
+
+        original_locations = config.model_locations
+        original_prefixes = config.allowed_package_prefixes
+        original_strict = config.model_import_strict
+
+        try:
+            config.model_locations = ['os']
+            config.allowed_package_prefixes = {'repom.'}
+            config.model_import_strict = False
+
+            models, failures = get_loaded_models()
+        finally:
+            config.model_locations = original_locations
+            config.allowed_package_prefixes = original_prefixes
+            config.model_import_strict = original_strict
+
+        assert len(failures) == 1
+        assert failures[0].target == 'os'
+        assert failures[0].exception_type == 'ValueError'
+        assert 'not in allowed list' in failures[0].message
 
 
 class TestDisplayConfig:

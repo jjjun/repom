@@ -1,52 +1,59 @@
 #!/usr/bin/env python3
 """List Models - Display all models loaded by load_models()"""
 
-from repom.utility import load_models
-from repom.models.base_model import Base
+import sys
+from typing import List
+
+from basekit.discovery import DiscoveryFailure
+
+from repom.utility import ModelInfo, describe_loaded_models
 
 
-def list_models():
-    """Display all models loaded by load_models()."""
-    # Load models from configured locations
-    load_models(context="list_models")
-
+def _display(models: List[ModelInfo], failures: List[DiscoveryFailure]) -> None:
+    """Print the model list and, if any, the import-failures section."""
     print("\n" + "="*70)
     print("Loaded Models")
     print("="*70)
 
-    if not Base.registry.mappers:
+    if not models:
         print("\n[INFO] No models loaded.")
-        print("="*70 + "\n")
-        return
+    else:
+        print(f"\nTotal: {len(models)} models\n")
 
-    # Collect model information
-    models_info = []
-    for mapper in Base.registry.mappers:
-        model_class = mapper.class_
-        table = model_class.__table__
+        max_name = max(len(model.name) for model in models)
+        max_table = max(len(model.table_name) for model in models)
 
-        info = {
-            'name': model_class.__name__,
-            'table': table.name,
-            'pk': ', '.join([col.name for col in table.primary_key]),
-            'columns': len(table.columns)
-        }
-        models_info.append(info)
-
-    # Sort by model name
-    models_info.sort(key=lambda x: x['name'])
-
-    # Display
-    print(f"\nTotal: {len(models_info)} models\n")
-
-    max_name = max(len(info['name']) for info in models_info)
-    max_table = max(len(info['table']) for info in models_info)
-
-    for info in models_info:
-        print(f"  {info['name']:<{max_name}}  →  {info['table']:<{max_table}}  ({info['columns']} cols)")
+        for model in models:
+            print(f"  {model.name:<{max_name}}  →  {model.table_name:<{max_table}}  ({model.column_count} cols)")
 
     print("="*70 + "\n")
 
+    if failures:
+        failure_count = len(failures)
+        print(f"[Model Import Failures] ({failure_count} failure{'s' if failure_count != 1 else ''})")
+        for idx, failure in enumerate(failures, 1):
+            print(f"  {idx}. {failure.target}")
+            print(f"     - Type    : {failure.exception_type}")
+            print(f"     - Message : {failure.message}")
+        print()
+
+
+def list_models():
+    """Display all models loaded by load_models()."""
+    models, failures = describe_loaded_models()
+    _display(models, failures)
+
+
+def main():
+    """Console entry point for the list_models script.
+
+    Returns:
+        0 on success, 1 if any model module failed to import.
+    """
+    models, failures = describe_loaded_models()
+    _display(models, failures)
+    return 1 if failures else 0
+
 
 if __name__ == '__main__':
-    list_models()
+    sys.exit(main())

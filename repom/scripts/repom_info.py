@@ -9,13 +9,14 @@ from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 from repom.config import config
-from repom.database import Base, safe_db_url
-from basekit.discovery import DiscoveryFailure, import_from_packages
+from repom.database import safe_db_url
+from basekit.discovery import DiscoveryFailure
 from repom.diagnostics.database_info import (
     collect_database_info_sync,
     format_size as _format_size,
     short_lived_postgres_engine,
 )
+from repom.utility import describe_loaded_models
 
 
 def format_size(size_bytes: int) -> str:
@@ -162,53 +163,16 @@ def get_loaded_models() -> Tuple[List[Dict[str, str]], List[DiscoveryFailure]]:
         model module that failed to import, so a partial load is visible in
         this diagnostic output instead of being silently dropped.
     """
-    models = []
-    failures: List[DiscoveryFailure] = []
+    models, failures = describe_loaded_models()
 
-    # Auto-import models if configured
-    if config.model_locations:
-        try:
-            failures = import_from_packages(
-                package_names=config.model_locations,
-                excluded_dirs=config.model_excluded_dirs,
-                allowed_prefixes=config.allowed_package_prefixes
-            )
-        except Exception as exc:
-            # e.g. a security-validation ValueError, which import_from_packages
-            # raises unconditionally rather than returning as a DiscoveryFailure.
-            failures = [
-                DiscoveryFailure(
-                    target=", ".join(config.model_locations),
-                    target_type="package",
-                    exception_type=type(exc).__name__,
-                    message=str(exc),
-                )
-            ]
-
-    # Get all tables from metadata
-    for table_name, table in Base.metadata.tables.items():
-        # Try to find the model class
-        model_class = None
-        for mapper in Base.registry.mappers:
-            if mapper.mapped_table.name == table_name:
-                model_class = mapper.class_
-                break
-
-        if model_class:
-            models.append({
-                'model_name': model_class.__name__,
-                'table_name': table_name,
-                'package': f"{model_class.__module__}.{model_class.__name__}"
-            })
-        else:
-            # Fallback if model class not found
-            models.append({
-                'model_name': table_name,
-                'table_name': table_name,
-                'package': 'Unknown'
-            })
-
-    return sorted(models, key=lambda x: x['model_name']), failures
+    return [
+        {
+            'model_name': model.name,
+            'table_name': model.table_name,
+            'package': model.qualified_name,
+        }
+        for model in models
+    ], failures
 
 
 def display_config():

@@ -2,7 +2,7 @@ import os
 import logging
 import time
 import unicodedata
-from typing import List, Optional
+from typing import List, NamedTuple, Optional, Tuple
 
 import inflect
 
@@ -38,6 +38,8 @@ __all__ = [
     'normalize_text',
     # repom specific
     'load_models',
+    'ModelInfo',
+    'describe_loaded_models',
 ]
 
 
@@ -168,5 +170,74 @@ def load_models(
         raise DiscoveryError(failures)
 
     return failures
+
+
+class ModelInfo(NamedTuple):
+    """Summary of one mapped model class, derived from Base.registry.mappers."""
+
+    name: str
+    qualified_name: str
+    table_name: str
+    primary_key: List[str]
+    column_count: int
+
+
+def describe_loaded_models(
+    *, strict: bool = False
+) -> Tuple[List[ModelInfo], List[DiscoveryFailure]]:
+    """Import models and describe every mapped class.
+
+    Built on load_models() so SQLAlchemy's configure_mappers() always runs
+    before the mappers are inspected, and reads Mapper.local_table (never
+    the deprecated Mapper.mapped_table) so a schema-qualified table reports
+    its full "schema.table" name instead of losing the schema.
+
+    Args:
+        strict: Forwarded to load_models(); see its docstring. Defaults to
+            False so callers that only display the model list never abort
+            on a partial import, regardless of config.model_import_strict.
+            When False, an exception raised by load_models() itself (for
+            example the security ValueError for a model location outside
+            config.allowed_package_prefixes) is also caught and reported as
+            a DiscoveryFailure instead of propagating, so display-only
+            callers still get a report; a DiscoveryError is re-raised as-is.
+
+    Returns:
+        Tuple of (models, failures), with models sorted by class name.
+    """
+    if strict:
+        failures = load_models(strict=True)
+    else:
+        try:
+            failures = load_models(strict=False)
+        except DiscoveryError:
+            raise
+        except Exception as exc:
+            from repom.config import config
+
+            failures = [
+                DiscoveryFailure(
+                    target=", ".join(config.model_locations),
+                    target_type="package",
+                    exception_type=type(exc).__name__,
+                    message=str(exc),
+                )
+            ]
+
+    from repom.models.base_model import Base
+
+    models = [
+        ModelInfo(
+            name=mapper.class_.__name__,
+            qualified_name=f"{mapper.class_.__module__}.{mapper.class_.__name__}",
+            table_name=mapper.local_table.fullname,
+            primary_key=[column.name for column in mapper.local_table.primary_key.columns],
+            column_count=len(mapper.local_table.columns),
+        )
+        for mapper in Base.registry.mappers
+    ]
+    models.sort(key=lambda model: model.name)
+
+    return models, failures
 
 
