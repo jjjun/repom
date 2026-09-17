@@ -9,6 +9,7 @@ db_sync_master のテスト
 """
 
 import pytest
+from sqlalchemy import event
 from repom.scripts.db_sync_master import load_master_data_files, sync_master_data
 from repom.examples.models.sample import SampleModel
 from repom.repositories import BaseRepository
@@ -226,6 +227,34 @@ class TestSyncMasterData:
         """空のリスト"""
         count = sync_master_data(SampleModel, [], db_test)
         assert count == 0
+
+    def test_sync_master_data_unchanged_data_keeps_updated_at(self, db_test):
+        """同一データを2回同期しても UPDATE が発行されず updated_at が変わらないこと"""
+        repo = BaseRepository(SampleModel, db_test)
+        data_list = [{"id": 500, "value": "same value", "done_at": None}]
+
+        sync_master_data(SampleModel, data_list, db_test)
+        db_test.commit()
+        first_updated_at = repo.get_by_id(500).updated_at
+
+        statements = []
+
+        def capture_statement(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(db_test.bind, 'before_cursor_execute', capture_statement)
+        try:
+            sync_master_data(SampleModel, data_list, db_test)
+            db_test.commit()
+        finally:
+            event.remove(db_test.bind, 'before_cursor_execute', capture_statement)
+
+        assert not any(
+            statement.lstrip().upper().startswith('UPDATE') for statement in statements
+        )
+
+        db_test.expire_all()
+        assert repo.get_by_id(500).updated_at == first_updated_at
 
     def test_sync_master_data_transaction_rollback(self, db_test):
         """トランザクションロールバック（エラー時）"""

@@ -267,3 +267,14 @@
   `CHANGE_ME`, a non-functional placeholder, instead of the working literals
   `repom_dev` and `admin`. Generated Redis services now always require a
   password.
+- Fixed `updated_at` being bumped on a flush with no net column change.
+  `BaseModel`'s `before_update` listener used to set `updated_at` to the
+  current time for every instance in `session.dirty`, but SQLAlchemy adds an
+  instance to `session.dirty` whenever an attribute is assigned, even when
+  the assigned value equals the current one, and even for relationship-only
+  changes. Running `sync_master_data` twice with identical data, or
+  re-assigning a column its current value, therefore bumped `updated_at` on
+  every row and broke "changed since" queries. The listener now only sets
+  `updated_at` when `session.is_modified(target, include_collections=False)`
+  is `True`, and it no longer overwrites `updated_at` when the application
+  explicitly assigned that column a value itself.

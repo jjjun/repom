@@ -1,7 +1,7 @@
 import uuid
 from functools import wraps
 from sqlalchemy import Integer, String, event, inspect
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, object_session
 from datetime import datetime, timezone
 from repom.database import Base
 from repom.custom_types.AutoDateTime import AutoDateTime
@@ -277,13 +277,14 @@ class BaseModel(Base):
         return updated
 
 
-# SQLAlchemy Event: updated_at の自動更新
+# SQLAlchemy Event: NUL バイトを含む値の書き込みを防止
 @event.listens_for(BaseModel, 'before_insert', propagate=True)
 @event.listens_for(BaseModel, 'before_update', propagate=True)
 def validate_before_write(mapper, connection, target):
     validate_model_no_nul_bytes(target)
 
 
+# SQLAlchemy Event: updated_at の自動更新
 @event.listens_for(BaseModel, 'before_update', propagate=True)
 def receive_before_update(mapper, connection, target):
     """
@@ -295,12 +296,25 @@ def receive_before_update(mapper, connection, target):
     動作:
     - SQLite を含むすべてのデータベースで動作
     - updated_at カラムを持つモデルのみ対象
-    - 更新のたびに自動実行される
+    - 対象インスタンスに updated_at 以外の実質的な変更がある場合のみ更新される
+      （session.is_modified() で判定するため、既存値と同じ値の再代入や
+      relationship のみの変更では更新されない）
+    - アプリケーションが updated_at に明示的な値を代入した場合は、
+      その値を優先し、自動設定で上書きしない
 
     Args:
         mapper: SQLAlchemy mapper
         connection: データベース接続
         target: 更新対象のモデルインスタンス
     """
-    if hasattr(target, 'updated_at'):
-        target.updated_at = datetime.now(timezone.utc)
+    if not hasattr(target, 'updated_at'):
+        return
+
+    session = object_session(target)
+    if session is None or not session.is_modified(target, include_collections=False):
+        return
+
+    if inspect(target).attrs.updated_at.history.has_changes():
+        return
+
+    target.updated_at = datetime.now(timezone.utc)

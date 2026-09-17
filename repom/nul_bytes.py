@@ -68,7 +68,7 @@ def _validate_document_no_nul_bytes(value, column_name: str, path: str | None = 
             else:
                 key_path = _child_path(path, str(key))
             _validate_document_no_nul_bytes(item, column_name, key_path)
-    elif isinstance(value, list):
+    elif isinstance(value, (list, tuple)):
         for index, item in enumerate(value):
             _validate_document_no_nul_bytes(item, column_name, _child_path(path, index))
 

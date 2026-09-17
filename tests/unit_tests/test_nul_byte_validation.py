@@ -182,6 +182,28 @@ def test_json_decorators_and_string_arrays_reject_nul_bytes(
     assert exc_info.value.key_path == key_path
 
 
+@pytest.mark.parametrize(
+    ('value', 'key_path'),
+    [
+        (('bad\0value',), '[0]'),
+        ({'items': ('bad\0value',)}, 'items[0]'),
+    ],
+)
+def test_json_columns_reject_nul_bytes_in_tuples_with_key_path(db_test, value, key_path):
+    record = NulByteModel(
+        title='valid',
+        body='valid',
+        payload=value,
+    )
+    db_test.add(record)
+
+    with pytest.raises(NulByteError) as exc_info:
+        db_test.flush()
+
+    assert exc_info.value.column_name == 'nul_byte_models.payload'
+    assert exc_info.value.key_path == key_path
+
+
 def test_json_columns_preserve_escaped_nul_text_and_control_characters(db_test):
     value = {
         'note': 'ordinary prose: \\u0000',
@@ -284,6 +306,24 @@ def test_bulk_update_rejects_nul_bytes(db_test):
         repo.bulk_update([{'id': record.id, 'title': 'bad\0value'}])
 
     assert exc_info.value.column_name == 'nul_byte_models.title'
+
+
+@pytest.mark.parametrize(
+    ('value', 'key_path'),
+    [
+        (('bad\0value',), '[0]'),
+        ({'items': ('bad\0value',)}, 'items[0]'),
+    ],
+)
+def test_bulk_update_rejects_nul_bytes_in_tuple(db_test, value, key_path):
+    repo = NulByteRepository(session=db_test)
+    record = repo.save(NulByteModel(title='valid', body='valid'))
+
+    with pytest.raises(NulByteError) as exc_info:
+        repo.bulk_update([{'id': record.id, 'payload': value}])
+
+    assert exc_info.value.column_name == 'nul_byte_models.payload'
+    assert exc_info.value.key_path == key_path
 
 
 @pytest.mark.asyncio
