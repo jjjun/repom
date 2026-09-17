@@ -10,7 +10,8 @@ dependencies = [
   # uv.lock is the effective pin until basekit is consumed from an index.
   "basekit>=0.4.0",
   "sqlalchemy>=2.0.49,<3.0.0",
-  "alembic>=1.14.0,<2.0.0",
+  # >=1.16.0: Config.get_version_locations_list(), used by AlembicSetup.from_ini.
+  "alembic>=1.16.0,<2.0.0",
   "inflect>=7.5.0,<8.0.0",
   "pydantic>=2.13.4,<3.0.0",
 ]

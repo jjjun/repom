@@ -88,12 +88,15 @@ uv run alembic_init
 開発中にマイグレーション履歴をリセットしたい場合：
 
 ```bash
-# CLI コマンドで実行
+# CLI コマンドで実行（<root_path>/alembic.ini が必要）
 uv run alembic_reset
 
+# 別の alembic.ini（別の名前空間）を対象にする場合
+uv run alembic_reset -c path/to/alembic.ini
+
 # 動作:
-# 1. alembic_version テーブルを削除（履歴をクリア）
-# 2. alembic/versions/*.py を削除（__init__.py は保持）
+# 1. 選択した alembic.ini の version_table（と version_table_schema）を削除
+# 2. その version_locations の *.py を削除（__init__.py は保持）
 ```
 
 **プログラムから実行**:

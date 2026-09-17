@@ -278,3 +278,14 @@
   `updated_at` when `session.is_modified(target, include_collections=False)`
   is `True`, and it no longer overwrites `updated_at` when the application
   explicitly assigned that column a value itself.
+- `alembic_reset` now takes a `-c`/`--config` option (default:
+  `<root_path>/alembic.ini`) and reads the target `alembic.ini` itself
+  (`version_table`, `version_table_schema`, `version_locations`,
+  `script_location`) via the new `AlembicSetup.from_ini`, instead of always
+  resetting the default `alembic_version` table and `alembic/versions`
+  directory regardless of which namespace the ini actually configures. The
+  destructive confirmation prompt now shows the resolved version table and
+  version directories. `alembic_init` reuses an existing `alembic.ini` the
+  same way when creating version directories. Raised the minimum supported
+  Alembic version to `1.16.0`, which added
+  `Config.get_version_locations_list()`.

@@ -945,7 +945,7 @@ dev = [
 requires-dist = [
     { name = "aiosqlite", marker = "extra == 'async'", specifier = ">=0.22.1,<0.23.0" },
     { name = "aiosqlite", marker = "extra == 'async-all'", specifier = ">=0.22.1,<0.23.0" },
-    { name = "alembic", specifier = ">=1.14.0,<2.0.0" },
+    { name = "alembic", specifier = ">=1.16.0,<2.0.0" },
     { name = "asyncpg", marker = "extra == 'async-all'", specifier = ">=0.31.0,<0.32.0" },
     { name = "asyncpg", marker = "extra == 'postgres-async'", specifier = ">=0.31.0,<0.32.0" },
     { name = "basekit", git = "https://github.com/jjjun/basekit.git?branch=main" },

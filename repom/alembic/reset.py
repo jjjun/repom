@@ -1,7 +1,7 @@
 """Alembic migration reset functionality."""
 
 from pathlib import Path
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 
 
 class AlembicReset:
@@ -29,53 +29,53 @@ class AlembicReset:
     def drop_alembic_version_table(self) -> None:
         """設定された Alembic バージョンテーブルを削除"""
         engine = create_engine(self.db_url)
-        quoted_version_table = engine.dialect.identifier_preparer.quote(
-            self.version_table
-        )
-        if (
-            self.db_url.startswith('postgresql')
-            and self.version_table_schema is not None
-        ):
-            quoted_version_table = (
-                f"{engine.dialect.identifier_preparer.quote_schema(self.version_table_schema)}."
-                f"{quoted_version_table}"
+        try:
+            quoted_version_table = engine.dialect.identifier_preparer.quote(
+                self.version_table
             )
+            # SQLite has no real schema support, so the existence check (like
+            # the DROP statement below) only qualifies by schema on postgresql.
+            existence_schema = None
+            if (
+                self.db_url.startswith('postgresql')
+                and self.version_table_schema is not None
+            ):
+                quoted_version_table = (
+                    f"{engine.dialect.identifier_preparer.quote_schema(self.version_table_schema)}."
+                    f"{quoted_version_table}"
+                )
+                existence_schema = self.version_table_schema
 
-        with engine.connect() as conn:
-            # データベースタイプに応じたテーブル存在チェック
-            if self.db_url.startswith('postgresql'):
-                result = conn.execute(text(
-                    "SELECT table_name FROM information_schema.tables "
-                    "WHERE table_schema = :version_table_schema "
-                    "AND table_name = :version_table"
-                ), {
-                    "version_table_schema": (
-                        self.version_table_schema or "public"
-                    ),
-                    "version_table": self.version_table
-                })
-            else:
-                # SQLite
-                result = conn.execute(text(
-                    "SELECT name FROM sqlite_master "
-                    "WHERE type='table' AND name=:version_table"
-                ), {"version_table": self.version_table})
+            with engine.connect() as conn:
+                table_exists = inspect(conn).has_table(
+                    self.version_table, schema=existence_schema
+                )
+                if table_exists:
+                    conn.execute(text(f"DROP TABLE {quoted_version_table}"))
+                    conn.commit()
+                    print(f"[OK] Dropped {self.version_table} table")
+                else:
+                    print(f"[OK] {self.version_table} table does not exist")
+        finally:
+            # Undisposed engines keep a pooled connection open, which leaves
+            # a file-based SQLite database locked on Windows until GC'd.
+            engine.dispose()
 
-            if result.fetchone():
-                conn.execute(text(f"DROP TABLE {quoted_version_table}"))
-                conn.commit()
-                print(f"[OK] Dropped {self.version_table} table")
-            else:
-                print(f"[OK] {self.version_table} table does not exist")
+    def delete_migration_files(self, versions_dir: Path | None = None) -> None:
+        """マイグレーションファイルを削除
 
-    def delete_migration_files(self) -> None:
-        """マイグレーションファイルを削除"""
-        if not self.versions_dir.exists():
-            print(f"[OK] Versions directory does not exist: {self.versions_dir}")
+        Args:
+            versions_dir: 削除対象のディレクトリ（省略時は self.versions_dir）
+        """
+        versions_dir = (
+            Path(versions_dir) if versions_dir is not None else self.versions_dir
+        )
+        if not versions_dir.exists():
+            print(f"[OK] Versions directory does not exist: {versions_dir}")
             return
 
         deleted_count = 0
-        for file in self.versions_dir.glob("*.py"):
+        for file in versions_dir.glob("*.py"):
             # __init__.py は保持
             if file.name == "__init__.py":
                 continue
@@ -90,7 +90,7 @@ class AlembicReset:
             print("[OK] No migration files to delete")
 
         # __pycache__ も削除
-        pycache = self.versions_dir / "__pycache__"
+        pycache = versions_dir / "__pycache__"
         if pycache.exists():
             import shutil
             shutil.rmtree(pycache)

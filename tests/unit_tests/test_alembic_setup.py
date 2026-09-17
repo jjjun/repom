@@ -4,10 +4,11 @@ Tests for the AlembicSetup utility class that provides
 a unified interface for Alembic initialization and reset operations.
 """
 
+import os
 import tempfile
 from pathlib import Path
 
-from repom.alembic import AlembicSetup
+from repom.alembic import AlembicSetup, AlembicTemplates
 
 
 class TestAlembicSetupInit:
@@ -60,6 +61,106 @@ class TestAlembicSetupInit:
             # versions_dir has the expanded path
             expected_dir = Path(tmpdir) / 'migrations'
             assert setup.versions_dir == expected_dir
+
+    def test_versions_dirs_defaults_to_single_entry_list(self):
+        """versions_dirs mirrors versions_dir when constructed directly"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            setup = AlembicSetup(tmpdir, 'sqlite:///test.db')
+
+            assert setup.versions_dirs == [setup.versions_dir]
+
+
+class TestFromIni:
+    """Tests for AlembicSetup.from_ini (repom#160)"""
+
+    def test_from_ini_reads_version_table_and_schema(self, tmp_path):
+        ini_path = tmp_path / "alembic.ini"
+        ini_path.write_text(AlembicTemplates.generate_alembic_ini(
+            script_location="alembic",
+            version_locations="%(here)s/migrations_ns2",
+            version_table="alembic_version_ns2",
+            version_table_schema="migration_ns2"
+        ))
+
+        setup = AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+
+        assert setup.version_table == "alembic_version_ns2"
+        assert setup.version_table_schema == "migration_ns2"
+        assert setup.script_location == "alembic"
+        assert setup.versions_dir == tmp_path / "migrations_ns2"
+        assert setup.versions_dirs == [tmp_path / "migrations_ns2"]
+
+    def test_from_ini_defaults_when_options_absent(self, tmp_path):
+        """A bare [alembic] section falls back the same way
+        alembic.script.ScriptDirectory.from_config does:
+        "<script_location>/versions"."""
+        ini_path = tmp_path / "alembic.ini"
+        ini_path.write_text("[alembic]\n")
+
+        setup = AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+
+        assert setup.version_table == "alembic_version"
+        assert setup.version_table_schema is None
+        assert setup.script_location == "alembic"
+        assert setup.versions_dir == tmp_path / "alembic" / "versions"
+        assert setup.versions_dirs == [tmp_path / "alembic" / "versions"]
+
+    def test_from_ini_defaults_to_script_location_versions_when_absent(
+        self, tmp_path
+    ):
+        """repom#160 review: a non-default script_location with no
+        version_locations must still resolve next to it, not to the
+        hard-coded "alembic/versions"."""
+        ini_path = tmp_path / "alembic.ini"
+        ini_path.write_text(
+            "[alembic]\n"
+            "script_location = submod/repom/alembic\n"
+        )
+
+        setup = AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+
+        expected = tmp_path / "submod" / "repom" / "alembic" / "versions"
+        assert setup.versions_dir == expected
+        assert setup.versions_dirs == [expected]
+
+    def test_from_ini_resolves_relative_version_locations_against_ini_dir(
+        self, tmp_path
+    ):
+        """A relative path with no %(here)s must not resolve against cwd"""
+        ini_path = tmp_path / "alembic.ini"
+        ini_path.write_text(
+            "[alembic]\n"
+            "script_location = alembic\n"
+            "version_locations = alembic/versions\n"
+            "path_separator = os\n"
+        )
+
+        setup = AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+
+        assert setup.versions_dir == tmp_path / "alembic" / "versions"
+
+    def test_from_ini_supports_multiple_version_locations(self, tmp_path):
+        version_locations = os.pathsep.join([
+            "%(here)s/migrations_a",
+            "%(here)s/migrations_b",
+        ])
+        ini_path = tmp_path / "alembic.ini"
+        ini_path.write_text(
+            "[alembic]\n"
+            "script_location = alembic\n"
+            f"version_locations = {version_locations}\n"
+            "path_separator = os\n"
+        )
+
+        setup = AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+
+        assert setup.versions_dirs == [
+            tmp_path / "migrations_a",
+            tmp_path / "migrations_b",
+        ]
+        # versions_dir keeps pointing at the first location for callers that
+        # only care about a single directory (e.g. alembic_init's summary).
+        assert setup.versions_dir == tmp_path / "migrations_a"
 
 
 class TestCreateAlembicIni:
@@ -268,6 +369,18 @@ class TestCreateVersionDirectory:
             setup.create_version_directory()
             assert versions_dir.exists()
 
+    def test_create_version_directory_creates_all_versions_dirs(self, tmp_path):
+        """create_version_directory covers every entry in versions_dirs"""
+        setup = AlembicSetup(tmp_path, 'sqlite:///test.db')
+        migrations_a = tmp_path / 'migrations_a'
+        migrations_b = tmp_path / 'migrations_b'
+        setup.versions_dirs = [migrations_a, migrations_b]
+
+        setup.create_version_directory()
+
+        assert (migrations_a / '__init__.py').exists()
+        assert (migrations_b / '__init__.py').exists()
+
 
 class TestResetMigrations:
     """Tests for reset_migrations method"""
@@ -338,6 +451,28 @@ class TestResetMigrations:
         setup.reset_migrations(drop_table=False, delete_files=False)
 
         assert created_with["version_table"] == "alembic_version"
+
+    def test_reset_migrations_deletes_files_from_every_version_location(
+        self, tmp_path
+    ):
+        """repom#160: multiple version_locations must each be cleaned"""
+        migrations_a = tmp_path / "migrations_a"
+        migrations_b = tmp_path / "migrations_b"
+        for versions_dir in (migrations_a, migrations_b):
+            versions_dir.mkdir()
+            (versions_dir / "__init__.py").touch()
+        (migrations_a / "0001_a.py").write_text("# a")
+        (migrations_b / "0001_b.py").write_text("# b")
+
+        setup = AlembicSetup(tmp_path, "sqlite:///test.db")
+        setup.versions_dirs = [migrations_a, migrations_b]
+
+        setup.reset_migrations(drop_table=False)
+
+        assert not (migrations_a / "0001_a.py").exists()
+        assert not (migrations_b / "0001_b.py").exists()
+        assert (migrations_a / "__init__.py").exists()
+        assert (migrations_b / "__init__.py").exists()
 
 
 class TestGetAlembicConfig:
