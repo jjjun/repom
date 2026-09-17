@@ -5,9 +5,8 @@ import sqlite3
 import time
 from typing import BinaryIO, Callable, TypeVar
 
-from basekit.docker_manager import DockerCommandExecutor
-
 from repom.config import config
+from repom.docker_service import DockerUnavailableError, is_container_running
 from repom.logging import get_logger
 
 logger = get_logger(__name__)
@@ -283,11 +282,11 @@ def run_postgres_via_docker_or_host(
     resolved_container_name = container_name or config.postgres.container.get_container_name()
 
     try:
-        is_running = DockerCommandExecutor.is_container_running(resolved_container_name)
-    except FileNotFoundError:
+        is_running = is_container_running(resolved_container_name)
+    except DockerUnavailableError as exc:
         logger.warning(
-            f"docker command not found while checking container {resolved_container_name}; "
-            f"falling back to {host_tools} for PostgreSQL {operation}."
+            f"Docker unavailable while checking container {resolved_container_name} "
+            f"({exc}); falling back to {host_tools} for PostgreSQL {operation}."
         )
         return via_host()
 

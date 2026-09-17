@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from collections.abc import Callable, Mapping
 from typing import Protocol
 
 from basekit.docker_manager import DockerCommandExecutor
+
+
+class DockerUnavailableError(RuntimeError):
+    """Raised when the docker CLI is missing or its daemon is unreachable."""
 
 
 class DockerServiceManager(Protocol):
@@ -48,6 +53,9 @@ def start_service(
         print(f"{exc}")
         print(f"Check logs: docker logs {manager.get_container_name()}")
         sys.exit(1)
+    except SystemExit as exc:
+        print(f"Check logs: docker logs {manager.get_container_name()}")
+        sys.exit(exc.code if exc.code is not None else 1)
 
 
 def stop_service(manager_factory: ManagerFactory) -> None:
@@ -62,6 +70,34 @@ def remove_service(manager_factory: ManagerFactory) -> None:
     manager_factory().remove()
 
 
+def is_container_running(container_name: str) -> bool:
+    """Return whether ``container_name`` is running.
+
+    Wraps DockerCommandExecutor.is_container_running() so a missing docker
+    CLI (FileNotFoundError) and an unreachable daemon (CalledProcessError,
+    e.g. Docker Desktop installed but not running) both surface as
+    DockerUnavailableError, carrying the daemon's stderr, instead of two
+    different exception types.
+    """
+    try:
+        return DockerCommandExecutor.is_container_running(container_name)
+    except FileNotFoundError as exc:
+        raise DockerUnavailableError(
+            "docker command not found. "
+            "Please install Docker Desktop: "
+            "https://www.docker.com/products/docker-desktop"
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
+        stderr = (stderr or "").strip()
+        message = f"docker is unavailable for container {container_name}"
+        if stderr:
+            message = f"{message}: {stderr}"
+        raise DockerUnavailableError(message) from exc
+
+
 def ensure_running(
     manager_factory: ManagerFactory,
     container_names: Mapping[str, str],
@@ -71,17 +107,10 @@ def ensure_running(
 ) -> None:
     """Start a Docker-backed service when one or more containers are down."""
 
-    try:
-        running_by_label = {
-            label: DockerCommandExecutor.is_container_running(container_name)
-            for label, container_name in container_names.items()
-        }
-    except FileNotFoundError as exc:
-        raise RuntimeError(
-            "docker command not found. "
-            "Please install Docker Desktop: "
-            "https://www.docker.com/products/docker-desktop"
-        ) from exc
+    running_by_label = {
+        label: is_container_running(container_name)
+        for label, container_name in container_names.items()
+    }
 
     if all(running_by_label.values()):
         return

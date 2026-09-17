@@ -1,11 +1,14 @@
 from tests._init import *
 
+import subprocess
 from unittest.mock import MagicMock
 import os
 import time
 
 import pytest
+from basekit.docker_manager import DockerCommandExecutor
 
+from repom.docker_service import DockerUnavailableError
 from repom.scripts import _backup_utils
 from repom.scripts._backup_utils import (
     ChecksumError,
@@ -170,7 +173,7 @@ def test_run_postgres_via_docker_or_host_uses_docker_when_container_running(monk
     via_host = MagicMock()
 
     monkeypatch.setattr(
-        _backup_utils.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(return_value=True),
     )
@@ -191,7 +194,7 @@ def test_run_postgres_via_docker_or_host_uses_host_when_container_stopped(monkey
     via_host = MagicMock(return_value="host-result")
 
     monkeypatch.setattr(
-        _backup_utils.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(return_value=False),
     )
@@ -212,9 +215,9 @@ def test_run_postgres_via_docker_or_host_uses_host_when_docker_missing(monkeypat
     via_host = MagicMock(return_value="host-result")
 
     monkeypatch.setattr(
-        _backup_utils.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
-        MagicMock(side_effect=FileNotFoundError("docker not found")),
+        MagicMock(side_effect=DockerUnavailableError("docker command not found")),
     )
 
     result = run_postgres_via_docker_or_host(
@@ -228,13 +231,43 @@ def test_run_postgres_via_docker_or_host_uses_host_when_docker_missing(monkeypat
     via_host.assert_called_once_with()
 
 
+def test_run_postgres_via_docker_or_host_uses_host_when_docker_daemon_unavailable(
+    monkeypatch, caplog
+):
+    """`docker ps` succeeds in finding the CLI but fails to reach the daemon
+    (e.g. Docker Desktop installed but not running); the operation should
+    fall back to host tools, with the daemon's stderr in the warning."""
+    via_docker = MagicMock()
+    via_host = MagicMock(return_value="host-result")
+
+    monkeypatch.setattr(
+        DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(
+            side_effect=subprocess.CalledProcessError(
+                1,
+                ["docker", "ps"],
+                stderr="Cannot connect to the Docker daemon",
+            )
+        ),
+    )
+
+    with caplog.at_level("WARNING"):
+        result = run_postgres_via_docker_or_host(
+            via_docker=via_docker,
+            via_host=via_host,
+            operation="backup",
+        )
+
+    assert result == "host-result"
+    via_docker.assert_not_called()
+    via_host.assert_called_once_with()
+    assert "Cannot connect to the Docker daemon" in caplog.text
+
+
 def test_run_postgres_via_docker_or_host_accepts_explicit_container_name(monkeypatch):
     is_running = MagicMock(return_value=True)
-    monkeypatch.setattr(
-        _backup_utils.DockerCommandExecutor,
-        "is_container_running",
-        is_running,
-    )
+    monkeypatch.setattr(_backup_utils, "is_container_running", is_running)
 
     result = run_postgres_via_docker_or_host(
         via_docker=lambda: "docker-result",

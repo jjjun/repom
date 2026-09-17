@@ -5,6 +5,7 @@ DockerService, Volume  docker-compose.yml
 
 import os
 import stat
+import subprocess
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -930,6 +931,28 @@ class TestPostgresEnsureRunning:
                 side_effect=FileNotFoundError("docker not found"),
             ):
                 with pytest.raises(RuntimeError, match="docker command not found"):
+                    manage.ensure_running()
+
+    def test_raises_runtime_error_when_docker_daemon_unavailable(self):
+        """An unreachable Docker daemon makes "docker ps" fail with
+        CalledProcessError, which ensure_running reports as RuntimeError
+        including the daemon message."""
+        import pytest
+
+        from repom.postgres import manage
+
+        with patch.object(manage, "config", self._patch_config(pgadmin_enabled=False)):
+            with patch(
+                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
+                side_effect=subprocess.CalledProcessError(
+                    1,
+                    ["docker", "ps"],
+                    stderr="Cannot connect to the Docker daemon",
+                ),
+            ):
+                with pytest.raises(
+                    RuntimeError, match="Cannot connect to the Docker daemon"
+                ):
                     manage.ensure_running()
 
     def test_raises_runtime_error_on_timeout(self):

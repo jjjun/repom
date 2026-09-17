@@ -167,6 +167,86 @@ def test_pg_tools_available_returns_true_when_only_container_available(monkeypat
     assert pg_tools_available(_params()) is True
 
 
+def test_pg_tools_available_falls_back_to_host_tools_when_docker_daemon_unavailable(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(
+            side_effect=subprocess.CalledProcessError(
+                1,
+                ["docker", "ps"],
+                stderr="Cannot connect to the Docker daemon",
+            )
+        ),
+    )
+    monkeypatch.setattr(pg_dump_tools.shutil, "which", lambda name: f"/usr/bin/{name}")
+
+    assert pg_tools_available(_params()) is True
+
+
+def test_pg_dump_custom_falls_back_to_host_when_docker_daemon_unavailable(
+    monkeypatch, tmp_path: Path
+):
+    dump_path = tmp_path / "db.dump"
+
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(
+            side_effect=subprocess.CalledProcessError(
+                1,
+                ["docker", "ps"],
+                stderr="Cannot connect to the Docker daemon",
+            )
+        ),
+    )
+
+    def fake_run(command, **kwargs):
+        if command == ["pg_dump", "--version"]:
+            return subprocess.CompletedProcess(command, 0, "pg_dump (PostgreSQL) 16.3\n", "")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(pg_dump_tools.subprocess, "run", fake_run)
+
+    result = pg_dump_custom(_params(), dump_path)
+
+    assert result.returncode == 0
+    assert result.used_docker is False
+
+
+def test_pg_restore_custom_falls_back_to_host_when_docker_daemon_unavailable(
+    monkeypatch, tmp_path: Path
+):
+    dump_path = tmp_path / "db.dump"
+    dump_path.write_bytes(b"CUSTOM-DUMP")
+
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(
+            side_effect=subprocess.CalledProcessError(
+                1,
+                ["docker", "ps"],
+                stderr="Cannot connect to the Docker daemon",
+            )
+        ),
+    )
+
+    def fake_run(command, **kwargs):
+        if command == ["pg_restore", "--version"]:
+            return subprocess.CompletedProcess(command, 0, "pg_restore (PostgreSQL) 16.3\n", "")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(pg_dump_tools.subprocess, "run", fake_run)
+
+    result = pg_restore_custom(_params(), dump_path)
+
+    assert result.returncode == 0
+    assert result.used_docker is False
+
+
 def test_pg_tool_result_redacts_password_and_adds_version_mismatch_hint(
     monkeypatch,
     tmp_path: Path,

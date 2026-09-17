@@ -10,6 +10,7 @@ from pathlib import Path
 from basekit.docker_manager import DockerCommandExecutor
 
 from repom.config import config
+from repom.docker_service import DockerUnavailableError, is_container_running
 from repom.scripts._backup_utils import build_host_pg_env, run_postgres_via_docker_or_host
 
 VERSION_MISMATCH_HINT = (
@@ -100,9 +101,9 @@ def pg_tools_available(params: PgConnParams) -> bool:
 
     container_name = params.container_name or config.postgres.container.get_container_name()
     try:
-        if DockerCommandExecutor.is_container_running(container_name):
+        if is_container_running(container_name):
             return True
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except DockerUnavailableError:
         pass
 
     return shutil.which("pg_dump") is not None and shutil.which("pg_restore") is not None

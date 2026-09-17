@@ -410,6 +410,28 @@ class TestRedisEnsureRunning:
                 with pytest.raises(RuntimeError, match="docker command not found"):
                     manage.ensure_running()
 
+    def test_raises_runtime_error_when_docker_daemon_unavailable(self):
+        import subprocess
+        from unittest.mock import patch
+
+        import pytest
+
+        from repom.redis import manage
+
+        with patch.object(manage, "config", self._patch_config()):
+            with patch(
+                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
+                side_effect=subprocess.CalledProcessError(
+                    1,
+                    ["docker", "ps"],
+                    stderr="Cannot connect to the Docker daemon",
+                ),
+            ):
+                with pytest.raises(
+                    RuntimeError, match="Cannot connect to the Docker daemon"
+                ):
+                    manage.ensure_running()
+
     def test_raises_runtime_error_on_timeout(self):
         from unittest.mock import MagicMock, patch
 
