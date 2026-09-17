@@ -34,7 +34,8 @@ class SoftDeletableMixin:
         - is_deleted プロパティ: 削除済みかどうかを確認
 
     注意:
-        - deleted_at は UTC タイムゾーン付きの DateTime 型です
+        - deleted_at は UTC タイムゾーン付きの DateTime 型です（ただし SQLite では
+          タイムゾーン情報が保持されず、読み込み時は naive な datetime になります）
         - セッションへの追加やコミットは呼び出し側で行う必要があります
         - BaseRepository を使用すると、削除済みレコードの自動除外が有効になります
     """

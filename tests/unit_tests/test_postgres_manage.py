@@ -1,6 +1,6 @@
-"""PostgreSQL manage.py 
+"""PostgreSQL manage.py の単体テスト
 
-DockerService, Volume  docker-compose.yml 
+DockerService, Volume 生成、および docker-compose.yml ファイル出力の機能をテストします。
 """
 
 import os
@@ -15,12 +15,12 @@ DATA_PATH = Path("data") / "repom"
 
 
 class TestGenerateDockerComposePostgresOnly:
-    """generate_docker_compose() - PostgreSQL gAdmin """
+    """generate_docker_compose() - PostgreSQL のみ（pgAdmin 無効）"""
 
     @patch('repom.postgres.manage.config')
     @patch('repom.postgres.manage.PostgresManager.get_init_dir')
     def test_postgres_only_service_generation(self, mock_get_init_dir, mock_config):
-        """PostgreSQL """
+        """PostgreSQL のみのサービスが生成されることを確認"""
         # Mock setup
         mock_init_dir = Path("/tmp/init")
         mock_get_init_dir.return_value = mock_init_dir
@@ -40,7 +40,7 @@ class TestGenerateDockerComposePostgresOnly:
         mock_pg_config.container = mock_container_config
 
         mock_pgadmin_config = MagicMock()
-        mock_pgadmin_config.container.enabled = False  # 
+        mock_pgadmin_config.container.enabled = False  # ← 無効
 
         mock_config.postgres = mock_pg_config
         mock_config.pgadmin = mock_pgadmin_config
@@ -52,20 +52,20 @@ class TestGenerateDockerComposePostgresOnly:
         generator = generate_docker_compose()
 
         # Assertions
-        assert len(generator.services) == 1  # PostgreSQL 
+        assert len(generator.services) == 1  # PostgreSQL のみ
         assert generator.services[0].name == "postgres"
         assert generator.services[0].image == "postgres:16-alpine"
         assert generator.services[0].container_name == "repom_postgres"
-        assert generator.services[0].depends_on is None  # 
+        assert generator.services[0].depends_on is None  # 依存なし
 
 
 class TestGenerateDockerComposePgAdminEnabled:
-    """generate_docker_compose() - pgAdmin """
+    """generate_docker_compose() - pgAdmin 有効"""
 
     @patch('repom.postgres.manage.config')
     @patch('repom.postgres.manage.PostgresManager.get_init_dir')
     def test_postgres_and_pgadmin_service_generation(self, mock_get_init_dir, mock_config):
-        """PostgreSQL  pgAdmin """
+        """PostgreSQL と pgAdmin の両サービスが生成されることを確認"""
         # Mock setup
         mock_init_dir = Path("/tmp/init")
         mock_get_init_dir.return_value = mock_init_dir
@@ -85,7 +85,7 @@ class TestGenerateDockerComposePgAdminEnabled:
         mock_pg_config.container = mock_pg_container
 
         mock_pgadmin_container = MagicMock()
-        mock_pgadmin_container.enabled = True  # 
+        mock_pgadmin_container.enabled = True  # ← 有効
         mock_pgadmin_container.get_container_name.return_value = "myproject_pgadmin"
         mock_pgadmin_container.get_volume_name.return_value = "myproject_pgadmin_data"
         mock_pgadmin_container.image = "dpage/pgadmin4:latest"
@@ -111,7 +111,7 @@ class TestGenerateDockerComposePgAdminEnabled:
         assert generator.services[0].name == "postgres"
         assert generator.services[1].name == "pgadmin"
 
-        # pgAdmin  depends_on 
+        # pgAdmin の depends_on を確認
         pgadmin_service = generator.services[1]
         assert pgadmin_service.depends_on is not None
         assert "postgres" in pgadmin_service.depends_on
@@ -120,7 +120,7 @@ class TestGenerateDockerComposePgAdminEnabled:
     @patch('repom.postgres.manage.config')
     @patch('repom.postgres.manage.PostgresManager.get_init_dir')
     def test_pgadmin_yaml_generation(self, mock_get_init_dir, mock_config):
-        """pgAdmin  YAML """
+        """pgAdmin の YAML 出力が正しく生成されることを確認"""
         # Mock setup
         mock_init_dir = Path("/tmp/init")
         mock_get_init_dir.return_value = mock_init_dir
@@ -163,7 +163,7 @@ class TestGenerateDockerComposePgAdminEnabled:
         generator = generate_docker_compose()
         yaml_content = generator.generate()
 
-        # YAML 
+        # YAML 出力確認
         assert "  pgadmin:" in yaml_content
         assert "    image: dpage/pgadmin4:latest" in yaml_content
         assert "    container_name: repom_pgadmin" in yaml_content
@@ -176,68 +176,68 @@ class TestGenerateDockerComposePgAdminEnabled:
 
 
 class TestGenerateInitSql:
-    """generate_init_sql() - DB """
+    """generate_init_sql() - DB 初期化スクリプト生成"""
 
     @patch('repom.postgres.manage.config')
     def test_default_database_names(self, mock_config):
-        """ DB epom, repom_dev, repom_test"""
+        """デフォルトの DB 名（repom, repom_dev, repom_test）が生成されることを確認"""
         mock_config.data_path = DATA_PATH
-        mock_config.db_name = "repom"  # db_name 
+        mock_config.db_name = "repom"  # db_name を使用
         mock_config.postgres.user = "repom"
 
         from repom.postgres.manage import generate_init_sql
 
         sql = generate_init_sql()
 
-        #  CREATE DATABASE gexec
+        # 全環境の CREATE DATABASE が含まれる（\gexec パターン）
         assert "'CREATE DATABASE \"repom\"'" in sql
         assert "'CREATE DATABASE \"repom_dev\"'" in sql
         assert "'CREATE DATABASE \"repom_test\"'" in sql
-        # IF NOT EXISTS 
+        # IF NOT EXISTS パターンが含まれる
         assert "WHERE NOT EXISTS" in sql
         assert "pg_database" in sql
-        # GRANT  DB 
+        # GRANT もすべての DB に対して含まれる
         assert 'GRANT ALL PRIVILEGES ON DATABASE "repom" TO "repom";' in sql
         assert 'GRANT ALL PRIVILEGES ON DATABASE "repom_dev" TO "repom";' in sql
         assert 'GRANT ALL PRIVILEGES ON DATABASE "repom_test" TO "repom";' in sql
 
     @patch('repom.postgres.manage.config')
     def test_custom_database_names(self, mock_config):
-        """ DB ine_py, mine_py_dev, mine_py_test"""
+        """カスタム DB 名（mine_py, mine_py_dev, mine_py_test）が生成されることを確認"""
         mock_config.data_path = DATA_PATH
-        mock_config.db_name = "mine_py"  # db_name 
+        mock_config.db_name = "mine_py"  # db_name を使用
         mock_config.postgres.user = "mine_py"
 
         from repom.postgres.manage import generate_init_sql
 
         sql = generate_init_sql()
 
-        #  CREATE DATABASE gexec
+        # 全環境の CREATE DATABASE が含まれる（\gexec パターン）
         assert "'CREATE DATABASE \"mine_py\"'" in sql
         assert "'CREATE DATABASE \"mine_py_dev\"'" in sql
         assert "'CREATE DATABASE \"mine_py_test\"'" in sql
-        # GRANT  DB 
+        # GRANT もすべての DB に対して含まれる
         assert 'GRANT ALL PRIVILEGES ON DATABASE "mine_py" TO "mine_py";' in sql
         assert 'GRANT ALL PRIVILEGES ON DATABASE "mine_py_dev" TO "mine_py";' in sql
         assert 'GRANT ALL PRIVILEGES ON DATABASE "mine_py_test" TO "mine_py";' in sql
 
     @patch('repom.postgres.manage.config')
     def test_environment_prefixing_in_sql(self, mock_config):
-        """"""
+        """環境別にデータベース名が正しくプレフィックスされていることを確認"""
         mock_config.data_path = DATA_PATH
-        mock_config.db_name = "project"  # db_name 
+        mock_config.db_name = "project"  # db_name を使用
         mock_config.postgres.user = "user"
 
         from repom.postgres.manage import generate_init_sql
 
         sql = generate_init_sql()
 
-        #  CREATE DATABASE gexec
+        # 全環境の CREATE DATABASE が含まれる（\gexec パターン）
         assert "'CREATE DATABASE \"project\"'" in sql
         assert "'CREATE DATABASE \"project_dev\"'" in sql
         assert "'CREATE DATABASE \"project_test\"'" in sql
 
-        #  GRANT 
+        # 全環境に対して GRANT が発行される
         assert 'GRANT ALL PRIVILEGES ON DATABASE "project" TO "user";' in sql
         assert 'GRANT ALL PRIVILEGES ON DATABASE "project_dev" TO "user";' in sql
         assert 'GRANT ALL PRIVILEGES ON DATABASE "project_test" TO "user";' in sql
@@ -263,13 +263,13 @@ class TestGenerateInitSql:
 
 
 class TestDockerComposeFileGeneration:
-    """Compose """
+    """Compose ファイルのファイル出力テスト"""
 
     @patch('repom.postgres.manage.config')
     @patch('repom.postgres.manage.PostgresManager.get_compose_dir')
     @patch('repom.postgres.manage.PostgresManager.get_init_dir')
     def test_yaml_file_is_valid(self, mock_get_init_dir, mock_get_compose_dir, mock_config, tmp_path):
-        """YAML """
+        """生成される YAML ファイルが有効な形式であることを確認"""
         # Mock setup
         mock_init_dir = tmp_path / "init"
         mock_init_dir.mkdir()
@@ -306,18 +306,18 @@ class TestDockerComposeFileGeneration:
         generator = generate_docker_compose()
         yaml_content = generator.generate()
 
-        # YAML
+        # YAML の基本構造を確認
         assert "version: '3.8'" in yaml_content
         assert "services:" in yaml_content
         assert "volumes:" in yaml_content
         assert "  postgres:" in yaml_content
         assert "  repom_postgres_data:" in yaml_content
 
-        #
+        # 重要な設定確認
         assert '      POSTGRES_USER: "repom"' in yaml_content
         assert '      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"' in yaml_content
         assert "repom_dev" not in yaml_content
-        # Note: POSTGRES_DB DB init
+        # Note: POSTGRES_DB は省略される（環境別DBは init スクリプトで作成）
         assert "POSTGRES_DB" not in yaml_content
 
     @patch('repom.postgres.manage.config')
@@ -688,16 +688,16 @@ class TestDockerComposeFileGeneration:
 
 
 class TestPgAdminServersJson:
-    """pgAdmin servers.json """
+    """pgAdmin servers.json 設定ファイル生成のテスト"""
 
     @patch('repom.postgres.manage.config')
     def test_generate_pgadmin_servers_json(self, mock_config):
-        """servers.json - """
+        """servers.json 設定の生成テスト - デフォルト値"""
         # Mock setup
         mock_config.data_path = DATA_PATH
         mock_config.postgres.user = "repom"
         mock_config.postgres.password = "repom_dev"
-        mock_config.db_name = "repom"  # db_name 
+        mock_config.db_name = "repom"  # db_name を使用
         mock_config.postgres.container.get_container_name.return_value = "repom_postgres"
 
         from repom.postgres.manage import generate_pgadmin_servers_json
@@ -714,16 +714,16 @@ class TestPgAdminServersJson:
         assert server["Port"] == 5432
         assert server["Username"] == "repom"
         assert server["SSLMode"] == "prefer"
-        assert server["MaintenanceDB"] == "repom_dev"  # 
+        assert server["MaintenanceDB"] == "repom_dev"  # デフォルト
 
     @patch('repom.postgres.manage.config')
     def test_generate_pgadmin_servers_json_custom_config(self, mock_config):
-        """servers.json - ONFIG_HOOK """
-        # Mock setup -  CONFIG_HOOK 
+        """servers.json 設定の生成テスト - カスタム値（CONFIG_HOOK 想定）"""
+        # Mock setup - 外部プロジェクトの CONFIG_HOOK を想定
         mock_config.data_path = DATA_PATH
         mock_config.postgres.user = "mine_py"
         mock_config.postgres.password = "mine_py_dev"
-        mock_config.db_name = "mine_py"  # db_name 
+        mock_config.db_name = "mine_py"  # db_name を使用
         mock_config.postgres.container.get_container_name.return_value = "mine_py_postgres"
 
         from repom.postgres.manage import generate_pgadmin_servers_json
@@ -733,17 +733,17 @@ class TestPgAdminServersJson:
 
         # Assertions
         server = config_dict["Servers"]["1"]
-        assert server["Name"] == "mine_py_postgres"  # 
-        assert server["Host"] == "postgres"  # Docker network  "postgres"
+        assert server["Name"] == "mine_py_postgres"  # カスタムコンテナ名
+        assert server["Host"] == "postgres"  # Docker network 内は常に "postgres"
         assert server["Username"] == "mine_py"
-        assert server["MaintenanceDB"] == "mine_py_dev"  #  DB 
+        assert server["MaintenanceDB"] == "mine_py_dev"  # カスタム DB 名
 
 
 class TestDirectorySeparation:
     """Tests for separate project directory structure (Issue #043)"""
 
     def test_get_compose_dir_uses_postgres_subdir(self):
-        """get_compose_dir postgres """
+        """get_compose_dir が postgres サブディレクトリを使用（分離プロジェクト構造）"""
         from repom.postgres.manage import PostgresManager
 
         compose_dir = PostgresManager().get_compose_dir()
@@ -753,7 +753,7 @@ class TestDirectorySeparation:
         assert "postgres" in str(compose_dir)
 
     def test_postgres_generate_creates_in_postgres_subdir(self):
-        """postgres_generate data/repom/postgres/  docker-compose.yml """
+        """postgres_generate が data/repom/postgres/ に docker-compose.yml を生成"""
         from repom.postgres import manage as postgres_manage
         from repom.postgres.manage import PostgresManager, generate
 
@@ -772,7 +772,7 @@ class TestDirectorySeparation:
         assert "postgres" in str(compose_file.parent)
 
     def test_postgres_redis_no_conflict(self):
-        """postgres_generate  redis_generate """
+        """postgres_generate と redis_generate の両方実行時に競合しない"""
         from repom.postgres import manage as postgres_manage
         from repom.postgres.manage import PostgresManager, generate as postgres_generate
         from repom.redis import manage as redis_manage
@@ -816,10 +816,10 @@ class TestDirectorySeparation:
 
 
 class TestPostgresEnsureRunning:
-    """ensure_running() """
+    """ensure_running() の単体テスト"""
 
     def _patch_config(self, *, pgadmin_enabled: bool):
-        """`repom.postgres.manage.config`  MagicMock """
+        """`repom.postgres.manage.config` の MagicMock 差し替えを返す"""
         mock_config = MagicMock()
         mock_config.postgres.container.get_container_name.return_value = "repom_postgres"
         mock_config.pgadmin.container.enabled = pgadmin_enabled
@@ -827,7 +827,7 @@ class TestPostgresEnsureRunning:
         return mock_config
 
     def test_returns_when_postgres_and_pgadmin_running(self):
-        """postgres  pgAdmin """
+        """postgres と pgAdmin の両方が起動済みなら何もしない"""
         from repom.postgres import manage
 
         with patch.object(manage, "config", self._patch_config(pgadmin_enabled=True)):
@@ -844,7 +844,7 @@ class TestPostgresEnsureRunning:
         manager_cls.assert_not_called()
 
     def test_returns_when_postgres_running_and_pgadmin_disabled(self):
-        """pgAdmin postgres """
+        """pgAdmin が無効なら postgres の状態だけで判定する"""
         from repom.postgres import manage
 
         with patch.object(manage, "config", self._patch_config(pgadmin_enabled=False)):
@@ -861,7 +861,7 @@ class TestPostgresEnsureRunning:
         manager_cls.assert_not_called()
 
     def test_starts_when_postgres_down(self):
-        """postgres generate + manager.start(timeout) """
+        """postgres が未起動なら generate + manager.start(timeout) を呼ぶ"""
         from repom.postgres import manage
 
         manager_instance = MagicMock()
@@ -880,13 +880,13 @@ class TestPostgresEnsureRunning:
         manager_instance.start.assert_called_once_with(timeout_seconds=42)
 
     def test_starts_when_only_pgadmin_down(self):
-        """postgres  up pgAdmin down """
+        """postgres は up でも pgAdmin が down なら起動処理に入る"""
         from repom.postgres import manage
 
         manager_instance = MagicMock()
 
         def is_container_running(name):
-            return name == "repom_postgres"  # pgadmin  False
+            return name == "repom_postgres"  # pgadmin は False
 
         with patch.object(manage, "config", self._patch_config(pgadmin_enabled=True)):
             with patch(
@@ -903,7 +903,7 @@ class TestPostgresEnsureRunning:
         manager_instance.start.assert_called_once_with(timeout_seconds=30)
 
     def test_skips_pgadmin_check_when_include_pgadmin_false(self):
-        """include_pgadmin=False pgAdmin """
+        """include_pgadmin=False なら pgAdmin の起動有無を見ない"""
         from repom.postgres import manage
 
         with patch.object(manage, "config", self._patch_config(pgadmin_enabled=True)):
@@ -920,7 +920,7 @@ class TestPostgresEnsureRunning:
         manager_cls.assert_not_called()
 
     def test_raises_runtime_error_when_docker_missing(self):
-        """docker  RuntimeError """
+        """docker コマンド不在は RuntimeError として伝搬する"""
         import pytest
 
         from repom.postgres import manage
@@ -956,7 +956,7 @@ class TestPostgresEnsureRunning:
                     manage.ensure_running()
 
     def test_raises_runtime_error_on_timeout(self):
-        """manager.start()  TimeoutError  RuntimeError """
+        """manager.start() の TimeoutError は RuntimeError に正規化される"""
         import pytest
 
         from repom.postgres import manage
@@ -978,7 +978,7 @@ class TestPostgresEnsureRunning:
                             manage.ensure_running()
 
     def test_raises_runtime_error_on_system_exit(self):
-        """manager.start()  SystemExit RuntimeError """
+        """manager.start() の SystemExit も RuntimeError に正規化される"""
         import pytest
 
         from repom.postgres import manage

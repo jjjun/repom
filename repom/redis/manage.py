@@ -95,7 +95,7 @@ class RedisManager(DockerManager):
         """Print local Redis connection details."""
 
         print()
-        print(" Redis Connection:")
+        print("Redis Connection:")
         print("  Host: 127.0.0.1")
         print(f"  Port: {self.config.redis.port}")
         if self.config.redis.password:
@@ -215,7 +215,7 @@ def generate():
 
     print(f"Generated: {output_path}")
     print(f"   Config: {init_dir / 'redis.conf'}")
-    print("\n Redis Service:")
+    print("\nRedis Service:")
     print(f"   Container: {config.redis.container.get_container_name()}")
     print(f"   Port: {config.redis.port}")
     print(f"   Volume: {config.redis.container.get_volume_name()}")

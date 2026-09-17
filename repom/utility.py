@@ -19,18 +19,7 @@ from basekit.discovery import (
     DEFAULT_EXCLUDED_DIRS as _BASE_EXCLUDED_DIRS,
 )
 
-"""
-inflect
-Python
-
-
-: 
-: 
-: (1st, 2nd, 3rd )
-: (a, an, the)
-"""
-
-# repom 
+# repom-specific excluded directories (model discovery only)
 DEFAULT_EXCLUDED_DIRS = _BASE_EXCLUDED_DIRS | {'base', 'mixin', 'validators', 'utils', 'helpers'}
 
 __all__ = [
@@ -54,21 +43,21 @@ __all__ = [
 
 def get_plural_tablename(file_path: str) -> str:
     """
-    
+    Derive a table name from a file name by pluralizing it.
 
     Args:
-        file_path (str): 
+        file_path (str): Path to the file.
 
     Returns:
-        str: 
+        str: The pluralized table name.
     """
-    # 
+    # Strip the extension, keeping only the file's base name.
     file_name = os.path.splitext(os.path.basename(file_path))[0]
 
-    # inflect 
+    # Initialize the inflect engine.
     p = inflect.engine()
 
-    # 
+    # Pluralize the file name.
     table_name = p.plural(file_name)
 
     return table_name
@@ -76,10 +65,10 @@ def get_plural_tablename(file_path: str) -> str:
 
 def normalize_text(s: str) -> str:
     """
-    
+    Normalize text (full-width/half-width, whitespace, lowercase).
     """
     s = unicodedata.normalize("NFKC", s)
-    s = s.replace(" ", "").replace("", "")
+    s = s.replace(" ", "")
     return s.lower()
 
 
@@ -89,7 +78,8 @@ def load_models(
     """Import all application models so SQLAlchemy can discover metadata.
 
     This function imports models based on config.model_locations setting.
-    If model_locations is not set, it falls back to importing repom.examples.models.
+    If model_locations is not set, no model modules are imported and a message
+    is logged noting that model import was skipped.
 
     Args:
         context: Execution context for logging (e.g., "db_create", "db_delete", "alembic_migration")

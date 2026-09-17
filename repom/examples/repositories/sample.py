@@ -1,7 +1,6 @@
 from typing import Optional, List
 from repom.examples.models.sample import SampleModel
 from repom import BaseRepository, FilterParams
-from repom.database import get_db_session
 
 
 class SampleFilterParams(FilterParams):
@@ -9,11 +8,6 @@ class SampleFilterParams(FilterParams):
 
 
 class SampleRepository(BaseRepository[SampleModel]):
-    def __init__(self, session=None):
-        if session is None:
-            session = get_db_session()
-        super().__init__(SampleModel, session)
-
     def find(
         self,
         params: Optional[SampleFilterParams] = None,

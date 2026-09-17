@@ -6,13 +6,14 @@ to detect potential N+1 query problems.
 
 Usage:
     from repom.diagnostics.query_analyzer import QueryAnalyzer
-    from repom.database import db_session
+    from repom.database import get_reusable_sync_transaction
     from myapp.models import User
-    
+
     analyzer = QueryAnalyzer()
-    
+
     with analyzer.capture():
-        users = db_session.query(User).all()
+        with get_reusable_sync_transaction() as session:
+            users = session.query(User).all()
         for user in users:
             print(user.posts)  # May trigger N+1 if not eager loaded
     
@@ -206,7 +207,7 @@ class QueryAnalyzer:
             - total_queries: Total number of queries executed
             - select_queries: Number of SELECT queries
             - potential_n_plus_1: Whether N+1 pattern detected
-            - similar_queries: Groups of similar queries
+            - repeated_queries: Groups of similar queries, keyed by pattern
         """
         total_queries = len(self.queries)
         select_queries = self.query_stats.get('SELECT', 0)

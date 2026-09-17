@@ -2,8 +2,10 @@
 デバッグ用スクリプト: リポジトリの find() と to_dict() のクエリログを確認
 
 使い方:
-1. TARGET_REPOSITORY を調査したいリポジトリクラスに変更
-2. python -m repom.scripts.debug_repository_queries を実行
+1. python -m repom.scripts.debug_repository_queries を実行
+   （引数なしの場合は repom.examples.repositories.sample.SampleRepository を調査）
+2. python -m repom.scripts.debug_repository_queries myapp.repositories:UserRepository
+   （"module:ClassName" 形式で調査対象のリポジトリクラスを指定）
 
 出力内容:
 - find() 実行時のクエリログ
@@ -17,15 +19,6 @@ from repom.diagnostics.query_analyzer import QueryAnalyzer
 from repom.database import _db_manager
 from repom import BaseRepository
 
-# ============================================================
-# 🎯 調査対象のリポジトリを指定してください
-# ============================================================
-# 例:
-from repom.examples.repositories.sample import SampleRepository
-TARGET_REPOSITORY = SampleRepository
-
-# TARGET_REPOSITORY: Type[BaseRepository] = None  # ここに調査対象のリポジトリクラスを指定
-
 
 def debug_repository_queries(repo_class: Type[BaseRepository]) -> None:
     """
@@ -34,11 +27,6 @@ def debug_repository_queries(repo_class: Type[BaseRepository]) -> None:
     Args:
         repo_class: 調査対象のリポジトリクラス
     """
-    if repo_class is None:
-        print("[NG] TARGET_REPOSITORY が指定されていません")
-        print("スクリプトの先頭で TARGET_REPOSITORY を設定してください")
-        return
-
     print("=" * 70)
     print(f"[INFO] Debug Repository: {repo_class.__name__}")
     print("=" * 70)
@@ -151,25 +139,30 @@ def debug_repository_queries(repo_class: Type[BaseRepository]) -> None:
 
 def main():
     """エントリーポイント"""
-    if TARGET_REPOSITORY is None:
-        print()
-        print("=" * 70)
-        print("[WARN] 使い方ガイド")
-        print("=" * 70)
-        print()
-        print("1. スクリプトの先頭で TARGET_REPOSITORY を設定してください:")
-        print()
-        print("   from myapp.repositories import UserRepository")
-        print("   TARGET_REPOSITORY = UserRepository")
-        print()
-        print("2. スクリプトを実行してください:")
-        print()
-        print("   python -m repom.scripts.debug_repository_queries")
-        print()
-        print("=" * 70)
-        return
+    import argparse
+    import importlib
 
-    debug_repository_queries(TARGET_REPOSITORY)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default=None,
+        help='調査対象のリポジトリクラス（"module:ClassName" 形式）。'
+             '省略時は repom.examples.repositories.sample.SampleRepository を使用する。',
+    )
+    args = parser.parse_args()
+
+    if args.target:
+        module_name, _, class_name = args.target.partition(":")
+        if not class_name:
+            parser.error('target は "module:ClassName" 形式で指定してください')
+        module = importlib.import_module(module_name)
+        repo_class = getattr(module, class_name)
+    else:
+        from repom.examples.repositories.sample import SampleRepository
+        repo_class = SampleRepository
+
+    debug_repository_queries(repo_class)
 
 
 if __name__ == "__main__":

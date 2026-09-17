@@ -68,7 +68,7 @@ def create_test_fixtures(
     db_url : str, optional
         データベース接続URL。指定しない場合は in-memory SQLite（sqlite:///:memory:）を使用
     model_loader : Callable, optional
-        モデルロード関数。指定しない場合は load_set_model_hook_function を使用
+        モデルロード関数。指定しない場合は load_models を使用
     allow_destructive : bool, optional
         EXEC_ENV が test でなく、かつ in-memory SQLite でもない db_url を明示的に
         許可する。既定は False で、その場合は RuntimeError を送出する
@@ -226,12 +226,14 @@ def convert_to_async_uri(sync_uri: str) -> str:
     -----
     必要な async ドライバー:
 
-    - SQLite: aiosqlite
-    - PostgreSQL: asyncpg
+    - SQLite: aiosqlite（extras: async）
+    - PostgreSQL: asyncpg（extras: postgres-async）
 
     repom をインストールする際に extras で指定してください::
 
-        uv add repom[async]
+        uv add "repom[async]"          # SQLite のみ
+        uv add "repom[postgres-async]" # PostgreSQL のみ
+        uv add "repom[async-all]"      # 両方
     """
     if sync_uri.startswith("sqlite:///"):
         return sync_uri.replace("sqlite:///", "sqlite+aiosqlite:///")
@@ -303,7 +305,7 @@ def create_async_test_fixtures(
 
         # pyproject.toml
         [project]
-        dependencies = ["repom[async]>=2.0,<3.0"]
+        dependencies = ["repom[async-all]"]  # SQLite のみなら repom[async] で可
 
         [dependency-groups]
         dev = ["pytest-asyncio>=0.23.0,<1.0.0"]
@@ -327,7 +329,7 @@ def create_async_test_fixtures(
     except ImportError as e:
         raise ImportError(
             "Async support requires additional dependencies. "
-            "Install with: uv add repom[async] pytest-asyncio"
+            "Install with: uv add \"repom[async-all]\" pytest-asyncio"
         ) from e
 
     # デフォルト値の設定
