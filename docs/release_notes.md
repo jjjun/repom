@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+- Removed the PostgreSQL backup/restore duplication between the host and
+  Docker paths and across `db_backup`, `db_restore`, and `pg_dump_tools`, and
+  fixed the memory, deadlock, and Windows-portability problems that
+  duplication was hiding. `repom.scripts._backup_utils` gains a shared
+  `build_pg_client_command()` (host argv, or `docker exec [-i] <container>`
+  argv, for `pg_dump`/`psql`/`pg_restore`), a shared `run_streaming_command()`
+  (a small Popen-based helper that streams stdin/stdout through file objects
+  via `shutil.copyfileobj` and drains stderr on a background thread into a
+  spooled temp file), `publish_backup()` (the empty-check / replace /
+  `write_checksum` / rotate / print sequence), and `warn_if_checksum_missing()`
+  (the missing-checksum warning). Backups now stream `pg_dump`'s stdout
+  through gzip into the 0600 partial file for both the host and Docker paths,
+  and restores stream `gzip.open(backup)` directly into `psql`'s stdin for
+  both paths - `restore_postgresql_via_host` no longer shells out to an
+  external `gunzip`, which was never available on a default Windows host (its
+  `'gunzip' in str(e)` missing-binary hint also never printed there, since
+  Windows's `FileNotFoundError` text doesn't name the program). Docker
+  custom-format dump/restore in `pg_dump_tools` now stream to and from the
+  dump file instead of buffering the whole dump through
+  `basekit.docker_manager.DockerCommandExecutor.exec_command`, which only
+  accepts `bytes`. Fixed a latent deadlock in `backup_postgresql_via_host`:
+  it read `pg_dump`'s stdout to EOF while stderr was a pipe nobody read, so a
+  `pg_dump` that wrote more than the OS pipe buffer to stderr hung forever;
+  `run_streaming_command`'s background stderr-draining thread makes this
+  impossible structurally. A plain-SQL restore now fully decompresses the
+  backup into a temporary 0600 file (verifying it end to end) before `psql`
+  starts, so a truncated archive fails before any statement reaches the
+  database, instead of the host path partially applying a truncated dump
+  (after its `DROP` statements) before gzip reported the error.
+  `pg_dump_custom`, `pg_restore_custom`, `pg_tools_available`,
+  `PgConnParams`, and `PgToolResult` keep their existing signatures and
+  semantics, and the backup/restore file formats are unchanged.
 - Fixed `get_lifespan_manager()` so `FastAPI(lifespan=get_lifespan_manager())`
   actually works. It previously returned an already-created
   `_db_manager.lifespan_context()` context manager instance; FastAPI/Starlette

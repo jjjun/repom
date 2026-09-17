@@ -3,22 +3,22 @@ from repom.logging import get_logger
 from basekit.docker_manager import DockerCommandExecutor
 import os
 import re
-import subprocess
 import gzip
 from datetime import datetime
 from pathlib import Path
 from repom.scripts._backup_utils import (
     BackupError,
+    ByteCountingWriter,
     backup_name_pattern,
     build_host_pg_env,
+    build_pg_client_command,
     cleanup_incomplete_backups,
     ensure_backup_dir,
-    format_size,
     open_backup_temp_file,
-    rotate_backups,
+    publish_backup,
     run_postgres_via_docker_or_host,
+    run_streaming_command,
     snapshot_sqlite_database,
-    write_checksum,
 )
 
 # ロガーを取得
@@ -80,15 +80,16 @@ def backup_sqlite():
 
     try:
         snapshot_sqlite_database(Path(config.sqlite.db_file_path), partial_path)
-
-        if partial_path.stat().st_size == 0:
-            logger.error("Backup file is empty")
-            print("Error: Backup file is empty")
-            partial_path.unlink()
-            raise BackupError("SQLite backup produced an empty file")
-
-        partial_path.replace(backup_path)
-        write_checksum(backup_path)
+        publish_backup(
+            partial_path,
+            backup_path,
+            backup_dir,
+            backup_pattern,
+            MAX_BACKUPS_PER_DB,
+            name_pattern,
+            empty=partial_path.stat().st_size == 0,
+            empty_message="SQLite backup produced an empty file",
+        )
     except BackupError:
         # Empty backup file; already logged, printed, and cleaned up above.
         raise
@@ -99,29 +100,49 @@ def backup_sqlite():
             partial_path.unlink()
         raise BackupError(f"Backup failed: {e}") from e
 
-    removed = rotate_backups(backup_dir, backup_pattern, MAX_BACKUPS_PER_DB, name_pattern)
-    if removed:
-        logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
-        for old in removed:
-            print(f"Removed old backup: {old.name}")
-            logger.warning(f"Removed old backup: {old.name}")
-    print(f"Backup created: {backup_path}")
-    logger.info(f"Backup created successfully: {backup_name}")
+
+def _pg_dump_command(container_name: str | None) -> list[str]:
+    """Build the pg_dump argv for the host or Docker path.
+
+    A separate function (rather than inlining build_pg_client_command below)
+    so tests can substitute a stand-in child process while still exercising
+    the real Popen-based streaming path in _backup_postgresql.
+    """
+    return build_pg_client_command(
+        "pg_dump",
+        host=config.postgres.host,
+        port=config.postgres.port,
+        user=config.postgres.user,
+        database=config.postgres_db,
+        extra_args=[
+            "--clean",      # DROP statements を含める
+            "--if-exists",  # DROP IF EXISTS で中断防止
+            "--no-owner",   # OWNER設定を出力しない
+            "--no-acl",     # ACL設定を出力しない
+        ],
+        container_name=container_name,
+    )
 
 
-def backup_postgresql_via_host():
-    """PostgreSQL データベースのバックアップ処理（ホスト側 pg_dump 使用）
+def _backup_postgresql(container_name: str | None) -> None:
+    """PostgreSQL データベースのバックアップ処理（ホスト / Docker exec 共通）
 
-    フォールバック実装：Docker コンテナが起動していない場合に使用されます。
-    ホスト環境に pg_dump がインストールされている必要があります。
+    ``container_name`` が None ならホストの pg_dump を直接実行し、そうでなければ
+    その名前のコンテナへ docker exec 経由で実行する。pg_dump の stdout は
+    gzip 圧縮しながらそのまま partial ファイルへストリームし（メモリに全体を
+    保持しない）、stderr は別スレッドでドレインしてデッドロックを防ぐ
+    （repom#167）。
     """
     logger.debug(f"Backup directory: {config.db_backup_path}")
     logger.debug(f"Database: {config.postgres_db}")
 
-    # sslmode / sslrootcert を解決・検証する（db_url と同じロジックを共有）。
-    # subprocess を起動する前に検証することで、prod での弱い sslmode を
-    # プロセス起動前に拒否する。
-    tls = config.postgres_tls_settings()
+    env = None
+    if container_name is None:
+        # sslmode / sslrootcert を解決・検証する（db_url と同じロジックを共有）。
+        # subprocess を起動する前に検証することで、prod での弱い sslmode を
+        # プロセス起動前に拒否する。
+        tls = config.postgres_tls_settings()
+        env = build_host_pg_env(config.postgres.password, tls.sslmode, tls.sslrootcert)
 
     # Ensure backup directory exists with restrictive permissions
     ensure_backup_dir(config.db_backup_path)
@@ -139,79 +160,59 @@ def backup_postgresql_via_host():
     name_pattern = backup_name_pattern(config.postgres_db, ".sql.gz")
     cleanup_stale_backups(backup_dir, backup_pattern, name_pattern)
 
-    # pg_dump コマンド実行
+    command = _pg_dump_command(container_name)
+    logger.info("Starting pg_dump via Docker exec" if container_name else "Starting pg_dump process")
+    logger.debug(f"Executing: {' '.join(command)} (PGPASSWORD hidden)")
+
     try:
-        logger.info("Starting pg_dump process")
-        env = build_host_pg_env(config.postgres.password, tls.sslmode, tls.sslrootcert)
+        raw_file = open_backup_temp_file(partial_path)
+    except OSError as e:
+        logger.error(f"Backup failed: {e}")
+        print(f"Error: Backup failed: {e}")
+        raise BackupError(f"Backup failed: {e}") from e
 
-        # pg_dump コマンド
-        pg_dump_cmd = [
-            'pg_dump',
-            '-h', config.postgres.host,
-            '-p', str(config.postgres.port),
-            '-U', config.postgres.user,
-            '-d', config.postgres_db,
-            '--clean',  # DROP statements を含める
-            '--if-exists',  # DROP IF EXISTS で中断防止
-            '--no-owner',  # OWNER設定を出力しない
-            '--no-acl',  # ACL設定を出力しない
-        ]
-
-        logger.debug(f"Executing: {' '.join(pg_dump_cmd)} (PGPASSWORD hidden)")
-
-        # pg_dump 実行 → gzip 圧縮
-        pg_dump_proc = subprocess.Popen(
-            pg_dump_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=env
-        )
-
+    try:
         # gzip 圧縮 (0600 で作成し、一時ファイルが world-readable になる窓を作らない)
-        bytes_written = 0
-        with open_backup_temp_file(partial_path) as raw_file:
+        with raw_file:
             with gzip.open(raw_file, 'wb') as gz_file:
-                for line in pg_dump_proc.stdout:
-                    gz_file.write(line)
-                    bytes_written += len(line)
+                writer = ByteCountingWriter(gz_file)
+                result = run_streaming_command(
+                    command, env=env, stdout_file=writer, password=config.postgres.password
+                )
+        bytes_written = writer.bytes_written
 
-        # pg_dump の終了を待つ
-        _, stderr = pg_dump_proc.communicate()
-
-        if pg_dump_proc.returncode != 0:
-            error_msg = stderr.decode('utf-8')
-            logger.error(f"pg_dump failed: {error_msg}")
-            print(f"Error: pg_dump failed\n{error_msg}")
+        if result.returncode != 0:
+            logger.error(f"pg_dump failed: {result.stderr}")
+            print(f"Error: pg_dump failed\n{result.stderr}")
             if partial_path.exists():
                 partial_path.unlink()  # 失敗したバックアップファイルを削除
-            raise BackupError(f"pg_dump failed with exit code {pg_dump_proc.returncode}: {error_msg}")
+            raise BackupError(f"pg_dump failed with exit code {result.returncode}: {result.stderr}")
 
-        # バックアップファイルサイズ確認 (gzip ヘッダーで常に非ゼロになるため、
-        # 空判定は pg_dump から読んだ生バイト数で行う)
-        logger.info(f"Backup file size: {format_size(partial_path.stat().st_size)}")
-
-        if bytes_written == 0:
-            logger.error("Backup file is empty")
-            print("Error: Backup file is empty")
-            partial_path.unlink()
-            raise BackupError("pg_dump produced an empty backup")
-
-        partial_path.replace(backup_path)
-        write_checksum(backup_path)
-        removed = rotate_backups(backup_dir, backup_pattern, MAX_BACKUPS_PER_DB, name_pattern)
-        if removed:
-            logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
-            for old in removed:
-                print(f"Removed old backup: {old.name}")
-                logger.warning(f"Removed old backup: {old.name}")
-        print(f"Backup created: {backup_path}")
-        logger.info(f"Backup created successfully: {backup_name}")
+        # 空判定は pg_dump から読んだ生バイト数で行う (gzip ヘッダーで
+        # partial ファイル自体は常に非ゼロになるため)
+        publish_backup(
+            partial_path,
+            backup_path,
+            backup_dir,
+            backup_pattern,
+            MAX_BACKUPS_PER_DB,
+            name_pattern,
+            empty=bytes_written == 0,
+            empty_message="pg_dump produced an empty backup",
+        )
 
     except FileNotFoundError as e:
-        logger.error("pg_dump command not found. Please install PostgreSQL client tools.")
-        print("Error: pg_dump command not found")
-        print("Please install PostgreSQL client tools and ensure 'pg_dump' is in your PATH")
-        raise BackupError("pg_dump command not found") from e
+        if partial_path.exists():
+            partial_path.unlink()
+        if container_name is None:
+            logger.error("pg_dump command not found. Please install PostgreSQL client tools.")
+            print("Error: pg_dump command not found")
+            print("Please install PostgreSQL client tools and ensure 'pg_dump' is in your PATH")
+            raise BackupError("pg_dump command not found") from e
+        logger.error("docker command not found. Please install Docker Desktop.")
+        print("Error: docker command not found")
+        print("Please install Docker Desktop: https://www.docker.com/products/docker-desktop")
+        raise BackupError("docker command not found") from e
     except BackupError:
         # pg_dump exited non-zero or produced an empty backup; already logged,
         # printed, and cleaned up above.
@@ -224,108 +225,24 @@ def backup_postgresql_via_host():
         raise BackupError(f"Backup failed: {e}") from e
 
 
+def backup_postgresql_via_host():
+    """PostgreSQL データベースのバックアップ処理（ホスト側 pg_dump 使用）
+
+    フォールバック実装：Docker コンテナが起動していない場合に使用されます。
+    ホスト環境に pg_dump がインストールされている必要があります。
+    """
+    _backup_postgresql(container_name=None)
+
+
 def backup_postgresql_via_docker():
     """PostgreSQL データベースのバックアップ処理（Docker exec 使用）
 
     Docker コンテナ内の pg_dump を使用してバックアップを作成します。
     ホスト環境に PostgreSQL クライアントツールのインストールは不要です。
     """
-    logger.debug(f"Backup directory: {config.db_backup_path}")
-    logger.debug(f"Database: {config.postgres_db}")
-
     container_name = config.postgres.container.get_container_name()
     logger.info(f"Using Docker container: {container_name}")
-
-    # Ensure backup directory exists with restrictive permissions
-    ensure_backup_dir(config.db_backup_path)
-    logger.debug(f"Backup directory created/verified: {config.db_backup_path}")
-
-    # Create backup file name: <postgres_db>_<datetime>.sql.gz
-    now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_name = f"{config.postgres_db}_{now_str}.sql.gz"
-    backup_path = Path(config.db_backup_path) / backup_name
-    partial_path = backup_path.with_name(f"{backup_path.name}.partial")
-    logger.debug(f"Backup file name: {backup_name}")
-
-    backup_dir = Path(config.db_backup_path)
-    backup_pattern = f"{config.postgres_db}_*.sql.gz"
-    name_pattern = backup_name_pattern(config.postgres_db, ".sql.gz")
-    cleanup_stale_backups(backup_dir, backup_pattern, name_pattern)
-
-    # docker exec で pg_dump 実行
-    try:
-        logger.info("Starting pg_dump via Docker exec")
-
-        # pg_dump コマンド構築
-        pg_dump_cmd = [
-            "pg_dump",
-            "-U", config.postgres.user,
-            "-d", config.postgres_db,
-            "--clean",      # DROP statements を含める
-            "--if-exists",  # DROP IF EXISTS で中断防止
-            "--no-owner",   # OWNER設定を出力しない
-            "--no-acl",     # ACL設定を出力しない
-        ]
-
-        logger.debug(f"Executing: docker exec {container_name} {' '.join(pg_dump_cmd)}")
-
-        # docker exec で pg_dump 実行
-        result = DockerCommandExecutor.exec_command(
-            container_name=container_name,
-            command=pg_dump_cmd,
-            capture_output=True
-        )
-
-        # gzip 圧縮して保存 (0600 で作成)
-        with open_backup_temp_file(partial_path) as raw_file:
-            with gzip.open(raw_file, 'wb') as gz_file:
-                gz_file.write(result.stdout)
-
-        # バックアップファイルサイズ確認 (gzip ヘッダーで常に非ゼロになるため、
-        # 空判定は pg_dump の生出力バイト数で行う)
-        logger.info(f"Backup file size: {format_size(partial_path.stat().st_size)}")
-
-        if len(result.stdout) == 0:
-            logger.error("Backup file is empty")
-            print("Error: Backup file is empty")
-            partial_path.unlink()
-            raise BackupError("pg_dump produced an empty backup")
-
-        partial_path.replace(backup_path)
-        write_checksum(backup_path)
-        removed = rotate_backups(backup_dir, backup_pattern, MAX_BACKUPS_PER_DB, name_pattern)
-        if removed:
-            logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
-            for old in removed:
-                print(f"Removed old backup: {old.name}")
-                logger.warning(f"Removed old backup: {old.name}")
-        print(f"Backup created: {backup_path}")
-        logger.info(f"Backup created successfully: {backup_name}")
-
-    except FileNotFoundError as e:
-        logger.error("docker command not found. Please install Docker Desktop.")
-        print("Error: docker command not found")
-        print("Please install Docker Desktop: https://www.docker.com/products/docker-desktop")
-        if partial_path.exists():
-            partial_path.unlink()
-        raise BackupError("docker command not found") from e
-    except BackupError:
-        # pg_dump produced an empty backup; already logged, printed, and
-        # cleaned up above.
-        raise
-    except subprocess.CalledProcessError as e:
-        error_msg = e.stderr.decode('utf-8') if e.stderr else str(e)
-        logger.error(f"pg_dump failed: {error_msg}")
-        print(f"Error: pg_dump failed\n{error_msg}")
-        if partial_path.exists():
-            partial_path.unlink()
-        raise BackupError(f"pg_dump failed: {error_msg}") from e
-    except Exception as e:
-        logger.error(f"Backup failed: {e}")
-        print(f"Error: Backup failed: {e}")
-        if partial_path.exists():
-            partial_path.unlink()
-        raise BackupError(f"Backup failed: {e}") from e
+    _backup_postgresql(container_name=container_name)
 
 
 def backup_postgresql():

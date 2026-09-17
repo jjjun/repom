@@ -11,7 +11,14 @@ from basekit.docker_manager import DockerCommandExecutor
 
 from repom.config import config
 from repom.docker_service import DockerUnavailableError, is_container_running
-from repom.scripts._backup_utils import build_host_pg_env, run_postgres_via_docker_or_host
+from repom.scripts._backup_utils import (
+    ByteCountingWriter,
+    build_host_pg_env,
+    build_pg_client_command,
+    mask_password,
+    run_postgres_via_docker_or_host,
+    run_streaming_command,
+)
 
 VERSION_MISMATCH_HINT = (
     "Hint: PostgreSQL client/server versions appear to differ. Start the "
@@ -112,31 +119,40 @@ def pg_tools_available(params: PgConnParams) -> bool:
 def _pg_dump_custom_via_docker(params: PgConnParams, dump_path: Path) -> PgToolResult:
     container_name = _container_name(params)
     tool_version = _docker_tool_version(container_name, "pg_dump", params.password)
-    command = _docker_pg_dump_command(params)
+    command = build_pg_client_command(
+        "pg_dump",
+        host=params.host,
+        port=params.port,
+        user=params.user,
+        database=params.database,
+        extra_args=["--format=custom", "--no-owner", "--no-acl"],
+        container_name=container_name,
+    )
 
     try:
-        completed = DockerCommandExecutor.exec_command(
-            container_name=container_name,
-            command=command,
-            capture_output=True,
-        )
+        with open(dump_path, "wb") as dump_file:
+            writer = ByteCountingWriter(dump_file)
+            result = run_streaming_command(command, stdout_file=writer, password=params.password)
     except FileNotFoundError as exc:
+        dump_path.unlink(missing_ok=True)
         return PgToolResult(
             returncode=127,
             used_docker=True,
             tool_version=tool_version,
-            stderr=_sanitize_stderr(str(exc), params.password),
-        )
-    except subprocess.CalledProcessError as exc:
-        return PgToolResult(
-            returncode=exc.returncode,
-            used_docker=True,
-            tool_version=tool_version,
-            stderr=_normalize_stderr(exc.stderr, params.password),
+            stderr=mask_password(str(exc), params.password),
         )
 
-    stdout = completed.stdout or b""
-    if not stdout:
+    if result.returncode != 0:
+        dump_path.unlink(missing_ok=True)
+        return PgToolResult(
+            returncode=result.returncode,
+            used_docker=True,
+            tool_version=tool_version,
+            stderr=_normalize_stderr(result.stderr, params.password),
+        )
+
+    if writer.bytes_written == 0:
+        dump_path.unlink(missing_ok=True)
         return PgToolResult(
             returncode=1,
             used_docker=True,
@@ -144,18 +160,24 @@ def _pg_dump_custom_via_docker(params: PgConnParams, dump_path: Path) -> PgToolR
             stderr="pg_dump produced empty custom-format output.",
         )
 
-    dump_path.write_bytes(stdout)
     return PgToolResult(
-        returncode=completed.returncode,
+        returncode=result.returncode,
         used_docker=True,
         tool_version=tool_version,
-        stderr=_normalize_stderr(completed.stderr, params.password),
+        stderr=_normalize_stderr(result.stderr, params.password),
     )
 
 
 def _pg_dump_custom_via_host(params: PgConnParams, dump_path: Path) -> PgToolResult:
     tool_version = _host_tool_version("pg_dump", params.password)
-    command = _host_pg_dump_command(params, dump_path)
+    command = build_pg_client_command(
+        "pg_dump",
+        host=params.host,
+        port=params.port,
+        user=params.user,
+        database=params.database,
+        extra_args=["--format=custom", "--no-owner", "--no-acl", "--file", str(dump_path)],
+    )
     completed = _run_host_command(command, params)
     return PgToolResult(
         returncode=completed.returncode,
@@ -168,41 +190,46 @@ def _pg_dump_custom_via_host(params: PgConnParams, dump_path: Path) -> PgToolRes
 def _pg_restore_custom_via_docker(params: PgConnParams, dump_path: Path) -> PgToolResult:
     container_name = _container_name(params)
     tool_version = _docker_tool_version(container_name, "pg_restore", params.password)
-    command = _docker_pg_restore_command(params)
+    command = build_pg_client_command(
+        "pg_restore",
+        host=params.host,
+        port=params.port,
+        user=params.user,
+        database=params.database,
+        extra_args=["--clean", "--if-exists", "--no-owner", "--no-acl"],
+        container_name=container_name,
+        stdin=True,
+    )
 
     try:
-        completed = DockerCommandExecutor.exec_command(
-            container_name=container_name,
-            command=command,
-            stdin=dump_path.read_bytes(),
-            capture_output=True,
-        )
+        with open(dump_path, "rb") as dump_file:
+            result = run_streaming_command(command, stdin_file=dump_file, password=params.password)
     except FileNotFoundError as exc:
         return PgToolResult(
             returncode=127,
             used_docker=True,
             tool_version=tool_version,
-            stderr=_sanitize_stderr(str(exc), params.password),
-        )
-    except subprocess.CalledProcessError as exc:
-        return PgToolResult(
-            returncode=exc.returncode,
-            used_docker=True,
-            tool_version=tool_version,
-            stderr=_normalize_stderr(exc.stderr, params.password),
+            stderr=mask_password(str(exc), params.password),
         )
 
     return PgToolResult(
-        returncode=completed.returncode,
+        returncode=result.returncode,
         used_docker=True,
         tool_version=tool_version,
-        stderr=_normalize_stderr(completed.stderr, params.password),
+        stderr=_normalize_stderr(result.stderr, params.password),
     )
 
 
 def _pg_restore_custom_via_host(params: PgConnParams, dump_path: Path) -> PgToolResult:
     tool_version = _host_tool_version("pg_restore", params.password)
-    command = _host_pg_restore_command(params, dump_path)
+    command = build_pg_client_command(
+        "pg_restore",
+        host=params.host,
+        port=params.port,
+        user=params.user,
+        database=params.database,
+        extra_args=["--clean", "--if-exists", "--no-owner", "--no-acl", str(dump_path)],
+    )
     completed = _run_host_command(command, params)
     return PgToolResult(
         returncode=completed.returncode,
@@ -225,71 +252,6 @@ def _run_host_command(command: list[str], params: PgConnParams) -> subprocess.Co
         )
     except FileNotFoundError as exc:
         return subprocess.CompletedProcess(command, 127, "", str(exc))
-
-
-def _host_pg_dump_command(params: PgConnParams, dump_path: Path) -> list[str]:
-    return [
-        "pg_dump",
-        "-h",
-        params.host,
-        "-p",
-        str(params.port),
-        "-U",
-        params.user,
-        "-d",
-        params.database,
-        "--format=custom",
-        "--no-owner",
-        "--no-acl",
-        "--file",
-        str(dump_path),
-    ]
-
-
-def _docker_pg_dump_command(params: PgConnParams) -> list[str]:
-    return [
-        "pg_dump",
-        "-U",
-        params.user,
-        "-d",
-        params.database,
-        "--format=custom",
-        "--no-owner",
-        "--no-acl",
-    ]
-
-
-def _host_pg_restore_command(params: PgConnParams, dump_path: Path) -> list[str]:
-    return [
-        "pg_restore",
-        "-h",
-        params.host,
-        "-p",
-        str(params.port),
-        "-U",
-        params.user,
-        "-d",
-        params.database,
-        "--clean",
-        "--if-exists",
-        "--no-owner",
-        "--no-acl",
-        str(dump_path),
-    ]
-
-
-def _docker_pg_restore_command(params: PgConnParams) -> list[str]:
-    return [
-        "pg_restore",
-        "-U",
-        params.user,
-        "-d",
-        params.database,
-        "--clean",
-        "--if-exists",
-        "--no-owner",
-        "--no-acl",
-    ]
 
 
 def _docker_tool_version(
@@ -340,9 +302,7 @@ def _normalize_stderr(value: bytes | str | None, password: str | None) -> str:
 
 
 def _sanitize_stderr(stderr: str, password: str | None) -> str:
-    if password:
-        return stderr.replace(password, "***")
-    return stderr
+    return mask_password(stderr, password)
 
 
 def _decode_output(value: bytes | str | None) -> str:

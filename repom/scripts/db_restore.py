@@ -13,9 +13,8 @@ Usage:
 from repom.config import config
 from repom.logging import get_logger
 from basekit.docker_manager import DockerCommandExecutor
-import os
-import subprocess
 import gzip
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -23,14 +22,17 @@ from typing import Optional
 from repom.scripts._backup_utils import (
     RestoreError,
     build_host_pg_env,
+    build_pg_client_command,
     format_size,
     get_backups,
+    gzip_decompress_to_temp_file,
     open_backup_temp_file,
     parse_backup_source_database,
     run_postgres_via_docker_or_host,
+    run_streaming_command,
     snapshot_sqlite_database,
     sqlite_backup_into,
-    verify_checksum,
+    warn_if_checksum_missing,
     write_checksum,
 )
 
@@ -98,9 +100,7 @@ def restore_sqlite(backup_file: Path):
     logger.info(f"Starting SQLite restore from {backup_file.name}")
 
     try:
-        if not verify_checksum(backup_file):
-            logger.warning(f"No checksum recorded for {backup_file.name}; skipping integrity check")
-            print(f"Warning: no checksum recorded for {backup_file.name}; skipping integrity check")
+        warn_if_checksum_missing(backup_file)
 
         current_db = Path(config.sqlite.db_file_path)
 
@@ -143,168 +143,83 @@ def restore_sqlite(backup_file: Path):
         raise RestoreError(f"Restore failed: {e}") from e
 
 
-def restore_postgresql_via_host(backup_file: Path):
-    """Restore a PostgreSQL database using host gunzip/psql.
+def _psql_command(container_name: str | None) -> list[str]:
+    """Build the psql argv for the host or Docker path.
 
-    Used as a fallback when no Docker container is running. Requires gunzip
-    and psql to be installed in the host environment.
+    A separate function so tests can substitute a stand-in child process
+    while still exercising the real streaming path in _restore_postgresql.
+    """
+    return build_pg_client_command(
+        "psql",
+        host=config.postgres.host,
+        port=config.postgres.port,
+        user=config.postgres.user,
+        database=config.postgres_db,
+        extra_args=["-v", "ON_ERROR_STOP=1"],  # stop on error
+        container_name=container_name,
+        stdin=True,
+    )
 
-    Args:
-        backup_file: source backup file to restore from (.sql.gz)
+
+def _restore_postgresql(backup_file: Path, container_name: str | None) -> None:
+    """PostgreSQL データベースのリストア処理（ホスト / Docker exec 共通）
+
+    gzip.open(backup_file) のストリームを直接 psql の stdin へ流し込み、
+    外部 gunzip コマンドには依存しない。psql を起動する前にアーカイブ全体を
+    一時ファイルへ展開して検証するため、破損／切り詰められた gzip は
+    プロセスを起動する前に失敗する。stderr は別スレッドでドレインして
+    デッドロックを防ぐ（repom#167）。
     """
     logger.info(f"Starting PostgreSQL restore from {backup_file.name}")
 
-    # sslmode / sslrootcert を解決・検証する（db_url と同じロジックを共有）。
-    # subprocess を起動する前に検証することで、prod での弱い sslmode を
-    # プロセス起動前に拒否する。
-    tls = config.postgres_tls_settings()
-
-    try:
-        if not verify_checksum(backup_file):
-            logger.warning(f"No checksum recorded for {backup_file.name}; skipping integrity check")
-            print(f"Warning: no checksum recorded for {backup_file.name}; skipping integrity check")
-
-        # Set PGPASSWORD and TLS settings in the environment
+    env = None
+    if container_name is None:
+        # sslmode / sslrootcert を解決・検証する（db_url と同じロジックを共有）。
+        # subprocess を起動する前に検証することで、prod での弱い sslmode を
+        # プロセス起動前に拒否する。
+        tls = config.postgres_tls_settings()
         env = build_host_pg_env(config.postgres.password, tls.sslmode, tls.sslrootcert)
 
-        # Restore with gunzip + psql
+    try:
+        warn_if_checksum_missing(backup_file)
+
+        # 破損／切り詰められた gzip はここで検出し、psql を起動する前に失敗させる
         logger.debug("Decompressing backup file")
+        sql_path = gzip_decompress_to_temp_file(backup_file)
+        try:
+            command = _psql_command(container_name)
+            logger.debug(f"Executing: {' '.join(command)} (PGPASSWORD hidden)")
+            print("Restoring database...")
 
-        # Decompress the backup with gunzip and pipe it to psql
-        gunzip_proc = subprocess.Popen(
-            ['gunzip', '-c', str(backup_file)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
+            with open(sql_path, "rb") as sql_file:
+                result = run_streaming_command(
+                    command, env=env, stdin_file=sql_file, password=config.postgres.password
+                )
+        finally:
+            sql_path.unlink(missing_ok=True)
 
-        # Restore with the psql command
-        psql_cmd = [
-            'psql',
-            '-h', config.postgres.host,
-            '-p', str(config.postgres.port),
-            '-U', config.postgres.user,
-            '-d', config.postgres_db,
-            '-v', 'ON_ERROR_STOP=1',  # stop on error
-        ]
-
-        logger.debug(f"Executing: {' '.join(psql_cmd)} (PGPASSWORD hidden)")
-        print("Restoring database...")
-
-        psql_proc = subprocess.Popen(
-            psql_cmd,
-            stdin=gunzip_proc.stdout,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=env
-        )
-
-        # Close gunzip's stdout so psql can consume it
-        gunzip_proc.stdout.close()
-
-        # Wait for both processes to finish and collect their exit status
-        psql_stdout, psql_stderr = psql_proc.communicate()
-        gunzip_stderr = gunzip_proc.stderr.read()
-        gunzip_proc.wait()
-
-        # Check gunzip errors
-        if gunzip_proc.returncode != 0:
-            error_msg = gunzip_stderr.decode('utf-8')
-            logger.error(f"gunzip failed: {error_msg}")
-            print(f"\nError: Failed to decompress backup file\n{error_msg}")
-            raise RestoreError(f"gunzip failed with exit code {gunzip_proc.returncode}: {error_msg}")
-
-        # Check psql errors
-        if psql_proc.returncode != 0:
-            error_msg = psql_stderr.decode('utf-8')
-            logger.error(f"psql restore failed: {error_msg}")
-            print(f"\nError: Restore failed\n{error_msg}")
-            raise RestoreError(f"psql failed with exit code {psql_proc.returncode}: {error_msg}")
+        if result.returncode != 0:
+            logger.error(f"psql restore failed: {result.stderr}")
+            print(f"\nError: Restore failed\n{result.stderr}")
+            raise RestoreError(f"psql failed with exit code {result.returncode}: {result.stderr}")
 
         print("\nRestore completed successfully")
         print(f"  Database: {config.postgres_db}")
         logger.info("PostgreSQL restore completed successfully")
 
     except FileNotFoundError as e:
-        if 'gunzip' in str(e):
-            logger.error("gunzip command not found")
-            print("\nError: gunzip command not found")
-            print("Please install gzip utilities")
-        elif 'psql' in str(e):
+        if container_name is None:
             logger.error("psql command not found")
             print("\nError: psql command not found")
             print("Please install PostgreSQL client tools and ensure 'psql' is in your PATH")
-        else:
-            logger.error(f"Command not found: {e}")
-            print(f"\nError: Required command not found: {e}")
-        raise RestoreError(f"Required command not found: {e}") from e
-    except RestoreError:
-        # gunzip/psql exited non-zero; already logged and printed above.
-        raise
-    except Exception as e:
-        logger.error(f"Restore failed: {e}")
-        print(f"\nError: Restore failed: {e}")
-        raise RestoreError(f"Restore failed: {e}") from e
-
-
-def restore_postgresql_via_docker(backup_file: Path):
-    """Restore a PostgreSQL database using docker exec.
-
-    Runs psql inside the Docker container to perform the restore. No host
-    PostgreSQL client tools installation is required.
-
-    Args:
-        backup_file: source backup file to restore from (.sql.gz)
-    """
-    logger.info(f"Starting PostgreSQL restore from {backup_file.name}")
-
-    container_name = config.postgres.container.get_container_name()
-    logger.info(f"Using Docker container: {container_name}")
-
-    try:
-        if not verify_checksum(backup_file):
-            logger.warning(f"No checksum recorded for {backup_file.name}; skipping integrity check")
-            print(f"Warning: no checksum recorded for {backup_file.name}; skipping integrity check")
-
-        # Decompress the backup file
-        logger.debug("Decompressing backup file")
-        with gzip.open(backup_file, 'rb') as gz_file:
-            sql_data = gz_file.read()
-
-        logger.debug(f"Backup file decompressed: {len(sql_data)} bytes")
-
-        # Build the psql command
-        psql_cmd = [
-            "psql",
-            "-U", config.postgres.user,
-            "-d", config.postgres_db,
-            "-v", "ON_ERROR_STOP=1",  # stop on error
-        ]
-
-        logger.debug(f"Executing: docker exec -i {container_name} {' '.join(psql_cmd)}")
-        print("Restoring database...")
-
-        # Run psql via docker exec -i (feed SQL from stdin)
-        DockerCommandExecutor.exec_command(
-            container_name=container_name,
-            command=psql_cmd,
-            stdin=sql_data,
-            capture_output=True
-        )
-
-        print("\nRestore completed successfully")
-        print(f"  Database: {config.postgres_db}")
-        logger.info("PostgreSQL restore completed successfully")
-
-    except FileNotFoundError as e:
+            raise RestoreError("psql command not found") from e
         logger.error("docker command not found. Please install Docker Desktop.")
         print("\nError: docker command not found")
         print("Please install Docker Desktop: https://www.docker.com/products/docker-desktop")
         raise RestoreError("docker command not found") from e
-    except subprocess.CalledProcessError as e:
-        error_msg = e.stderr.decode('utf-8') if e.stderr else str(e)
-        logger.error(f"psql restore failed: {error_msg}")
-        print(f"\nError: Restore failed\n{error_msg}")
-        raise RestoreError(f"psql restore failed: {error_msg}") from e
+    except RestoreError:
+        # psql exited non-zero; already logged and printed above.
+        raise
     except gzip.BadGzipFile as e:
         logger.error("Invalid gzip file")
         print("\nError: Invalid backup file (not a gzip file)")
@@ -315,11 +230,36 @@ def restore_postgresql_via_docker(backup_file: Path):
         raise RestoreError(f"Restore failed: {e}") from e
 
 
+def restore_postgresql_via_host(backup_file: Path):
+    """Restore a PostgreSQL database by streaming a gzip backup into host psql.
+
+    Used as a fallback when no Docker container is running. Requires psql to
+    be installed in the host environment.
+
+    Args:
+        backup_file: source backup file to restore from (.sql.gz)
+    """
+    _restore_postgresql(backup_file, container_name=None)
+
+
+def restore_postgresql_via_docker(backup_file: Path):
+    """Restore a PostgreSQL database by streaming a gzip backup into psql via docker exec.
+
+    No host PostgreSQL client tools installation is required.
+
+    Args:
+        backup_file: source backup file to restore from (.sql.gz)
+    """
+    container_name = config.postgres.container.get_container_name()
+    logger.info(f"Using Docker container: {container_name}")
+    _restore_postgresql(backup_file, container_name=container_name)
+
+
 def restore_postgresql(backup_file: Path):
     """Entry point for PostgreSQL restore.
 
     Uses docker exec when the Docker container is running, and falls back to
-    host gunzip/psql when it is stopped.
+    host psql when it is stopped.
 
     Args:
         backup_file: source backup file to restore from (.sql.gz)

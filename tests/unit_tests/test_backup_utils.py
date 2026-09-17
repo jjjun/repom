@@ -1,6 +1,9 @@
 from tests._init import *
 
+import gzip
+import io
 import subprocess
+import sys
 from unittest.mock import MagicMock
 import os
 import time
@@ -8,22 +11,31 @@ import time
 import pytest
 from basekit.docker_manager import DockerCommandExecutor
 
+from _fake_pg_client import fake_client_command, missing_binary_command
 from repom.docker_service import DockerUnavailableError
 from repom.scripts import _backup_utils
 from repom.scripts._backup_utils import (
+    BackupError,
+    ByteCountingWriter,
     ChecksumError,
     backup_name_pattern,
+    build_pg_client_command,
     checksum_path,
     cleanup_incomplete_backups,
     compute_checksum,
     ensure_backup_dir,
     format_size,
     get_backups,
+    gzip_decompress_to_temp_file,
+    mask_password,
     open_backup_temp_file,
     parse_backup_source_database,
+    publish_backup,
     rotate_backups,
     run_postgres_via_docker_or_host,
+    run_streaming_command,
     verify_checksum,
+    warn_if_checksum_missing,
     write_checksum,
 )
 
@@ -447,3 +459,299 @@ def test_cleanup_incomplete_backups_removes_checksum_sidecar_for_zero_byte_file(
 
     assert removed == [empty]
     assert not checksum_path(empty).exists()
+
+
+def test_build_pg_client_command_builds_host_argv():
+    command = build_pg_client_command(
+        "pg_dump",
+        host="localhost",
+        port=5432,
+        user="postgres",
+        database="repom_test",
+        extra_args=["--clean", "--if-exists"],
+    )
+
+    assert command == [
+        "pg_dump",
+        "-h", "localhost",
+        "-p", "5432",
+        "-U", "postgres",
+        "-d", "repom_test",
+        "--clean",
+        "--if-exists",
+    ]
+
+
+def test_build_pg_client_command_builds_docker_argv_without_host_flags():
+    command = build_pg_client_command(
+        "pg_dump",
+        host="localhost",
+        port=5432,
+        user="postgres",
+        database="repom_test",
+        extra_args=["--clean"],
+        container_name="repom-postgres",
+    )
+
+    assert command == [
+        "docker", "exec", "repom-postgres",
+        "pg_dump",
+        "-U", "postgres",
+        "-d", "repom_test",
+        "--clean",
+    ]
+
+
+def test_build_pg_client_command_docker_stdin_adds_interactive_flag():
+    command = build_pg_client_command(
+        "psql",
+        host="localhost",
+        port=5432,
+        user="postgres",
+        database="repom_test",
+        extra_args=["-v", "ON_ERROR_STOP=1"],
+        container_name="repom-postgres",
+        stdin=True,
+    )
+
+    assert command[:4] == ["docker", "exec", "-i", "repom-postgres"]
+
+
+def test_build_pg_client_command_host_ignores_stdin_flag():
+    command = build_pg_client_command(
+        "psql",
+        host="localhost",
+        port=5432,
+        user="postgres",
+        database="repom_test",
+        stdin=True,
+    )
+
+    assert "-i" not in command
+
+
+def test_mask_password_replaces_password_in_text():
+    assert mask_password("connection failed: secret", "secret") == "connection failed: ***"
+
+
+def test_mask_password_is_noop_without_password():
+    assert mask_password("connection failed", None) == "connection failed"
+    assert mask_password("connection failed", "") == "connection failed"
+
+
+def test_byte_counting_writer_counts_and_forwards_writes():
+    sink = io.BytesIO()
+    writer = ByteCountingWriter(sink)
+
+    writer.write(b"hello")
+    writer.write(b" world")
+
+    assert writer.bytes_written == len(b"hello world")
+    assert sink.getvalue() == b"hello world"
+
+
+class TestRunStreamingCommand:
+    """Exercises real child processes so the stdin/stdout streaming and the
+    background stderr-draining thread run for real (repom#167: a child
+    writing more to stderr than an OS pipe buffer holds must never deadlock
+    the caller)."""
+
+    def test_streams_large_stdout_and_drains_large_stderr_without_deadlock(self, monkeypatch):
+        monkeypatch.setenv("FAKE_CHILD_STDOUT_BYTES", str(1024 * 1024))
+        monkeypatch.setenv("FAKE_CHILD_STDERR_BYTES", str(1024 * 1024))
+        sink = io.BytesIO()
+
+        result = run_streaming_command(fake_client_command(), stdout_file=sink)
+
+        assert result.returncode == 0
+        assert len(sink.getvalue()) == 1024 * 1024
+        assert len(result.stderr.encode("utf-8", errors="replace")) == 1024 * 1024
+
+    def test_streams_large_stdin_and_drains_large_stderr_without_deadlock(self, monkeypatch, tmp_path):
+        sink_path = tmp_path / "stdin_echo.bin"
+        monkeypatch.setenv("FAKE_CHILD_STDIN_SINK", str(sink_path))
+        monkeypatch.setenv("FAKE_CHILD_STDERR_BYTES", str(1024 * 1024))
+        payload = b"S" * (1024 * 1024)
+
+        result = run_streaming_command(fake_client_command(), stdin_file=io.BytesIO(payload))
+
+        assert result.returncode == 0
+        assert sink_path.read_bytes() == payload
+
+    def test_delivers_exact_stdin_bytes_without_corruption(self, monkeypatch, tmp_path):
+        sink_path = tmp_path / "stdin_echo.bin"
+        monkeypatch.setenv("FAKE_CHILD_STDIN_SINK", str(sink_path))
+        payload = os.urandom(2048)
+
+        result = run_streaming_command(fake_client_command(), stdin_file=io.BytesIO(payload))
+
+        assert result.returncode == 0
+        assert sink_path.read_bytes() == payload
+
+    def test_reports_nonzero_exit_code(self, monkeypatch):
+        monkeypatch.setenv("FAKE_CHILD_EXIT_CODE", "1")
+
+        result = run_streaming_command(fake_client_command(), stdout_file=io.BytesIO())
+
+        assert result.returncode == 1
+
+    def test_masks_password_in_returned_stderr(self, monkeypatch):
+        monkeypatch.setenv("FAKE_CHILD_STDERR_TEXT", "connection failed: secret\n")
+
+        result = run_streaming_command(
+            fake_client_command(), stdout_file=io.BytesIO(), password="secret"
+        )
+
+        assert "secret" not in result.stderr
+        assert "***" in result.stderr
+
+    def test_raises_file_not_found_for_missing_binary(self):
+        with pytest.raises(FileNotFoundError):
+            run_streaming_command(missing_binary_command(), stdout_file=io.BytesIO())
+
+    def test_returns_child_error_when_child_exits_before_reading_all_stdin(self, monkeypatch):
+        """A child (standing in for psql/pg_restore) that stops reading stdin
+        and exits with an error while a large payload is still being written
+        must report its real exit code and stderr, not a raised
+        BrokenPipeError (repom#167 review round 2)."""
+        monkeypatch.setenv("FAKE_CHILD_EXIT_CODE", "3")
+        monkeypatch.setenv("FAKE_CHILD_STDERR_TEXT", "ERROR: relation does not exist\n")
+        payload = b"S" * (20 * 1024 * 1024)
+
+        result = run_streaming_command(fake_client_command(), stdin_file=io.BytesIO(payload))
+
+        assert result.returncode == 3
+        assert "relation does not exist" in result.stderr
+
+    def test_reports_failure_when_child_exits_zero_without_reading_all_stdin(self, monkeypatch):
+        """If the stdin copy is cut short but the child still exits 0, that
+        must be reported as a failure rather than silently returning
+        success for a restore that was not fully applied."""
+        monkeypatch.setenv("FAKE_CHILD_EXIT_CODE", "0")
+        payload = b"S" * (20 * 1024 * 1024)
+
+        result = run_streaming_command(fake_client_command(), stdin_file=io.BytesIO(payload))
+
+        assert result.returncode != 0
+
+
+class TestGzipDecompressToTempFile:
+    def test_decompresses_full_content_into_sibling_temp_file(self, tmp_path):
+        source = tmp_path / "backup.sql.gz"
+        with gzip.open(source, "wb") as f:
+            f.write(b"SELECT 1;" * 1000)
+
+        temp_path = gzip_decompress_to_temp_file(source)
+        try:
+            assert temp_path.parent == source.parent
+            assert temp_path.read_bytes() == b"SELECT 1;" * 1000
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+    @POSIX_ONLY
+    def test_temp_file_is_0600(self, tmp_path):
+        source = tmp_path / "backup.sql.gz"
+        with gzip.open(source, "wb") as f:
+            f.write(b"payload")
+
+        temp_path = gzip_decompress_to_temp_file(source)
+        try:
+            assert temp_path.stat().st_mode & 0o777 == 0o600
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+    def test_truncated_archive_raises_before_leaving_a_temp_file(self, tmp_path):
+        source = tmp_path / "backup.sql.gz"
+        with gzip.open(source, "wb") as f:
+            f.write(b"SELECT 1;" * 1000)
+        truncated = source.read_bytes()[:-10]
+        source.write_bytes(truncated)
+
+        with pytest.raises(EOFError):
+            gzip_decompress_to_temp_file(source)
+
+        assert list(tmp_path.glob("*.decompressed")) == []
+
+    def test_non_gzip_file_raises_bad_gzip_file(self, tmp_path):
+        source = tmp_path / "backup.sql.gz"
+        source.write_bytes(b"not a gzip file")
+
+        with pytest.raises(gzip.BadGzipFile):
+            gzip_decompress_to_temp_file(source)
+
+        assert list(tmp_path.glob("*.decompressed")) == []
+
+
+class TestWarnIfChecksumMissing:
+    def test_missing_checksum_warns_and_does_not_raise(self, tmp_path, capsys):
+        backup_file = tmp_path / "db_20260101_000000.sql.gz"
+        backup_file.write_bytes(b"payload")
+
+        warn_if_checksum_missing(backup_file)
+
+        assert "no checksum recorded" in capsys.readouterr().out.lower()
+
+    def test_matching_checksum_does_not_warn(self, tmp_path, capsys):
+        backup_file = tmp_path / "db_20260101_000000.sql.gz"
+        backup_file.write_bytes(b"payload")
+        write_checksum(backup_file)
+
+        warn_if_checksum_missing(backup_file)
+
+        assert "no checksum recorded" not in capsys.readouterr().out.lower()
+
+    def test_mismatched_checksum_raises(self, tmp_path):
+        backup_file = tmp_path / "db_20260101_000000.sql.gz"
+        backup_file.write_bytes(b"payload")
+        write_checksum(backup_file)
+        backup_file.write_bytes(b"tampered")
+
+        with pytest.raises(ChecksumError):
+            warn_if_checksum_missing(backup_file)
+
+
+class TestPublishBackup:
+    def test_raises_and_removes_partial_when_empty(self, tmp_path):
+        partial_path = tmp_path / "repom_20260101_000000.sql.gz.partial"
+        partial_path.write_bytes(b"\x1f\x8b")  # gzip header only, no payload
+        backup_path = tmp_path / "repom_20260101_000000.sql.gz"
+
+        with pytest.raises(BackupError, match="empty"):
+            publish_backup(
+                partial_path,
+                backup_path,
+                tmp_path,
+                "repom_*.sql.gz",
+                3,
+                empty=True,
+                empty_message="pg_dump produced an empty backup",
+            )
+
+        assert not partial_path.exists()
+        assert not backup_path.exists()
+
+    def test_publishes_checksums_and_rotates_when_not_empty(self, tmp_path):
+        old = tmp_path / "repom_20260101_000000.sql.gz"
+        old.write_bytes(b"old payload")
+        os.utime(old, (1, 1))
+        write_checksum(old)
+
+        partial_path = tmp_path / "repom_20260102_000000.sql.gz.partial"
+        partial_path.write_bytes(b"new payload")
+        backup_path = tmp_path / "repom_20260102_000000.sql.gz"
+
+        publish_backup(
+            partial_path,
+            backup_path,
+            tmp_path,
+            "repom_*.sql.gz",
+            1,
+            empty=False,
+            empty_message="unused",
+        )
+
+        assert not partial_path.exists()
+        assert backup_path.read_bytes() == b"new payload"
+        assert checksum_path(backup_path).exists()
+        assert not old.exists()
+        assert not checksum_path(old).exists()

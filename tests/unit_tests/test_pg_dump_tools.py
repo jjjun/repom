@@ -1,9 +1,11 @@
 from tests._init import *
 
+import os
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from _fake_pg_client import fake_client_command
 from repom.config import RepomConfig
 from repom.scripts import pg_dump_tools
 from repom.scripts.pg_dump_tools import (
@@ -32,8 +34,12 @@ def _params(
 
 
 def test_pg_dump_custom_uses_docker_stdout_without_file(monkeypatch, tmp_path: Path):
+    """The Docker custom-format dump must stream pg_dump's stdout straight
+    into dump_path via the shared Popen-based streaming helper, never
+    buffering the whole dump through DockerCommandExecutor.exec_command
+    (repom#167) - only the small "--version" probe still goes through it."""
     dump_path = tmp_path / "db.dump"
-    calls: list[list[str]] = []
+    build_calls: list[tuple[str, dict]] = []
 
     monkeypatch.setattr(
         pg_dump_tools.DockerCommandExecutor,
@@ -42,34 +48,32 @@ def test_pg_dump_custom_uses_docker_stdout_without_file(monkeypatch, tmp_path: P
     )
 
     def exec_command(container_name, command, stdin=None, capture_output=True):
-        calls.append(command)
         assert container_name == "managed-postgres"
-        assert stdin is None
-        assert capture_output is True
         if command == ["pg_dump", "--version"]:
             return subprocess.CompletedProcess(command, 0, b"pg_dump (PostgreSQL) 16.3\n", b"")
-        return subprocess.CompletedProcess(command, 0, b"CUSTOM-DUMP", b"")
+        raise AssertionError(f"exec_command must not carry the dump payload: {command}")
+
+    def fake_build_pg_client_command(tool, **kwargs):
+        build_calls.append((tool, kwargs))
+        return fake_client_command()
 
     monkeypatch.setattr(pg_dump_tools.DockerCommandExecutor, "exec_command", exec_command)
+    monkeypatch.setattr(pg_dump_tools, "build_pg_client_command", fake_build_pg_client_command)
+    monkeypatch.setenv("FAKE_CHILD_STDOUT_BYTES", str(1024 * 1024))
 
     result = pg_dump_custom(_params(), dump_path)
 
     assert result.returncode == 0
     assert result.used_docker is True
     assert result.tool_version == "pg_dump (PostgreSQL) 16.3"
-    assert dump_path.read_bytes() == b"CUSTOM-DUMP"
-    assert calls[-1] == [
-        "pg_dump",
-        "-U",
-        "user",
-        "-d",
-        "mine_py",
-        "--format=custom",
-        "--no-owner",
-        "--no-acl",
-    ]
-    assert "--file" not in calls[-1]
-    assert "secret" not in calls[-1]
+    assert dump_path.stat().st_size == 1024 * 1024
+
+    tool, kwargs = build_calls[-1]
+    assert tool == "pg_dump"
+    assert kwargs["container_name"] == "managed-postgres"
+    assert kwargs["extra_args"] == ["--format=custom", "--no-owner", "--no-acl"]
+    assert "--file" not in kwargs["extra_args"]
+    assert "secret" not in repr(kwargs)
 
 
 def test_pg_dump_custom_uses_host_file_when_container_stopped(monkeypatch, tmp_path: Path):
@@ -116,10 +120,16 @@ def test_pg_dump_custom_uses_host_file_when_container_stopped(monkeypatch, tmp_p
 
 
 def test_pg_restore_custom_streams_dump_bytes_to_docker(monkeypatch, tmp_path: Path):
+    """The Docker custom-format restore must stream dump_path's bytes
+    straight into pg_restore's stdin via the shared Popen-based streaming
+    helper, never buffering the whole dump through
+    DockerCommandExecutor.exec_command (repom#167) - only the small
+    "--version" probe still goes through it."""
     dump_path = tmp_path / "db.dump"
-    dump_path.write_bytes(b"CUSTOM-DUMP")
-    restore_stdin = None
-    restore_command = None
+    payload = os.urandom(1024 * 1024)
+    dump_path.write_bytes(payload)
+    sink_path = tmp_path / "stdin_echo.bin"
+    build_calls: list[tuple[str, dict]] = []
 
     monkeypatch.setattr(
         pg_dump_tools.DockerCommandExecutor,
@@ -128,32 +138,177 @@ def test_pg_restore_custom_streams_dump_bytes_to_docker(monkeypatch, tmp_path: P
     )
 
     def exec_command(container_name, command, stdin=None, capture_output=True):
-        nonlocal restore_stdin, restore_command
         if command == ["pg_restore", "--version"]:
             return subprocess.CompletedProcess(command, 0, b"pg_restore (PostgreSQL) 16.3\n", b"")
-        restore_stdin = stdin
-        restore_command = command
-        return subprocess.CompletedProcess(command, 0, b"", b"")
+        raise AssertionError(f"exec_command must not carry the restore payload: {command}")
+
+    def fake_build_pg_client_command(tool, **kwargs):
+        build_calls.append((tool, kwargs))
+        return fake_client_command()
 
     monkeypatch.setattr(pg_dump_tools.DockerCommandExecutor, "exec_command", exec_command)
+    monkeypatch.setattr(pg_dump_tools, "build_pg_client_command", fake_build_pg_client_command)
+    monkeypatch.setenv("FAKE_CHILD_STDIN_SINK", str(sink_path))
 
     result = pg_restore_custom(_params(), dump_path)
 
     assert result.returncode == 0
     assert result.used_docker is True
-    assert restore_stdin == b"CUSTOM-DUMP"
-    assert restore_command == [
-        "pg_restore",
-        "-U",
-        "user",
-        "-d",
-        "mine_py",
-        "--clean",
-        "--if-exists",
-        "--no-owner",
-        "--no-acl",
-    ]
-    assert str(dump_path) not in restore_command
+    assert sink_path.read_bytes() == payload
+
+    tool, kwargs = build_calls[-1]
+    assert tool == "pg_restore"
+    assert kwargs["container_name"] == "managed-postgres"
+    assert kwargs["extra_args"] == ["--clean", "--if-exists", "--no-owner", "--no-acl"]
+    assert kwargs["stdin"] is True
+    assert str(dump_path) not in repr(kwargs)
+
+
+def _version_only_exec_command(tool_name):
+    """A DockerCommandExecutor.exec_command stand-in that only answers the
+    small "--version" probe and fails any call carrying a dump/restore
+    payload, so a test using it proves that payload never reaches
+    exec_command (repom#167)."""
+
+    def exec_command(container_name, command, stdin=None, capture_output=True):
+        if command == [tool_name, "--version"]:
+            return subprocess.CompletedProcess(command, 0, b"", b"")
+        raise AssertionError(f"exec_command must not carry the {tool_name} payload: {command}")
+
+    return exec_command
+
+
+def test_pg_dump_custom_via_docker_reports_missing_docker_binary(monkeypatch, tmp_path: Path):
+    """A real FileNotFoundError from launching the Docker argv (docker CLI
+    missing) is reported as returncode 127, and no dump file is left behind."""
+    dump_path = tmp_path / "db.dump"
+
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor, "exec_command", _version_only_exec_command("pg_dump")
+    )
+    monkeypatch.setattr(
+        pg_dump_tools,
+        "build_pg_client_command",
+        lambda tool, **kwargs: ["repom-test-nonexistent-pg-client-binary"],
+    )
+
+    result = pg_dump_custom(_params(), dump_path)
+
+    assert result.returncode == 127
+    assert result.used_docker is True
+    assert not dump_path.exists()
+
+
+def test_pg_restore_custom_via_docker_reports_missing_docker_binary(monkeypatch, tmp_path: Path):
+    dump_path = tmp_path / "db.dump"
+    dump_path.write_bytes(b"CUSTOM-DUMP")
+
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor, "exec_command", _version_only_exec_command("pg_restore")
+    )
+    monkeypatch.setattr(
+        pg_dump_tools,
+        "build_pg_client_command",
+        lambda tool, **kwargs: ["repom-test-nonexistent-pg-client-binary"],
+    )
+
+    result = pg_restore_custom(_params(), dump_path)
+
+    assert result.returncode == 127
+    assert result.used_docker is True
+
+
+def test_pg_restore_custom_via_docker_returns_result_when_child_exits_before_reading_all_stdin(
+    monkeypatch, tmp_path: Path
+):
+    """When pg_restore stops reading stdin and exits with an error (repom#167
+    review round 2) while a large dump is still being streamed in, this must
+    return a PgToolResult with the child's real exit code and stderr instead
+    of raising BrokenPipeError."""
+    dump_path = tmp_path / "db.dump"
+    dump_path.write_bytes(os.urandom(20 * 1024 * 1024))
+
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor, "exec_command", _version_only_exec_command("pg_restore")
+    )
+    monkeypatch.setattr(
+        pg_dump_tools, "build_pg_client_command", lambda tool, **kwargs: fake_client_command()
+    )
+    monkeypatch.setenv("FAKE_CHILD_EXIT_CODE", "3")
+    monkeypatch.setenv("FAKE_CHILD_STDERR_TEXT", "ERROR: relation does not exist\n")
+
+    result = pg_restore_custom(_params(), dump_path)
+
+    assert result.returncode == 3
+    assert "relation does not exist" in result.stderr
+
+
+def test_pg_dump_custom_via_docker_empty_output_removes_dump_file(monkeypatch, tmp_path: Path):
+    dump_path = tmp_path / "db.dump"
+
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor, "exec_command", _version_only_exec_command("pg_dump")
+    )
+    monkeypatch.setattr(
+        pg_dump_tools, "build_pg_client_command", lambda tool, **kwargs: fake_client_command()
+    )
+    monkeypatch.setenv("FAKE_CHILD_STDOUT_BYTES", "0")
+
+    result = pg_dump_custom(_params(), dump_path)
+
+    assert result.returncode == 1
+    assert "empty" in result.stderr
+    assert not dump_path.exists()
+
+
+def test_pg_dump_custom_via_docker_failure_after_partial_output_removes_dump_file(
+    monkeypatch, tmp_path: Path
+):
+    """A pg_dump that writes some custom-format bytes and then fails must not
+    leave a partial dump file at dump_path (repom#167 review round 2) -
+    before this fix, only a fully successful dump avoided writing the file at
+    all, but a mid-stream failure left dump_path holding a truncated dump."""
+    dump_path = tmp_path / "db.dump"
+
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "is_container_running",
+        MagicMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor, "exec_command", _version_only_exec_command("pg_dump")
+    )
+    monkeypatch.setattr(
+        pg_dump_tools, "build_pg_client_command", lambda tool, **kwargs: fake_client_command()
+    )
+    monkeypatch.setenv("FAKE_CHILD_STDOUT_BYTES", "1024")
+    monkeypatch.setenv("FAKE_CHILD_EXIT_CODE", "1")
+    monkeypatch.setenv("FAKE_CHILD_STDERR_TEXT", "pg_dump: error: connection lost\n")
+
+    result = pg_dump_custom(_params(), dump_path)
+
+    assert result.returncode == 1
+    assert not dump_path.exists()
 
 
 def test_pg_tools_available_returns_true_when_only_container_available(monkeypatch):

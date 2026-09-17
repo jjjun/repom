@@ -1,10 +1,17 @@
 from pathlib import Path
+from dataclasses import dataclass
+import errno
+import gzip
 import hashlib
 import os
 import re
+import shutil
 import sqlite3
+import subprocess
+import tempfile
+import threading
 import time
-from typing import BinaryIO, Callable, Optional, TypeVar
+from typing import BinaryIO, Callable, Optional, Sequence, TypeVar
 
 from repom.config import config
 from repom.docker_service import DockerUnavailableError, is_container_running
@@ -13,6 +20,11 @@ from repom.logging import get_logger
 logger = get_logger(__name__)
 T = TypeVar("T")
 STALE_PARTIAL_BACKUP_AGE_SECONDS = 24 * 60 * 60
+
+# Cap the buffered stderr size accumulated while draining a child process's
+# stderr on a background thread (see run_streaming_command); a client tool
+# emitting more than this spills to a temp file instead of growing memory.
+STREAMED_STDERR_SPOOL_LIMIT = 1024 * 1024
 
 # Backup artifacts hold a full copy of the database; keep them readable only
 # by the owner so a second local account or unprivileged process cannot read
@@ -183,6 +195,59 @@ def verify_checksum(backup_path: Path) -> bool:
     return True
 
 
+def warn_if_checksum_missing(backup_file: Path) -> None:
+    """Verify ``backup_file``'s checksum, warning instead of raising when none
+    is recorded.
+
+    Shared by every restore path (SQLite, PostgreSQL host, PostgreSQL
+    Docker) so the missing-checksum warning is logged and printed in exactly
+    one place. A recorded-but-mismatched checksum still raises ChecksumError
+    from the underlying verify_checksum() call.
+    """
+    if not verify_checksum(backup_file):
+        logger.warning(f"No checksum recorded for {backup_file.name}; skipping integrity check")
+        print(f"Warning: no checksum recorded for {backup_file.name}; skipping integrity check")
+
+
+def publish_backup(
+    partial_path: Path,
+    backup_path: Path,
+    backup_dir: Path,
+    glob_pattern: str,
+    max_keep: int,
+    name_pattern: Optional[re.Pattern[str]] = None,
+    *,
+    empty: bool,
+    empty_message: str,
+) -> None:
+    """Finish a backup: reject an empty result, then publish, checksum and rotate.
+
+    Shared by the SQLite and PostgreSQL (host and Docker) backup paths so the
+    publish / checksum / rotate / print sequence lives in exactly one place.
+    ``empty`` is precomputed by the caller: an uncompressed byte count for
+    PostgreSQL (gzip's header keeps the compressed file non-zero even for an
+    empty dump), or the raw file size for SQLite.
+    """
+    if empty:
+        logger.error(empty_message)
+        print(f"Error: {empty_message}")
+        partial_path.unlink()
+        raise BackupError(empty_message)
+
+    logger.info(f"Backup file size: {format_size(partial_path.stat().st_size)}")
+    partial_path.replace(backup_path)
+    write_checksum(backup_path)
+
+    removed = rotate_backups(backup_dir, glob_pattern, max_keep, name_pattern)
+    if removed:
+        logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {max_keep}")
+        for old in removed:
+            print(f"Removed old backup: {old.name}")
+            logger.warning(f"Removed old backup: {old.name}")
+    print(f"Backup created: {backup_path}")
+    logger.info(f"Backup created successfully: {backup_path.name}")
+
+
 def format_size(size_bytes: int) -> str:
     """Format byte count as ``<x.xx> MB``."""
     return f"{size_bytes / (1024 * 1024):.2f} MB"
@@ -332,6 +397,196 @@ def build_host_pg_env(
     if sslrootcert is not None:
         env["PGSSLROOTCERT"] = sslrootcert
     return env
+
+
+def build_pg_client_command(
+    tool: str,
+    *,
+    host: str,
+    port: int,
+    user: str,
+    database: str,
+    extra_args: Sequence[str] = (),
+    container_name: str | None = None,
+    stdin: bool = False,
+) -> list[str]:
+    """Build argv for a PostgreSQL client tool (pg_dump / psql / pg_restore).
+
+    Shared by db_backup, db_restore and pg_dump_tools so host and Docker
+    argv are built in exactly one place. Returns host argv (``<tool> -h host
+    -p port -U user -d database ...``) when ``container_name`` is None, or
+    Docker argv (``docker exec [-i] <container_name> <tool> -U user -d
+    database ...``) otherwise. ``stdin=True`` adds Docker exec's ``-i`` flag
+    so this process's stdin is forwarded into the container; host argv
+    always carries stdin through subprocess.Popen directly, so ``stdin`` has
+    no effect there.
+    """
+    if container_name is not None:
+        command = ["docker", "exec"]
+        if stdin:
+            command.append("-i")
+        command.append(container_name)
+        command.extend([tool, "-U", user, "-d", database])
+    else:
+        command = [tool, "-h", host, "-p", str(port), "-U", user, "-d", database]
+    command.extend(extra_args)
+    return command
+
+
+def mask_password(text: str, password: str | None) -> str:
+    """Replace ``password`` with "***" in text destined for logs or errors."""
+    if password:
+        return text.replace(password, "***")
+    return text
+
+
+class ByteCountingWriter:
+    """Wrap a binary writer, counting the bytes written through it.
+
+    Lets a caller learn the uncompressed byte count streamed into a gzip
+    writer without buffering it separately - publish_backup's empty check
+    must not be fooled by gzip's header, which keeps the compressed file
+    non-zero even for an empty dump.
+    """
+
+    def __init__(self, wrapped: BinaryIO) -> None:
+        self._wrapped = wrapped
+        self.bytes_written = 0
+
+    def write(self, data: bytes) -> int:
+        self.bytes_written += len(data)
+        return self._wrapped.write(data)
+
+
+@dataclass(frozen=True)
+class StreamedCommandResult:
+    """Exit status and masked stderr text from run_streaming_command."""
+
+    returncode: int
+    stderr: str
+
+
+def _is_closed_stdin_pipe_error(exc: OSError) -> bool:
+    """True for the write/close errors a child's early stdin exit raises.
+
+    A child (psql/pg_restore) that stops reading stdin and exits makes the
+    next write to its stdin pipe raise BrokenPipeError (errno EPIPE) on
+    POSIX; on Windows the same condition can surface as a plain OSError with
+    errno EINVAL instead.
+    """
+    return isinstance(exc, BrokenPipeError) or exc.errno in (errno.EPIPE, errno.EINVAL)
+
+
+def run_streaming_command(
+    command: list[str],
+    *,
+    env: dict[str, str] | None = None,
+    stdin_file: BinaryIO | None = None,
+    stdout_file: BinaryIO | None = None,
+    password: str | None = None,
+) -> StreamedCommandResult:
+    """Run ``command``, streaming stdin/stdout through file objects.
+
+    Shared by the host and Docker execution paths in db_backup, db_restore
+    and pg_dump_tools, since a Docker argv (built by build_pg_client_command)
+    is just another command to launch here. Exactly one of ``stdin_file``
+    (copied into the child's stdin, e.g. a decompressing gzip reader) or
+    ``stdout_file`` (filled from the child's stdout, e.g. a compressing gzip
+    writer) is normally given, matching a dump (stdout) or restore (stdin)
+    direction; neither side ever buffers a whole dump/restore payload in
+    memory.
+
+    stderr is drained on a background thread into a spooled temporary file
+    while the main thread does the stdin/stdout copy, so a child writing
+    more to stderr than an OS pipe buffer holds can never deadlock this call
+    (see repom#167: pg_dump writing >64KB of stderr while nobody read it hung
+    forever). The drained stderr is decoded and password-masked before being
+    returned.
+
+    A child that stops reading stdin and exits early (ON_ERROR_STOP failure,
+    authentication failure, missing role) makes the stdin copy - or the
+    subsequent close - raise BrokenPipeError/OSError instead of finishing.
+    That is caught here so the child's real exit code and stderr are
+    returned instead of the pipe error propagating and hiding them
+    (repom#167). If the copy was cut short but the child still exited 0,
+    that is reported as a failure (returncode 1) rather than success, since
+    it means the child did not read all of its input.
+    """
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE if stdin_file is not None else subprocess.DEVNULL,
+        stdout=subprocess.PIPE if stdout_file is not None else subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+
+    stderr_capture = tempfile.SpooledTemporaryFile(max_size=STREAMED_STDERR_SPOOL_LIMIT)
+    stderr_thread = threading.Thread(
+        target=shutil.copyfileobj, args=(process.stderr, stderr_capture), daemon=True
+    )
+    stderr_thread.start()
+
+    stdin_cut_short = False
+    try:
+        if stdout_file is not None:
+            shutil.copyfileobj(process.stdout, stdout_file)
+        if stdin_file is not None:
+            try:
+                shutil.copyfileobj(stdin_file, process.stdin)
+            except OSError as exc:
+                if not _is_closed_stdin_pipe_error(exc):
+                    raise
+                stdin_cut_short = True
+    finally:
+        if process.stdout is not None:
+            process.stdout.close()
+        if process.stdin is not None:
+            try:
+                process.stdin.close()
+            except OSError as exc:
+                if not _is_closed_stdin_pipe_error(exc):
+                    raise
+                stdin_cut_short = True
+        stderr_thread.join()
+        process.stderr.close()
+        process.wait()
+
+    stderr_capture.seek(0)
+    stderr_text = stderr_capture.read().decode("utf-8", errors="replace")
+    stderr_capture.close()
+    stderr_text = mask_password(stderr_text, password)
+
+    returncode = process.returncode
+    if stdin_cut_short and returncode == 0:
+        note = "Command exited before reading all input"
+        stderr_text = f"{stderr_text}\n{note}" if stderr_text else note
+        returncode = 1
+
+    return StreamedCommandResult(returncode=returncode, stderr=stderr_text)
+
+
+def gzip_decompress_to_temp_file(source: Path) -> Path:
+    """Fully decompress ``source`` into a new sibling 0600 temp file.
+
+    Reads the entire gzip stream before returning, so a truncated or
+    corrupt archive raises here (gzip.BadGzipFile / EOFError) before any of
+    its content reaches a client tool's stdin - a restore must fail before
+    the child process starts, not partway through applying it. The caller
+    owns the returned path and must unlink it when done.
+    """
+    fd, tmp_name = tempfile.mkstemp(
+        dir=source.parent, prefix=f"{source.name}.", suffix=".decompressed"
+    )
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+    os.chmod(tmp_path, BACKUP_FILE_MODE)
+    try:
+        with gzip.open(source, "rb") as compressed, open(tmp_path, "wb") as decompressed:
+            shutil.copyfileobj(compressed, decompressed)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    return tmp_path
 
 
 def run_postgres_via_docker_or_host(
