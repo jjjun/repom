@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Optional, Set
 
 from basekit.config_hook import Config, get_config_from_hook
-from sqlalchemy.engine import URL
+from sqlalchemy.engine import URL, make_url
 
 from repom.postgres.config import (
     PgAdminConfig as _PgAdminConfig,
@@ -668,8 +668,26 @@ class RepomConfig(Config):
         - StaticPool: https://docs.sqlalchemy.org/en/20/core/pooling.html#sqlalchemy.pool.StaticPool
         - PostgreSQL: https://docs.sqlalchemy.org/en/20/dialects/postgresql.html
         """
+        return self.engine_kwargs_for_url(self.db_url)
+
+    def engine_kwargs_for_url(self, url: Optional[str]) -> dict:
+        """指定した URL 用の engine kwargs を返す（config.db_type に依存しない）
+
+        engine_kwargs は ``self.engine_kwargs_for_url(self.db_url)`` の
+        ラッパー。DB 種別は self.db_type ではなく url 自体のドライバー名から
+        判定するため、config.db_type と異なる URL（repom.testing のフィク
+        スチャファクトリなど）に対しても同じルールで engine kwargs を
+        導出できる（repom#166）。
+
+        Args:
+            url: create_engine / create_async_engine に渡す予定の URL
+
+        Returns:
+            dict: create_engine に渡すキーワード引数（engine_kwargs 参照）
+        """
         # PostgreSQL
-        if self.db_type == "postgres":
+        is_postgres = bool(url) and make_url(url).drivername.split("+")[0] == "postgresql"
+        if is_postgres:
             return {
                 "pool_size": self.db_pool_size,
                 "max_overflow": self.db_max_overflow,
@@ -684,7 +702,7 @@ class RepomConfig(Config):
             }
 
         # SQLite :memory: DB の場合は、StaticPool を使用して単一接続を全スレッドで共有
-        is_memory_db = self.db_url and ":memory:" in self.db_url
+        is_memory_db = bool(url) and ":memory:" in url
 
         if is_memory_db:
             # :memory: DB 用の設定（StaticPool を使用）
@@ -709,7 +727,7 @@ class RepomConfig(Config):
             }
 
             # SQLite ファイルベースの場合は check_same_thread を無効化
-            if self.db_url and self.db_url.startswith("sqlite"):
+            if url and url.startswith("sqlite"):
                 kwargs["connect_args"] = {"check_same_thread": False}
 
         return kwargs

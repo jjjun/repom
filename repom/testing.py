@@ -23,7 +23,8 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 from typing import Callable, Optional
-from repom.database import Base, safe_db_url
+from repom.database import Base, DatabaseManager, safe_db_url
+from repom.database import convert_to_async_uri  # noqa: F401 - re-exported, see below
 from repom.config import config
 from repom.utility import load_models
 
@@ -131,16 +132,10 @@ def create_test_fixtures(
         # モデルをロード
         _model_loader()
 
-        # エンジン作成時に、URLに応じて適切な engine_kwargs を選択
-        # SQLite :memory: の場合は、常に SQLite 用の engine_kwargs を使用
-        if ':memory:' in _db_url:
-            from sqlalchemy.pool import StaticPool
-            kwargs = {
-                'poolclass': StaticPool,
-                'connect_args': {'check_same_thread': False},
-            }
-        else:
-            kwargs = config.engine_kwargs
+        # フィクスチャ URL に応じた engine_kwargs を導出（config.db_type ではなく
+        # _db_url 自体のドライバーで判定するため、config の db_type と異なる URL
+        # を渡しても正しい設定になる）
+        kwargs = config.engine_kwargs_for_url(_db_url)
 
         engine = create_engine(_db_url, **kwargs)
 
@@ -194,58 +189,9 @@ def create_test_fixtures(
 # Async Support (SQLAlchemy 2.0+)
 # ========================================
 
-def convert_to_async_uri(sync_uri: str) -> str:
-    """
-    同期 DB URI を async URI に変換
-
-    SQLAlchemy の async エンジンには async 対応ドライバーが必要。
-
-    Parameters
-    ----------
-    sync_uri : str
-        同期データベース URI
-
-    Returns
-    -------
-    str
-        async データベース URI
-
-    Examples
-    --------
-    SQLite::
-
-        convert_to_async_uri("sqlite:///data/db.sqlite3")
-        # => "sqlite+aiosqlite:///data/db.sqlite3"
-
-    PostgreSQL::
-
-        convert_to_async_uri("postgresql://user:pass@host/db")
-        # => "postgresql+asyncpg://user:pass@host/db"
-
-    Notes
-    -----
-    必要な async ドライバー:
-
-    - SQLite: aiosqlite（extras: async）
-    - PostgreSQL: asyncpg（extras: postgres-async）
-
-    repom をインストールする際に extras で指定してください::
-
-        uv add "repom[async]"          # SQLite のみ
-        uv add "repom[postgres-async]" # PostgreSQL のみ
-        uv add "repom[async-all]"      # 両方
-    """
-    if sync_uri.startswith("sqlite:///"):
-        return sync_uri.replace("sqlite:///", "sqlite+aiosqlite:///")
-    elif sync_uri.startswith("sqlite://"):
-        return sync_uri.replace("sqlite://", "sqlite+aiosqlite://")
-    elif sync_uri.startswith("postgresql://"):
-        return sync_uri.replace("postgresql://", "postgresql+asyncpg://")
-    elif sync_uri.startswith("mysql://"):
-        return sync_uri.replace("mysql://", "mysql+aiomysql://")
-    else:
-        # 既に async URI の場合はそのまま返す
-        return sync_uri
+# convert_to_async_uri は repom.database.convert_to_async_uri のエイリアス
+# （DatabaseManager._convert_to_async_uri に実装を一本化: repom#166）。
+# 上の import 文により repom.testing.convert_to_async_uri としても import 可能。
 
 
 def create_async_test_fixtures(
@@ -335,7 +281,6 @@ def create_async_test_fixtures(
     # デフォルト値の設定
     _db_url = db_url if db_url is not None else "sqlite:///:memory:"
     _require_test_database(_db_url, allow_destructive)
-    _async_db_url = convert_to_async_uri(_db_url)
     _model_loader = model_loader or load_models
 
     @pytest_asyncio.fixture(scope='session')
@@ -350,18 +295,13 @@ def create_async_test_fixtures(
         # モデルをロード
         _model_loader()
 
-        # エンジン作成時に、URLに応じて適切な engine_kwargs を選択
-        # SQLite :memory: の場合は、常に SQLite 用の engine_kwargs を使用
-        if ':memory:' in _async_db_url:
-            from sqlalchemy.pool import StaticPool
-            kwargs = {
-                'poolclass': StaticPool,
-                'connect_args': {'check_same_thread': False},
-            }
-        else:
-            kwargs = config.engine_kwargs
+        # フィクスチャ URL に応じた engine_kwargs を導出し、async ドライバー用の
+        # URL・connect_args に変換する（DatabaseManager.get_async_engine と
+        # 同じ resolve_engine_settings を使うことで実装の分岐を防ぐ）
+        base_kwargs = config.engine_kwargs_for_url(_db_url)
+        _, (async_url, kwargs) = DatabaseManager.resolve_engine_settings(_db_url, base_kwargs)
 
-        engine = create_async_engine(_async_db_url, echo=False, **kwargs)
+        engine = create_async_engine(async_url, **kwargs)
 
         # テーブル作成（async での create_all）
         async with engine.begin() as conn:

@@ -400,9 +400,8 @@ class DatabaseManager:
             # across event loops running on different threads) is safe.
             with self._lock:
                 if self._async_engine is None:
-                    async_url = self._convert_to_async_uri(config.db_url)
-                    async_url, async_engine_kwargs = self._adapt_asyncpg_connect_options(
-                        async_url, config.engine_kwargs
+                    _, (async_url, async_engine_kwargs) = self.resolve_engine_settings(
+                        config.db_url, config.engine_kwargs
                     )
                     self._async_engine = create_async_engine(
                         async_url,
@@ -744,6 +743,36 @@ class DatabaseManager:
             adapted_kwargs.pop("connect_args", None)
 
         return url.render_as_string(hide_password=False), adapted_kwargs
+
+    @staticmethod
+    def resolve_engine_settings(
+        sync_url: str, engine_kwargs: dict
+    ) -> "tuple[tuple[str, dict], tuple[str, dict]]":
+        """Derive the (url, kwargs) pairs for the sync and async engines.
+
+        Both the sync and the async engine are ultimately built from the same
+        starting point - a sync URL plus a base engine_kwargs dict - but the
+        async engine additionally needs driver conversion
+        (_convert_to_async_uri) and asyncpg-specific connect_args translation
+        (_adapt_asyncpg_connect_options). Centralizing that derivation here
+        lets get_async_engine and repom.testing's fixture factories share one
+        implementation instead of drifting apart (repom#166).
+
+        Args:
+            sync_url: Synchronous database URL.
+            engine_kwargs: Base keyword arguments for create_engine (also the
+                starting point for create_async_engine, before async-specific
+                adaptation).
+
+        Returns:
+            tuple[tuple[str, dict], tuple[str, dict]]: ((sync_url,
+            sync_kwargs), (async_url, async_kwargs)).
+        """
+        async_url = DatabaseManager._convert_to_async_uri(sync_url)
+        async_url, async_kwargs = DatabaseManager._adapt_asyncpg_connect_options(
+            async_url, engine_kwargs
+        )
+        return (sync_url, engine_kwargs), (async_url, async_kwargs)
 
 
 # ========================================
