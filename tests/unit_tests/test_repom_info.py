@@ -15,6 +15,7 @@ from repom.scripts.repom_info import (
     main,
     parse_postgres_url,
     test_postgres_connection as check_postgres_connection,
+    test_redis_connection as check_redis_connection,
 )
 
 
@@ -173,7 +174,7 @@ class TestPostgresConnectionTest:
 
         assert '[NG] Not configured' in result
 
-    @patch('repom.scripts.repom_info.create_engine')
+    @patch('repom.diagnostics.database_info.create_engine')
     @patch('repom.scripts.repom_info.config')
     def test_connection_test_success(self, mock_config, mock_create_engine):
         """Test successful PostgreSQL connection."""
@@ -185,6 +186,11 @@ class TestPostgresConnectionTest:
         mock_postgres.password = 'test_pass'
         mock_config.postgres = mock_postgres
         mock_config.postgres_db = 'test_db'
+        mock_config.db_url = 'postgresql://test_user:test_pass@localhost:5432/test_db'
+        mock_config.engine_kwargs = {
+            'pool_pre_ping': True,
+            'connect_args': {'connect_timeout': 10, 'application_name': 'myapp'},
+        }
 
         # Mock successful connection
         mock_engine = Mock()
@@ -200,7 +206,14 @@ class TestPostgresConnectionTest:
         assert result == '[OK] Connected'
         mock_engine.dispose.assert_called_once()
 
-    @patch('repom.scripts.repom_info.create_engine')
+        # config.engine_kwargs must flow through (application_name preserved),
+        # with only the connect timeout pinned to a short probe value.
+        _, kwargs = mock_create_engine.call_args
+        assert kwargs['connect_args']['application_name'] == 'myapp'
+        assert kwargs['connect_args']['connect_timeout'] == 3
+        assert kwargs['pool_pre_ping'] is True
+
+    @patch('repom.diagnostics.database_info.create_engine')
     @patch('repom.scripts.repom_info.config')
     def test_connection_test_failure(self, mock_config, mock_create_engine):
         """Test failed PostgreSQL connection."""
@@ -212,6 +225,8 @@ class TestPostgresConnectionTest:
         mock_postgres.password = 'test_pass'
         mock_config.postgres = mock_postgres
         mock_config.postgres_db = 'test_db'
+        mock_config.db_url = 'postgresql://test_user:test_pass@localhost:5432/test_db'
+        mock_config.engine_kwargs = {'connect_args': {}}
 
         # Mock connection failure
         mock_create_engine.side_effect = OperationalError("Connection failed", None, None)
@@ -219,6 +234,108 @@ class TestPostgresConnectionTest:
         result = check_postgres_connection()
 
         assert '[NG] Failed' in result
+
+    @patch('repom.diagnostics.database_info.create_engine')
+    @patch('repom.scripts.repom_info.config')
+    def test_connection_test_disposes_engine_when_connect_raises(self, mock_config, mock_create_engine):
+        """The engine must be disposed even when engine.connect() itself fails,
+        not just when create_engine() fails - otherwise a failing check leaks
+        the engine (repom#163).
+        """
+        mock_postgres = Mock()
+        mock_postgres.host = 'localhost'
+        mock_config.postgres = mock_postgres
+        mock_config.postgres_db = 'test_db'
+        mock_config.db_url = 'postgresql://test_user:test_pass@localhost:5432/test_db'
+        mock_config.engine_kwargs = {'connect_args': {}}
+
+        mock_engine = Mock()
+        mock_engine.connect.side_effect = OperationalError("Connection failed", None, None)
+        mock_create_engine.return_value = mock_engine
+
+        result = check_postgres_connection()
+
+        assert '[NG] Failed' in result
+        mock_engine.dispose.assert_called_once()
+
+
+class TestRedisConnectionTest:
+    """Tests for test_redis_connection function."""
+
+    @patch('redis.Redis')
+    @patch('repom.scripts.repom_info.config')
+    def test_redis_connection_passes_password_and_db(self, mock_config, mock_redis_cls):
+        """The client must be constructed with the configured password and db,
+        since repom's Redis containers always run with requirepass set
+        (repom#163).
+        """
+        mock_config.redis.host = 'localhost'
+        mock_config.redis.port = 6379
+        mock_config.redis.password = 'secret'
+        mock_config.redis.database = 2
+        mock_redis_cls.return_value = Mock()
+
+        result = check_redis_connection()
+
+        assert result == '[OK] Connected'
+        _, kwargs = mock_redis_cls.call_args
+        assert kwargs['password'] == 'secret'
+        assert kwargs['db'] == 2
+
+    @patch('redis.Redis')
+    @patch('repom.scripts.repom_info.config')
+    def test_redis_connection_empty_password_becomes_none(self, mock_config, mock_redis_cls):
+        """An empty-string password (the RepomConfig default) must be sent as
+        None rather than as an empty-string credential.
+        """
+        mock_config.redis.host = 'localhost'
+        mock_config.redis.port = 6379
+        mock_config.redis.password = ''
+        mock_config.redis.database = 0
+        mock_redis_cls.return_value = Mock()
+
+        check_redis_connection()
+
+        _, kwargs = mock_redis_cls.call_args
+        assert kwargs['password'] is None
+
+    @patch('redis.Redis')
+    @patch('repom.scripts.repom_info.config')
+    def test_redis_connection_authentication_error(self, mock_config, mock_redis_cls):
+        """An AuthenticationError (a ConnectionError subclass) must be reported
+        as an authentication failure, not misreported as "Connection refused".
+        """
+        import redis
+
+        mock_config.redis.host = 'localhost'
+        mock_config.redis.port = 6379
+        mock_config.redis.password = 'wrong'
+        mock_config.redis.database = 0
+        mock_redis = Mock()
+        mock_redis.ping.side_effect = redis.AuthenticationError("NOAUTH Authentication required.")
+        mock_redis_cls.return_value = mock_redis
+
+        result = check_redis_connection()
+
+        assert result == '[NG] Authentication failed'
+
+    @patch('redis.Redis')
+    @patch('repom.scripts.repom_info.config')
+    def test_redis_connection_refused(self, mock_config, mock_redis_cls):
+        """A plain connection failure is still reported as connection refused."""
+        import redis
+
+        mock_config.redis.host = 'localhost'
+        mock_config.redis.port = 6379
+        mock_config.redis.password = None
+        mock_config.redis.database = 0
+        mock_redis = Mock()
+        mock_redis.ping.side_effect = redis.ConnectionError("Connection refused")
+        mock_redis_cls.return_value = mock_redis
+
+        result = check_redis_connection()
+
+        assert result == '[NG] Connection refused'
 
 
 class TestGetLoadedModels:

@@ -38,6 +38,23 @@ def test_resolve_sqlite_db_path(tmp_path):
     assert resolve_sqlite_db_path("postgresql://localhost/db", tmp_path) is None
 
 
+def test_resolve_sqlite_db_path_uses_make_url(tmp_path):
+    """A driver-qualified scheme and a query string must be parsed correctly
+    (repom#163) - a literal-prefix check misreads both.
+    """
+    driver_qualified = resolve_sqlite_db_path(
+        "sqlite+pysqlite:///data/app.sqlite3", tmp_path
+    )
+    assert driver_qualified == tmp_path / "data" / "app.sqlite3"
+
+    with_query_string = resolve_sqlite_db_path(
+        "sqlite:///data/app.sqlite3?timeout=30", tmp_path
+    )
+    assert with_query_string == tmp_path / "data" / "app.sqlite3"
+
+    assert resolve_sqlite_db_path("sqlite://", tmp_path) is None
+
+
 def test_collect_database_info_sync_sqlite_file(tmp_path):
     db_file = tmp_path / "app.sqlite3"
     db_file.write_bytes(b"1234")
@@ -99,6 +116,7 @@ def test_collect_database_info_sync_postgres_skips_size_query():
         db_url="postgresql://user:pass@localhost:5432/app",
         db_name="app",
         postgres_db="app_dev",
+        engine_kwargs={"connect_args": {}},
     )
 
     with patch.object(database_info.config_module, "config", mock_config), patch.object(
@@ -120,6 +138,10 @@ def test_collect_database_info_sync_postgres_reads_size():
         db_url="postgresql://user:pass@localhost:5432/app",
         db_name="app",
         postgres_db="app_dev",
+        engine_kwargs={
+            "pool_pre_ping": True,
+            "connect_args": {"connect_timeout": 10, "application_name": "app"},
+        },
     )
     mock_engine = Mock()
     mock_conn = Mock()
@@ -131,7 +153,7 @@ def test_collect_database_info_sync_postgres_reads_size():
 
     with patch.object(database_info.config_module, "config", mock_config), patch.object(
         database_info, "create_engine", return_value=mock_engine
-    ):
+    ) as mock_create_engine:
         info = collect_database_info_sync()
 
     assert info.backend == "postgres"
@@ -139,6 +161,38 @@ def test_collect_database_info_sync_postgres_reads_size():
     assert info.size_bytes == 2 * 1024 * 1024
     assert info.size_text == "2.00 MB"
     assert info.status == "ok"
+    mock_engine.dispose.assert_called_once()
+
+    # config.engine_kwargs must flow through (application_name preserved),
+    # with only the connect timeout pinned to a short probe value.
+    _, kwargs = mock_create_engine.call_args
+    assert kwargs["connect_args"]["application_name"] == "app"
+    assert kwargs["connect_args"]["connect_timeout"] == 3
+    assert kwargs["pool_pre_ping"] is True
+
+
+def test_collect_database_info_sync_postgres_disposes_engine_on_connect_error():
+    """The engine must be disposed even when engine.connect() raises, not
+    just when create_engine() raises - otherwise a failing check leaks the
+    engine (repom#163).
+    """
+    mock_config = SimpleNamespace(
+        db_type="postgres",
+        db_url="postgresql://user:pass@localhost:5432/app",
+        db_name="app",
+        postgres_db="app_dev",
+        engine_kwargs={"connect_args": {}},
+    )
+    mock_engine = Mock()
+    mock_engine.connect.side_effect = RuntimeError("connection refused")
+
+    with patch.object(database_info.config_module, "config", mock_config), patch.object(
+        database_info, "create_engine", return_value=mock_engine
+    ):
+        info = collect_database_info_sync()
+
+    assert info.status == "unavailable"
+    assert "connection refused" in info.error
     mock_engine.dispose.assert_called_once()
 
 
@@ -163,6 +217,45 @@ async def test_collect_database_info_async_postgres_skips_size_query():
     assert info.size_text == "N/A (skipped)"
     assert info.status == "ok"
     mock_session.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_collect_database_info_async_postgres_no_session_skips_size_matches_sync():
+    """include_database_size must be evaluated before requiring a session, so
+    a caller with no session but no need for the size still gets the same
+    'ok' / skipped result the sync function returns (repom#163).
+    """
+    mock_config = SimpleNamespace(
+        db_type="postgres",
+        db_url="postgresql://user:pass@localhost:5432/app",
+        db_name="app",
+        postgres_db="app_dev",
+        engine_kwargs={"connect_args": {}},
+    )
+
+    with patch.object(database_info.config_module, "config", mock_config):
+        async_info = await collect_database_info_async(None, include_database_size=False)
+        sync_info = collect_database_info_sync(include_database_size=False)
+
+    assert async_info.status == sync_info.status == "ok"
+    assert async_info.size_text == sync_info.size_text == "N/A (skipped)"
+    assert async_info.target == sync_info.target == "app_dev"
+
+
+@pytest.mark.asyncio
+async def test_collect_database_info_async_postgres_requires_session_for_size():
+    mock_config = SimpleNamespace(
+        db_type="postgres",
+        db_url="postgresql://user:pass@localhost:5432/app",
+        db_name="app",
+        postgres_db="app_dev",
+    )
+
+    with patch.object(database_info.config_module, "config", mock_config):
+        info = await collect_database_info_async(None)
+
+    assert info.status == "unavailable"
+    assert info.error == "Async session is not available"
 
 
 @pytest.mark.asyncio

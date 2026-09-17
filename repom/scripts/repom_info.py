@@ -4,7 +4,7 @@ import os
 import sys
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import text, create_engine
+from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -14,6 +14,7 @@ from basekit.discovery import DiscoveryFailure, import_from_packages
 from repom.diagnostics.database_info import (
     collect_database_info_sync,
     format_size as _format_size,
+    short_lived_postgres_engine,
 )
 
 
@@ -102,19 +103,10 @@ def test_postgres_connection() -> str:
     # Build PostgreSQL connection URL (psycopg3) via config.db_url so the
     # same URL encoding and sslmode handling as the real engine applies here.
     try:
-        pg_url = config.db_url
+        with short_lived_postgres_engine(config) as test_engine:
+            with test_engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
 
-        # Create a temporary engine for testing with a short connect timeout.
-        test_engine = create_engine(
-            pg_url,
-            pool_pre_ping=True,
-            connect_args={"connect_timeout": 3}
-        )
-
-        with test_engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-
-        test_engine.dispose()
         return '[OK] Connected'
     except SQLAlchemyError as e:
         error_msg = str(e.orig) if hasattr(e, 'orig') else str(e)
@@ -130,6 +122,7 @@ def test_redis_connection() -> str:
         Connection status message
         - "[OK] Connected": Successfully connected
         - "[NG] redis-py not installed": redis library not available
+        - "[NG] Authentication failed": Redis rejected the configured password
         - "[NG] Connection refused": Redis server not responding
         - "[NG] Error: ...": Other connection errors
     """
@@ -141,12 +134,16 @@ def test_redis_connection() -> str:
             r = redis.Redis(
                 host=config.redis.host,
                 port=config.redis.port,
+                password=config.redis.password or None,
+                db=config.redis.database,
                 socket_connect_timeout=2,
                 socket_keepalive=True,
                 health_check_interval=1
             )
             r.ping()  # send PING to verify the connection
             return "[OK] Connected"
+        except redis.AuthenticationError:
+            return "[NG] Authentication failed"
         except redis.ConnectionError:
             return "[NG] Connection refused"
         except Exception as e:

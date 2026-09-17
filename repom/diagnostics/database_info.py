@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import repom.config as config_module
@@ -55,15 +58,19 @@ def format_size(size_bytes: int | None, *, unit: str = "auto") -> str:
 
 def resolve_sqlite_db_path(db_url: str, root_path: str | Path) -> Path | None:
     """Resolve a SQLite URL to a local file path."""
-    if db_url == "sqlite:///:memory:":
+    try:
+        url = make_url(db_url)
+    except Exception:
         return None
 
-    prefix = "sqlite:///"
-    if not db_url.startswith(prefix):
+    if url.get_backend_name() != "sqlite":
         return None
 
-    raw_path = db_url.replace(prefix, "", 1)
-    candidate = Path(raw_path)
+    database = url.database
+    if not database or database == ":memory:" or database.startswith("file::memory:"):
+        return None
+
+    candidate = Path(database)
     if candidate.is_absolute():
         return candidate
     return Path(root_path) / candidate
@@ -75,6 +82,62 @@ def _database_target(config_obj: Any) -> str:
 
 def _get_config() -> Any:
     return config_module.config
+
+
+@contextmanager
+def short_lived_postgres_engine(
+    config_obj: Any, *, connect_timeout: int = 3
+) -> Iterator[Engine]:
+    """Create a short-lived PostgreSQL engine for connectivity probes.
+
+    Uses ``config_obj.engine_kwargs`` so consumer overrides (application_name,
+    connect_args, etc.) still apply, but pins ``connect_args.connect_timeout``
+    to a short value so a probe against an unreachable host fails quickly
+    instead of waiting on the configured production timeout. The engine is
+    always disposed, even when the connection attempt raises.
+    """
+    engine_kwargs = dict(config_obj.engine_kwargs)
+    connect_args = dict(engine_kwargs.get("connect_args") or {})
+    connect_args["connect_timeout"] = connect_timeout
+    engine_kwargs["connect_args"] = connect_args
+
+    engine = create_engine(config_obj.db_url, **engine_kwargs)
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+
+
+def _skipped_postgres_info(target: str) -> DatabaseInfo:
+    return DatabaseInfo(
+        backend="postgres",
+        target=target,
+        size_bytes=None,
+        size_text="N/A (skipped)",
+        status="ok",
+    )
+
+
+def _unavailable_postgres_info(target: str, error: str) -> DatabaseInfo:
+    return DatabaseInfo(
+        backend="postgres",
+        target=target,
+        size_bytes=None,
+        size_text="N/A",
+        status="unavailable",
+        error=error,
+    )
+
+
+def _unsupported_backend_info(config_obj: Any) -> DatabaseInfo:
+    return DatabaseInfo(
+        backend=str(config_obj.db_type),
+        target=safe_db_url(str(config_obj.db_url)),
+        size_bytes=None,
+        size_text="N/A",
+        status="unsupported",
+        error=f"Unsupported database backend: {config_obj.db_type}",
+    )
 
 
 def collect_database_info_sync(
@@ -110,29 +173,16 @@ def collect_database_info_sync(
     if config.db_type == "postgres":
         target = _database_target(config)
         if not include_database_size:
-            return DatabaseInfo(
-                backend="postgres",
-                target=target,
-                size_bytes=None,
-                size_text="N/A (skipped)",
-                status="ok",
-            )
+            return _skipped_postgres_info(target)
 
         try:
-            engine = create_engine(
-                config.db_url,
-                pool_pre_ping=True,
-                connect_args={"connect_timeout": 3},
-            )
-            try:
+            with short_lived_postgres_engine(config) as engine:
                 with engine.connect() as conn:
                     size_bytes = int(
                         conn.execute(
                             text("SELECT pg_database_size(current_database())")
                         ).scalar_one()
                     )
-            finally:
-                engine.dispose()
 
             return DatabaseInfo(
                 backend="postgres",
@@ -142,23 +192,9 @@ def collect_database_info_sync(
                 status="ok",
             )
         except Exception as exc:
-            return DatabaseInfo(
-                backend="postgres",
-                target=target,
-                size_bytes=None,
-                size_text="N/A",
-                status="unavailable",
-                error=str(exc),
-            )
+            return _unavailable_postgres_info(target, str(exc))
 
-    return DatabaseInfo(
-        backend=str(config.db_type),
-        target=safe_db_url(str(config.db_url)),
-        size_bytes=None,
-        size_text="N/A",
-        status="unsupported",
-        error=f"Unsupported database backend: {config.db_type}",
-    )
+    return _unsupported_backend_info(config)
 
 
 async def collect_database_info_async(
@@ -173,23 +209,10 @@ async def collect_database_info_async(
 
     if config.db_type == "postgres":
         target = _database_target(config)
-        if session is None:
-            return DatabaseInfo(
-                backend="postgres",
-                target=target,
-                size_bytes=None,
-                size_text="N/A",
-                status="unavailable",
-                error="Async session is not available",
-            )
         if not include_database_size:
-            return DatabaseInfo(
-                backend="postgres",
-                target=target,
-                size_bytes=None,
-                size_text="N/A (skipped)",
-                status="ok",
-            )
+            return _skipped_postgres_info(target)
+        if session is None:
+            return _unavailable_postgres_info(target, "Async session is not available")
 
         try:
             result = await session.execute(
@@ -204,20 +227,6 @@ async def collect_database_info_async(
                 status="ok",
             )
         except Exception as exc:
-            return DatabaseInfo(
-                backend="postgres",
-                target=target,
-                size_bytes=None,
-                size_text="N/A",
-                status="unavailable",
-                error=str(exc),
-            )
+            return _unavailable_postgres_info(target, str(exc))
 
-    return DatabaseInfo(
-        backend=str(config.db_type),
-        target=safe_db_url(str(config.db_url)),
-        size_bytes=None,
-        size_text="N/A",
-        status="unsupported",
-        error=f"Unsupported database backend: {config.db_type}",
-    )
+    return _unsupported_backend_info(config)

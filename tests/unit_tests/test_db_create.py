@@ -61,3 +61,28 @@ def test_db_create_raises_on_import_failure(monkeypatch):
         db_create.main()
 
     fake_base.metadata.create_all.assert_not_called()
+
+
+def test_db_create_logs_safe_db_url(monkeypatch):
+    """A password passed as a query parameter (which str(engine.url) does not
+    hide) must never reach the log (repom#163).
+    """
+    fake_config = MagicMock()
+    fake_config.db_type = 'sqlite'
+    monkeypatch.setattr(db_create, "config", fake_config)
+
+    monkeypatch.setattr(db_create, "load_models", MagicMock(return_value=[]))
+    monkeypatch.setattr(db_create, "Base", MagicMock())
+
+    fake_engine = MagicMock()
+    fake_engine.url = "postgresql://user@localhost/app?password=secret"
+    monkeypatch.setattr(db_create, "get_sync_engine", MagicMock(return_value=fake_engine))
+
+    fake_logger = MagicMock()
+    monkeypatch.setattr(db_create, "logger", fake_logger)
+
+    db_create.main()
+
+    logged_message = fake_logger.info.call_args[0][0]
+    assert "secret" not in logged_message
+    assert "password=***" in logged_message
