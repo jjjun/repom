@@ -12,6 +12,7 @@ from repom.docker_service import DockerUnavailableError
 from repom.scripts import _backup_utils
 from repom.scripts._backup_utils import (
     ChecksumError,
+    backup_name_pattern,
     checksum_path,
     cleanup_incomplete_backups,
     compute_checksum,
@@ -19,6 +20,7 @@ from repom.scripts._backup_utils import (
     format_size,
     get_backups,
     open_backup_temp_file,
+    parse_backup_source_database,
     rotate_backups,
     run_postgres_via_docker_or_host,
     verify_checksum,
@@ -133,6 +135,76 @@ def test_cleanup_incomplete_backups_preserves_recent_partial_artifacts(tmp_path)
     assert removed == [stale_partial]
     assert recent_partial.exists()
     assert not stale_partial.exists()
+
+
+def test_backup_name_pattern_does_not_match_database_with_shared_prefix():
+    pattern = backup_name_pattern("repom", ".sql.gz")
+
+    assert pattern.fullmatch("repom_20260101_000000.sql.gz")
+    assert not pattern.fullmatch("repom_dev_20260101_000000.sql.gz")
+
+
+def test_rotate_backups_with_name_pattern_ignores_other_database_prefix_matches(tmp_path):
+    prod_old = tmp_path / "repom_20260101_000000.sql.gz"
+    prod_middle = tmp_path / "repom_20260102_000000.sql.gz"
+    prod_new = tmp_path / "repom_20260103_000000.sql.gz"
+    dev = tmp_path / "repom_dev_20260104_000000.sql.gz"
+    _touch(prod_old, 1)
+    _touch(prod_middle, 2)
+    _touch(prod_new, 3)
+    _touch(dev, 4)
+
+    # A plain glob for "repom" also matches "repom_dev_...", since "*" swallows
+    # "dev_20260104_000000"; name_pattern must keep rotation scoped to "repom".
+    removed = rotate_backups(
+        tmp_path, "repom_*.sql.gz", max_keep=2, name_pattern=backup_name_pattern("repom", ".sql.gz")
+    )
+
+    assert removed == [prod_old]
+    assert not prod_old.exists()
+    assert prod_middle.exists()
+    assert prod_new.exists()
+    assert dev.exists()
+
+
+def test_cleanup_incomplete_backups_with_name_pattern_ignores_other_database(tmp_path):
+    prod_empty = tmp_path / "repom_20260101_000000.sql.gz"
+    dev_empty = tmp_path / "repom_dev_20260101_000000.sql.gz"
+    prod_empty.touch()
+    dev_empty.touch()
+
+    removed = cleanup_incomplete_backups(
+        tmp_path, "repom_*.sql.gz", name_pattern=backup_name_pattern("repom", ".sql.gz")
+    )
+
+    assert removed == [prod_empty]
+    assert not prod_empty.exists()
+    assert dev_empty.exists()
+
+
+def test_parse_backup_source_database_matches_postgres_name():
+    assert parse_backup_source_database("repom_dev_20260101_000000.sql.gz", ".sql.gz") == "repom_dev"
+
+
+def test_parse_backup_source_database_matches_sqlite_name():
+    assert parse_backup_source_database("repom_20260101_000000.sqlite3", ".sqlite3") == "repom"
+
+
+def test_parse_backup_source_database_returns_none_for_legacy_postgres_name():
+    assert parse_backup_source_database("db_20260101_000000.sql.gz", ".sql.gz") is None
+
+
+def test_parse_backup_source_database_returns_none_for_unrelated_name():
+    assert parse_backup_source_database("notes.txt", ".sql.gz") is None
+
+
+def test_get_backups_lists_legacy_and_current_named_postgres_backups(tmp_path):
+    legacy = tmp_path / "db_20260101_000000.sql.gz"
+    current = tmp_path / "repom_20260102_000000.sql.gz"
+    _touch(legacy, 1)
+    _touch(current, 2)
+
+    assert get_backups(tmp_path, "postgres") == [current, legacy]
 
 
 def test_format_size_formats_fixed_mb_values():

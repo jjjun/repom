@@ -1,6 +1,7 @@
 from tests._init import *
 
 import os
+import re
 import sqlite3
 import subprocess
 from datetime import datetime
@@ -48,10 +49,23 @@ def test_backup_postgresql_via_host_publishes_backup_and_checksum(monkeypatch, t
 
     db_backup.backup_postgresql_via_host()
 
-    backups = list(tmp_path.glob("db_*.sql.gz"))
+    backups = list(tmp_path.glob("*.sql.gz"))
     assert len(backups) == 1
+    assert backups[0].name.startswith(f"{config.postgres_db}_")
     assert checksum_path(backups[0]).exists()
     assert list(tmp_path.glob("*.partial")) == []
+
+
+def test_backup_postgresql_via_host_names_backup_after_configured_database(monkeypatch, tmp_path):
+    config = _mock_postgres_config(tmp_path)
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.setattr(db_backup.subprocess, "Popen", lambda *a, **k: _FakePgDumpProc())
+
+    db_backup.backup_postgresql_via_host()
+
+    backups = list(tmp_path.glob("*.sql.gz"))
+    assert len(backups) == 1
+    assert re.fullmatch(r"repom_test_\d{8}_\d{6}\.sql\.gz", backups[0].name)
 
 
 @POSIX_ONLY
@@ -74,7 +88,7 @@ def test_backup_file_is_0600(monkeypatch, tmp_path):
 
     db_backup.backup_postgresql_via_host()
 
-    backups = list(tmp_path.glob("db_*.sql.gz"))
+    backups = list(tmp_path.glob("*.sql.gz"))
     assert len(backups) == 1
     assert backups[0].stat().st_mode & 0o777 == 0o600
 
@@ -120,7 +134,7 @@ def test_backup_raises_when_pg_dump_fails(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match="pg_dump"):
         db_backup.backup_postgresql_via_host()
 
-    assert list(tmp_path.glob("db_*.sql.gz")) == []
+    assert list(tmp_path.glob("*.sql.gz")) == []
     assert list(tmp_path.glob("*.partial")) == []
 
 
@@ -182,8 +196,67 @@ def test_backup_postgresql_via_host_raises_before_launching_process_on_invalid_t
         db_backup.backup_postgresql_via_host()
 
     assert popen_calls == []
-    assert list(tmp_path.glob("db_*.sql.gz")) == []
+    assert list(tmp_path.glob("*.sql.gz")) == []
     assert "test-password" not in str(exc_info.value)
+
+
+def _make_finished_backup(path, mtime):
+    path.write_bytes(b"payload")
+    os.utime(path, (mtime, mtime))
+
+
+def test_backup_postgresql_via_host_rotation_does_not_delete_other_database_backup(
+    monkeypatch, tmp_path
+):
+    """"repom" is a name-prefix of "repom_dev"; rotating "repom" backups with a
+    plain glob like "repom_*.sql.gz" would also match "repom_dev_...", so a
+    dev backup taken from the same checkout must not delete a prod backup."""
+    dev_backup = tmp_path / "repom_dev_20260101_000000.sql.gz"
+    _make_finished_backup(dev_backup, mtime=1)
+
+    config = _mock_postgres_config(tmp_path)
+    config.postgres_db = "repom"
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.setattr(db_backup.subprocess, "Popen", lambda *a, **k: _FakePgDumpProc())
+
+    db_backup.backup_postgresql_via_host()
+
+    assert dev_backup.exists()
+    new_backups = [p for p in tmp_path.glob("*.sql.gz") if p != dev_backup]
+    assert len(new_backups) == 1
+    assert re.fullmatch(r"repom_\d{8}_\d{6}\.sql\.gz", new_backups[0].name)
+
+
+def test_backup_postgresql_via_host_rotation_keeps_max_backups_per_database(
+    monkeypatch, tmp_path
+):
+    """Three existing prod backups at the retention limit, plus three dev
+    backups sharing the directory, must rotate independently: the oldest prod
+    backup is removed while every dev backup survives."""
+    prod_backups = [
+        tmp_path / f"repom_2026010{n}_000000.sql.gz" for n in range(1, 4)
+    ]
+    for i, path in enumerate(prod_backups, start=1):
+        _make_finished_backup(path, mtime=i)
+
+    dev_backups = [
+        tmp_path / f"repom_dev_2026010{n}_000000.sql.gz" for n in range(1, 4)
+    ]
+    for i, path in enumerate(dev_backups, start=1):
+        _make_finished_backup(path, mtime=i)
+
+    config = _mock_postgres_config(tmp_path)
+    config.postgres_db = "repom"
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.setattr(db_backup.subprocess, "Popen", lambda *a, **k: _FakePgDumpProc())
+
+    db_backup.backup_postgresql_via_host()
+
+    assert not prod_backups[0].exists()
+    assert prod_backups[1].exists() and prod_backups[2].exists()
+    assert all(path.exists() for path in dev_backups)
+    remaining_prod = [p for p in tmp_path.glob("repom_*.sql.gz") if p not in dev_backups]
+    assert len(remaining_prod) == db_backup.MAX_BACKUPS_PER_DB
 
 
 def _mock_sqlite_config(backup_dir, db_file_path):
@@ -331,6 +404,71 @@ def test_backup_sqlite_file_is_0600(monkeypatch, tmp_path):
         writer.close()
 
 
+def test_backup_sqlite_rotation_does_not_delete_other_database_backup(monkeypatch, tmp_path):
+    """"repom" is a name-prefix of "repom_dev"; rotating "repom" backups with a
+    plain glob like "repom_*.sqlite3" would also match "repom_dev_...", so a
+    dev backup taken from the same checkout must not delete a prod backup."""
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    dev_backup = backup_dir / "repom_dev_20260101_000000.sqlite3"
+    _make_finished_backup(dev_backup, mtime=1)
+
+    db_file = tmp_path / "repom.sqlite3"
+    writer = sqlite3.connect(str(db_file))
+    writer.execute("CREATE TABLE items (id INTEGER)")
+    writer.commit()
+    config = _mock_sqlite_config(backup_dir, db_file)
+    monkeypatch.setattr(db_backup, "config", config)
+
+    try:
+        db_backup.backup_sqlite()
+    finally:
+        writer.close()
+
+    assert dev_backup.exists()
+    new_backups = [p for p in backup_dir.glob("*.sqlite3") if p != dev_backup]
+    assert len(new_backups) == 1
+    assert re.fullmatch(r"repom_\d{8}_\d{6}\.sqlite3", new_backups[0].name)
+
+
+def test_backup_sqlite_rotation_keeps_max_backups_per_database(monkeypatch, tmp_path):
+    """Three existing prod backups at the retention limit, plus three dev
+    backups sharing the directory, must rotate independently: the oldest prod
+    backup is removed while every dev backup survives."""
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+
+    prod_backups = [
+        backup_dir / f"repom_2026010{n}_000000.sqlite3" for n in range(1, 4)
+    ]
+    for i, path in enumerate(prod_backups, start=1):
+        _make_finished_backup(path, mtime=i)
+
+    dev_backups = [
+        backup_dir / f"repom_dev_2026010{n}_000000.sqlite3" for n in range(1, 4)
+    ]
+    for i, path in enumerate(dev_backups, start=1):
+        _make_finished_backup(path, mtime=i)
+
+    db_file = tmp_path / "repom.sqlite3"
+    writer = sqlite3.connect(str(db_file))
+    writer.execute("CREATE TABLE items (id INTEGER)")
+    writer.commit()
+    config = _mock_sqlite_config(backup_dir, db_file)
+    monkeypatch.setattr(db_backup, "config", config)
+
+    try:
+        db_backup.backup_sqlite()
+    finally:
+        writer.close()
+
+    assert not prod_backups[0].exists()
+    assert prod_backups[1].exists() and prod_backups[2].exists()
+    assert all(path.exists() for path in dev_backups)
+    remaining_prod = [p for p in backup_dir.glob("repom_*.sqlite3") if p not in dev_backups]
+    assert len(remaining_prod) == db_backup.MAX_BACKUPS_PER_DB
+
+
 def _mock_postgres_config_for_main(backup_dir, sslmode="prefer", sslrootcert=None):
     config = _mock_postgres_config(backup_dir, sslmode=sslmode, sslrootcert=sslrootcert)
     config.db_type = "postgres"
@@ -350,7 +488,7 @@ def test_main_raises_backup_error_when_host_pg_dump_fails(monkeypatch, tmp_path)
     with pytest.raises(BackupError, match="pg_dump"):
         db_backup.main()
 
-    assert list(tmp_path.glob("db_*.sql.gz")) == []
+    assert list(tmp_path.glob("*.sql.gz")) == []
     assert list(tmp_path.glob("*.partial")) == []
 
 
@@ -371,7 +509,7 @@ def test_main_raises_backup_error_when_docker_pg_dump_fails(monkeypatch, tmp_pat
     with pytest.raises(BackupError, match="pg_dump"):
         db_backup.main()
 
-    assert list(tmp_path.glob("db_*.sql.gz")) == []
+    assert list(tmp_path.glob("*.sql.gz")) == []
     assert list(tmp_path.glob("*.partial")) == []
 
 
@@ -410,7 +548,7 @@ def test_main_raises_backup_error_on_write_error_while_compressing(monkeypatch, 
     with pytest.raises(BackupError, match="disk full"):
         db_backup.main()
 
-    assert list(tmp_path.glob("db_*.sql.gz")) == []
+    assert list(tmp_path.glob("*.sql.gz")) == []
     assert list(tmp_path.glob("*.partial")) == []
 
 
@@ -425,7 +563,7 @@ def test_main_raises_backup_error_on_empty_dump_output_via_host(monkeypatch, tmp
     with pytest.raises(BackupError, match="empty"):
         db_backup.main()
 
-    assert list(tmp_path.glob("db_*.sql.gz")) == []
+    assert list(tmp_path.glob("*.sql.gz")) == []
     assert list(tmp_path.glob("*.partial")) == []
 
 
@@ -442,7 +580,7 @@ def test_main_raises_backup_error_on_empty_dump_output_via_docker(monkeypatch, t
     with pytest.raises(BackupError, match="empty"):
         db_backup.main()
 
-    assert list(tmp_path.glob("db_*.sql.gz")) == []
+    assert list(tmp_path.glob("*.sql.gz")) == []
     assert list(tmp_path.glob("*.partial")) == []
 
 
@@ -454,7 +592,7 @@ def test_main_returns_normally_on_successful_backup(monkeypatch, tmp_path):
 
     db_backup.main()
 
-    assert len(list(tmp_path.glob("db_*.sql.gz"))) == 1
+    assert len(list(tmp_path.glob("*.sql.gz"))) == 1
 
 
 def _mock_sqlite_config_for_main(backup_dir, db_file_path):

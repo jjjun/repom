@@ -2,12 +2,14 @@ from repom.config import config
 from repom.logging import get_logger
 from basekit.docker_manager import DockerCommandExecutor
 import os
+import re
 import subprocess
 import gzip
 from datetime import datetime
 from pathlib import Path
 from repom.scripts._backup_utils import (
     BackupError,
+    backup_name_pattern,
     build_host_pg_env,
     cleanup_incomplete_backups,
     ensure_backup_dir,
@@ -26,9 +28,11 @@ logger = get_logger(__name__)
 MAX_BACKUPS_PER_DB = 3
 
 
-def cleanup_stale_backups(backup_dir: Path, glob_pattern: str):
+def cleanup_stale_backups(
+    backup_dir: Path, glob_pattern: str, name_pattern: re.Pattern[str] | None = None
+):
     """Remove artifacts left by interrupted backup attempts."""
-    for incomplete_backup in cleanup_incomplete_backups(backup_dir, glob_pattern):
+    for incomplete_backup in cleanup_incomplete_backups(backup_dir, glob_pattern, name_pattern):
         logger.warning(f"Removed incomplete backup: {incomplete_backup.name}")
 
 
@@ -59,7 +63,8 @@ def backup_sqlite():
 
     backup_dir = Path(config.db_backup_path)
     backup_pattern = f"{name}_*{ext}"
-    cleanup_stale_backups(backup_dir, backup_pattern)
+    name_pattern = backup_name_pattern(name, ext)
+    cleanup_stale_backups(backup_dir, backup_pattern, name_pattern)
 
     # Snapshot through SQLite's backup API, keeping the backup readable only
     # by its owner from creation, so committed-but-uncheckpointed WAL data is
@@ -94,7 +99,7 @@ def backup_sqlite():
             partial_path.unlink()
         raise BackupError(f"Backup failed: {e}") from e
 
-    removed = rotate_backups(backup_dir, backup_pattern, MAX_BACKUPS_PER_DB)
+    removed = rotate_backups(backup_dir, backup_pattern, MAX_BACKUPS_PER_DB, name_pattern)
     if removed:
         logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
         for old in removed:
@@ -122,15 +127,17 @@ def backup_postgresql_via_host():
     ensure_backup_dir(config.db_backup_path)
     logger.debug(f"Backup directory created/verified: {config.db_backup_path}")
 
-    # Create backup file name: db_<datetime>.sql.gz
+    # Create backup file name: <postgres_db>_<datetime>.sql.gz
     now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_name = f"db_{now_str}.sql.gz"
+    backup_name = f"{config.postgres_db}_{now_str}.sql.gz"
     backup_path = Path(config.db_backup_path) / backup_name
     partial_path = backup_path.with_name(f"{backup_path.name}.partial")
     logger.debug(f"Backup file name: {backup_name}")
 
     backup_dir = Path(config.db_backup_path)
-    cleanup_stale_backups(backup_dir, "db_*.sql.gz")
+    backup_pattern = f"{config.postgres_db}_*.sql.gz"
+    name_pattern = backup_name_pattern(config.postgres_db, ".sql.gz")
+    cleanup_stale_backups(backup_dir, backup_pattern, name_pattern)
 
     # pg_dump コマンド実行
     try:
@@ -191,7 +198,7 @@ def backup_postgresql_via_host():
 
         partial_path.replace(backup_path)
         write_checksum(backup_path)
-        removed = rotate_backups(backup_dir, "db_*.sql.gz", MAX_BACKUPS_PER_DB)
+        removed = rotate_backups(backup_dir, backup_pattern, MAX_BACKUPS_PER_DB, name_pattern)
         if removed:
             logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
             for old in removed:
@@ -233,15 +240,17 @@ def backup_postgresql_via_docker():
     ensure_backup_dir(config.db_backup_path)
     logger.debug(f"Backup directory created/verified: {config.db_backup_path}")
 
-    # Create backup file name: db_<datetime>.sql.gz
+    # Create backup file name: <postgres_db>_<datetime>.sql.gz
     now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_name = f"db_{now_str}.sql.gz"
+    backup_name = f"{config.postgres_db}_{now_str}.sql.gz"
     backup_path = Path(config.db_backup_path) / backup_name
     partial_path = backup_path.with_name(f"{backup_path.name}.partial")
     logger.debug(f"Backup file name: {backup_name}")
 
     backup_dir = Path(config.db_backup_path)
-    cleanup_stale_backups(backup_dir, "db_*.sql.gz")
+    backup_pattern = f"{config.postgres_db}_*.sql.gz"
+    name_pattern = backup_name_pattern(config.postgres_db, ".sql.gz")
+    cleanup_stale_backups(backup_dir, backup_pattern, name_pattern)
 
     # docker exec で pg_dump 実行
     try:
@@ -284,7 +293,7 @@ def backup_postgresql_via_docker():
 
         partial_path.replace(backup_path)
         write_checksum(backup_path)
-        removed = rotate_backups(backup_dir, "db_*.sql.gz", MAX_BACKUPS_PER_DB)
+        removed = rotate_backups(backup_dir, backup_pattern, MAX_BACKUPS_PER_DB, name_pattern)
         if removed:
             logger.info(f"Removing {len(removed)} old backup(s) to maintain limit of {MAX_BACKUPS_PER_DB}")
             for old in removed:

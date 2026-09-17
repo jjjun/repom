@@ -1,9 +1,10 @@
 from pathlib import Path
 import hashlib
 import os
+import re
 import sqlite3
 import time
-from typing import BinaryIO, Callable, TypeVar
+from typing import BinaryIO, Callable, Optional, TypeVar
 
 from repom.config import config
 from repom.docker_service import DockerUnavailableError, is_container_running
@@ -196,7 +197,7 @@ def get_backups(backup_dir: str | Path, db_type: str) -> list[Path]:
     if db_type == "sqlite":
         backups = list(backup_path.glob("*.sqlite3"))
     elif db_type == "postgres":
-        backups = list(backup_path.glob("db_*.sql.gz"))
+        backups = list(backup_path.glob("*.sql.gz"))
     else:
         logger.warning(f"Unknown db_type: {db_type}, showing all backups")
         backups = list(backup_path.glob("*"))
@@ -205,10 +206,51 @@ def get_backups(backup_dir: str | Path, db_type: str) -> list[Path]:
     return backups
 
 
-def cleanup_incomplete_backups(backup_dir: Path, glob_pattern: str) -> list[Path]:
-    """Remove zero-byte backup files and stale partial artifacts."""
+def backup_name_pattern(stem: str, suffix: str) -> re.Pattern[str]:
+    """Return an anchored pattern matching one database's backup file names.
+
+    A plain glob such as ``f"{stem}_*{suffix}"`` also matches another
+    database whose name has ``stem`` as a prefix (e.g. "repom" vs.
+    "repom_dev", where the glob's ``*`` also swallows "dev_<timestamp>").
+    Filtering candidates with ``pattern.fullmatch(name)`` keeps rotation and
+    incomplete-file cleanup scoped to exactly this database's timestamped
+    files.
+    """
+    return re.compile(re.escape(stem) + r"_\d{8}_\d{6}" + re.escape(suffix))
+
+
+def parse_backup_source_database(name: str, suffix: str) -> Optional[str]:
+    """Return the database name encoded in a backup file name, if any.
+
+    Matches the ``<database>_<YYYYmmdd_HHMMSS><suffix>`` shape written by
+    db_backup. Returns None when ``name`` doesn't match that shape, or for a
+    legacy PostgreSQL backup named ``db_<YYYYmmdd_HHMMSS>.sql.gz`` (the fixed
+    "db" prefix used before repom#157), whose source database is unknown.
+    """
+    match = re.fullmatch(r"(.+)_\d{8}_\d{6}" + re.escape(suffix), name)
+    if not match:
+        return None
+    source = match.group(1)
+    if suffix == ".sql.gz" and source == "db":
+        return None
+    return source
+
+
+def cleanup_incomplete_backups(
+    backup_dir: Path,
+    glob_pattern: str,
+    name_pattern: Optional[re.Pattern[str]] = None,
+) -> list[Path]:
+    """Remove zero-byte backup files and stale partial artifacts.
+
+    When ``name_pattern`` is given, only files whose name fullmatches it are
+    considered, so a ``glob_pattern`` that is also a prefix of another
+    database's files (see ``backup_name_pattern``) doesn't reach them.
+    """
     incomplete_files = []
     for path in backup_dir.glob(glob_pattern):
+        if name_pattern is not None and not name_pattern.fullmatch(path.name):
+            continue
         try:
             if path.stat().st_size == 0:
                 path.unlink(missing_ok=True)
@@ -219,6 +261,10 @@ def cleanup_incomplete_backups(backup_dir: Path, glob_pattern: str) -> list[Path
 
     stale_partial_cutoff = time.time() - STALE_PARTIAL_BACKUP_AGE_SECONDS
     for path in backup_dir.glob(f"{glob_pattern}.partial"):
+        if name_pattern is not None and not name_pattern.fullmatch(
+            path.name.removesuffix(".partial")
+        ):
+            continue
         try:
             if path.stat().st_mtime <= stale_partial_cutoff:
                 path.unlink(missing_ok=True)
@@ -229,18 +275,28 @@ def cleanup_incomplete_backups(backup_dir: Path, glob_pattern: str) -> list[Path
     return incomplete_files
 
 
-def rotate_backups(backup_dir: Path, glob_pattern: str, max_keep: int) -> list[Path]:
+def rotate_backups(
+    backup_dir: Path,
+    glob_pattern: str,
+    max_keep: int,
+    name_pattern: Optional[re.Pattern[str]] = None,
+) -> list[Path]:
     """Remove incomplete and old backup files and return the removed paths.
 
     Rotation keeps the newest ``max_keep`` non-empty final files by modification
     time. A ``max_keep`` value of 0 or less disables retention deletion.
+    ``name_pattern``, when given, scopes both incomplete-file cleanup and
+    retention to files whose name fullmatches it (see
+    ``cleanup_incomplete_backups`` and ``backup_name_pattern``).
     """
-    removed_files = cleanup_incomplete_backups(backup_dir, glob_pattern)
+    removed_files = cleanup_incomplete_backups(backup_dir, glob_pattern, name_pattern)
     if max_keep <= 0:
         return removed_files
 
     files = []
     for path in backup_dir.glob(glob_pattern):
+        if name_pattern is not None and not name_pattern.fullmatch(path.name):
+            continue
         try:
             files.append((path.stat().st_mtime, path))
         except FileNotFoundError:

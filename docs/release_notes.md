@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+- BREAKING: PostgreSQL backups are now named `<postgres_db>_<YYYYmmdd_HHMMSS>.sql.gz`
+  (the effective database name from `config.postgres_db`) instead of the fixed
+  `db_<YYYYmmdd_HHMMSS>.sql.gz`, in both the host `pg_dump` and Docker exec
+  paths. Previously every environment wrote the same `db_` prefix into the
+  shared `data_path/backups/postgres` directory (`RepomConfig.db_backup_path`
+  does not vary by `exec_env`), so rotation's `db_*.sql.gz` glob, and
+  `cleanup_incomplete_backups`'s stale/zero-byte cleanup, could not tell a dev
+  backup from a prod one and deleted across environments. SQLite backup
+  rotation had the same problem in the other direction: one database name can
+  be a prefix of another (e.g. `repom` vs. `repom_dev`), so a plain
+  `f"{name}_*{ext}"` glob for `repom` also matched `repom_dev`'s files.
+  `rotate_backups()` and `cleanup_incomplete_backups()` in
+  `repom.scripts._backup_utils` now take an optional `name_pattern` (built by
+  the new `backup_name_pattern(stem, suffix)`) that anchors matches to
+  `<stem>_<8 digits>_<6 digits><suffix>` via `re.fullmatch`, and `db_backup`
+  passes it for both PostgreSQL and SQLite so retention and incomplete-file
+  cleanup are scoped to exactly the database being backed up; existing
+  callers that omit `name_pattern` keep the previous glob-only behavior.
+  Pre-existing `db_*.sql.gz` files from before this change are left alone —
+  never rotated or deleted automatically — since they no longer match the new
+  per-database pattern, but `get_backups()` still lists them (`db_restore`
+  marks them "legacy/unknown source database"). `db_restore` now lists the
+  target database's own backups first, then others; parses each backup's
+  source database from its file name via the new
+  `parse_backup_source_database(name, suffix)`; and prints the source and
+  target database before confirming. A backup whose source is unknown or
+  differs from the target database (`config.postgres_db`, or the SQLite file
+  name) can no longer be confirmed by typing "y" - the user must type the
+  target database name instead, so a dev dump can't be restored into the prod
+  database with a single keystroke.
 - BREAKING: `repom.scripts.db_backup.main()` and
   `repom.scripts.db_restore.main()` now raise on failure instead of printing
   an error and returning normally. Previously, most backup and restore

@@ -56,7 +56,7 @@ def _mock_postgres_config(backup_dir, sslmode="prefer", sslrootcert=None):
     return config
 
 
-def _make_backup_file(tmp_path, name="db_20260101_000000.sql.gz", payload=b"SELECT 1;\n"):
+def _make_backup_file(tmp_path, name="repom_test_20260101_000000.sql.gz", payload=b"SELECT 1;\n"):
     backup_file = tmp_path / name
     with gzip.open(backup_file, "wb") as f:
         f.write(payload)
@@ -550,6 +550,49 @@ def test_main_returns_normally_when_restore_cancelled_at_confirmation(monkeypatc
     db_restore.main()
 
 
+def test_main_cancels_cross_database_restore_when_target_name_not_typed(monkeypatch, tmp_path):
+    """A backup from another database ("otherdb") must not be restorable by
+    typing "y"; only typing the target database name confirms the restore."""
+    _make_backup_file(tmp_path, name="otherdb_20260101_000000.sql.gz")
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
+    popen = MagicMock()
+    monkeypatch.setattr(db_restore.subprocess, "Popen", popen)
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "y"]))
+
+    db_restore.main()
+
+    popen.assert_not_called()
+
+
+def test_main_proceeds_with_cross_database_restore_when_target_name_typed(monkeypatch, tmp_path):
+    _make_backup_file(tmp_path, name="otherdb_20260101_000000.sql.gz")
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
+    monkeypatch.setattr(db_restore.subprocess, "Popen", _make_popen())
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "repom_test"]))
+
+    db_restore.main()
+
+
+def test_main_cancels_legacy_backup_restore_when_target_name_not_typed(monkeypatch, tmp_path):
+    """A legacy ``db_<timestamp>.sql.gz`` backup has an unknown source
+    database, so it must require typing the target name too."""
+    _make_backup_file(tmp_path, name="db_20260101_000000.sql.gz")
+    config = _mock_postgres_config_for_main(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
+    popen = MagicMock()
+    monkeypatch.setattr(db_restore.subprocess, "Popen", popen)
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "y"]))
+
+    db_restore.main()
+
+    popen.assert_not_called()
+
+
 def _mock_sqlite_config_for_main(backup_dir, db_file_path):
     config = _mock_sqlite_config(backup_dir, db_file_path)
     config.db_type = "sqlite"
@@ -577,3 +620,41 @@ def test_main_raises_restore_error_on_sqlite_checksum_mismatch(monkeypatch, tmp_
         db_restore.main()
 
     assert isinstance(exc_info.value.__cause__, ChecksumError)
+
+
+def test_main_cancels_sqlite_cross_database_restore_when_target_name_not_typed(monkeypatch, tmp_path):
+    """A backup from another database ("other") must not be restorable by
+    typing "y"; only typing the target database name ("app") confirms it."""
+    current_db = tmp_path / "app.sqlite3"
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    backup_file = backup_dir / "other_20260101_000000.sqlite3"
+    restore_source = _make_sqlite_db(backup_file, row_id=99)
+    restore_source.close()
+    write_checksum(backup_file)
+
+    config = _mock_sqlite_config_for_main(backup_dir, current_db)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "y"]))
+
+    db_restore.main()
+
+    assert not current_db.exists()
+
+
+def test_main_proceeds_with_sqlite_cross_database_restore_when_target_name_typed(monkeypatch, tmp_path):
+    current_db = tmp_path / "app.sqlite3"
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    backup_file = backup_dir / "other_20260101_000000.sqlite3"
+    restore_source = _make_sqlite_db(backup_file, row_id=99)
+    restore_source.close()
+    write_checksum(backup_file)
+
+    config = _mock_sqlite_config_for_main(backup_dir, current_db)
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "app"]))
+
+    db_restore.main()
+
+    assert current_db.exists()
