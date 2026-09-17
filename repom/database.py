@@ -655,6 +655,47 @@ class DatabaseManager:
             )
 
     @staticmethod
+    def _resolve_asyncpg_ssl(sslmode: str, sslrootcert: "Optional[str]"):
+        """Mirror libpq's sslmode/sslrootcert semantics for asyncpg's ``ssl`` arg.
+
+        asyncpg has no sslmode/sslrootcert concept of its own: passing it the
+        sslmode string reproduces libpq's disable/allow/prefer/require
+        behaviour (opportunistic TLS, no certificate verification), while an
+        ssl.SSLContext forces TLS and verifies the certificate chain (and,
+        optionally, the hostname). libpq only consults sslrootcert to verify
+        the chain in require/verify-ca/verify-full, and only checks the
+        hostname for verify-full:
+
+        | sslmode + sslrootcert | libpq (sync engine)                              | asyncpg (this mapping)                |
+        | ---------------------- | ------------------------------------------------- | -------------------------------------- |
+        | disable                | plaintext                                          | "disable" (sslrootcert ignored)        |
+        | allow / prefer         | opportunistic TLS, no verification, may fall back  | "allow" / "prefer" (sslrootcert ignored)|
+        | require, no rootcert   | TLS required, no verification                      | "require"                              |
+        | require + rootcert     | TLS required; chain verified, no hostname check    | SSLContext(check_hostname=False)       |
+        | verify-ca, no rootcert | chain verified against default trust store         | "verify-ca"                            |
+        | verify-ca + rootcert   | chain verified, no hostname check                  | SSLContext(check_hostname=False)       |
+        | verify-full, no rootcert| chain and hostname verified against default store | "verify-full"                          |
+        | verify-full + rootcert | chain and hostname verified                        | SSLContext(check_hostname=True)        |
+
+        Without sslrootcert, the sslmode string is passed straight through so
+        asyncpg resolves the default root certificate (and, for verify-full,
+        the hostname check) itself.
+
+        Args:
+            sslmode: One of disable/allow/prefer/require/verify-ca/verify-full.
+            sslrootcert: Path to a CA bundle, or None/empty.
+
+        Returns:
+            Either the original sslmode string, or an ssl.SSLContext loaded
+            with sslrootcert (verify_mode=CERT_REQUIRED by default).
+        """
+        if sslmode in ("disable", "allow", "prefer") or not sslrootcert:
+            return sslmode
+        ssl_context = ssl.create_default_context(cafile=sslrootcert)
+        ssl_context.check_hostname = sslmode == "verify-full"
+        return ssl_context
+
+    @staticmethod
     def _adapt_asyncpg_connect_options(async_url: str, engine_kwargs: dict) -> "tuple[str, dict]":
         """Translate libpq-style URL/connect_args into asyncpg's own parameters.
 
@@ -684,15 +725,9 @@ class DatabaseManager:
 
         asyncpg_connect_args = {}
         if sslmode is not None:
-            if sslrootcert:
-                ssl_context = ssl.create_default_context(cafile=sslrootcert)
-                if sslmode == "verify-ca":
-                    ssl_context.check_hostname = False
-                elif sslmode == "verify-full":
-                    ssl_context.check_hostname = True
-                asyncpg_connect_args["ssl"] = ssl_context
-            else:
-                asyncpg_connect_args["ssl"] = sslmode
+            asyncpg_connect_args["ssl"] = DatabaseManager._resolve_asyncpg_ssl(
+                sslmode, sslrootcert
+            )
 
         connect_args = engine_kwargs.get("connect_args") or {}
         if "connect_timeout" in connect_args:

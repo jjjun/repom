@@ -287,6 +287,79 @@ class TestGetAsyncEngineAsyncpgConnectOptions:
         assert set(connect_args) <= accepted_params
 
 
+class TestAdaptAsyncpgConnectOptionsSslMapping:
+    """_adapt_asyncpg_connect_options() / _resolve_asyncpg_ssl() が libpq
+    (psycopg) と同じ sslmode/sslrootcert semantics を asyncpg の ``ssl``
+    connect 引数へ写像することを、エンジンを構築せず直接検証する。
+
+    disable/allow/prefer は sslrootcert の有無に関わらず証明書を検証しない
+    （libpq もこれらのモードでは検証しない）。require/verify-ca/verify-full は
+    sslrootcert が無ければ asyncpg 自身のデフォルトルート証明書解決に任せて
+    sslmode 文字列をそのまま渡し、sslrootcert があればそれを読み込んだ
+    SSLContext を渡す（verify-full だけ check_hostname=True）。
+    """
+
+    @staticmethod
+    def _make_async_url(sslmode, sslrootcert):
+        query = f"sslmode={sslmode}"
+        if sslrootcert:
+            query += f"&sslrootcert={sslrootcert}"
+        return f"postgresql+asyncpg://user:pass@localhost:5432/db?{query}"
+
+    @pytest.mark.parametrize(
+        "sslmode", ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"]
+    )
+    def test_without_sslrootcert_passes_sslmode_string_through(self, sslmode):
+        async_url = self._make_async_url(sslmode, None)
+
+        _, adapted_kwargs = DatabaseManager._adapt_asyncpg_connect_options(async_url, {})
+
+        assert adapted_kwargs["connect_args"]["ssl"] == sslmode
+
+    @pytest.mark.parametrize("sslmode", ["disable", "allow", "prefer"])
+    def test_opportunistic_modes_ignore_sslrootcert(self, sslmode):
+        async_url = self._make_async_url(sslmode, "/tmp/fake-root.crt")
+
+        _, adapted_kwargs = DatabaseManager._adapt_asyncpg_connect_options(async_url, {})
+
+        assert adapted_kwargs["connect_args"]["ssl"] == sslmode
+
+    @pytest.mark.parametrize(
+        ("sslmode", "expected_check_hostname"),
+        [("require", False), ("verify-ca", False), ("verify-full", True)],
+    )
+    def test_verifying_modes_build_ssl_context_from_sslrootcert(
+        self, monkeypatch, sslmode, expected_check_hostname
+    ):
+        create_default_context_calls = []
+        real_create_default_context = ssl.create_default_context
+
+        def spy_create_default_context(*, cafile=None):
+            create_default_context_calls.append(cafile)
+            return real_create_default_context()
+
+        monkeypatch.setattr(ssl, "create_default_context", spy_create_default_context)
+        async_url = self._make_async_url(sslmode, "/tmp/fake-root.crt")
+
+        _, adapted_kwargs = DatabaseManager._adapt_asyncpg_connect_options(async_url, {})
+
+        assert create_default_context_calls == ["/tmp/fake-root.crt"]
+        ssl_context = adapted_kwargs["connect_args"]["ssl"]
+        assert isinstance(ssl_context, ssl.SSLContext)
+        assert ssl_context.check_hostname is expected_check_hostname
+        assert ssl_context.verify_mode is ssl.CERT_REQUIRED
+
+    def test_non_asyncpg_url_is_unchanged(self):
+        async_url = "postgresql+psycopg://user:pass@localhost:5432/db?sslmode=require"
+
+        result_url, result_kwargs = DatabaseManager._adapt_asyncpg_connect_options(
+            async_url, {"connect_args": {"connect_timeout": 5}}
+        )
+
+        assert result_url == async_url
+        assert result_kwargs == {"connect_args": {"connect_timeout": 5}}
+
+
 class TestGetAsyncEngineEchoKwarg:
     """RepomConfig.engine_kwargs の docstring はサブクラスでのオーバーライドを
     案内しており、echo もその対象になりうる。get_async_engine() はかつて
