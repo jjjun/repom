@@ -35,7 +35,7 @@ def main():
 
     print("Resetting Alembic migrations...")
     setup.reset_migrations()
-    print("✓ Alembic migrations reset successfully")
+    print("[OK] Alembic migrations reset successfully")
 
 
 if __name__ == "__main__":

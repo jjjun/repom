@@ -94,4 +94,4 @@ class AlembicReset:
         if pycache.exists():
             import shutil
             shutil.rmtree(pycache)
-            print("✓ Deleted __pycache__")
+            print("[OK] Deleted __pycache__")

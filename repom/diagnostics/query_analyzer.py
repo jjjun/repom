@@ -258,7 +258,7 @@ class QueryAnalyzer:
             print(f"  {query_type}: {count}")
 
         if analysis['potential_n_plus_1']:
-            print("\n⚠️  Potential N+1 Problem Detected!")
+            print("\n[WARN] Potential N+1 Problem Detected!")
             print(f"   Found {len(analysis['repeated_queries'])} repeated query patterns")
 
             print("\nRepeated Query Patterns:")
@@ -268,7 +268,7 @@ class QueryAnalyzer:
                 display_pattern = pattern[:100] + "..." if len(pattern) > 100 else pattern
                 print(f"    {display_pattern}")
         else:
-            print("\n✅ No obvious N+1 problems detected")
+            print("\n[OK] No obvious N+1 problems detected")
 
         if verbose and self.queries:
             print("\n" + "-"*70)

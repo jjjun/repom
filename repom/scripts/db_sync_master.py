@@ -113,7 +113,7 @@ def main():
     # モデルをロード
     print("\n[1/3] モデルをロード中...")
     load_models()
-    print("✓ モデルのロード完了")
+    print("[OK] モデルのロード完了")
 
     # マスターデータディレクトリの確認
     master_data_dir = config.master_data_path
@@ -140,7 +140,7 @@ def main():
                 model_name = model_class.__name__
                 count = sync_master_data(model_class, master_data, session)
 
-                print(f"  ✓ {model_name}: {count} 件")
+                print(f"  [OK] {model_name}: {count} 件")
                 total_count += count
                 file_count += 1
 

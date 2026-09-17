@@ -15,7 +15,7 @@ def main():
     print("Initializing Alembic...")
     setup.create_alembic_ini()
     setup.create_version_directory()
-    print("\n✓ Alembic initialized successfully")
+    print("\n[OK] Alembic initialized successfully")
     print(f"  - alembic.ini: {config.root_path}/alembic.ini")
     print(f"  - versions dir: {setup.versions_dir}")
     print("\nNote: env.py and script.py.mako are provided by repom.")
