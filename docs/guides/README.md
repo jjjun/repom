@@ -22,6 +22,7 @@
 - [モデル自動 import](features/auto_import_models_guide.md)
 - [Alembic](features/alembic_migration_guide.md)
 - [マスターデータ同期](features/master_data_sync_guide.md)
+- [バックアップ / リストア](features/backup_guide.md)
 - [ロギング](features/logging_guide.md)
 - [QueryAnalyzer](features/query_analyzer_guide.md)
 - [Docker 管理の責務境界](features/docker_manager_guide.md)
