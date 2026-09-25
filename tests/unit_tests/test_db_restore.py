@@ -5,6 +5,7 @@ import sqlite3
 from unittest.mock import MagicMock
 
 import pytest
+from basekit.docker_manager import DockerCommandExecutor
 
 from _fake_pg_client import fake_client_command, missing_binary_command
 from repom.config import PostgresTlsSettings
@@ -219,14 +220,14 @@ class TestRestoreStreamingWithoutDeadlock:
 
     def _run(self, monkeypatch, tmp_path, container_running):
         payload = b"X" * (1024 * 1024)
-        backup_file = _make_backup_file(tmp_path, payload=payload)
+        _make_backup_file(tmp_path, payload=payload)
         config = _mock_postgres_config_for_main(tmp_path)
         monkeypatch.setattr(db_restore, "config", config)
         monkeypatch.setattr(
             _backup_utils, "is_container_running", MagicMock(return_value=container_running)
         )
         monkeypatch.setattr(
-            db_restore.DockerCommandExecutor,
+            DockerCommandExecutor,
             "exec_command",
             MagicMock(side_effect=AssertionError("exec_command must not carry the restore payload")),
         )
@@ -490,7 +491,7 @@ def test_main_raises_restore_error_when_docker_psql_fails(monkeypatch, tmp_path)
     monkeypatch.setattr(db_restore, "config", config)
     monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=True))
     monkeypatch.setattr(
-        db_restore.DockerCommandExecutor,
+        DockerCommandExecutor,
         "exec_command",
         MagicMock(side_effect=AssertionError("exec_command must not carry the restore payload")),
     )

@@ -12,7 +12,6 @@ Usage:
 
 from repom.config import config
 from repom.logging import get_logger
-from basekit.docker_manager import DockerCommandExecutor
 import gzip
 import os
 from datetime import datetime

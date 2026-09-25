@@ -1028,7 +1028,7 @@ class TestDependencyExceptionForwarding:
         )
 
         with pytest.raises(ValueError):
-            async with asynccontextmanager(get_async_db_session)() as session:
+            async with asynccontextmanager(get_async_db_session)():
                 raise ValueError("boom")
         events.append('exception seen by caller')
 
@@ -1043,7 +1043,7 @@ class TestDependencyExceptionForwarding:
         )
 
         with pytest.raises(ValueError):
-            async with asynccontextmanager(get_async_db_transaction)() as session:
+            async with asynccontextmanager(get_async_db_transaction)():
                 raise ValueError("boom")
         events.append('exception seen by caller')
 
@@ -1057,7 +1057,7 @@ class TestDependencyExceptionForwarding:
             lambda: _recording_async_session_cm(events, commits=True)
         )
 
-        async with asynccontextmanager(get_async_db_session)() as session:
+        async with asynccontextmanager(get_async_db_session)():
             pass
 
         assert events == ['open', 'commit', 'close']
@@ -1070,7 +1070,7 @@ class TestDependencyExceptionForwarding:
             lambda: _recording_async_session_cm(events, commits=True)
         )
 
-        async with asynccontextmanager(get_async_db_transaction)() as session:
+        async with asynccontextmanager(get_async_db_transaction)():
             pass
 
         assert events == ['open', 'commit', 'close']

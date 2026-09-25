@@ -3,7 +3,6 @@ from tests._init import *
 import gzip
 import io
 import subprocess
-import sys
 from unittest.mock import MagicMock
 import os
 import time

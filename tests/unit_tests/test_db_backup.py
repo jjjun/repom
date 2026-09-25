@@ -9,6 +9,7 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
+from basekit.docker_manager import DockerCommandExecutor
 
 from _fake_pg_client import fake_client_command, missing_binary_command
 from repom.config import PostgresTlsSettings
@@ -261,7 +262,7 @@ class TestStreamingWithoutDeadlock:
             _backup_utils, "is_container_running", MagicMock(return_value=container_running)
         )
         monkeypatch.setattr(
-            db_backup.DockerCommandExecutor,
+            DockerCommandExecutor,
             "exec_command",
             MagicMock(side_effect=AssertionError("exec_command must not carry the dump payload")),
         )
@@ -523,7 +524,7 @@ def test_main_raises_backup_error_when_docker_pg_dump_fails(monkeypatch, tmp_pat
     monkeypatch.setattr(db_backup, "config", config)
     monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=True))
     monkeypatch.setattr(
-        db_backup.DockerCommandExecutor,
+        DockerCommandExecutor,
         "exec_command",
         MagicMock(side_effect=AssertionError("exec_command must not carry the dump payload")),
     )
@@ -598,7 +599,7 @@ def test_main_raises_backup_error_on_empty_dump_output_via_docker(monkeypatch, t
     monkeypatch.setattr(db_backup, "config", config)
     monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=True))
     monkeypatch.setattr(
-        db_backup.DockerCommandExecutor,
+        DockerCommandExecutor,
         "exec_command",
         MagicMock(side_effect=AssertionError("exec_command must not carry the dump payload")),
     )

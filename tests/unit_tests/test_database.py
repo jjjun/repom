@@ -504,7 +504,7 @@ class TestDependencyExceptionForwarding:
         )
 
         with pytest.raises(ValueError):
-            with contextmanager(get_db_session)() as session:
+            with contextmanager(get_db_session)():
                 raise ValueError("boom")
         events.append('exception seen by caller')
 
@@ -518,7 +518,7 @@ class TestDependencyExceptionForwarding:
         )
 
         with pytest.raises(ValueError):
-            with contextmanager(get_db_transaction)() as session:
+            with contextmanager(get_db_transaction)():
                 raise ValueError("boom")
         events.append('exception seen by caller')
 
@@ -531,7 +531,7 @@ class TestDependencyExceptionForwarding:
             lambda: _recording_sync_session_cm(events, commits=False)
         )
 
-        with contextmanager(get_db_session)() as session:
+        with contextmanager(get_db_session)():
             pass
 
         assert events == ['open', 'close']
@@ -543,7 +543,7 @@ class TestDependencyExceptionForwarding:
             lambda: _recording_sync_session_cm(events, commits=True)
         )
 
-        with contextmanager(get_db_transaction)() as session:
+        with contextmanager(get_db_transaction)():
             pass
 
         assert events == ['open', 'commit', 'close']
