@@ -19,7 +19,8 @@ fi
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
-# --all-extras is required: tests import asyncpg, psycopg and redis.
+# --all-extras remains a harmless safeguard for any extras added after the
+# test dependencies in the dev group.
 # On failure, print a readable first line and exit 1 so Claude Code reports
 # a non-blocking hook error; the session still starts.
 if ! output="$(uv sync --all-extras --dev --locked 2>&1)"; then

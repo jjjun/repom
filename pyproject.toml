@@ -59,6 +59,7 @@ dev = [
   "aiosqlite>=0.22.1,<0.23.0",
   "requests>=2.33.1,<3.0.0",
   "ruff>=0.15.13",
+  "repom[postgres,postgres-async,redis]",
 ]
 
 [build-system]
