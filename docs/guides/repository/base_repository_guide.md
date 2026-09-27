@@ -112,10 +112,10 @@ tasks = repo.bulk_insert([Task(title=f"タスク{i}") for i in range(100)])
 変更を確定するには、`with` ブロックを抜けるか、明示的に `session.commit()` を呼んでください。
 
 **用途別の使い分け**:
-- FastAPI Depends: `get_db_session()` / `get_db_transaction()`
+- FastAPI Depends: 読み取りは `Depends(get_db_session)`、書き込みは `Depends(get_db_transaction, scope="function")`
 - sync の反復 transaction（task/worker/CLI）: `get_reusable_sync_transaction()`
 - one-shot script（終了時 dispose を含む）: `get_standalone_sync_transaction()`
-- async パターン: `get_async_db_session()` / `get_async_db_transaction()` / `get_standalone_async_transaction()`
+- async パターン: `Depends(get_async_db_session)` / `Depends(get_async_db_transaction, scope="function")` / `get_standalone_async_transaction()`
 
 **詳細**: [セッション管理パターンガイド](repository_session_patterns.md)
 

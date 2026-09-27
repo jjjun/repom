@@ -101,10 +101,13 @@ async def load_task(task_id: int):
         return await AsyncTaskRepository(session=session).get_by_id(task_id)
 ```
 
-FastAPI では `Depends(get_async_db_session)` または
-`Depends(get_async_db_transaction)` を使用します。詳細は
-[AsyncBaseRepository ガイド](docs/guides/repository/async_repository_guide.md)を
-参照してください。
+FastAPI では、読み取りには `Depends(get_async_db_session)`、書き込みには
+`Depends(get_async_db_transaction, scope="function")` を使用します。
+`scope="function"` には FastAPI >= 0.121.0 が必要です。デフォルト scope との違いと
+`StreamingResponse` の注意は
+[セッション管理パターンガイド](docs/guides/repository/repository_session_patterns.md)を、
+その他の async 利用方法は
+[AsyncBaseRepository ガイド](docs/guides/repository/async_repository_guide.md)を参照してください。
 
 ### 論理削除
 

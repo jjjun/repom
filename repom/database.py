@@ -320,7 +320,7 @@ class DatabaseManager:
         Automatically disposes the engine on exit, making it suitable for
         CLI tools, batch scripts, and other standalone applications.
 
-        For FastAPI, use get_db_transaction() with Depends instead.
+        For FastAPI, use ``Depends(get_db_transaction, scope="function")`` instead.
 
         Yields:
             Session: SQLAlchemy synchronous session
@@ -860,12 +860,16 @@ def get_db_transaction() -> Generator[Session, None, None]:
         >>> @app.post("/users")
         >>> def create_user(
         >>>     user_data: UserCreate,
-        >>>     session: Session = Depends(get_db_transaction)
+        >>>     session: Session = Depends(get_db_transaction, scope="function")
         >>> ):
-        >>>     user = User(**user_data.dict())
+        >>>     user = User(**user_data.model_dump())
         >>>     session.add(user)
-        >>>     # Auto commit on exit
+        >>>     # Auto commit before the response is sent
         >>>     return user
+
+    For FastAPI write routes, ``scope="function"`` commits before the response
+    is sent. It requires FastAPI >= 0.121.0; see the repository session patterns
+    guide for the default-scope behavior and StreamingResponse caveat.
     """
     with _db_manager.get_sync_transaction() as session:
         yield session
@@ -878,7 +882,8 @@ def get_standalone_sync_transaction():
     Automatically disposes the engine on exit, making it suitable for
     CLI tools, batch scripts, and other standalone applications.
 
-    For FastAPI applications, use get_db_transaction() with Depends instead.
+    For FastAPI applications, use ``Depends(get_db_transaction, scope="function")``
+    instead.
 
     Returns:
         ContextManager[Session]: Context manager that yields Session
@@ -910,7 +915,7 @@ def get_reusable_sync_transaction():
     get_standalone_sync_transaction(), this function does not dispose the
     engine on exit.
 
-    For FastAPI applications, use get_db_transaction() with Depends.
+    For FastAPI applications, use ``Depends(get_db_transaction, scope="function")``.
 
     Returns:
         ContextManager[Session]: Context manager that yields Session
@@ -978,6 +983,25 @@ async def get_async_db_transaction():
 
     Yields:
         AsyncSession: SQLAlchemy asynchronous session with auto-commit/rollback
+
+    Example:
+        >>> from fastapi import Depends
+        >>> from repom.database import get_async_db_transaction
+        >>>
+        >>> @app.post("/users")
+        >>> async def create_user(
+        >>>     user_data: UserCreate,
+        >>>     session: AsyncSession = Depends(
+        >>>         get_async_db_transaction, scope="function"
+        >>>     ),
+        >>> ):
+        >>>     user = User(**user_data.model_dump())
+        >>>     session.add(user)
+        >>>     return user
+
+    For FastAPI write routes, ``scope="function"`` commits before the response
+    is sent. It requires FastAPI >= 0.121.0; see the repository session patterns
+    guide for the default-scope behavior and StreamingResponse caveat.
     """
     async with _db_manager.get_async_transaction() as session:
         yield session
@@ -990,8 +1014,8 @@ def get_standalone_async_transaction():
     Automatically disposes the engine on exit, making it suitable for
     CLI tools, batch scripts, Jupyter notebooks, and other standalone applications.
 
-    For FastAPI applications, use get_async_db_transaction() with
-    lifespan_context() instead.
+    For FastAPI applications, use
+    ``Depends(get_async_db_transaction, scope="function")`` instead.
 
     Returns:
         AsyncContextManager[AsyncSession]: Async context manager that yields AsyncSession
@@ -1024,7 +1048,8 @@ def get_reusable_async_transaction():
     get_standalone_async_transaction(), this function does not dispose the
     engine on exit.
 
-    For FastAPI applications, use get_async_db_transaction() with Depends.
+    For FastAPI applications, use
+    ``Depends(get_async_db_transaction, scope="function")``.
 
     Returns:
         AsyncContextManager[AsyncSession]: Async context manager that yields AsyncSession

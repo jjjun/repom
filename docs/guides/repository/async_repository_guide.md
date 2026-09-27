@@ -23,8 +23,11 @@ repo = AsyncBaseRepository(Task, session=async_session)
 
 ## FastAPI
 
-読み取りだけなら `get_async_db_session()`、複数の書き込みを1トランザクションに
-まとめるなら `get_async_db_transaction()` を dependency として使います。
+読み取りだけなら `Depends(get_async_db_session)`、複数の書き込みを1トランザクションに
+まとめるなら `Depends(get_async_db_transaction, scope="function")` を dependency として
+使います。`scope="function"` には FastAPI >= 0.121.0 が必要です。デフォルト scope との
+違いと `StreamingResponse` の注意は
+[セッション管理パターンガイド](repository_session_patterns.md)を参照してください。
 `get_async_db_session()` は同期版の `get_db_session()` と異なり、成功時に commit
 し、例外発生時は rollback します。
 アプリ終了時の engine cleanup には `get_lifespan_manager()` を指定します。
@@ -43,7 +46,7 @@ app = FastAPI(lifespan=get_lifespan_manager())
 
 @app.post("/tasks")
 async def create_task(
-    session: AsyncSession = Depends(get_async_db_transaction),
+    session: AsyncSession = Depends(get_async_db_transaction, scope="function"),
 ):
     repo = TaskRepository(session=session)
     task = await repo.save(Task(title="Async task"))

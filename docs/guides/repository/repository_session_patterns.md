@@ -62,13 +62,26 @@ def list_tasks(session: Session = Depends(get_db_session)):
 
 
 @app.post("/tasks")
-def create_task(session: Session = Depends(get_db_transaction)):
+def create_task(session: Session = Depends(get_db_transaction, scope="function")):
     return TaskRepository(session=session).dict_save({"title": "Review"})
 ```
 
 Use `get_db_session()` for a session without an automatic commit and
 `get_db_transaction()` when the request should commit on success and roll
 back on error.
+
+**FastAPI transaction dependencies:** For write routes, use
+`Depends(get_db_transaction, scope="function")` or
+`Depends(get_async_db_transaction, scope="function")`.
+This requires FastAPI >= 0.121.0. With the default `scope="request"`, the commit
+runs after the response is sent, so a client that reads immediately after the
+write can miss it and a commit failure is reported to the client as success.
+`scope="function"` commits
+before the response is sent. It also closes the session before the send, so do
+not use it with a `StreamingResponse` that reads from the session while
+streaming. `get_db_session()` does not commit on exit and needs no scope.
+`get_async_db_session()` commits on exit, so reserve it for read routes; it
+needs no scope for that use.
 
 Do not write `with get_db_session()`: it is a generator intended for
 dependency injection.
@@ -98,7 +111,7 @@ async def list_tasks(session: AsyncSession = Depends(get_async_db_session)):
 
 @app.post("/tasks")
 async def create_task(
-    session: AsyncSession = Depends(get_async_db_transaction),
+    session: AsyncSession = Depends(get_async_db_transaction, scope="function"),
 ):
     return await TaskRepository(session=session).dict_save({"title": "Review"})
 ```
