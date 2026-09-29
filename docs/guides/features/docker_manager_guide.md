@@ -47,4 +47,4 @@ Docker CLI がない場合、起動失敗、readiness timeout は `RuntimeError`
 - [Redis ガイド](../redis/README.md)
 - [Compose 基盤の責務境界](docker_compose_guide.md)
 - [`repom/docker_service.py`](../../../repom/docker_service.py)
-- [Docker manager 移管の履歴](../../technical/docker_manager_code_reduction_analysis.md)
+- [Docker manager 移管の履歴](../../technical/docker_manager_history.md)
