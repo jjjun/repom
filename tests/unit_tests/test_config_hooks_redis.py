@@ -32,7 +32,7 @@ def test_apply_redis_env_overrides_does_nothing_when_unset():
     assert config.redis.port == 6379
     assert config.redis.password is None
     assert config.redis.database == 0
-    assert config.redis.container.host_port == 6379
+    assert config.redis.container.host_port is None
     assert config.redis.container.expose_to_lan is False
 
 

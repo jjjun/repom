@@ -95,9 +95,27 @@ class TestRedisContainerConfig:
 
     def test_host_port_default(self):
         """ホストポート デフォルト: 6379"""
-        from repom.redis.config import RedisContainerConfig
+        from repom.redis.config import RedisConfig, RedisContainerConfig
         container = RedisContainerConfig()
-        assert container.host_port == 6379
+        assert container.host_port is None
+        assert RedisConfig(container=container).published_port == 6379
+
+    def test_published_port_uses_redis_port_when_host_port_is_unset(self):
+        from repom.redis.config import RedisConfig
+
+        config = RedisConfig(port=6381)
+
+        assert config.published_port == 6381
+
+    def test_published_port_uses_host_port_when_configured(self):
+        from repom.redis.config import RedisConfig, RedisContainerConfig
+
+        config = RedisConfig(
+            port=6381,
+            container=RedisContainerConfig(host_port=6390),
+        )
+
+        assert config.published_port == 6390
 
     def test_host_port_setter(self):
         """ホストポート Setter で設定"""

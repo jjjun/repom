@@ -97,13 +97,16 @@ class RedisManager(DockerManager):
         print()
         print("Redis Connection:")
         print("  Host: 127.0.0.1")
-        print(f"  Port: {self.config.redis.port}")
+        print(f"  Port: {self.config.redis.published_port}")
         if self.config.redis.password:
             print("  Auth: enabled")
-            print(f"  CLI: REDISCLI_AUTH=*** redis-cli -p {self.config.redis.port}")
+            print(
+                f"  CLI: REDISCLI_AUTH=*** redis-cli -p "
+                f"{self.config.redis.published_port}"
+            )
         else:
             print("  Auth: disabled")
-            print(f"  CLI: redis-cli -p {self.config.redis.port}")
+            print(f"  CLI: redis-cli -p {self.config.redis.published_port}")
         print()
 
 
@@ -153,7 +156,7 @@ def generate_docker_compose() -> DockerComposeGenerator:
 
     manager = RedisManager()
     container = config.redis.container
-    redis_port = config.redis.port
+    redis_port = config.redis.published_port
     redis_password = config.redis.password
     reject_default_credential(redis_password, env_var="REDIS_PASSWORD")
     reject_control_characters(redis_password, field_name="redis.password")
@@ -217,7 +220,7 @@ def generate():
     print(f"   Config: {init_dir / 'redis.conf'}")
     print("\nRedis Service:")
     print(f"   Container: {config.redis.container.get_container_name()}")
-    print(f"   Port: {config.redis.port}")
+    print(f"   Published Port: {config.redis.published_port}")
     print(f"   Volume: {config.redis.container.get_volume_name()}")
     print("   Auth: enabled")
 

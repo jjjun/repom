@@ -189,7 +189,7 @@ class TestRedisManagerConnectionInfo:
         captured = capsys.readouterr()
         assert "Redis Connection" in captured.out
         assert "127.0.0.1" in captured.out
-        assert str(manager.config.redis.port) in captured.out
+        assert str(manager.config.redis.published_port) in captured.out
 
     def test_print_connection_info_contains_cli_command(self, capsys):
         """Test print_connection_info shows CLI command"""
@@ -359,7 +359,7 @@ class TestRedisDockerCompose:
         assert "redis:" in yaml_content
         assert "repom_redis" in yaml_content
         # Check port mapping with actual config value (host_port:container_port)
-        assert f"{config.redis.port}:6379" in yaml_content
+        assert f"{config.redis.published_port}:6379" in yaml_content
         assert "healthcheck:" in yaml_content
         assert "redis-cli" in yaml_content
 

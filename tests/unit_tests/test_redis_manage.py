@@ -62,7 +62,8 @@ class TestRedisManager:
     def test_print_connection_info_uses_config_port(self, capsys):
         """print_connection_info が config.redis.port を使用"""
         manager = RedisManager()
-        manager.print_connection_info()
+        with patch.object(config.redis.container, "host_port", None):
+            manager.print_connection_info()
 
         captured = capsys.readouterr()
         assert f"Port: {config.redis.port}" in captured.out
@@ -111,19 +112,55 @@ class TestGenerateDockerCompose:
 
     def test_compose_ports_bind_loopback_by_default(self):
         """Published ports bind to 127.0.0.1 unless expose_to_lan is set."""
-        with patch.object(config.redis.container, "expose_to_lan", False):
+        with (
+            patch.object(config.redis.container, "host_port", None),
+            patch.object(config.redis.container, "expose_to_lan", False),
+        ):
             generator = generate_docker_compose()
 
-        for port in generator.services[0].ports:
-            assert port.startswith("127.0.0.1:")
+        assert generator.services[0].ports == [
+            f"127.0.0.1:{config.redis.port}:6379"
+        ]
 
     def test_compose_exposes_to_lan_when_configured(self):
         """expose_to_lan=True publishes the port on every interface."""
-        with patch.object(config.redis.container, "expose_to_lan", True):
+        with (
+            patch.object(config.redis.container, "host_port", 6390),
+            patch.object(config.redis.container, "expose_to_lan", True),
+        ):
             generator = generate_docker_compose()
 
-        for port in generator.services[0].ports:
-            assert port.startswith("0.0.0.0:")
+        assert generator.services[0].ports == ["0.0.0.0:6390:6379"]
+
+    def test_compose_uses_host_port_when_configured(self):
+        with (
+            patch.object(config.redis, "port", 6381),
+            patch.object(config.redis.container, "host_port", 6390),
+        ):
+            generator = generate_docker_compose()
+
+        assert generator.services[0].ports == ["127.0.0.1:6390:6379"]
+
+    def test_generate_writes_host_port_override_with_temporary_data_path(
+        self, tmp_path, monkeypatch
+    ):
+        from repom.config import RepomConfig
+        from repom.config_hooks.redis import apply_redis_env_overrides
+        from repom.redis import manage
+
+        monkeypatch.setenv("REDIS_PORT", "6381")
+        monkeypatch.setenv("REDIS_HOST_PORT", "6390")
+        monkeypatch.setenv("REDIS_PASSWORD", "test-redis-password")
+        test_config = RepomConfig(root_path=str(tmp_path))
+        apply_redis_env_overrides(test_config)
+        monkeypatch.setattr(manage, "config", test_config)
+
+        manage.generate()
+
+        compose_path = (
+            Path(test_config.data_path) / "redis" / manage.COMPOSE_FILENAME
+        )
+        assert "127.0.0.1:6390:6379" in compose_path.read_text(encoding="utf-8")
 
     def test_compose_rejects_newline_in_password(self):
         """A newline in the password cannot inject an extra YAML key."""

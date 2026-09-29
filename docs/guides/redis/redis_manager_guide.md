@@ -12,6 +12,7 @@ uv sync --extra redis
 ```dotenv
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
+# REDIS_HOST_PORT=6390
 REDIS_PASSWORD=CHANGE_ME
 REDIS_DB=0
 # REDIS_EXPOSE_TO_LAN=true
@@ -22,6 +23,8 @@ REDIS_DB=0
 
 `REDIS_PORT` は接続先と生成 Compose の公開 port です。利用側 hook では、
 プロジェクト既定値の後に environment override を適用します。
+`REDIS_HOST_PORT` を指定した場合は公開 host port にその値を使い、未指定の場合は
+`REDIS_PORT` を公開 host port の fallback として使います。
 
 ```python
 from repom.config_hooks.redis import apply_redis_env_overrides
