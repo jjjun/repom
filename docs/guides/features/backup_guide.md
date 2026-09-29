@@ -37,7 +37,20 @@ uv run db_backup
 書き込まれ、`db_restore` はリストア前にこれを検証します
 （`warn_if_checksum_missing()`）。サイドカーが存在しない古いバックアップは
 警告を出すだけでリストアは継続し、サイドカーはあるが値が一致しない場合は
-`ChecksumError` でリストアを中断します。
+`ChecksumError` が `RestoreError` に wrap されて呼び出し元へ通知され、リストアを
+中断します。
+
+## データベース接続先
+
+`db_backup` / `db_restore` は `config.db_url` を使いません。PostgreSQL では
+`config.postgres.*` と `config.postgres_db`、SQLite では
+`config.sqlite.db_file_path` を対象にします。一方、Alembic と `db_sync_master` は
+`db_url` を使います。そのため `REPOM_DATABASE_URL` または `DATABASE_URL` で URL を
+上書きすると、バックアップ／リストア先と Alembic／同期コマンドの接続先が異なる
+場合があります。
+
+PostgreSQL のバックアップ／リストアは、container が起動中なら `docker exec` を使い、
+起動していなければ host の `pg_dump` / `psql` に fallback します。
 
 ## ローテーション
 
@@ -89,6 +102,11 @@ uv run db_restore
   作成した最新のバックアップでも `[legacy/unknown source database]` 扱いとなり、
   `db_restore` は毎回 `y` ではなくリストア先データベース名の入力を要求します。
 
+SQLite のリストアでは、既存の DB ファイルがある場合に
+`restore_backup_<timestamp>.sqlite3` という safety copy を作成します。このファイルは
+通常のバックアップローテーションの対象外で、自動削除されません。PostgreSQL の
+リストアには自動 safety copy はありません。
+
 ## 失敗時の挙動
 
 `db_backup.main()` と `db_restore.main()` は、失敗時にエラーメッセージを
@@ -97,6 +115,10 @@ uv run db_restore
 `RuntimeError` のサブクラス）。呼び出し元プロセスの終了コードは非ゼロになるため、
 タスクの成否を記録するスケジューラ（fast-domain の arq cron など）は、
 失敗したバックアップ/リストアを失敗タスクとして正しく記録できます。
+ただし PostgreSQL path では `ensure_backup_dir()` と `postgres_tls_settings()` が
+wrapping try の外で実行されるため、`OSError` / `ValueError` が
+`BackupError` / `RestoreError` に wrap されずに発生する場合があります。いずれも
+コマンドの終了コードは非ゼロです。
 （`db_restore` でユーザーが `q` または確認プロンプトで中断した場合は例外にはならず、
 正常終了として扱われます。）
 

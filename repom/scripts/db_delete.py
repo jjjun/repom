@@ -16,7 +16,7 @@ def main():
     parser.add_argument(
         "--yes", "-y",
         action="store_true",
-        help="Skip the interactive confirmation prompt (required when stdin is not a TTY).",
+        help="Confirm non-interactively; required when stdin is not a TTY (a TTY still prompts).",
     )
     args = parser.parse_args()
 

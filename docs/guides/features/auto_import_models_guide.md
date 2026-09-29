@@ -35,7 +35,10 @@ def hook_config(config):
 （`load_models(strict=True)`）で読み込みます。partial な `Base.metadata` のまま
 autogenerate や `create_all` を実行するのは、テーブルの誤 drop や作成漏れに直結する
 ためです。`model_import_strict = False` はそれ以外の呼び出し元（`list_models` など）
-にのみ適用されます。
+に適用されます。`db_delete`、`db_sync_master`、test fixture の既定 loader、直接呼び出す
+`load_models()` がこの設定の影響を受けます。一方、`list_models` と `repom_info` は
+`describe_loaded_models(strict=False)` を通じて読み込むため、設定値に関わらず常に
+non-strict です。
 
 ## 実行
 
@@ -60,9 +63,15 @@ uv run repom_info
 `load_models()` は対象 package をすべて import した後に
 `sqlalchemy.orm.configure_mappers()` を呼びます。文字列 relationship の参照先が
 同じ `model_locations` 群から import できるように package を構成してください。
+`configure_mappers()` の失敗は basekit により WARNING としてログに記録されますが、
+`strict=True` でも例外にはなりません。
 
 循環参照を避けるために個別 module の import 順へ依存するのではなく、モデル
 package の `__init__.py` と `model_locations` を安定させます。
+
+ファイル名が `_` で始まる module は discovery で skip されます。
+`model_excluded_dirs` の既定値は空集合です。`repom.utility.DEFAULT_EXCLUDED_DIRS` は
+`load_models()` に自動適用されないため、除外する directory は利用側 hook で明示します。
 
 ## テスト
 

@@ -6,6 +6,7 @@
 - [Alembic migrations](alembic_migration_guide.md)
 - [Model discovery](auto_import_models_guide.md)
 - [Master-data synchronization](master_data_sync_guide.md)
+- [Database backup and restore](backup_guide.md)
 
 ## Diagnostics and infrastructure
 
@@ -14,6 +15,7 @@
 - [Docker responsibility boundary](docker_manager_guide.md)
 - [Compose generation](docker_compose_guide.md)
 - [Generic discovery responsibility boundary](discovery_guide.md)
+- [NUL-byte validation](nul_byte_validation.md)
 
 Generic package discovery and Docker/Compose orchestration are implemented by
 basekit. These pages describe repom's integration points and service-specific
