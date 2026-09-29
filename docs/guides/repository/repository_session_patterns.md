@@ -133,9 +133,25 @@ async def main():
 asyncio.run(main())
 ```
 
-Advanced long-running code can iterate `get_async_db_transaction()` directly,
-but it must call `dispose_engines()` when the process is finished. The
-standalone context manager is safer for ordinary scripts.
+For long-running async code, use `get_reusable_async_transaction()` for each
+transaction and call `dispose_engines()` when the process shuts down:
+
+```python
+import asyncio
+
+from repom.database import dispose_engines, get_reusable_async_transaction
+
+
+async def main():
+    try:
+        async with get_reusable_async_transaction() as session:
+            tasks = await TaskRepository(session=session).get_all()
+    finally:
+        await dispose_engines()
+
+
+asyncio.run(main())
+```
 
 ## Repository instance reuse and concurrency
 

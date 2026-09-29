@@ -141,29 +141,36 @@ class TaskRepository(AsyncBaseRepository[Task]):
 
 ```python
 # デフォルト: id 昇順
-tasks = await repo.find()
+tasks = await repo.find(limit=100)
 
 # 降順・昇順指定（canonical form）
-tasks = await repo.find(order_by='created_at:desc')
-tasks = await repo.find(order_by='title:asc')
+tasks = await repo.find(order_by='created_at:desc', limit=100)
+tasks = await repo.find(order_by='title:asc', limit=100)
 
 # SQLAlchemy 式
 from sqlalchemy import desc
-tasks = await repo.find(order_by=desc(Task.created_at))
+tasks = await repo.find(order_by=desc(Task.created_at), limit=100)
 
 # 複数ソート（カスタムリポジトリで実装）
-from sqlalchemy import select, desc
+from sqlalchemy import desc
 from repom import AsyncBaseRepository
 
 class TaskRepository(AsyncBaseRepository[Task]):
     async def find_sorted(self):
-        query = select(Task).order_by(
+        query = self._base_select().order_by(
             desc(Task.priority),
             Task.created_at
         )
+        filters = []
+        self._append_soft_delete_filter(filters)
+        if filters:
+            query = query.where(*filters)
+        query = self.set_find_option(query, limit=100)
         result = await self.session.execute(query)
-        return result.scalars().all()
+        return result.scalars().unique().all()
 ```
+
+この `find_sorted()` も `TaskRepository(session=session)` のように外部セッションを明示して使ってください。`_base_select()` と `set_find_option()` を使い、soft-delete filter と `max_limit` を適用します。
 
 **注意**:
 
@@ -463,6 +470,10 @@ task = await repo.get_by_id(1)  # 同じく自動適用
 - ✅ `find_one()` - 単一レコード取得
 - ✅ `get_by_id()` - ID で取得
 - ✅ `get_by()` - カラム条件で取得
+- ✅ `get_all()` - 全件取得
+- ✅ `find_by_ids()` - ID リストで取得
+- ✅ `find_deleted()` - 削除済みレコードを取得
+- ✅ `find_deleted_before()` - 指定日時より前に削除されたレコードを取得
 
 #### options の優先順位
 
@@ -485,7 +496,7 @@ tasks = await repo.find(options=[
 
 ```python
 # Without default_options
-tasks = repo.find()  # 1回のクエリ
+tasks = repo.find(limit=100)  # 1回のクエリ
 for task in tasks:
     print(task.user.name)  # N回のクエリ（N+1 問題）
 # 合計: 1 + N = 101回のクエリ（N=100の場合）
@@ -496,10 +507,10 @@ class TaskRepository(BaseRepository[Task]):
         super().__init__(Task, session)
         self.default_options = [joinedload(Task.user)]
 
-tasks = repo.find()  # 2回のクエリ（tasks と users）
+tasks = repo.find(limit=100)  # 1回のクエリ（tasks と users）
 for task in tasks:
     print(task.user.name)  # クエリなし
-# 合計: 2回のクエリ（N=100でも同じ）
+# 合計: 1回のクエリ（N=100でも同じ）
 ```
 
 **デメリット：不要な eager load**:
@@ -508,7 +519,7 @@ for task in tasks:
 
 ```python
 # リレーション不要な場合は明示的にスキップ
-task_ids = [task.id for task in repo.find(options=[])]  # 高速
+task_ids = [task.id for task in repo.find(options=[], limit=100)]  # 高速
 ```
 
 #### クラス属性で default_options / default_order_by を設定する
@@ -607,10 +618,12 @@ class TaskRepository(AsyncBaseRepository[Task]):
 ### 複雑な検索ロジック
 
 ```python
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_
 from datetime import datetime, timedelta
 
 class TaskRepository(AsyncBaseRepository[Task]):
+    allowed_order_columns = AsyncBaseRepository.allowed_order_columns + ["due_date"]
+
     async def find_urgent_tasks(self) -> List[Task]:
         """緊急タスク（高優先度 かつ 期限間近）"""
         deadline = datetime.now() + timedelta(days=3)
@@ -621,26 +634,27 @@ class TaskRepository(AsyncBaseRepository[Task]):
             Task.status != 'completed'
         ]
         
-        return await self.find(filters=filters, order_by='due_date:asc')
+        return await self.find(filters=filters, order_by='due_date:asc', limit=100)
     
     async def find_overdue_tasks(self) -> List[Task]:
         """期限切れタスク"""
-        query = select(Task).where(
-            and_(
-                Task.due_date < datetime.now(),
-                Task.status != 'completed'
-            )
-        ).order_by(Task.due_date)
+        filters = [
+            Task.due_date < datetime.now(),
+            Task.status != 'completed'
+        ]
+        self._append_soft_delete_filter(filters)
+        query = self._base_select().where(and_(*filters))
+        query = self.set_find_option(query, order_by=Task.due_date, limit=100)
         
         result = await self.session.execute(query)
-        return result.scalars().all()
+        return result.scalars().unique().all()
 ```
+
+`find_overdue_tasks()` のように `self.session.execute()` を使うメソッドは、`TaskRepository(session=session)` のように外部セッションを明示して使ってください。`_base_select()` と `set_find_option()` を使い、論理削除フィルタも適用します。
 
 ### 関連モデルの操作
 
 ```python
-from sqlalchemy import select
-
 class TaskRepository(AsyncBaseRepository[Task]):
     async def find_with_user(self, user_id: int) -> List[Task]:
         """特定ユーザーのタスクを取得"""
@@ -648,15 +662,24 @@ class TaskRepository(AsyncBaseRepository[Task]):
     
     async def find_by_tags(self, tags: List[str]) -> List[Task]:
         """タグで検索（多対多）"""
-        query = select(Task).join(Task.tags).where(
+        filters = []
+        self._append_soft_delete_filter(filters)
+        query = self._base_select().join(Task.tags).where(
             Tag.name.in_(tags)
         ).distinct()
+        if filters:
+            query = query.where(*filters)
+        query = self.set_find_option(query, limit=100)
         
         result = await self.session.execute(query)
-        return result.scalars().all()
+        return result.scalars().unique().all()
 ```
 
+この `find_by_tags()` も `session=` を指定したリポジトリで呼び出してください。`_base_select()` を使うことで独自のベース SELECT 設定を保ち、`set_find_option()` で取得上限を適用します。
+
 ### options を活用したカスタムメソッド
+
+`find()` をオーバーライドする場合は `filters` 引数を受け取り、検索条件に統合してください。`filters` 引数がない `find()` は、リポジトリ定義時に `RuntimeWarning` を出します。
 
 ```python
 from sqlalchemy.orm import joinedload, selectinload
