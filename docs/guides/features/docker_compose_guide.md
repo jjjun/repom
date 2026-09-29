@@ -20,6 +20,12 @@ uv run redis_remove
 
 生成先、container 名、port、credential の設定は各サービスガイドを参照してください。
 
+## repom の安全チェック
+
+repom は `repom/docker_compose_safety.py` で、Compose に渡す YAML 文字列を quote し、
+値に改行・復帰・NUL 文字があれば拒否します。port は既定で `127.0.0.1` に bind し、
+秘密情報を含む `.env` file は mode `0600` で作成します。
+
 - [PostgreSQL ガイド](../postgresql/README.md)
 - [Redis ガイド](../redis/README.md)
 - [Docker manager の責務境界](docker_manager_guide.md)
