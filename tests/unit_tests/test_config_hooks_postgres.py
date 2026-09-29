@@ -190,7 +190,9 @@ def test_apply_postgres_env_overrides_rejects_out_of_range_host_port(
         apply_postgres_env_overrides(config)
 
 
-def test_repom_config_singleton_applies_postgres_env(monkeypatch):
+def test_repom_config_singleton_applies_postgres_env(
+    monkeypatch, repom_config_hook_for_reload
+):
     import repom.config as config_module
 
     monkeypatch.setenv("POSTGRES_USER", "env_user")
@@ -211,4 +213,5 @@ def test_repom_config_singleton_applies_postgres_env(monkeypatch):
     finally:
         for name in POSTGRES_ENV_NAMES:
             monkeypatch.delenv(name, raising=False)
+        repom_config_hook_for_reload()
         importlib.reload(config_module)

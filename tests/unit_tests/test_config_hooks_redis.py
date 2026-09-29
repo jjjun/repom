@@ -189,7 +189,9 @@ def test_apply_redis_env_overrides_ignores_config_without_redis(monkeypatch):
     apply_redis_env_overrides(ConfigWithoutRedis())
 
 
-def test_repom_config_singleton_applies_redis_port_env(monkeypatch):
+def test_repom_config_singleton_applies_redis_port_env(
+    monkeypatch, repom_config_hook_for_reload
+):
     import repom.config as config_module
 
     monkeypatch.setenv("REDIS_HOST", "env-redis")
@@ -208,4 +210,5 @@ def test_repom_config_singleton_applies_redis_port_env(monkeypatch):
     finally:
         for name in REDIS_ENV_NAMES:
             monkeypatch.delenv(name, raising=False)
+        repom_config_hook_for_reload()
         importlib.reload(config_module)

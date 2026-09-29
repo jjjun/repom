@@ -129,7 +129,9 @@ def test_apply_pgadmin_env_overrides_rejects_out_of_range_host_port(
         apply_pgadmin_env_overrides(config)
 
 
-def test_repom_config_singleton_applies_pgadmin_env(monkeypatch):
+def test_repom_config_singleton_applies_pgadmin_env(
+    monkeypatch, repom_config_hook_for_reload
+):
     import repom.config as config_module
 
     monkeypatch.setenv("PGADMIN_DEFAULT_EMAIL", "env-admin@repom.local")
@@ -144,4 +146,5 @@ def test_repom_config_singleton_applies_pgadmin_env(monkeypatch):
     finally:
         for name in PGADMIN_ENV_NAMES:
             monkeypatch.delenv(name, raising=False)
+        repom_config_hook_for_reload()
         importlib.reload(config_module)
