@@ -758,13 +758,13 @@ class TestFastAPIDependsPattern:
     async def test_fastapi_depends_real_simulation(self):
         """Simulate REAL FastAPI Depends behavior (using anext())"""
         # This is how FastAPI actually processes async dependencies
-        async def simulate_fastapi_depends(dependency_func):
+        async def simulate_fastapi_depends(dependency_func, operation):
             """Simulates FastAPI's async dependency injection"""
             gen = dependency_func()
             try:
                 # Get the dependency value
                 value = await gen.__anext__()
-                return value
+                return await operation(value)
             finally:
                 # Cleanup
                 try:
@@ -772,17 +772,18 @@ class TestFastAPIDependsPattern:
                 except StopAsyncIteration:
                     pass
 
+        async def use_session(session):
+            # AsyncSession であることを確認
+            assert isinstance(session, AsyncSession), \
+                f"Expected AsyncSession but got {type(session).__name__}"
+
+            # session.execute() が動作することを確認
+            result = await session.execute(select(SampleModel))
+            items = result.scalars().all()
+            return isinstance(items, list)
+
         # Use the simulated Depends
-        session = await simulate_fastapi_depends(get_async_db_session)
-
-        # AsyncSession であることを確認
-        assert isinstance(session, AsyncSession), \
-            f"Expected AsyncSession but got {type(session).__name__}"
-
-        # session.execute() が動作することを確認
-        result = await session.execute(select(SampleModel))
-        items = result.scalars().all()
-        assert isinstance(items, list)
+        assert await simulate_fastapi_depends(get_async_db_session, use_session)
 
     @pytest.mark.asyncio
     async def test_session_has_required_methods(self):
@@ -815,6 +816,10 @@ class TestStandaloneAsyncTransaction:
     注意: standalone transaction は自動的に dispose するため、
     通常の fixture とは分離してテストする必要があります。
     """
+
+    @pytest.fixture(autouse=True)
+    def isolate_database_manager(self, monkeypatch):
+        monkeypatch.setattr(database_module, "_db_manager", DatabaseManager())
 
     @pytest.mark.asyncio
     async def test_yields_async_session(self):

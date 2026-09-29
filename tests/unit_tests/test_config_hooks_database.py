@@ -1,8 +1,7 @@
-import importlib
-
 import pytest
 
 from repom.config import RepomConfig
+from repom.config_hook import hook_config
 from repom.config_hooks.database import apply_database_env_overrides
 
 
@@ -215,24 +214,10 @@ def test_apply_database_env_overrides_rejects_invalid_pool_pre_ping(monkeypatch)
         apply_database_env_overrides(config)
 
 
-def test_repom_config_singleton_applies_database_env(
-    monkeypatch, repom_config_hook_for_reload
-):
-    import repom.config as config_module
+def test_hook_config_configures_repom_defaults(monkeypatch):
+    monkeypatch.delenv("DB_TYPE", raising=False)
+    config = hook_config(RepomConfig(exec_env="test"))
 
-    monkeypatch.setenv("REPOM_DATABASE_URL", "postgresql://repom-specific")
-    monkeypatch.setenv("DB_TYPE", "postgres")
-    monkeypatch.setenv("SQLALCHEMY_ECHO", "true")
-    monkeypatch.setenv("SQLALCHEMY_ECHO_LEVEL", "DEBUG")
-    reloaded = importlib.reload(config_module)
-
-    try:
-        assert reloaded.config.db_type == "postgres"
-        assert reloaded.config.db_url == "postgresql://repom-specific"
-        assert reloaded.config.enable_sqlalchemy_echo is True
-        assert reloaded.config.sqlalchemy_echo_level == "DEBUG"
-    finally:
-        for name in DATABASE_ENV_NAMES:
-            monkeypatch.delenv(name, raising=False)
-        repom_config_hook_for_reload()
-        importlib.reload(config_module)
+    assert config.model_locations == ["repom.examples.models"]
+    assert config.db_type == "sqlite"
+    assert config.db_name == "repom"

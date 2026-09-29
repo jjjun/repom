@@ -9,7 +9,7 @@ from sqlalchemy import (
     Date,
     text,
 )
-from repom.database import Base
+from tests.behavior_tests.isolated_models import Base, clear_behavior_models
 
 
 """
@@ -78,9 +78,7 @@ def test_compare_save_behavior(db_test):
     注意点.
     commit 前では TaskStringModel.done_at は `datetime.date` だけど、commit した後は `str` となる。
     """
-    from sqlalchemy.orm import clear_mappers, configure_mappers
-
-    # Redefine models within test to handle clear_mappers() from other tests
+    # Define models in the isolated registry used by behavior tests.
     class LocalTaskModel(Base):
         __abstract__ = True
         id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -134,8 +132,7 @@ def test_compare_save_behavior(db_test):
     print('----- /after commit -----')
 
     # Cleanup mappers to prevent SAWarning in subsequent tests
-    clear_mappers()
-    configure_mappers()
+    clear_behavior_models()
 
 
 # uv run pytest tests/behavior_tests/test_date_type_comparison.py::test_handle_invalid_date_save
@@ -152,9 +149,7 @@ def test_handle_invalid_date_save(db_test):
      エラーは発生せず、文字列を含んだ値が保存される(例.2023-12-23 ffds)
 
     """
-    from sqlalchemy.orm import clear_mappers, configure_mappers
-
-    # Redefine models within test to handle clear_mappers() from other tests
+    # Define models in the isolated registry used by behavior tests.
     class LocalTaskModel(Base):
         __abstract__ = True
         id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -202,8 +197,7 @@ def test_handle_invalid_date_save(db_test):
         raise e
 
     # Cleanup mappers to prevent SAWarning in subsequent tests
-    clear_mappers()
-    configure_mappers()
+    clear_behavior_models()
 
 
 # uv run pytest tests/behavior_tests/test_date_type_comparison.py::test_compare_search_behavior
@@ -211,9 +205,7 @@ def test_compare_search_behavior(db_test):
     """
     辞書型のデータを保存する
     """
-    from sqlalchemy.orm import clear_mappers, configure_mappers
-
-    # Redefine models within test to handle clear_mappers() from other tests
+    # Define models in the isolated registry used by behavior tests.
     class LocalTaskModel(Base):
         __abstract__ = True
         id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -315,5 +307,4 @@ def test_compare_search_behavior(db_test):
     print("----- search results -----")
 
     # Cleanup mappers to prevent SAWarning in subsequent tests
-    clear_mappers()
-    configure_mappers()
+    clear_behavior_models()

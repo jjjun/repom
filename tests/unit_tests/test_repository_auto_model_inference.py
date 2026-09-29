@@ -97,3 +97,7 @@ def test_repository_auto_inference_without_type_param_error():
     error_msg = str(exc_info.value)
     assert "Could not infer model type" in error_msg
     assert "NoTypeParamRepository" in error_msg
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

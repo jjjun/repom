@@ -657,3 +657,7 @@ class TestSoftDeleteIntegration:
         # find(include_deleted=True) は5つ
         all_items = repo.find(include_deleted=True)
         assert len(all_items) == 5
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

@@ -229,3 +229,7 @@ class TestAsyncDefaultOrderByFastAPIPattern:
         assert results[0].id == data['item3'].id
         assert results[1].id == data['item2'].id
         assert results[2].id == data['item1'].id
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

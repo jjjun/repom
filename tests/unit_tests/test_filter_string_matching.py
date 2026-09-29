@@ -150,3 +150,7 @@ def test_listjson_filter_treats_wildcards_as_literal(db_test):
     results = db_test.query(FilterMatchModel).filter(*filters).all()
 
     assert [r.id for r in results] == [match.id]
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

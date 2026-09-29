@@ -794,3 +794,7 @@ async def test_async_default_session_fallback():
 
     await repo.remove(fetched)
     assert await repo.get_by_id(created.id) is None
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

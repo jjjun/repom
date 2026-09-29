@@ -18,6 +18,14 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 import pytest
+from repom.database import Base
+
+
+def _remove_test_tables(*table_names):
+    for table_name in table_names:
+        table = Base.metadata.tables.get(table_name)
+        if table is not None:
+            Base.metadata.remove(table)
 
 
 def test_type_checking_with_alphabetical_import_order():
@@ -35,7 +43,6 @@ def test_type_checking_with_alphabetical_import_order():
     - しかし実行時には AniVideoUserStatusModel がまだインポートされていない
     - SQLAlchemy の名前解決が失敗
     """
-    from sqlalchemy.orm import clear_mappers, configure_mappers
     # 一時ディレクトリ作成
     temp_dir = Path(tempfile.mkdtemp(prefix="test_models_"))
 
@@ -122,8 +129,13 @@ class AniVideoUserStatusModel(BaseModel):
             engine = create_engine("sqlite:///:memory:", echo=False)
 
             # メタデータから全テーブルを作成
-            from repom.models.base_model import BaseModel
-            BaseModel.metadata.create_all(engine)
+            Base.metadata.create_all(
+                engine,
+                tables=[
+                    Base.metadata.tables["ani_video_items"],
+                    Base.metadata.tables["ani_video_user_statuses"],
+                ],
+            )
 
             # セッションを作成してオブジェクトを作成できるか確認
             with Session(engine) as session:
@@ -167,9 +179,7 @@ class AniVideoUserStatusModel(BaseModel):
 
         # 一時ディレクトリを削除
         shutil.rmtree(temp_dir, ignore_errors=True)
-        # マッパークリーンアップ
-        clear_mappers()
-        configure_mappers()
+        _remove_test_tables("ani_video_items", "ani_video_user_statuses")
 
 
 def test_type_checking_with_manual_import_order():
@@ -202,15 +212,15 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 from repom.models.base_model import BaseModel
 
 # TYPE_CHECKING の外でインポート（実行時にも利用可能）
-from .ani_video_user_status import AniVideoUserStatusModel
+from .ani_video_user_status import AniVideoUserStatusFixedModel
 
-class AniVideoItemModel(BaseModel):
+class AniVideoItemFixedModel(BaseModel):
     __tablename__ = 'ani_video_items_fixed'
     
     title: Mapped[str] = mapped_column(String(200))
     
     # relationship with string reference
-    user_statuses: Mapped[List["AniVideoUserStatusModel"]] = relationship(
+    user_statuses: Mapped[List["AniVideoUserStatusFixedModel"]] = relationship(
         back_populates="ani_video_item",
         cascade="all, delete-orphan"
     )
@@ -226,16 +236,16 @@ from repom.models.base_model import BaseModel
 # 前方参照を使うので循環インポートは発生しない
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from .ani_video_item import AniVideoItemModel
+    from .ani_video_item import AniVideoItemFixedModel
 
-class AniVideoUserStatusModel(BaseModel):
+class AniVideoUserStatusFixedModel(BaseModel):
     __tablename__ = 'ani_video_user_statuses_fixed'
     
     ani_video_item_id: Mapped[int] = mapped_column(ForeignKey('ani_video_items_fixed.id'))
     status: Mapped[str] = mapped_column(String(50))
     
     # relationship with string reference
-    ani_video_item: Mapped["AniVideoItemModel"] = relationship(
+    ani_video_item: Mapped["AniVideoItemFixedModel"] = relationship(
         back_populates="user_statuses"
     )
 """, encoding='utf-8')
@@ -258,15 +268,20 @@ class AniVideoUserStatusModel(BaseModel):
             assert test_models is not None, "ani_video_item module should be imported"
 
             # AniVideoItemModel が存在するか確認
-            AniVideoItemModel = getattr(test_models, 'AniVideoItemModel', None)
-            assert AniVideoItemModel is not None, "AniVideoItemModel should be imported"
+            AniVideoItemModel = getattr(test_models, 'AniVideoItemFixedModel', None)
+            assert AniVideoItemModel is not None, "AniVideoItemFixedModel should be imported"
 
             # データベースを作成してマッパーが正しく動作するか確認
             engine = create_engine("sqlite:///:memory:", echo=False)
 
             # メタデータから全テーブルを作成
-            from repom.models.base_model import BaseModel
-            BaseModel.metadata.create_all(engine)
+            Base.metadata.create_all(
+                engine,
+                tables=[
+                    Base.metadata.tables["ani_video_items_fixed"],
+                    Base.metadata.tables["ani_video_user_statuses_fixed"],
+                ],
+            )
 
             # セッションを作成してオブジェクトを作成できるか確認
             with Session(engine) as session:
@@ -290,6 +305,10 @@ class AniVideoUserStatusModel(BaseModel):
             modules_to_remove = [key for key in sys.modules.keys() if key.startswith('test_models_fixed')]
             for module in modules_to_remove:
                 del sys.modules[module]
+            _remove_test_tables(
+                "ani_video_items_fixed",
+                "ani_video_user_statuses_fixed",
+            )
 
     finally:
         # 一時ディレクトリを削除
@@ -309,5 +328,3 @@ if __name__ == '__main__':
     print("Test 2: Manual import order (Expected to work)")
     print("=" * 80)
     test_type_checking_with_manual_import_order()
-
-

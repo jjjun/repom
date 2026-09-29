@@ -258,3 +258,7 @@ def test_listjson_filter_empty_list_no_cache_warning_with_sqlalchemy_utils(db_te
         results = repo.find(ListModelFilterParams(option_list=[]))
     ids = [item.id for item in results]
     assert log.id in ids
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

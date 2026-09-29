@@ -827,3 +827,7 @@ async def test_default_options_with_joinedload_collection(async_db_test, setup_a
     assert len(authors) == 2
     total_books = sum(len(author.books) for author in authors)
     assert total_books == 3
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

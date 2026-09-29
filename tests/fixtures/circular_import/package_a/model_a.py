@@ -2,7 +2,7 @@
 from sqlalchemy import String
 from sqlalchemy.orm import relationship, mapped_column, Mapped
 from typing import TYPE_CHECKING, List
-from repom import BaseModel
+from repom.models.base_model import BaseModel
 
 if TYPE_CHECKING:
     from ..package_b.model_b import ModelB

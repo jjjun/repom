@@ -172,3 +172,7 @@ def test_default_order_by_rejects_bare_column_default_at_runtime(db_test):
         match="canonical format 'column:asc' or 'column:desc'",
     ):
         repo.find()
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

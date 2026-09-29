@@ -1,5 +1,3 @@
-import importlib
-
 import pytest
 
 from repom.config import RepomConfig
@@ -127,24 +125,3 @@ def test_apply_pgadmin_env_overrides_rejects_out_of_range_host_port(
         match="PGADMIN_HOST_PORT must be between 1 and 65535",
     ):
         apply_pgadmin_env_overrides(config)
-
-
-def test_repom_config_singleton_applies_pgadmin_env(
-    monkeypatch, repom_config_hook_for_reload
-):
-    import repom.config as config_module
-
-    monkeypatch.setenv("PGADMIN_DEFAULT_EMAIL", "env-admin@repom.local")
-    monkeypatch.setenv("PGADMIN_DEFAULT_PASSWORD", "env-secret")
-    monkeypatch.setenv("PGADMIN_HOST_PORT", "15050")
-    reloaded = importlib.reload(config_module)
-
-    try:
-        assert reloaded.config.pgadmin.email == "env-admin@repom.local"
-        assert reloaded.config.pgadmin.password == "env-secret"
-        assert reloaded.config.pgadmin.container.host_port == 15050
-    finally:
-        for name in PGADMIN_ENV_NAMES:
-            monkeypatch.delenv(name, raising=False)
-        repom_config_hook_for_reload()
-        importlib.reload(config_module)

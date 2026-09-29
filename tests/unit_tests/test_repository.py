@@ -782,3 +782,7 @@ def test_default_session_fallback():
 
     repo.remove(fetched)
     assert repo.get_by_id(created.id) is None
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

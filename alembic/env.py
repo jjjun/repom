@@ -102,7 +102,7 @@ def include_object(object_, name, type_, reflected, compare_to):
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Allow applications to import their own models before migrations run.
 # Strict regardless of config.model_import_strict: autogenerate compares the

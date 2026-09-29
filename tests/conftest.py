@@ -4,6 +4,7 @@ import os
 import shutil
 import sys
 import pytest
+import pytest_asyncio
 import logging
 from pathlib import Path
 from tempfile import mkdtemp
@@ -65,31 +66,6 @@ from repom.testing import create_test_fixtures, create_async_test_fixtures  # no
 # テストモデルをインポート（自動登録される）
 
 
-@pytest.fixture
-def repom_config_hook_for_reload(monkeypatch):
-    """Set repom's default hook and return a callback to restore its prior value."""
-    had_config_hook = 'CONFIG_HOOK' in os.environ
-    original_config_hook = os.environ.get('CONFIG_HOOK')
-    had_original_hook = 'REPOM_TEST_ORIGINAL_CONFIG_HOOK' in os.environ
-    original_hook = os.environ.get('REPOM_TEST_ORIGINAL_CONFIG_HOOK')
-    monkeypatch.setenv('CONFIG_HOOK', 'tests.session_config:hook_config')
-    monkeypatch.setenv(
-        'REPOM_TEST_ORIGINAL_CONFIG_HOOK', 'repom.config_hook:hook_config'
-    )
-
-    def restore_config_hook():
-        if had_config_hook:
-            monkeypatch.setenv('CONFIG_HOOK', original_config_hook)
-        else:
-            monkeypatch.delenv('CONFIG_HOOK', raising=False)
-        if had_original_hook:
-            monkeypatch.setenv('REPOM_TEST_ORIGINAL_CONFIG_HOOK', original_hook)
-        else:
-            monkeypatch.delenv('REPOM_TEST_ORIGINAL_CONFIG_HOOK', raising=False)
-
-    return restore_config_hook
-
-
 def pytest_sessionfinish(session, exitstatus):
     shutil.rmtree(_TEST_SESSION_ROOT, ignore_errors=True)
 
@@ -124,24 +100,6 @@ def pytest_configure(config):
     logging.getLogger('aiosqlite').setLevel(logging.WARNING)
     logging.getLogger('asyncio').setLevel(logging.WARNING)
     logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
-
-
-def pytest_collection_modifyitems(items):
-    """Run stable unit tests before behavior tests that intentionally clear mappers."""
-    order = {
-        'unit_tests': 0,
-        'behavior_tests': 1,
-        'integration_tests': 2,
-    }
-
-    def sort_key(item):
-        path_parts = set(item.path.parts)
-        for directory, priority in order.items():
-            if directory in path_parts:
-                return priority
-        return 3
-
-    items.sort(key=sort_key)
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -217,6 +175,23 @@ db_engine, db_test = create_test_fixtures()
 async_db_engine, async_db_test = create_async_test_fixtures()
 
 
+@pytest_asyncio.fixture
+async def isolated_async_database_manager(monkeypatch):
+    """Provide a fresh application async engine with the mapped tables created."""
+    import repom.database as database_module
+    from repom.database import Base, DatabaseManager
+
+    manager = DatabaseManager()
+    engine = await manager.get_async_engine()
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    monkeypatch.setattr(database_module, '_db_manager', manager)
+
+    yield manager
+
+    await manager.dispose_async()
+
+
 @pytest.fixture(scope='session', autouse=True)
 def protect_repository_data():
     """Fail if the test session modifies local data or migration files."""
@@ -282,11 +257,5 @@ def isolate_test_file_logs(tmp_path, monkeypatch):
 
 
 # ==================== Test Cleanup ====================
-# Tests that need mapper cleanup should use clear_mappers() and configure_mappers() directly.
-# Example:
-#   from sqlalchemy.orm import clear_mappers, configure_mappers
-#   try:
-#       # test code
-#   finally:
-#       clear_mappers()
-#       configure_mappers()
+# Pure SQLAlchemy behavior tests use an isolated registry so cleanup does not
+# unmap Repom models used by other tests.

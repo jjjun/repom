@@ -125,7 +125,9 @@ def test_permanent_delete_does_not_commit_external_session(db_test):
 
 
 @pytest.mark.asyncio
-async def test_async_soft_delete_does_not_commit_external_session():
+async def test_async_soft_delete_does_not_commit_external_session(
+    isolated_async_database_manager,
+):
     """外部セッション（非同期）: soft_delete() が commit を実行しない"""
     prep_repo = AsyncExternalSessionSoftDeleteRepository()
     item = await prep_repo.save(ExternalSessionSoftDeleteModel(name="async_soft_delete_external_target"))
@@ -151,7 +153,9 @@ async def test_async_soft_delete_does_not_commit_external_session():
 
 
 @pytest.mark.asyncio
-async def test_async_restore_does_not_commit_external_session():
+async def test_async_restore_does_not_commit_external_session(
+    isolated_async_database_manager,
+):
     """外部セッション（非同期）: restore() が commit を実行しない"""
     prep_repo = AsyncExternalSessionSoftDeleteRepository()
     item = await prep_repo.save(ExternalSessionSoftDeleteModel(name="async_restore_external_target"))
@@ -177,7 +181,9 @@ async def test_async_restore_does_not_commit_external_session():
 
 
 @pytest.mark.asyncio
-async def test_async_permanent_delete_does_not_commit_external_session():
+async def test_async_permanent_delete_does_not_commit_external_session(
+    isolated_async_database_manager,
+):
     """外部セッション（非同期）: permanent_delete() が commit を実行しない"""
     prep_repo = AsyncExternalSessionSoftDeleteRepository()
     item = await prep_repo.save(ExternalSessionSoftDeleteModel(name="async_permanent_delete_external_target"))
@@ -308,7 +314,9 @@ def test_permanent_delete_does_not_rollback_external_session(db_test, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_async_soft_delete_does_not_rollback_external_session(monkeypatch):
+async def test_async_soft_delete_does_not_rollback_external_session(
+    monkeypatch, isolated_async_database_manager
+):
     """外部セッション（非同期）: soft_delete() が失敗しても呼び出し元のセッションを
     rollback しない"""
     prep_repo = AsyncExternalSessionSoftDeleteRepository()
@@ -345,7 +353,9 @@ async def test_async_soft_delete_does_not_rollback_external_session(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_async_restore_does_not_rollback_external_session(monkeypatch):
+async def test_async_restore_does_not_rollback_external_session(
+    monkeypatch, isolated_async_database_manager
+):
     """外部セッション（非同期）: restore() が失敗しても呼び出し元のセッションを
     rollback しない"""
     prep_repo = AsyncExternalSessionSoftDeleteRepository()
@@ -383,7 +393,9 @@ async def test_async_restore_does_not_rollback_external_session(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_async_permanent_delete_does_not_rollback_external_session(monkeypatch):
+async def test_async_permanent_delete_does_not_rollback_external_session(
+    monkeypatch, isolated_async_database_manager
+):
     """外部セッション（非同期）: permanent_delete() が失敗しても呼び出し元の
     セッションを rollback しない"""
     prep_repo = AsyncExternalSessionSoftDeleteRepository()
@@ -447,7 +459,9 @@ def test_soft_delete_missing_id_does_not_flush_external_session(db_test, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_async_soft_delete_missing_id_does_not_flush_external_session(monkeypatch):
+async def test_async_soft_delete_missing_id_does_not_flush_external_session(
+    monkeypatch, isolated_async_database_manager
+):
     """外部セッション（非同期）: 存在しない ID の soft_delete() は flush を呼ばない"""
     async with _external_async_transaction() as session:
         repo = AsyncExternalSessionSoftDeleteRepository(session)

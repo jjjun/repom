@@ -156,3 +156,7 @@ def test_sqlite_negative_limit_does_not_return_all_rows(seeded_repo):
             seeded_repo.find(limit=-1)
 
     mock_execute.assert_not_called()
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

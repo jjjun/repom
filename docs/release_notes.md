@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The shared Alembic environment now preserves existing application and Repom
+  loggers when it configures Alembic logging for in-process migrations.
 - Docker service auto-start now reuses existing compose files and `.env` when
   containers are stopped, instead of regenerating credentials from the current
   process environment. Explicit PostgreSQL and Redis generation/start commands

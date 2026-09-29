@@ -116,3 +116,7 @@ def test_filter_params_mapping_supports_eq_in_contains(db_test):
     assert [item.rank for item in eq_results] == [2]
     assert {item.rank for item in in_results} == {1, 3}
     assert {item.name for item in contains_results} == {'alpha', 'charlie'}
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

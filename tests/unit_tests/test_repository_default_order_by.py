@@ -209,3 +209,7 @@ class TestDefaultOrderByEdgeCases:
         assert results[0].priority == 3
         assert results[1].priority == 2
         assert results[2].priority == 1
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

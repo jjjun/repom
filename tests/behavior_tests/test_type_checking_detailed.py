@@ -15,6 +15,7 @@ import warnings
 from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from tests.behavior_tests.isolated_models import clear_behavior_models
 
 
 def test_inspect_import_order():
@@ -44,12 +45,13 @@ def test_inspect_import_order():
             (models_dir / filename).write_text(f"""
 print(f"Importing: {filename}")
 
-from repom.models.base_model import BaseModel
+from tests.behavior_tests.isolated_models import Base as BehaviorBase
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String
+from sqlalchemy import Integer, String
 
-class {filename[:-3].title().replace('_', '')}Model(BaseModel):
+class {filename[:-3].title().replace('_', '')}Model(BehaviorBase):
     __tablename__ = '{filename[:-3]}'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(50))
 """, encoding='utf-8')
 
@@ -75,8 +77,7 @@ class {filename[:-3].title().replace('_', '')}Model(BaseModel):
             modules_to_remove = [key for key in sys.modules.keys() if key.startswith('test_order')]
             for module in modules_to_remove:
                 del sys.modules[module]
-            from repom.models.base_model import BaseModel
-            BaseModel.metadata.clear()
+            clear_behavior_models()
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -94,7 +95,7 @@ def test_sqlalchemy_relationship_lazy_resolution():
       2. metadata.create_all() 実行時
       3. 明示的に configure_mappers() を呼び出した時
     """
-    from sqlalchemy.orm import clear_mappers, configure_mappers
+    from sqlalchemy.orm import configure_mappers
     temp_dir = Path(tempfile.mkdtemp(prefix="test_lazy_"))
 
     try:
@@ -107,16 +108,17 @@ def test_sqlalchemy_relationship_lazy_resolution():
         (models_dir / "a_parent.py").write_text("""
 from typing import TYPE_CHECKING, List
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy import String
-from repom.models.base_model import BaseModel
+from sqlalchemy import Integer, String
+from tests.behavior_tests.isolated_models import Base as BehaviorBase
 
 if TYPE_CHECKING:
     from .z_child import ZChildModel
 
 print(">>> a_parent.py: Defining AParentModel")
 
-class AParentModel(BaseModel):
+class AParentModel(BehaviorBase):
     __tablename__ = 'a_parents'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(50))
     
     # この時点では ZChildModel は存在しない
@@ -130,17 +132,18 @@ print(">>> a_parent.py: AParentModel defined successfully")
         # Child model (アルファベット順で後)
         (models_dir / "z_child.py").write_text("""
 from typing import TYPE_CHECKING
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from repom.models.base_model import BaseModel
+from tests.behavior_tests.isolated_models import Base as BehaviorBase
 
 if TYPE_CHECKING:
     from .a_parent import AParentModel
 
 print(">>> z_child.py: Defining ZChildModel")
 
-class ZChildModel(BaseModel):
+class ZChildModel(BehaviorBase):
     __tablename__ = 'z_children'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(50))
     parent_id: Mapped[int] = mapped_column(ForeignKey('a_parents.id'))
     
@@ -188,8 +191,8 @@ print(">>> z_child.py: ZChildModel defined successfully")
 
             # データベースを作成
             engine = create_engine("sqlite:///:memory:", echo=False)
-            from repom.models.base_model import BaseModel
-            BaseModel.metadata.create_all(engine)
+            from tests.behavior_tests.isolated_models import Base
+            Base.metadata.create_all(engine)
 
             # モデルを取得
             test_lazy = sys.modules.get('test_lazy.a_parent')
@@ -210,13 +213,12 @@ print(">>> z_child.py: ZChildModel defined successfully")
             modules_to_remove = [key for key in sys.modules.keys() if key.startswith('test_lazy')]
             for module in modules_to_remove:
                 del sys.modules[module]
-            from repom.models.base_model import BaseModel
-            BaseModel.metadata.clear()
+            clear_behavior_models()
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
         # マッパークリーンアップ
-        clear_mappers()
+        clear_behavior_models()
         configure_mappers()
 
 
@@ -234,7 +236,7 @@ def test_actual_failure_scenario():
     - 一方のモデルファイルが auto_import_models() でインポートされない
     - または、インポートに失敗する
     """
-    from sqlalchemy.orm import clear_mappers, configure_mappers
+    from sqlalchemy.orm import configure_mappers
     temp_dir = Path(tempfile.mkdtemp(prefix="test_failure_"))
 
     try:
@@ -247,14 +249,15 @@ def test_actual_failure_scenario():
         (models_dir / "parent.py").write_text("""
 from typing import TYPE_CHECKING, List
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy import String
-from repom.models.base_model import BaseModel
+from sqlalchemy import Integer, String
+from tests.behavior_tests.isolated_models import Base as BehaviorBase
 
 if TYPE_CHECKING:
     from .child_not_imported import ChildNotImportedModel
 
-class ParentModel(BaseModel):
+class ParentModel(BehaviorBase):
     __tablename__ = 'parents'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(50))
     
     # ChildNotImportedModel は存在しないので、名前解決失敗するはず
@@ -303,13 +306,12 @@ class ParentModel(BaseModel):
             modules_to_remove = [key for key in sys.modules.keys() if key.startswith('test_failure')]
             for module in modules_to_remove:
                 del sys.modules[module]
-            from repom.models.base_model import BaseModel
-            BaseModel.metadata.clear()
+            clear_behavior_models()
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
         # マッパークリーンアップ
-        clear_mappers()
+        clear_behavior_models()
         configure_mappers()
 
 
@@ -328,5 +330,3 @@ if __name__ == '__main__':
     print("Test 3: Actual failure scenario")
     print("=" * 80)
     test_actual_failure_scenario()
-
-

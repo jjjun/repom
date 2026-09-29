@@ -74,23 +74,11 @@ basekit = { git = "https://github.com/jjjun/basekit.git", branch = "main" }
 [tool.pytest.ini_options]
 addopts = [
   "-q",
-  "-x",
   "--benchmark-skip",
-  "--ignore=tests/test_local.py",
 ]
 
 markers = [
   "run_benchmark: Run the benchmark",
-  "model: mark a test as related to model functionality",
-  "repo: mark a test as related to repo functionality",
-  "query: mark a test as related to query functionality",
-]
-
-filterwarnings = [
-  "ignore::DeprecationWarning:sqlalchemy.*",
-  "ignore:The garbage collector is trying to clean up non-checked-in connection.*:sqlalchemy.exc.SAWarning",
-  "ignore:Task was destroyed but it is pending.*:RuntimeWarning",
-  "ignore:find\\(\\) was called without a limit:RuntimeWarning",
 ]
 
 [tool.ruff.lint.per-file-ignores]

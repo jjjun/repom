@@ -1,44 +1,20 @@
-"""
-
-Behavior coverage for circular SQLAlchemy mapper initialization.
+"""Behavior coverage for circular SQLAlchemy mapper initialization.
 
 Issue history is stored in issuekit; this file is the executable regression
 specification.
 """
-import pytest
-from repom.models.base_model import Base
-from sqlalchemy.orm import clear_mappers
+from pathlib import Path
+import subprocess
+import sys
 
 
-@pytest.fixture
-def clean_circular_import_env():
-    """循環参照テスト用の環境をクリーンアップ
-
-    各テスト前後で以下を実行：
-    - Base.metadata のクリア
-    - SQLAlchemy マッパーのクリア
-    - モジュールキャッシュのクリア（tests.fixtures.circular_import）
-
-    これにより、テストの独立性を保証し、循環参照エラーを正確に再現できる。
-    """
-    # 前処理
-    Base.metadata.clear()
-    clear_mappers()
-
-    import sys
-    for key in list(sys.modules.keys()):
-        if 'tests.fixtures.circular_import' in key:
-            del sys.modules[key]
-
-    yield  # テスト実行
-
-    # 後処理
-    Base.metadata.clear()
-    clear_mappers()
-
-    for key in list(sys.modules.keys()):
-        if 'tests.fixtures.circular_import' in key:
-            del sys.modules[key]
+def _run_isolated_python(script: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+    )
 
 
 class TestCircularImportIssue:
@@ -55,7 +31,7 @@ class TestCircularImportIssue:
     まだ定義されていない（クラスレジストリに未登録）こと。
     """
 
-    def test_reproduce_circular_import_error(self, clean_circular_import_env):
+    def test_reproduce_circular_import_error(self):
         """循環参照エラーの再現
 
         条件：package_a のみをインポート後、configure_mappers() を呼ぶ
@@ -67,30 +43,30 @@ class TestCircularImportIssue:
         - ModelB はまだインポートされていない
         - マッパー初期化時に 'ModelB' という名前が解決できない
         """
-        from basekit.discovery import import_package_directory
-        from sqlalchemy.orm import configure_mappers
+        result = _run_isolated_python(
+            """
+from basekit.discovery import import_package_directory
+from sqlalchemy.orm import configure_mappers
 
-        # package_a のみをインポート
-        import_package_directory(
-            package_name='tests.fixtures.circular_import.package_a',
-            excluded_dirs=set(),
-            allowed_prefixes={'tests.fixtures.', 'repom.'}
+import_package_directory(
+    package_name="tests.fixtures.circular_import.package_a",
+    excluded_dirs=set(),
+    allowed_prefixes={"tests.fixtures.", "tests.behavior_tests.", "repom."},
+)
+
+try:
+    configure_mappers()
+except Exception as exc:
+    error_message = str(exc)
+    assert "failed to locate a name" in error_message.lower(), error_message
+    assert "'ModelB'" in error_message, error_message
+else:
+    raise AssertionError("configure_mappers() should not resolve ModelB")
+"""
         )
+        assert result.returncode == 0, result.stdout + result.stderr
 
-        # マッパーを強制的に初期化 → エラー発生
-        with pytest.raises(Exception) as exc_info:
-            configure_mappers()
-
-        # エラーメッセージの検証
-        error_message = str(exc_info.value)
-        assert "failed to locate a name" in error_message.lower(), (
-            f"Expected 'failed to locate a name' in error: {error_message}"
-        )
-        assert "'ModelB'" in error_message, (
-            f"Expected 'ModelB' in error: {error_message}"
-        )
-
-    def test_verify_deferred_mapper_solution(self, clean_circular_import_env):
+    def test_verify_deferred_mapper_solution(self):
         """遅延マッパー初期化による解決策の検証
 
         条件：すべてのパッケージをインポート後、configure_mappers() を呼ばない
@@ -104,42 +80,31 @@ class TestCircularImportIssue:
 
         これが解決策1の基礎となる動作である。
         """
-        from basekit.discovery import import_package_directory
-        from sqlalchemy.orm import class_mapper
+        result = _run_isolated_python(
+            """
+from basekit.discovery import import_package_directory
+from sqlalchemy.orm import class_mapper
 
-        # すべてのパッケージをインポート
-        import_package_directory(
-            package_name='tests.fixtures.circular_import.package_a',
-            excluded_dirs=set(),
-            allowed_prefixes={'tests.fixtures.', 'repom.'}
+for package_name in (
+    "tests.fixtures.circular_import.package_a",
+    "tests.fixtures.circular_import.package_b",
+):
+    import_package_directory(
+        package_name=package_name,
+        excluded_dirs=set(),
+        allowed_prefixes={"tests.fixtures.", "tests.behavior_tests.", "repom."},
+    )
+
+from tests.fixtures.circular_import.package_a.model_a import ModelA
+from tests.fixtures.circular_import.package_b.model_b import ModelB
+from repom.database import Base
+
+assert hasattr(ModelA, "children")
+assert hasattr(ModelB, "parent")
+assert class_mapper(ModelA) is not None
+assert class_mapper(ModelB) is not None
+assert "test_model_a" in Base.metadata.tables
+assert "test_model_b" in Base.metadata.tables
+"""
         )
-
-        import_package_directory(
-            package_name='tests.fixtures.circular_import.package_b',
-            excluded_dirs=set(),
-            allowed_prefixes={'tests.fixtures.', 'repom.'}
-        )
-
-        # configure_mappers() は呼ばない（遅延初期化に任せる）
-
-        # モデルクラスを取得
-        from tests.fixtures.circular_import.package_a.model_a import ModelA
-        from tests.fixtures.circular_import.package_b.model_b import ModelB
-
-        # リレーションシップの確認
-        assert hasattr(ModelA, 'children'), "ModelA should have 'children' relationship"
-        assert hasattr(ModelB, 'parent'), "ModelB should have 'parent' relationship"
-
-        # マッパーが遅延初期化されることを確認
-        mapper_a = class_mapper(ModelA)
-        mapper_b = class_mapper(ModelB)
-
-        assert mapper_a is not None, "ModelA mapper should be initialized"
-        assert mapper_b is not None, "ModelB mapper should be initialized"
-
-        # テーブルが正しく登録されていることを確認
-        tables = list(Base.metadata.tables.keys())
-        assert 'test_model_a' in tables, "test_model_a should be registered"
-        assert 'test_model_b' in tables, "test_model_b should be registered"
-
-
+        assert result.returncode == 0, result.stdout + result.stderr

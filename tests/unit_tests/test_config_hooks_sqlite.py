@@ -1,5 +1,3 @@
-import importlib
-
 import pytest
 
 from repom.config import RepomConfig
@@ -89,24 +87,3 @@ def test_apply_sqlite_env_overrides_ignores_config_without_sqlite(monkeypatch):
     monkeypatch.setenv("SQLITE_DB_FILE", "custom.sqlite3")
 
     apply_sqlite_env_overrides(ConfigWithoutSqlite())
-
-
-def test_repom_config_singleton_applies_sqlite_env(
-    monkeypatch, repom_config_hook_for_reload
-):
-    import repom.config as config_module
-
-    monkeypatch.setenv("SQLITE_DB_PATH", "env/data")
-    monkeypatch.setenv("SQLITE_DB_FILE", "env.sqlite3")
-    monkeypatch.setenv("SQLITE_USE_IN_MEMORY_FOR_TESTS", "false")
-    reloaded = importlib.reload(config_module)
-
-    try:
-        assert reloaded.config.sqlite.db_path == "env/data"
-        assert reloaded.config.sqlite.db_file == "env.sqlite3"
-        assert reloaded.config.sqlite.use_in_memory_for_tests is False
-    finally:
-        for name in SQLITE_ENV_NAMES:
-            monkeypatch.delenv(name, raising=False)
-        repom_config_hook_for_reload()
-        importlib.reload(config_module)

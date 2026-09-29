@@ -58,7 +58,9 @@ def test_save_internal_session_rolls_back_on_integrity_error():
 
 
 @pytest.mark.asyncio
-async def test_async_save_internal_session_rolls_back_on_integrity_error():
+async def test_async_save_internal_session_rolls_back_on_integrity_error(
+    isolated_async_database_manager,
+):
     """内部セッション（非同期）: IntegrityError で commit が失敗したら rollback され、
     重複行が残らず、Repository は以降も使用可能であること"""
     repo = AsyncRollbackTestRepository()
@@ -104,7 +106,9 @@ def test_permanent_delete_uses_a_single_internal_session(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_async_permanent_delete_uses_a_single_internal_session(monkeypatch):
+async def test_async_permanent_delete_uses_a_single_internal_session(
+    monkeypatch, isolated_async_database_manager
+):
     """内部セッション（非同期）の permanent_delete() は lookup と delete を
     1つのセッションで行う"""
     prep_repo = AsyncRollbackTestRepository()

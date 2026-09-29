@@ -1,4 +1,5 @@
 from contextlib import nullcontext
+import logging
 from pathlib import Path
 import runpy
 import sys
@@ -11,6 +12,28 @@ import sqlalchemy
 
 import repom.config
 import repom.utility
+
+
+def test_env_keeps_preexisting_loggers_enabled(monkeypatch):
+    alembic_ini = Path(__file__).parents[2] / "alembic.ini"
+    alembic_config = Config(str(alembic_ini))
+    logger = logging.getLogger("repom.test_alembic_env_preexisting")
+    original_disabled = logger.disabled
+    logger.disabled = False
+
+    monkeypatch.setattr(context, "config", alembic_config, raising=False)
+    monkeypatch.setattr(context, "is_offline_mode", lambda: True)
+    monkeypatch.setattr(context, "configure", lambda **options: None)
+    monkeypatch.setattr(context, "begin_transaction", nullcontext)
+    monkeypatch.setattr(context, "run_migrations", lambda: None)
+    monkeypatch.setattr(repom.utility, "load_models", lambda **kwargs: None)
+
+    env_path = Path(__file__).parents[2] / "alembic" / "env.py"
+    try:
+        runpy.run_path(env_path)
+        assert logger.disabled is False
+    finally:
+        logger.disabled = original_disabled
 
 
 class AlembicConfigStub:
