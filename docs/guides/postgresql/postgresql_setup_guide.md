@@ -95,6 +95,13 @@ uv run repom_info
 は `${POSTGRES_PASSWORD}` のような変数参照でこれを読み込みます。生成物は
 runtime artifact です。設定の正本は `CONFIG_HOOK` と環境変数です。
 
+When both generated files exist, application `ensure_running()` starts the
+existing compose project without regenerating it. `postgres_generate` and
+`postgres_start` refuse to replace a `.env` with different credentials.
+Use the credential rotation commands for an existing volume, or pass
+`--force-regenerate` for an intentional replacement; regeneration keeps the
+previous `.env` as `.env.bak` with mode `0600` when its content changes.
+
 ## 停止と削除
 
 ```bash

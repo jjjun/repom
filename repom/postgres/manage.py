@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 
 from repom.config import config
 from repom.credentials import reject_default_credential
@@ -19,6 +20,7 @@ from repom.docker_compose_safety import (
     format_env_file,
     quote_yaml_string,
     reject_control_characters,
+    validate_secret_file_overwrite,
     write_secret_file,
 )
 from repom.postgres.credentials import mask_secret, quote_identifier, quote_literal
@@ -29,6 +31,7 @@ from basekit.docker_compose import (
 )
 from basekit.docker_manager import DockerCommandExecutor, DockerManager
 from repom.docker_service import (
+    _force_regenerate_from_args,
     ensure_running as ensure_container_service_running,
     remove_service,
     start_service,
@@ -260,8 +263,8 @@ def generate_init_sql() -> str:
 """
 
 
-def generate():
-    """Write PostgreSQL compose and initialization files."""
+def generate(*, overwrite_secrets: bool = False):
+    """Write PostgreSQL files, refusing changed secrets unless overridden."""
 
     manager = PostgresManager()
     generator = generate_docker_compose()
@@ -269,16 +272,27 @@ def generate():
     init_dir = manager.get_init_dir()
     init_sql = generate_init_sql()
     init_sql_path = init_dir / "01_init_databases.sql"
-    init_sql_path.write_text(init_sql, encoding="utf-8")
 
     compose_dir = manager.get_compose_dir()
     output_path = compose_dir / COMPOSE_FILENAME
-    generator.write_to_file(output_path)
 
     secrets = {"POSTGRES_PASSWORD": config.postgres.password}
     if config.pgadmin.container.enabled:
         secrets["PGADMIN_DEFAULT_PASSWORD"] = config.pgadmin.password
-    write_secret_file(compose_dir / ".env", format_env_file(secrets))
+    env_path = compose_dir / ".env"
+    env_content = format_env_file(secrets)
+    rotation_commands = ("postgres_rotate_credentials",)
+    if config.pgadmin.container.enabled:
+        rotation_commands += ("pgadmin_rotate_password",)
+    validate_secret_file_overwrite(
+        env_path,
+        env_content,
+        overwrite_secrets=overwrite_secrets,
+        rotation_commands=rotation_commands,
+    )
+
+    init_sql_path.write_text(init_sql, encoding="utf-8")
+    generator.write_to_file(output_path)
 
     if config.pgadmin.container.enabled:
         servers_json_path = compose_dir / "servers.json"
@@ -288,6 +302,8 @@ def generate():
             encoding="utf-8",
         )
         print(f"pgAdmin servers config: {servers_json_path}")
+
+    write_secret_file(env_path, env_content)
 
     print(f"Generated: {output_path}")
     print(f"   Init SQL: {init_sql_path}")
@@ -306,10 +322,27 @@ def generate():
         print("\n pgAdmin: Disabled (set config.pgadmin.container.enabled=True to enable)")
 
 
-def start():
+def start(*, overwrite_secrets: bool = False):
     """Generate files and start PostgreSQL."""
 
-    start_service(PostgresManager, generate)
+    start_service(
+        PostgresManager,
+        lambda: generate(overwrite_secrets=overwrite_secrets),
+    )
+
+
+def main_generate() -> None:
+    """Console entry point for PostgreSQL file generation."""
+
+    force = _force_regenerate_from_args("Generate PostgreSQL compose files.")
+    generate(overwrite_secrets=force)
+
+
+def main_start() -> None:
+    """Console entry point for starting PostgreSQL."""
+
+    force = _force_regenerate_from_args("Generate files and start PostgreSQL.")
+    start(overwrite_secrets=force)
 
 
 def stop():
@@ -343,12 +376,20 @@ def ensure_running(
     if include_pgadmin and bool(getattr(config.pgadmin.container, "enabled", False)):
         container_names["pgadmin"] = config.pgadmin.container.get_container_name()
 
+    def get_generated_files() -> tuple[Path, Path]:
+        compose_dir = PostgresManager().get_compose_dir()
+        return (
+            compose_dir / COMPOSE_FILENAME,
+            compose_dir / ".env",
+        )
+
     ensure_container_service_running(
         PostgresManager,
         container_names,
         generate,
         "PostgreSQL",
         timeout_seconds,
+        generated_files=get_generated_files,
     )
 
 

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Docker service auto-start now reuses existing compose files and `.env` when
+  containers are stopped, instead of regenerating credentials from the current
+  process environment. Explicit PostgreSQL and Redis generation/start commands
+  refuse to replace a differing `.env` unless `--force-regenerate` is passed;
+  replacements keep the previous `.env` as `.env.bak` with mode `0600` when
+  its content changes.
+  Successful credential rotations synchronize the generated `.env`.
 - Removed the PostgreSQL backup/restore duplication between the host and
   Docker paths and across `db_backup`, `db_restore`, and `pg_dump_tools`, and
   fixed the memory, deadlock, and Windows-portability problems that

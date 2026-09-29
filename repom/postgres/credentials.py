@@ -474,6 +474,11 @@ def main_postgres() -> None:
         schemas=tuple(args.schemas or ("public",)),
     )
     result = rotate_postgres_credentials(plan, dry_run=not args.execute)
+    if args.execute and not result.dry_run:
+        config.postgres.password = new_password
+        from repom.postgres.manage import generate
+
+        generate(overwrite_secrets=True)
     _print_result(result)
 
 
@@ -539,4 +544,10 @@ def main_pgadmin() -> None:
         )
     else:
         result = rotate_pgadmin_password(plan, dry_run=not args.execute)
+    if args.execute and not result.dry_run:
+        if not args.recreate_volume:
+            config.pgadmin.password = new_password
+        from repom.postgres.manage import generate
+
+        generate(overwrite_secrets=True)
     _print_result(result)

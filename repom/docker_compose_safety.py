@@ -88,10 +88,47 @@ def format_env_file(values: Mapping[str, str]) -> str:
 
 
 def write_secret_file(path: Path, content: str) -> None:
-    """Write generated content that carries a plaintext secret, owner-only."""
+    """Write plaintext secrets owner-only, backing up changed prior content."""
 
+    if path.exists():
+        backup_secret_file(path, content)
     path.write_text(content, encoding="utf-8")
     os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def validate_secret_file_overwrite(
+    path: Path,
+    content: str,
+    *,
+    overwrite_secrets: bool,
+    rotation_commands: tuple[str, ...],
+) -> None:
+    """Refuse to replace a generated secret file with different content."""
+
+    if not path.exists() or path.read_text(encoding="utf-8") == content:
+        return
+    if overwrite_secrets:
+        return
+
+    commands = ", ".join(rotation_commands)
+    raise ValueError(
+        f"Refusing to overwrite {path} because its secrets differ from the "
+        f"current configuration. Use {commands} to rotate credentials, or "
+        "pass overwrite_secrets=True (CLI: --force-regenerate) to intentionally "
+        "replace them."
+    )
+
+
+def backup_secret_file(path: Path, new_content: str) -> None:
+    """Keep the changed prior content as an owner-only one-generation backup."""
+
+    previous_content = path.read_text(encoding="utf-8")
+    if previous_content == new_content:
+        return
+
+    backup_path = path.with_name(f"{path.name}.bak")
+    backup_path.write_text(previous_content, encoding="utf-8")
+    os.chmod(backup_path, stat.S_IRUSR | stat.S_IWUSR)
 
 
 __all__ = [
@@ -100,5 +137,7 @@ __all__ = [
     "format_env_file",
     "quote_yaml_string",
     "reject_control_characters",
+    "backup_secret_file",
+    "validate_secret_file_overwrite",
     "write_secret_file",
 ]

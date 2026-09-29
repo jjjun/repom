@@ -8,6 +8,7 @@ Tests verify that redis/manage.py correctly uses config values for:
 """
 
 from pathlib import Path
+import stat
 from unittest.mock import patch
 
 import pytest
@@ -320,15 +321,22 @@ class TestDirectoryManagement:
         assert str(compose_dir).endswith("redis")
         assert "redis" in str(compose_dir)
 
-    def test_redis_generate_creates_in_redis_subdir(self):
+    def test_redis_generate_creates_in_redis_subdir(self, tmp_path):
         """redis_generate が data/repom/redis/ に docker-compose.yml を生成"""
         from repom.redis.manage import generate
 
+        compose_dir = tmp_path / "redis"
+        compose_dir.mkdir()
+        init_dir = compose_dir / "redis_init"
+        init_dir.mkdir()
+
         # Generate files
-        generate()
+        with patch.object(RedisManager, "get_compose_dir", return_value=compose_dir):
+            with patch.object(RedisManager, "get_init_dir", return_value=init_dir):
+                generate()
 
         # Verify files are in redis subdirectory
-        compose_file = RedisManager().get_compose_dir() / "docker-compose.generated.yml"
+        compose_file = compose_dir / "docker-compose.generated.yml"
         assert compose_file.exists()
         assert "redis" in str(compose_file.parent)
 
@@ -364,6 +372,34 @@ class TestRedisSecretFilePermissions:
         env_content = (compose_dir / ".env").read_text()
         assert env_content == 'REDIS_PASSWORD="redis-secret"\n'
 
+    def test_generate_refuses_changed_password_and_force_keeps_backup(self, tmp_path):
+        compose_dir = tmp_path / "compose"
+        compose_dir.mkdir()
+        init_dir = compose_dir / "redis_init"
+        init_dir.mkdir()
+        env_file = compose_dir / ".env"
+        original_env = 'REDIS_PASSWORD="old-redis-secret"\n'
+        env_file.write_text(original_env, encoding="utf-8")
+
+        from repom.redis.manage import generate
+
+        with patch.object(config.redis, "password", "new-redis-secret"):
+            with patch.object(RedisManager, "get_compose_dir", return_value=compose_dir):
+                with patch.object(RedisManager, "get_init_dir", return_value=init_dir):
+                    with pytest.raises(ValueError) as excinfo:
+                        generate()
+
+                    assert "redis_rotate_password" in str(excinfo.value)
+                    assert "new-redis-secret" not in str(excinfo.value)
+                    assert env_file.read_text(encoding="utf-8") == original_env
+                    assert not (compose_dir / "docker-compose.generated.yml").exists()
+
+                    generate(overwrite_secrets=True)
+
+        assert env_file.read_text(encoding="utf-8") == 'REDIS_PASSWORD="new-redis-secret"\n'
+        assert (compose_dir / ".env.bak").read_text(encoding="utf-8") == original_env
+        assert stat.S_IMODE((compose_dir / ".env.bak").stat().st_mode) == 0o600
+
 
 class TestRedisEnsureRunning:
     """ensure_running() の単体テスト"""
@@ -372,8 +408,35 @@ class TestRedisEnsureRunning:
         from unittest.mock import MagicMock
 
         mock_config = MagicMock()
+        mock_config.data_path = "/repom-test-data-does-not-exist"
         mock_config.redis.container.get_container_name.return_value = "repom_redis"
         return mock_config
+
+    def test_uses_existing_generated_files_when_redis_is_down(self, tmp_path):
+        from unittest.mock import MagicMock, patch
+
+        from repom.redis import manage
+
+        mock_config = self._patch_config()
+        compose_dir = tmp_path / "redis"
+        compose_dir.mkdir()
+        (compose_dir / manage.COMPOSE_FILENAME).write_text("services: {}\n")
+        (compose_dir / ".env").write_text('REDIS_PASSWORD="saved-secret"\n')
+        manager_instance = MagicMock()
+        manager_instance.get_compose_dir.return_value = compose_dir
+
+        with patch.object(manage, "config", mock_config):
+            with patch(
+                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
+                return_value=False,
+            ):
+                with patch.object(manage, "generate") as generate:
+                    with patch.object(manage, "RedisManager", return_value=manager_instance):
+                        manage.ensure_running()
+
+        generate.assert_not_called()
+        manager_instance.get_compose_dir.assert_called_once_with()
+        manager_instance.start.assert_called_once_with(timeout_seconds=30)
 
     def test_returns_when_redis_already_running(self):
         from unittest.mock import patch
@@ -393,12 +456,13 @@ class TestRedisEnsureRunning:
         generate.assert_not_called()
         manager_cls.assert_not_called()
 
-    def test_starts_when_redis_down(self):
+    def test_starts_when_redis_down(self, tmp_path):
         from unittest.mock import MagicMock, patch
 
         from repom.redis import manage
 
         manager_instance = MagicMock()
+        manager_instance.get_compose_dir.return_value = tmp_path / "redis"
         with patch.object(manage, "config", self._patch_config()):
             with patch(
                 "basekit.docker_manager.DockerCommandExecutor.is_container_running",
@@ -413,12 +477,13 @@ class TestRedisEnsureRunning:
         generate.assert_called_once_with()
         manager_instance.start.assert_called_once_with(timeout_seconds=12)
 
-    def test_default_timeout_seconds_is_30(self):
+    def test_default_timeout_seconds_is_30(self, tmp_path):
         from unittest.mock import MagicMock, patch
 
         from repom.redis import manage
 
         manager_instance = MagicMock()
+        manager_instance.get_compose_dir.return_value = tmp_path / "redis"
         with patch.object(manage, "config", self._patch_config()):
             with patch(
                 "basekit.docker_manager.DockerCommandExecutor.is_container_running",
@@ -514,4 +579,25 @@ class TestRedisEnsureRunning:
                             manage.ensure_running()
 
 
+class TestRedisGenerationCLI:
+    def test_force_regenerate_flag_is_forwarded_to_generate(self, monkeypatch):
+        import sys
 
+        from repom.redis import manage
+
+        monkeypatch.setattr(sys, "argv", ["redis_generate", "--force-regenerate"])
+        with patch.object(manage, "generate") as generate:
+            manage.main_generate()
+
+        generate.assert_called_once_with(overwrite_secrets=True)
+
+    def test_force_regenerate_flag_is_forwarded_to_start(self, monkeypatch):
+        import sys
+
+        from repom.redis import manage
+
+        monkeypatch.setattr(sys, "argv", ["redis_start", "--force-regenerate"])
+        with patch.object(manage, "start") as start:
+            manage.main_start()
+
+        start.assert_called_once_with(overwrite_secrets=True)

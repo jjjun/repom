@@ -8,7 +8,7 @@ contains it. Health checks authenticate with the configured password.
 
 ## Fresh Or Regenerated Config
 
-Set the password and regenerate the Redis files:
+For a fresh data volume, set the password and generate the Redis files:
 
 ```bash
 REDIS_PASSWORD="new-password" uv run redis_generate
@@ -19,6 +19,12 @@ Start Redis:
 ```bash
 REDIS_PASSWORD="new-password" uv run redis_start
 ```
+
+For an existing volume, use `redis_rotate_password` to change its live
+password. `redis_generate` and `redis_start` refuse to replace a generated
+`.env` when its password differs from the active configuration. Pass
+`--force-regenerate` only when intentionally replacing the generated secret;
+changed content keeps the previous `.env` as `.env.bak` with mode `0600`.
 
 Connect with:
 
@@ -54,12 +60,14 @@ opts in to using the configured password as the new value.
 When more than one stdin option is used, the new password is read first.
 
 After execution, repom regenerates the compose files and the `.env` secrets
-file with the new password only after Redis confirms the change. The runtime
-command passes the old password through `REDISCLI_AUTH` when it is supplied
-with `--old-password` or `--old-password-stdin`, or entered at the TTY prompt,
-and sends the new password through stdin. `REDISCLI_AUTH` is written to a 0600
-temporary file and passed to the container with `docker exec --env-file`, and
-the file is removed as soon as the command finishes, so the old password is
+file with the new password only after Redis confirms the change. This update
+uses the explicit secret overwrite path and keeps the previous `.env` as
+`.env.bak` when its content changes.
+The runtime command passes the old password through `REDISCLI_AUTH` when it is
+supplied with `--old-password` or `--old-password-stdin`, or entered at the TTY
+prompt, and sends the new password through stdin. `REDISCLI_AUTH` is written to
+a 0600 temporary file and passed to the container with `docker exec --env-file`,
+and the file is removed as soon as the command finishes, so the old password is
 not placed in process arguments. The readiness poll used while starting Redis
 never sends a password at all: it pings unauthenticated and treats a NOAUTH
 reply as confirmation that the server is up.

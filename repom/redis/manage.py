@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
 from repom.config import config
 from repom.credentials import reject_default_credential, resolve_password
@@ -20,6 +21,7 @@ from repom.docker_compose_safety import (
     format_env_file,
     quote_yaml_string,
     reject_control_characters,
+    validate_secret_file_overwrite,
     write_secret_file,
 )
 from repom.redis.credentials import (
@@ -34,6 +36,7 @@ from basekit.docker_compose import (
 )
 from basekit.docker_manager import DockerCommandExecutor, DockerManager
 from repom.docker_service import (
+    _force_regenerate_from_args,
     ensure_running as ensure_container_service_running,
     remove_service,
     start_service,
@@ -198,23 +201,28 @@ def generate_docker_compose() -> DockerComposeGenerator:
     return generator
 
 
-def generate():
-    """Write Redis compose and redis.conf files."""
+def generate(*, overwrite_secrets: bool = False):
+    """Write Redis files, refusing changed secrets unless overridden."""
 
     manager = RedisManager()
     redis_conf = generate_redis_conf()
     init_dir = manager.get_init_dir()
-    (init_dir / "redis.conf").write_text(redis_conf, encoding="utf-8")
-
-    generator = generate_docker_compose()
     compose_dir = manager.get_compose_dir()
     output_path = compose_dir / COMPOSE_FILENAME
+    env_path = compose_dir / ".env"
+    env_content = format_env_file({"REDIS_PASSWORD": config.redis.password})
+    validate_secret_file_overwrite(
+        env_path,
+        env_content,
+        overwrite_secrets=overwrite_secrets,
+        rotation_commands=("redis_rotate_password",),
+    )
+
+    generator = generate_docker_compose()
+    (init_dir / "redis.conf").write_text(redis_conf, encoding="utf-8")
     generator.write_to_file(output_path)
 
-    write_secret_file(
-        compose_dir / ".env",
-        format_env_file({"REDIS_PASSWORD": config.redis.password}),
-    )
+    write_secret_file(env_path, env_content)
 
     print(f"Generated: {output_path}")
     print(f"   Config: {init_dir / 'redis.conf'}")
@@ -225,10 +233,27 @@ def generate():
     print("   Auth: enabled")
 
 
-def start():
+def start(*, overwrite_secrets: bool = False):
     """Generate files and start Redis."""
 
-    start_service(RedisManager, generate)
+    start_service(
+        RedisManager,
+        lambda: generate(overwrite_secrets=overwrite_secrets),
+    )
+
+
+def main_generate() -> None:
+    """Console entry point for Redis file generation."""
+
+    force = _force_regenerate_from_args("Generate Redis compose files.")
+    generate(overwrite_secrets=force)
+
+
+def main_start() -> None:
+    """Console entry point for starting Redis."""
+
+    force = _force_regenerate_from_args("Generate files and start Redis.")
+    start(overwrite_secrets=force)
 
 
 def stop():
@@ -250,12 +275,20 @@ def ensure_running(*, timeout_seconds: int = 30) -> None:
         RuntimeError: The container runtime is unavailable or Redis fails to start.
     """
 
+    def get_generated_files() -> tuple[Path, Path]:
+        compose_dir = RedisManager().get_compose_dir()
+        return (
+            compose_dir / COMPOSE_FILENAME,
+            compose_dir / ".env",
+        )
+
     ensure_container_service_running(
         RedisManager,
         {"redis": config.redis.container.get_container_name()},
         generate,
         "Redis",
         timeout_seconds,
+        generated_files=get_generated_files,
     )
 
 
@@ -292,7 +325,7 @@ def rotate_password(
     )
     if not dry_run:
         config.redis.password = password
-        generate()
+        generate(overwrite_secrets=True)
     for line in (result.masked_command, result.masked_input.strip()):
         print(line)
     return result

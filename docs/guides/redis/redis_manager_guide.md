@@ -63,6 +63,14 @@ uv run repom_info
 設定の正本は `CONFIG_HOOK` と環境変数です。生成物を手編集しても、次の
 `redis_generate` で上書きされます。
 
+Application `ensure_running()` uses the existing compose files when the
+compose file and `.env` are present. Explicit `redis_generate` and `redis_start`
+regenerate the files, but refuse to replace a `.env` whose secret differs
+from the active config. Rotate a running Redis instance with
+`redis_rotate_password`, or pass `--force-regenerate` for an intentional
+replacement; changed content keeps the previous `.env` as `.env.bak` with mode
+`0600`.
+
 ## 停止と削除
 
 ```bash

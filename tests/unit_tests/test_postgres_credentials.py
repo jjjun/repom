@@ -377,6 +377,34 @@ def test_postgres_main_prompts_for_new_password_in_a_tty(monkeypatch):
     assert rotate.call_args.args[0].new_password == "new-secret"
 
 
+def test_postgres_main_rewrites_generated_env_after_execute(monkeypatch):
+    mock_config = MagicMock()
+    mock_config.postgres.password = "old-secret"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "postgres_rotate_credentials",
+            "--new-password",
+            "new-secret",
+            "--current-password",
+            "old-secret",
+            "--execute",
+        ],
+    )
+
+    with patch("repom.postgres.credentials.config", mock_config):
+        with patch(
+            "repom.postgres.credentials.rotate_postgres_credentials",
+            return_value=MagicMock(dry_run=False, masked_output=()),
+        ):
+            with patch("repom.postgres.manage.generate") as generate:
+                main_postgres()
+
+    assert mock_config.postgres.password == "new-secret"
+    generate.assert_called_once_with(overwrite_secrets=True)
+
+
 def test_pgadmin_main_keeps_new_password_argument_behavior(monkeypatch):
     monkeypatch.setattr(
         sys,
@@ -388,6 +416,27 @@ def test_pgadmin_main_keeps_new_password_argument_behavior(monkeypatch):
         main_pgadmin()
 
     assert rotate.call_args.args[0].new_password == "new-secret"
+
+
+def test_pgadmin_main_rewrites_generated_env_after_execute(monkeypatch):
+    mock_config = MagicMock()
+    mock_config.pgadmin.password = "old-secret"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["pgadmin_rotate_password", "--new-password", "new-secret", "--execute"],
+    )
+
+    with patch("repom.postgres.credentials.config", mock_config):
+        with patch(
+            "repom.postgres.credentials.rotate_pgadmin_password",
+            return_value=MagicMock(dry_run=False, masked_output=()),
+        ):
+            with patch("repom.postgres.manage.generate") as generate:
+                main_pgadmin()
+
+    assert mock_config.pgadmin.password == "new-secret"
+    generate.assert_called_once_with(overwrite_secrets=True)
 
 
 def test_pgadmin_main_requires_explicit_new_password(monkeypatch):
