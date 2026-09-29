@@ -30,6 +30,7 @@ from repom.scripts._backup_utils import (
     run_postgres_via_docker_or_host,
     run_streaming_command,
     snapshot_sqlite_database,
+    sqlite_backup_suffixes,
     sqlite_backup_into,
     warn_if_checksum_missing,
     write_checksum,
@@ -38,14 +39,28 @@ from repom.scripts._backup_utils import (
 logger = get_logger(__name__)
 
 
-def display_backups(backups: list[Path], target: str, suffix: str) -> Optional[Path]:
+def _backup_suffix(name: str, suffixes: tuple[str, ...]) -> Optional[str]:
+    """Return the matching backup suffix for the configured database type."""
+    return next((candidate for candidate in suffixes if name.endswith(candidate)), None)
+
+
+def _backup_source_database(name: str, suffixes: tuple[str, ...]) -> Optional[str]:
+    matched_suffix = _backup_suffix(name, suffixes)
+    if matched_suffix is None:
+        return None
+    return parse_backup_source_database(name, matched_suffix)
+
+
+def display_backups(
+    backups: list[Path], target: str, suffixes: tuple[str, ...]
+) -> Optional[Path]:
     """Display the list of backups and let the user select one.
 
     Args:
         backups: list of backup files, current database's backups first
         target: name of the database a restore would write into
-        suffix: backup file suffix for the current db_type (".sql.gz" or
-            ".sqlite3"), used to parse each backup's source database
+        suffixes: backup file suffixes for the current db_type, used to parse
+            each backup's source database
 
     Returns:
         the selected backup file, or None when cancelled
@@ -62,7 +77,7 @@ def display_backups(backups: list[Path], target: str, suffix: str) -> Optional[P
         modified = datetime.fromtimestamp(backup.stat().st_mtime)
         modified_str = modified.strftime("%Y-%m-%d %H:%M:%S")
         latest_mark = " <- latest" if i == 1 else ""
-        source = parse_backup_source_database(backup.name, suffix)
+        source = _backup_source_database(backup.name, suffixes)
         if source is None:
             source_mark = " [legacy/unknown source database]"
         elif source != target:
@@ -287,7 +302,12 @@ def main():
         raise RestoreError(f"Backup directory not found: {config.db_backup_path}")
 
     # Get the backup files
-    backups = get_backups(config.db_backup_path, config.db_type)
+    suffixes = (
+        (".sql.gz",)
+        if config.db_type == "postgres"
+        else sqlite_backup_suffixes(config.sqlite.db_file_path)
+    )
+    backups = get_backups(config.db_backup_path, config.db_type, suffixes)
 
     if not backups:
         print(f"No backups found in {config.db_backup_path}")
@@ -297,15 +317,14 @@ def main():
     # List the target database's own backups first, then backups from other
     # (or unknown/legacy) source databases.
     target = target_database_name()
-    suffix = ".sql.gz" if config.db_type == "postgres" else ".sqlite3"
     current_db_backups = [
         backup for backup in backups
-        if parse_backup_source_database(backup.name, suffix) == target
+        if _backup_source_database(backup.name, suffixes) == target
     ]
     other_backups = [backup for backup in backups if backup not in current_db_backups]
 
     # Let the user select a backup
-    selected = display_backups(current_db_backups + other_backups, target, suffix)
+    selected = display_backups(current_db_backups + other_backups, target, suffixes)
 
     if not selected:
         logger.info("Restore cancelled by user")
@@ -315,7 +334,12 @@ def main():
     # restore target, and require typing the target name (instead of "y")
     # whenever the backup's source is unknown or does not match, so a
     # cross-database restore can't happen with a single keystroke.
-    source = parse_backup_source_database(selected.name, suffix)
+    matched_suffix = _backup_suffix(selected.name, suffixes)
+    source = (
+        parse_backup_source_database(selected.name, matched_suffix)
+        if matched_suffix is not None
+        else None
+    )
     print(f"\nSelected: {selected.name}")
     print(f"  Source database: {source if source is not None else 'unknown (legacy backup)'}")
     print(f"  Target database: {target}")
@@ -340,14 +364,14 @@ def main():
             logger.info("Restore cancelled by user")
             return
 
-    # Determine db_type from the file extension
-    is_sqlite = selected.suffix == '.sqlite3'
-    is_postgres = selected.name.endswith('.sql.gz')
+    # Confirm the selected backup matches the configured database type.
+    is_sqlite = config.db_type == "sqlite" and matched_suffix is not None
+    is_postgres = config.db_type == "postgres" and matched_suffix is not None
 
     # Run the restore
-    if is_sqlite and config.db_type == 'sqlite':
+    if is_sqlite:
         restore_sqlite(selected)
-    elif is_postgres and config.db_type == 'postgres':
+    elif is_postgres:
         restore_postgresql(selected)
 
     logger.info("Database restore process completed")

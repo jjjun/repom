@@ -9,7 +9,7 @@ from basekit.docker_manager import DockerCommandExecutor
 
 from _fake_pg_client import fake_client_command, missing_binary_command
 from repom.config import PostgresTlsSettings
-from repom.scripts import _backup_utils, db_restore
+from repom.scripts import _backup_utils, db_backup, db_restore
 from repom.scripts._backup_utils import ChecksumError, RestoreError, checksum_path, write_checksum
 
 
@@ -646,6 +646,59 @@ def _mock_sqlite_config_for_main(backup_dir, db_file_path):
     config = _mock_sqlite_config(backup_dir, db_file_path)
     config.db_type = "sqlite"
     return config
+
+
+def test_main_lists_and_restores_sqlite_db_backup(monkeypatch, tmp_path, capsys):
+    current_db = tmp_path / "app.db"
+    source = _make_sqlite_db(current_db, row_id=42)
+    source.close()
+
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    other_backup = backup_dir / "other_20260101_000000.db"
+    other_source = _make_sqlite_db(other_backup, row_id=99)
+    other_source.close()
+    write_checksum(other_backup)
+
+    partial_backup = backup_dir / "partial_20260101_000000.db.partial"
+    partial_backup.write_bytes(b"in progress")
+    checksum_only = backup_dir / "checksum_20260101_000000.db.sha256"
+    checksum_only.write_text("checksum", encoding="utf-8")
+
+    config = _mock_sqlite_config_for_main(backup_dir, current_db)
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.setattr(db_restore, "config", config)
+
+    db_backup.backup_sqlite()
+
+    backups = _backup_utils.get_backups(
+        backup_dir, "sqlite", _backup_utils.sqlite_backup_suffixes(current_db)
+    )
+    app_backups = [backup for backup in backups if backup.name.startswith("app_")]
+    assert len(app_backups) == 1
+    assert set(backups) == {app_backups[0], other_backup}
+    assert partial_backup not in backups
+    assert checksum_only not in backups
+
+    changed_db = sqlite3.connect(str(current_db))
+    changed_db.execute("UPDATE items SET id = 7")
+    changed_db.commit()
+    changed_db.close()
+
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "y"]))
+    db_restore.main()
+
+    output = capsys.readouterr().out
+    assert output.index(f"[1] {app_backups[0].name}") < output.index(
+        f"[2] {other_backup.name}"
+    )
+    assert "[other database: other]" in output
+
+    restored_db = sqlite3.connect(str(current_db))
+    try:
+        assert restored_db.execute("SELECT id FROM items").fetchall() == [(42,)]
+    finally:
+        restored_db.close()
 
 
 def test_main_raises_restore_error_on_sqlite_checksum_mismatch(monkeypatch, tmp_path):

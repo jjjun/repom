@@ -253,14 +253,36 @@ def format_size(size_bytes: int) -> str:
     return f"{size_bytes / (1024 * 1024):.2f} MB"
 
 
-def get_backups(backup_dir: str | Path, db_type: str) -> list[Path]:
+def sqlite_backup_suffixes(db_file_path: str | Path) -> tuple[str, ...]:
+    """Return the configured SQLite backup suffix and the legacy suffix."""
+    suffixes = (Path(db_file_path).suffix, ".sqlite3")
+    if not suffixes[0]:
+        # An extensionless SQLite file yields an empty suffix, so only legacy
+        # .sqlite3 backups are listed.
+        return (".sqlite3",)
+    return tuple(dict.fromkeys(suffix for suffix in suffixes if suffix))
+
+
+def get_backups(
+    backup_dir: str | Path,
+    db_type: str,
+    suffixes: tuple[str, ...] | None = None,
+) -> list[Path]:
     """Return backup files matching ``db_type``, newest first."""
     backup_path = Path(backup_dir)
     if not backup_path.exists():
         return []
 
     if db_type == "sqlite":
-        backups = list(backup_path.glob("*.sqlite3"))
+        if suffixes is None:
+            suffixes = sqlite_backup_suffixes(config.sqlite.db_file_path)
+        backups = [
+            path
+            for path in backup_path.iterdir()
+            if path.is_file()
+            and not path.name.endswith((".partial", CHECKSUM_SUFFIX))
+            and any(path.name.endswith(suffix) for suffix in suffixes)
+        ]
     elif db_type == "postgres":
         backups = list(backup_path.glob("*.sql.gz"))
     else:

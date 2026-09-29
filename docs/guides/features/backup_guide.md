@@ -29,7 +29,9 @@ uv run db_backup
 書き込まれます（`postgres` / `sqlite` サブディレクトリは追加されません）。
 
 - PostgreSQL: `<data_path>/backups/postgres/<postgres_db>_<YYYYmmdd_HHMMSS>.sql.gz`
-- SQLite: `<data_path>/backups/sqlite/<db のファイル名 stem>_<YYYYmmdd_HHMMSS>.sqlite3`
+- SQLite: `<data_path>/backups/sqlite/<db のファイル名 stem>_<YYYYmmdd_HHMMSS><db のファイル名拡張子>`
+
+従来の `.sqlite3` バックアップも引き続き一覧に表示されます。
 
 いずれも作成のたびに `.sha256` サイドカーファイル（`write_checksum()`）が
 書き込まれ、`db_restore` はリストア前にこれを検証します
