@@ -35,7 +35,7 @@ class TestUser:
         user2 = repo.save(User(name='Bob'))
         user3 = repo.save(User(name='Charlie'))
         
-        results = repo.find()
+        results = repo.find(limit=100)
         assert len(results) == 3
     
     def test_get_user_by_id(self, db_test):
@@ -85,7 +85,7 @@ def setup_users(db_test):
 class TestUserRepository:
     def test_find_all_users(self, setup_users):
         """フィクスチャを受け取って使用"""
-        results = setup_users['repo'].find()
+        results = setup_users['repo'].find(limit=100)
         assert len(results) == 3
     
     def test_get_user_by_id(self, setup_users):
@@ -95,7 +95,7 @@ class TestUserRepository:
     
     def test_filter_by_age(self, setup_users):
         """フィクスチャのデータを利用した検索テスト"""
-        results = setup_users['repo'].find(filter_params={'age__gte': 30})
+        results = setup_users['repo'].find(filters=[User.age >= 30], limit=100)
         assert len(results) == 2
 ```
 
@@ -113,9 +113,10 @@ class TestUserRepository:
 
 ```python
 import pytest
+import pytest_asyncio
 from repom import AsyncBaseRepository
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def setup_users(async_db_test):
     """非同期フィクスチャ（autouse=False）"""
     repo = AsyncUserRepository(session=async_db_test)
@@ -138,31 +139,28 @@ class TestAsyncUserRepository:
     @pytest.mark.asyncio
     async def test_find_all_users(self, setup_users):
         """非同期フィクスチャを受け取る"""
-        data = await setup_users  # await で結果を取得
-        results = await data['repo'].find()
+        data = setup_users
+        results = await data['repo'].find(limit=100)
         assert len(results) == 3
     
     @pytest.mark.asyncio
     async def test_get_user_by_id(self, setup_users):
-        data = await setup_users
+        data = setup_users
         user = await data['repo'].get_by_id(data['user1'].id)
         assert user.name == 'Alice'
 ```
 
-### ⚠️ 重要: autouse=True は使えない
+### 非同期フィクスチャの定義
 
-pytest-asyncio は **autouse=True の非同期フィクスチャをサポートしていません**。
+`async def` フィクスチャには `@pytest_asyncio.fixture` を使います。`autouse=True` も
+利用できます。通常の `@pytest.fixture` では非同期フィクスチャを処理できず、pytest 9
+ではエラーになります。
 
 ```python
-# ❌ これはエラーになる
-@pytest.fixture(autouse=True)  # autouse=True は非同期で使えない
-async def setup_method(async_db_test):
-    repo = AsyncUserRepository(session=async_db_test)
-    # ...
-    return repo
+import pytest_asyncio
 
-# ✅ autouse=False（デフォルト）で明示的に指定
-@pytest.fixture  # autouse=False がデフォルト
+# ✅ autouse=True も使用可能
+@pytest_asyncio.fixture(autouse=True)
 async def setup_method(async_db_test):
     repo = AsyncUserRepository(session=async_db_test)
     # ...
@@ -170,12 +168,12 @@ async def setup_method(async_db_test):
 ```
 
 **理由:**
-- pytest は autouse フィクスチャを自動実行しますが、非同期関数の await を自動で行えない
-- pytest 9 ではエラーになる予定（現在は警告）
+- `pytest_asyncio.fixture` が async fixture のセットアップ・teardown を管理する
+- `autouse=True` は同期・非同期どちらの fixture でも指定できる
 
 **解決策:**
-- autouse を使わず、各テストで明示的にフィクスチャを受け取る
-- 同期フィクスチャで autouse=True を使いたい場合は、データ作成を同期的に行う
+- async fixture には `@pytest_asyncio.fixture` を使う
+- fixture の値を引数で受け取ると、テスト内ではすでに解決済みなので `await` しない
 
 ---
 
@@ -280,7 +278,7 @@ def setup_users(db_test):
     }
 
 def test_find_users(setup_users):
-    results = setup_users['repo'].find()
+    results = setup_users['repo'].find(limit=100)
     assert len(results) == 4  # admin + 3 users
 
 # ❌ 悪い例：タプルだとインデックスが不明瞭
@@ -289,38 +287,27 @@ def setup_users(db_test):
     return repo, admin_user, [user1, user2, user3]
 
 def test_find_users(setup_users):
-    results = setup_users[0].find()  # 0 が何か分からない
+    results = setup_users[0].find(limit=100)  # 0 が何か分からない
 ```
 
 ### 3. フィクスチャは共通資産として扱う
 
 ```python
 # tests/conftest.py に共通フィクスチャを定義
-@pytest.fixture
-def db_engine():
-    """全テストで共有するDBエンジン"""
-    engine = create_engine('sqlite:///:memory:')
-    BaseModel.metadata.create_all(engine)
-    yield engine
-    engine.dispose()
+from repom.testing import create_test_fixtures
 
-@pytest.fixture
-def db_test(db_engine):
-    """各テストごとにトランザクションを提供"""
-    connection = db_engine.connect()
-    transaction = connection.begin()
-    session = Session(bind=connection)
-    
-    yield session
-    
-    transaction.rollback()
-    connection.close()
+db_engine, db_test = create_test_fixtures()
 ```
+
+`db_engine` は session scope、`db_test` は function scope の `scoped_session` です。
+非同期テストには `create_async_test_fixtures()` を使います。どちらの factory も、
+`EXEC_ENV` が `test` でなく、in-memory SQLite でもない DB を指定する場合は
+`allow_destructive=True` が必要です。
 
 ### 4. docstring でフィクスチャの目的を明記
 
 ```python
-@pytest.fixture
+@pytest_asyncio.fixture
 async def setup_method(async_db_test):
     """非同期テスト用のセットアップフィクスチャ
     
@@ -349,34 +336,25 @@ async def setup_method(async_db_test):
 
 ## よくある問題と解決策
 
-### 問題1: 非同期フィクスチャで autouse=True エラー
+### 問題1: 非同期フィクスチャの定義と取得
 
-**エラー内容:**
-```
-PytestRemovedIn9Warning: 'test_xxx' requested an async fixture 'setup_method' 
-with autouse=True, with no plugin or hook that handled it.
-```
+pytest 9 以降では、`@pytest.fixture` で定義した async fixture を要求するとエラーに
+なります。`pytest-asyncio` を使う場合は `@pytest_asyncio.fixture` で定義します。
 
-**原因:**  
-pytest-asyncio は autouse=True の非同期フィクスチャをサポートしていない。
-
-**解決策:**
+fixture の返り値は引数として受け取った時点で解決済みです。`await` しないでください。
 ```python
-# ❌ autouse=True は使えない
-@pytest.fixture(autouse=True)
+import pytest
+import pytest_asyncio
+
+# ✅ pytest_asyncio.fixture で定義
+@pytest_asyncio.fixture
 async def setup_method(async_db_test):
     # ...
 
-# ✅ autouse=False（デフォルト）で明示的に指定
-@pytest.fixture
-async def setup_method(async_db_test):
-    # ...
-
-# テストで明示的に受け取る
 @pytest.mark.asyncio
 async def test_find(self, setup_method):
-    data = await setup_method
-    results = await data['repo'].find()
+    data = setup_method
+    results = await data['repo'].find(limit=100)
 ```
 
 ### 問題2: フィクスチャのデータが他のテストに影響
@@ -395,18 +373,10 @@ def setup_users(db_test):  # scope指定なし = function
     """各テストで新しいデータを作成"""
     # ...
 
-# または Transaction Rollback を使う（repom のデフォルト）
-@pytest.fixture
-def db_test(db_engine):
-    """各テストでトランザクションをロールバック"""
-    connection = db_engine.connect()
-    transaction = connection.begin()
-    session = Session(bind=connection)
-    
-    yield session
-    
-    transaction.rollback()  # テスト後にロールバック
-    connection.close()
+# または repom.testing の Transaction Rollback fixture factory を使う
+from repom.testing import create_test_fixtures
+
+db_engine, db_test = create_test_fixtures()
 ```
 
 ### 問題3: フィクスチャが複雑になりすぎる

@@ -17,15 +17,28 @@ uv sync
 uv run pytest
 ```
 
-任意機能は必要なものだけ追加します。
+repom 自体を開発する場合、`uv sync` は dev dependency group 経由で PostgreSQL
+（同期・非同期）、Redis、`aiosqlite` を含む開発用依存関係をインストールします。
+
+### 別のプロジェクトで使う
+
+別プロジェクトには Git dependency として追加します。
 
 ```bash
-uv sync --extra postgres        # psycopg
-uv sync --extra postgres-async  # asyncpg
-uv sync --extra redis
-uv sync --extra async           # aiosqlite
-uv sync --extra async-all       # aiosqlite + asyncpg
+uv add "repom @ git+https://github.com/jjjun/repom.git"
 ```
+
+PostgreSQL や Redis の機能が必要な場合は、利用する extras を指定します。例えば:
+
+```bash
+uv add "repom[postgres,postgres-async,redis] @ git+https://github.com/jjjun/repom.git"
+```
+
+配布 wheel には `repom` パッケージのみが含まれ、リポジトリ直下の `alembic/`
+（`env.py`、`script.py.mako`）はインストールされません。repom の Alembic 環境を
+使う場合は、mine-py や fast-domain と同様に Git submodule などで repom の checkout
+を用意し、`script_location` をその checkout 内の `alembic/` に設定してください。
+詳細は [Alembic migration ガイド](docs/guides/features/alembic_migration_guide.md)を参照してください。
 
 ## 基本的な使い方
 
@@ -194,7 +207,22 @@ def hook_config(config):
 | PostgreSQL | `postgres_generate`, `postgres_start`, `postgres_stop`, `postgres_remove`, `postgres_rotate_credentials`, `pgadmin_rotate_password` |
 | Redis | `redis_generate`, `redis_start`, `redis_stop`, `redis_remove`, `redis_rotate_password` |
 
+`alembic` コマンドは `[project.scripts]` に登録された repom の console script では
+なく、Alembic dependency が提供する CLI です。
+
 すべて `uv run <command>` として実行します。
+
+## 公開 API
+
+`BaseModel`、`BaseRepository`、`AsyncBaseRepository`、`SoftDeletableMixin` は上の「基本的な使い方」で説明しています。
+
+| 分野 | 名前 | ガイド |
+| --- | --- | --- |
+| 検索パラメータ | `FilterParams`, `MatchMode`, `MatchColumn`, `contains_column`, `prefix_column` | [検索パラメータガイド](docs/guides/repository/repository_filter_params_guide.md) |
+| 並び順 | `get_order_by_columns`, `get_order_by_default_value`, `get_order_by_values`, `VirtualColumnError` | [並び順ガイド](docs/guides/repository/order_by_guide.md) |
+| バリデーション | `NulByteError` | [NUL byte validation ガイド](docs/guides/features/nul_byte_validation.md) |
+| 診断 | `QueryAnalyzer` | [QueryAnalyzer ガイド](docs/guides/features/query_analyzer_guide.md) |
+| ロギング | `make_timed_rotating_handler`, `DateNamedDailyFileHandler` | [ロギングガイド](docs/guides/features/logging_guide.md) |
 
 ## テスト
 
