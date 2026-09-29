@@ -44,9 +44,31 @@ class Membership(BaseModel, use_id=False):
     user_id: Mapped[int] = mapped_column(primary_key=True)
 ```
 
-UUID values are assigned during construction. Timestamp values are populated
-when SQLAlchemy inserts or updates the row, so flush before relying on their
-final values.
+The flags can also be declared as class attributes. Subclasses inherit those
+values, and class parameters take precedence when both forms are supplied. An
+intermediate abstract class without `__tablename__` receives no generated
+columns; its concrete subclasses apply the inherited flags when their table
+is mapped:
+
+```python
+class CompositeModel(BaseModel):
+    __abstract__ = True
+    use_id = False
+
+
+class ExternalMembership(CompositeModel):
+    __tablename__ = "external_memberships"
+
+    account_id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(primary_key=True)
+```
+
+UUID values are assigned during construction. Timestamp columns have no Python
+or server defaults. On INSERT, `AutoDateTime` supplies their values while
+SQLAlchemy binds the INSERT, so the model attributes are still `None` after a
+flush; call `session.refresh(instance)` to load the stored timestamps. On
+UPDATE, the `updated_at` event sets that attribute before the flush. `repo.save()`
+refreshes only when it uses an internal session.
 
 ## Custom SQLAlchemy types
 
@@ -98,12 +120,9 @@ distinct requested value becomes a correlated `EXISTS` against the
 `json_each` expansion, rather than a table-valued join added to the outer
 query, so a repeated array element or several requested values never
 multiply the outer model rows, inflate `count()`, or push a matching row
-past a `limit`/`offset` page. It is dialect-aware: PostgreSQL's
-`json_each()`/`json_each_text()` only accept JSON objects and its `json`
-type has no equality operator, so on PostgreSQL the element match compiles
-to `json_array_elements_text()` and the empty-list match compiles to
-`json_array_length(...) == 0`. SQLite keeps using `json_each()`, which
-already handles arrays and compares dynamically typed values directly.
+past a `limit`/`offset` page. For element matching, it uses
+`json_array_elements_text()` on PostgreSQL and `json_each()` on SQLite.
+For an empty-list match, both dialects use `json_array_length(...) == 0`.
 Callers do not need to branch on dialect themselves.
 
 ## Mass-assignment and serialization allowlists

@@ -6,6 +6,7 @@
 
 - [システムカラムとカスタム型](model/system_columns_and_custom_types.md)
 - [Soft Delete](model/soft_delete_guide.md)
+- [ManyToManyMixin](model/many_to_many_guide.md)
 
 ## Repository
 
