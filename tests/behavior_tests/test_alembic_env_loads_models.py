@@ -14,26 +14,24 @@ import sys
 from pathlib import Path
 import os
 import pytest
-import tempfile
 import shutil
 import re
 
 
-def alembic_test_env():
+def alembic_test_env(test_root: Path):
     env = os.environ.copy()
     env["EXEC_ENV"] = "test"
     env["DB_TYPE"] = "sqlite"
-    env.pop("CONFIG_HOOK", None)
+    env["CONFIG_HOOK"] = "alembic_test_config:hook_config"
+    env["REPOM_TEST_ROOT"] = str(test_root)
+    project_root = Path(__file__).parent.parent.parent.resolve()
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(project_root / "tests"), env.get("PYTHONPATH", "")]
+    )
     return env
 
 
-def remove_file_based_test_db(project_root: Path):
-    test_db = project_root / "data" / "repom" / "repom_test.sqlite3"
-    if test_db.exists():
-        test_db.unlink()
-
-
-def test_alembic_env_loads_without_error():
+def test_alembic_env_loads_without_error(tmp_path):
     """
     Alembic の env.py が正しく読み込まれ、モデルロード処理が成功することを確認
 
@@ -57,7 +55,7 @@ def test_alembic_env_loads_without_error():
         capture_output=True,
         text=True,
         timeout=10,
-        env=alembic_test_env(),
+        env=alembic_test_env(tmp_path),
     )
 
     # 実行結果を確認
@@ -100,7 +98,7 @@ def test_alembic_env_loads_without_error():
     )
 
 
-def test_alembic_revision_check_loads_without_error():
+def test_alembic_revision_check_loads_without_error(tmp_path):
     """
     Alembic revision check コマンドが正常に動作することを確認
 
@@ -123,7 +121,7 @@ def test_alembic_revision_check_loads_without_error():
         capture_output=True,
         text=True,
         timeout=10,
-        env=alembic_test_env(),
+        env=alembic_test_env(tmp_path),
     )
 
     # エラーが発生しないことを確認
@@ -146,7 +144,7 @@ def test_alembic_revision_check_loads_without_error():
     "heads",
     "history",
 ])
-def test_alembic_commands_load_env_correctly(alembic_command):
+def test_alembic_commands_load_env_correctly(alembic_command, tmp_path):
     """
     複数の Alembic コマンドで env.py が正しく読み込まれることを確認
 
@@ -166,7 +164,7 @@ def test_alembic_commands_load_env_correctly(alembic_command):
         capture_output=True,
         text=True,
         timeout=10,
-        env=alembic_test_env(),
+        env=alembic_test_env(tmp_path),
     )
 
     # env.py のロードに失敗していないことを確認
@@ -182,7 +180,7 @@ def test_alembic_commands_load_env_correctly(alembic_command):
     )
 
 
-def test_alembic_revision_autogenerate_works():
+def test_alembic_revision_autogenerate_works(tmp_path):
     """
     Alembic の autogenerate 機能が正しく動作することを確認
 
@@ -200,20 +198,35 @@ def test_alembic_revision_autogenerate_works():
         SQLITE_USE_FILE_DB=1 を使用（test 環境のデフォルトは in-memory SQLite のため、
         subprocess 間でDB状態が保持されない）
     """
-    project_root = Path(__file__).parent.parent.parent
-    versions_dir = project_root / "alembic" / "versions"
+    project_root = Path(__file__).parent.parent.parent.resolve()
+    versions_dir = tmp_path / "alembic" / "versions"
+    versions_dir.mkdir(parents=True)
+    ini_path = tmp_path / "alembic.ini"
+    ini_content = (project_root / "alembic.ini").read_text(encoding="utf-8")
+    ini_content = ini_content.replace(
+        "script_location = alembic",
+        f"script_location = {project_root / 'alembic'}",
+        1,
+    )
+    ini_content = ini_content.replace(
+        "version_locations = alembic/versions",
+        "version_locations = %(here)s/alembic/versions",
+        1,
+    )
+    ini_path.write_text(ini_content, encoding="utf-8")
 
     # test 環境でファイルベースDB を使用（in-memory は subprocess 間で状態が保持されない）
-    test_env = alembic_test_env()
+    test_env = alembic_test_env(tmp_path)
     test_env["SQLITE_USE_FILE_DB"] = "1"
-    remove_file_based_test_db(project_root)
+    alembic_command = [sys.executable, "-m", "alembic", "-c", str(ini_path)]
 
     # 既存のマイグレーションファイルを一時バックアップ
-    temp_backup_dir = tempfile.mkdtemp()
+    temp_backup_dir = tmp_path / "versions_backup"
+    temp_backup_dir.mkdir()
     try:
         # DBを最新状態にする
         upgrade_result = subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            [*alembic_command, "upgrade", "head"],
             cwd=project_root,
             capture_output=True,
             text=True,
@@ -236,9 +249,11 @@ def test_alembic_revision_autogenerate_works():
         # テスト用のマイグレーションファイルを生成
         result = subprocess.run(
             [
-                sys.executable, "-m", "alembic", "revision",
+                *alembic_command,
+                "revision",
                 "--autogenerate",
-                "-m", "test_migration_generation"
+                "-m",
+                "test_migration_generation",
             ],
             cwd=project_root,
             capture_output=True,
@@ -300,13 +315,11 @@ def test_alembic_revision_autogenerate_works():
     finally:
         # バックアップを復元
         if versions_dir.exists():
-            for file in Path(temp_backup_dir).glob("*.py"):
+            for file in temp_backup_dir.glob("*.py"):
                 shutil.copy2(file, versions_dir)
-        shutil.rmtree(temp_backup_dir)
-        remove_file_based_test_db(project_root)
 
 
-def test_alembic_upgrade_head_works():
+def test_alembic_upgrade_head_works(tmp_path):
     """
     Alembic upgrade head が正常に動作することを確認
 
@@ -328,7 +341,7 @@ def test_alembic_upgrade_head_works():
         capture_output=True,
         text=True,
         timeout=30,
-        env=alembic_test_env(),
+        env=alembic_test_env(tmp_path),
     )
 
     # コマンドが成功すること

@@ -22,6 +22,7 @@ from pathlib import Path
 
 def configure_database(config):
     database_path = Path(os.environ["ALEMBIC_HOOK_TEST_DB"]).as_posix()
+    config.root_path = os.environ["ALEMBIC_HOOK_TEST_ROOT"]
     config.db_url = f"sqlite:///{database_path}"
     config.allowed_package_prefixes = {"alembic_test_hooks", "repom."}
     return config
@@ -62,6 +63,7 @@ def _alembic_env(tmp_path: Path) -> dict[str, str]:
     env["DB_TYPE"] = "sqlite"
     env["CONFIG_HOOK"] = "alembic_test_hooks:configure_database"
     env["ALEMBIC_HOOK_TEST_DB"] = str(tmp_path / "hook-test.sqlite3")
+    env["ALEMBIC_HOOK_TEST_ROOT"] = str(tmp_path / "repom-root")
     env["ALEMBIC_HOOK_TEST_MARKER"] = str(tmp_path / "hook-called.txt")
     env["PYTHONPATH"] = os.pathsep.join(
         filter(None, (str(tmp_path), env.get("PYTHONPATH")))

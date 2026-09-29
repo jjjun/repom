@@ -24,13 +24,14 @@ from repom.redis.manage import (
 
 
 @pytest.fixture(autouse=True)
-def _redis_password_configured():
+def _redis_password_configured(tmp_path, monkeypatch):
     """Give every test a real password by default.
 
     ``generate_redis_conf()``/``generate_docker_compose()`` now fail closed
     on an unconfigured password; tests that care about that behavior
     override this with their own ``patch.object(config.redis, "password", ...)``.
     """
+    monkeypatch.setattr(config, "root_path", str(tmp_path))
     with patch.object(config.redis, "password", "test-redis-password"):
         yield
 

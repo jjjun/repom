@@ -1,12 +1,66 @@
 # fmt: off
+import hashlib
 import os
+import shutil
 import sys
 import pytest
 import logging
+from pathlib import Path
+from tempfile import mkdtemp
+
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+_TEST_SESSION_ROOT = mkdtemp(prefix='repom-tests-')
+_ORIGINAL_CONFIG_HOOK = os.environ.get('CONFIG_HOOK')
+if _ORIGINAL_CONFIG_HOOK and _ORIGINAL_CONFIG_HOOK.strip():
+    os.environ['REPOM_TEST_ORIGINAL_CONFIG_HOOK'] = _ORIGINAL_CONFIG_HOOK
+elif 'REPOM_TEST_ORIGINAL_CONFIG_HOOK' in os.environ:
+    del os.environ['REPOM_TEST_ORIGINAL_CONFIG_HOOK']
+
+os.environ['REPOM_TEST_ROOT'] = _TEST_SESSION_ROOT
+os.environ['CONFIG_HOOK'] = 'tests.session_config:hook_config'
+
+
+def _snapshot_protected_paths():
+    """Capture repository data and migration files that tests must not change."""
+    repo_root = Path(__file__).resolve().parents[1]
+    protected_roots = (
+        repo_root / 'data',
+        repo_root / 'data_master',
+        repo_root / 'alembic' / 'versions',
+    )
+    snapshot = {}
+
+    for root in protected_roots:
+        if not root.exists():
+            continue
+
+        paths = (root, *root.rglob('*'))
+        for path in paths:
+            relative_path = path.relative_to(repo_root)
+            file_stat = path.lstat()
+            entry = {
+                'mode': file_stat.st_mode,
+                'mtime_ns': file_stat.st_mtime_ns,
+                'size': file_stat.st_size,
+            }
+            if path.is_symlink():
+                entry['target'] = os.readlink(path)
+            elif path.is_file():
+                entry['content_hash'] = hashlib.sha256(path.read_bytes()).digest()
+            snapshot[relative_path] = entry
+
+    return snapshot
+
+
+_PROTECTED_PATHS_AT_IMPORT = _snapshot_protected_paths()
 
 os.environ['EXEC_ENV'] = 'test'
 
-from repom.testing import create_test_fixtures, create_async_test_fixtures
+from repom.testing import create_test_fixtures, create_async_test_fixtures  # noqa: E402
 
 # テストモデルをインポート（自動登録される）
 
@@ -16,15 +70,28 @@ def repom_config_hook_for_reload(monkeypatch):
     """Set repom's default hook and return a callback to restore its prior value."""
     had_config_hook = 'CONFIG_HOOK' in os.environ
     original_config_hook = os.environ.get('CONFIG_HOOK')
-    monkeypatch.setenv('CONFIG_HOOK', 'repom.config_hook:hook_config')
+    had_original_hook = 'REPOM_TEST_ORIGINAL_CONFIG_HOOK' in os.environ
+    original_hook = os.environ.get('REPOM_TEST_ORIGINAL_CONFIG_HOOK')
+    monkeypatch.setenv('CONFIG_HOOK', 'tests.session_config:hook_config')
+    monkeypatch.setenv(
+        'REPOM_TEST_ORIGINAL_CONFIG_HOOK', 'repom.config_hook:hook_config'
+    )
 
     def restore_config_hook():
         if had_config_hook:
             monkeypatch.setenv('CONFIG_HOOK', original_config_hook)
         else:
             monkeypatch.delenv('CONFIG_HOOK', raising=False)
+        if had_original_hook:
+            monkeypatch.setenv('REPOM_TEST_ORIGINAL_CONFIG_HOOK', original_hook)
+        else:
+            monkeypatch.delenv('REPOM_TEST_ORIGINAL_CONFIG_HOOK', raising=False)
 
     return restore_config_hook
+
+
+def pytest_sessionfinish(session, exitstatus):
+    shutil.rmtree(_TEST_SESSION_ROOT, ignore_errors=True)
 
 
 def _debug_logging_enabled(config):
@@ -46,10 +113,7 @@ def pytest_configure(config):
         logging.basicConfig(
             level=logging.DEBUG,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.StreamHandler(),
-                logging.FileHandler('data/repom/logs/test.log', encoding='utf-8')
-            ]
+            handlers=[logging.StreamHandler()]
         )
         logging.getLogger('repom').setLevel(logging.DEBUG)
     else:
@@ -81,7 +145,7 @@ def pytest_collection_modifyitems(items):
 
 
 @pytest.fixture(scope='session', autouse=True)
-def setup_database_tables():
+def setup_database_tables(protect_repository_data, redirect_test_logs):
     """
     データベースタイプに応じてテーブルを自動作成
 
@@ -121,7 +185,7 @@ def setup_database_tables():
 
 
 @pytest.fixture(scope='session', autouse=True)
-def setup_test_models(db_engine):
+def setup_test_models(protect_repository_data, redirect_test_logs, db_engine):
     """テストモデルのテーブルを作成
 
     このフィクスチャは session スコープで自動実行され、
@@ -151,6 +215,70 @@ db_engine, db_test = create_test_fixtures()
 
 # async 版（新規）
 async_db_engine, async_db_test = create_async_test_fixtures()
+
+
+@pytest.fixture(scope='session', autouse=True)
+def protect_repository_data():
+    """Fail if the test session modifies local data or migration files."""
+    before = _PROTECTED_PATHS_AT_IMPORT
+    yield
+    after = _snapshot_protected_paths()
+
+    changed_paths = sorted(
+        path
+        for path in before.keys() | after.keys()
+        if before.get(path) != after.get(path)
+    )
+    if changed_paths:
+        changed_list = '\n'.join(f'  {path}' for path in changed_paths)
+        pytest.fail(
+            'Tests changed protected repository data or migrations:\n'
+            f'{changed_list}',
+            pytrace=False,
+        )
+
+
+@pytest.fixture(scope='session', autouse=True)
+def redirect_test_logs(protect_repository_data, tmp_path_factory):
+    """Keep default application log handlers outside the repository data tree."""
+    from repom.config import config
+
+    logger = logging.getLogger('repom')
+    original_handlers = list(logger.handlers)
+    test_log_path = tmp_path_factory.mktemp('repom-test-logs')
+    config.log_path = str(test_log_path)
+
+    for handler in original_handlers:
+        if isinstance(handler, logging.FileHandler):
+            logger.removeHandler(handler)
+            handler.close()
+
+    yield
+
+    for handler in logger.handlers[:]:
+        if isinstance(handler, logging.FileHandler):
+            logger.removeHandler(handler)
+            handler.close()
+
+
+@pytest.fixture(autouse=True)
+def isolate_test_file_logs(tmp_path, monkeypatch):
+    """Keep file handlers created by tests inside each test's temporary directory."""
+    from repom.config import config
+
+    monkeypatch.setattr(config, 'log_path', str(tmp_path))
+    logger = logging.getLogger('repom')
+    for handler in logger.handlers[:]:
+        if isinstance(handler, logging.FileHandler):
+            logger.removeHandler(handler)
+            handler.close()
+
+    yield
+
+    for handler in logger.handlers[:]:
+        if isinstance(handler, logging.FileHandler):
+            logger.removeHandler(handler)
+            handler.close()
 
 
 # ==================== Test Cleanup ====================

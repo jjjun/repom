@@ -66,10 +66,10 @@ class TestEngineKwargsReflectPoolSettings:
         assert kwargs["pool_recycle"] == 1800
         assert kwargs["pool_pre_ping"] is False
 
-    def test_sqlite_file_reflects_configured_values(self):
+    def test_sqlite_file_reflects_configured_values(self, tmp_path):
         config = RepomConfig()
         config.db_type = "sqlite"
-        config.root_path = "/tmp/repom"
+        config.root_path = str(tmp_path)
         config.sqlite.use_in_memory_for_tests = False
         config.init()
         config.db_pool_size = 3
@@ -86,10 +86,10 @@ class TestEngineKwargsReflectPoolSettings:
         assert kwargs["pool_recycle"] == 900
         assert kwargs["pool_pre_ping"] is False
 
-    def test_sqlite_memory_ignores_pool_settings(self):
+    def test_sqlite_memory_ignores_pool_settings(self, tmp_path):
         config = RepomConfig()
         config.db_type = "sqlite"
-        config.root_path = "/tmp/repom"
+        config.root_path = str(tmp_path)
         config._db_url = "sqlite:///:memory:"
         config.db_pool_size = 3
 

@@ -27,6 +27,7 @@ from pathlib import Path
 
 def configure_database(config):
     database_path = Path(os.environ["ALEMBIC_MODEL_IMPORT_TEST_DB"]).as_posix()
+    config.root_path = os.environ["ALEMBIC_MODEL_IMPORT_TEST_ROOT"]
     config.db_url = f"sqlite:///{{database_path}}"
     config.model_locations = {model_locations!r}
     config.allowed_package_prefixes = {{"tests.fixtures."}}
@@ -42,6 +43,7 @@ def _alembic_env(tmp_path: Path) -> dict:
     env["DB_TYPE"] = "sqlite"
     env["CONFIG_HOOK"] = "alembic_model_import_test_hooks:configure_database"
     env["ALEMBIC_MODEL_IMPORT_TEST_DB"] = str(tmp_path / "model-import-test.sqlite3")
+    env["ALEMBIC_MODEL_IMPORT_TEST_ROOT"] = str(tmp_path / "repom-root")
     env["PYTHONPATH"] = os.pathsep.join(
         filter(None, (str(tmp_path), env.get("PYTHONPATH")))
     )

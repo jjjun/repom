@@ -25,10 +25,11 @@ def test_redis_cli_command_without_env_file():
     assert command == ("docker", "exec", "-i", "repom_redis", "redis-cli")
 
 
-def test_redis_cli_command_uses_env_file_when_given():
+def test_redis_cli_command_uses_env_file_when_given(tmp_path):
+    env_file = tmp_path / "repom-redis-auth-xyz.env"
     command = build_redis_cli_command(
         container_name="repom_redis",
-        env_file="/tmp/repom-redis-auth-xyz.env",
+        env_file=str(env_file),
     )
 
     assert command == (
@@ -36,7 +37,7 @@ def test_redis_cli_command_uses_env_file_when_given():
         "exec",
         "-i",
         "--env-file",
-        "/tmp/repom-redis-auth-xyz.env",
+        str(env_file),
         "repom_redis",
         "redis-cli",
     )

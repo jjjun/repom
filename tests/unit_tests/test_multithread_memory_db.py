@@ -10,7 +10,6 @@ StaticPool が正しく設定されていない場合、以下のエラーが発
     is thread id Y.
 """
 
-import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -42,7 +41,7 @@ class TestMultithreadMemoryDbAccess:
     """
 
     @pytest.fixture(scope="function")
-    def memory_engine(self):
+    def memory_engine(self, monkeypatch):
         """
         Test 環境用の :memory: DB エンジンを作成
 
@@ -50,29 +49,20 @@ class TestMultithreadMemoryDbAccess:
         明示的に test 環境の設定を使用する。
         """
         # Test 環境の設定を使用
-        original_env = os.environ.get("EXEC_ENV")
-        os.environ["EXEC_ENV"] = "test"
+        monkeypatch.setenv("EXEC_ENV", "test")
+        config = RepomConfig()
+        config.exec_env = "test"  # 明示的に test 環境に設定
+        # use_in_memory_db_for_tests が True であることを確認
+        assert config.sqlite.use_in_memory_for_tests is True
+        assert ":memory:" in config.db_url
 
-        try:
-            config = RepomConfig()
-            config.exec_env = "test"  # 明示的に test 環境に設定
-            # use_in_memory_db_for_tests が True であることを確認
-            assert config.sqlite.use_in_memory_for_tests is True
-            assert ":memory:" in config.db_url
+        # エンジンを作成
+        engine = create_engine(config.db_url, **config.engine_kwargs)
 
-            # エンジンを作成
-            engine = create_engine(config.db_url, **config.engine_kwargs)
+        # テーブルを作成
+        BaseModel.metadata.create_all(engine)
 
-            # テーブルを作成
-            BaseModel.metadata.create_all(engine)
-
-            yield engine
-        finally:
-            # 環境変数を復元
-            if original_env:
-                os.environ["EXEC_ENV"] = original_env
-            else:
-                os.environ.pop("EXEC_ENV", None)
+        yield engine
 
     @pytest.fixture(scope="function")
     def seed_data(self, memory_engine):
@@ -239,53 +229,35 @@ class TestMemoryDbConfiguration:
     StaticPool が正しく設定されているかを確認する。
     """
 
-    def test_memory_db_uses_static_pool(self):
+    def test_memory_db_uses_static_pool(self, monkeypatch):
         """
         Test 環境の :memory: DB で StaticPool が使用されることを確認
         """
-        original_env = os.environ.get("EXEC_ENV")
-        os.environ["EXEC_ENV"] = "test"
+        monkeypatch.setenv("EXEC_ENV", "test")
+        config = RepomConfig()
+        config.exec_env = "test"  # 明示的に test 環境に設定
+        assert ":memory:" in config.db_url
 
-        try:
-            config = RepomConfig()
-            config.exec_env = "test"  # 明示的に test 環境に設定
-            assert ":memory:" in config.db_url
+        engine_kwargs = config.engine_kwargs
 
-            engine_kwargs = config.engine_kwargs
+        # StaticPool が設定されているか確認
+        assert "poolclass" in engine_kwargs
+        assert "check_same_thread" in engine_kwargs.get("connect_args", {})
+        assert engine_kwargs["connect_args"]["check_same_thread"] is False
 
-            # StaticPool が設定されているか確認
-            assert "poolclass" in engine_kwargs
-            assert "check_same_thread" in engine_kwargs.get("connect_args", {})
-            assert engine_kwargs["connect_args"]["check_same_thread"] is False
-
-        finally:
-            if original_env:
-                os.environ["EXEC_ENV"] = original_env
-            else:
-                os.environ.pop("EXEC_ENV", None)
-
-    def test_file_based_db_uses_default_pool(self):
+    def test_file_based_db_uses_default_pool(self, monkeypatch):
         """
         ファイルベースの DB では StaticPool を使用しないことを確認
         """
-        original_env = os.environ.get("EXEC_ENV")
-        os.environ["EXEC_ENV"] = "dev"
+        monkeypatch.setenv("EXEC_ENV", "dev")
+        config = RepomConfig()
+        config.exec_env = "dev"  # 明示的に dev 環境に設定
+        assert ":memory:" not in config.db_url
 
-        try:
-            config = RepomConfig()
-            config.exec_env = "dev"  # 明示的に dev 環境に設定
-            assert ":memory:" not in config.db_url
+        engine_kwargs = config.engine_kwargs
 
-            engine_kwargs = config.engine_kwargs
-
-            # StaticPool は設定されていないはず
-            # （pool_size などが設定されている）
-            assert "pool_size" in engine_kwargs
-            assert "poolclass" not in engine_kwargs  # デフォルトプールを使用
-            assert "check_same_thread" in engine_kwargs.get("connect_args", {})
-
-        finally:
-            if original_env:
-                os.environ["EXEC_ENV"] = original_env
-            else:
-                os.environ.pop("EXEC_ENV", None)
+        # StaticPool は設定されていないはず
+        # （pool_size などが設定されている）
+        assert "pool_size" in engine_kwargs
+        assert "poolclass" not in engine_kwargs  # デフォルトプールを使用
+        assert "check_same_thread" in engine_kwargs.get("connect_args", {})

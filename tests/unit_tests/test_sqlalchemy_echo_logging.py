@@ -119,19 +119,19 @@ class TestSqlalchemyHideParametersConfig:
 
         assert config.engine_kwargs["hide_parameters"] is False
 
-    def test_sqlite_file_engine_kwargs_reflect_setting(self):
+    def test_sqlite_file_engine_kwargs_reflect_setting(self, tmp_path):
         config = RepomConfig()
         config.db_type = "sqlite"
-        config.root_path = "/tmp/repom"
+        config.root_path = str(tmp_path)
         config.sqlite.use_in_memory_for_tests = False
         config.init()
 
         assert config.engine_kwargs["hide_parameters"] is True
 
-    def test_sqlite_memory_engine_kwargs_reflect_setting(self):
+    def test_sqlite_memory_engine_kwargs_reflect_setting(self, tmp_path):
         config = RepomConfig()
         config.db_type = "sqlite"
-        config.root_path = "/tmp/repom"
+        config.root_path = str(tmp_path)
         config._db_url = "sqlite:///:memory:"
         config.sqlalchemy_hide_parameters = False
 
