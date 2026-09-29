@@ -4,6 +4,11 @@
 `DockerVolume`) は `basekit.docker_compose` が正本です。repom はこの API を
 PostgreSQL と Redis の構成生成に利用しますが、汎用 API 仕様はここへ複製しません。
 
+起動時は Docker Compose v2 plugin (`docker compose`) が使える場合に優先され、使えない
+場合は standalone `docker-compose` に fallback します。v1 で作成した stack を初めて
+v2 の `up -d` で起動すると container が一度再作成される場合がありますが、named
+volume は保持されます。
+
 repom で利用者が操作する入口は console script です。
 
 ```bash

@@ -1,7 +1,12 @@
 # PostgreSQL セットアップガイド
 
 repom は PostgreSQL と任意の pgAdmin を Docker Compose で管理できます。Docker
-Desktop または Docker Engine と Compose plugin が必要です。
+Desktop または Docker Engine と Docker Compose v2 plugin (`docker compose`) または standalone
+`docker-compose` が必要です。
+
+両方がある場合は Docker Compose v2 plugin を優先します。v1 で作成した stack を
+初めて v2 の `up -d` で起動すると、container が一度再作成される場合がありますが、
+named volume は保持されます。
 
 ## インストール
 

@@ -3,6 +3,11 @@
 repom は Redis の設定、Compose 生成、起動・停止、password rotation を提供します。
 Python client を利用する場合は optional dependency を追加します。
 
+Docker Compose v2 plugin (`docker compose`) と standalone `docker-compose` のどちらも
+利用できます。両方がある場合は plugin を優先します。v1 で作成した stack を初めて
+v2 の `up -d` で起動すると、container が一度再作成される場合がありますが、named
+volume は保持されます。
+
 ```bash
 uv sync --extra redis
 ```

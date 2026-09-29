@@ -208,9 +208,9 @@ def _backup_postgresql(container_name: str | None) -> None:
             print("Error: pg_dump command not found")
             print("Please install PostgreSQL client tools and ensure 'pg_dump' is in your PATH")
             raise BackupError("pg_dump command not found") from e
-        logger.error("docker command not found. Please install Docker Desktop.")
+        logger.error("docker command not found. Please install Docker Engine or Docker Desktop.")
         print("Error: docker command not found")
-        print("Please install Docker Desktop: https://www.docker.com/products/docker-desktop")
+        print("Please install Docker Engine or Docker Desktop.")
         raise BackupError("docker command not found") from e
     except BackupError:
         # pg_dump exited non-zero or produced an empty backup; already logged,

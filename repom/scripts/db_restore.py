@@ -227,9 +227,9 @@ def _restore_postgresql(backup_file: Path, container_name: str | None) -> None:
             print("\nError: psql command not found")
             print("Please install PostgreSQL client tools and ensure 'psql' is in your PATH")
             raise RestoreError("psql command not found") from e
-        logger.error("docker command not found. Please install Docker Desktop.")
+        logger.error("docker command not found. Please install Docker Engine or Docker Desktop.")
         print("\nError: docker command not found")
-        print("Please install Docker Desktop: https://www.docker.com/products/docker-desktop")
+        print("Please install Docker Engine or Docker Desktop.")
         raise RestoreError("docker command not found") from e
     except RestoreError:
         # psql exited non-zero; already logged and printed above.
