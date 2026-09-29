@@ -167,29 +167,14 @@ docs/ideas/README.md のテンプレートに従ってアイデアドキュメ�
 
 ## 現在のアイデア
 
-### 1. Schema Validation Command
-**File**: `schema_validation_command.md`
-**目的**: デプロイ前に全モデルのスキーマを検証する CLI コマンド
-**優先度**: 中
-**ステータス**: アイデア段階
+現在進行中のアイデアはありません。
 
-### 2. Schema File Generation
-**File**: `schema_file_generation.md`
-**目的**: Pydantic スキーマを JSON Schema に出力して API ドキュメント化
-**優先度**: 低
-**ステータス**: アイデア段階
+## 退役したアイデア
 
-### 3. API Type Resolution
-**File**: `api_type_resolution.md`
-**目的**: FastAPI/Flask の response_model 型解決を自動化
-**優先度**: 低
-**ステータス**: アイデア段階
-
-### 4. FilterParams Auto Generation
-**File**: `auto_filter_params_generation.md`
-**目的**: Repository の filter 定義から FastAPI 用 FilterParams を生成
-**優先度**: 未評価
-**ステータス**: アイデア段階
+- `schema_validation_command.md` — スキーマ検証は fast-domain の責務となった。復元元: `04c9f68cbe2602b653b1eeb6bc839d51ec7e8ffb`。
+- `schema_file_generation.md` — API schema 生成機能は fast-domain へ移管された。復元元: `9b7c4799bbcb20fc9f7cb39337948c39fb1c8f71`。
+- `api_type_resolution.md` — API schema 解決は fast-domain の責務となった。復元元: `911f155f193c6d7fc571c268aa3a255a9c8a1afa`。
+- `auto_filter_params_generation.md` — filter 構築は実装済みで、FastAPI 連携は fast-domain の責務となった。復元元: `911f155f193c6d7fc571c268aa3a255a9c8a1afa`。
 
 ## アイデア投稿
 
@@ -200,10 +185,10 @@ docs/ideas/README.md のテンプレートに従ってアイデアドキュメ�
 4. 関連 Issue があればリンクする
 5. コミットメッセージ: `docs(ideas): Add [idea title]`
 
-### 外部コントリビューター向け
-1. GitHub Discussions の「Ideas」カテゴリで提案
-2. 投稿にテンプレートを使用
-3. 適切と判断された場合、管理者が `docs/ideas/` に反映
+### 他プロジェクトへの提案
+
+- repom の作業は `issuekit author` で issue を作成します。
+- 他プロジェクトの作業は `issuekit propose --to <project>` で提案します。
 
 ## アイデア評価基準
 
@@ -223,10 +208,9 @@ docs/ideas/README.md のテンプレートに従ってアイデアドキュメ�
 
 ## アーカイブ
 
-不要になったアイデアや代替済みのアイデアは、ドキュメント内のステータス更新でアーカイブ扱いとする。
+不要になったアイデアや代替済みのアイデアは、この README の退役したアイデア一覧に理由と復元元 commit を記録します。
 
 ## 質問
 
-アイデア運用に関する質問は以下を参照:
-- `issuekit protocol --role <role>`（または MCP `get_protocol`）- Issue 管理フロー
-- GitHub Discussions のプロジェクト管理者
+アイデア運用と Issue 管理フローは `issuekit protocol --role <role>` を参照してください。
+他プロジェクトの作業は `issuekit propose --to <project>` で提案します。

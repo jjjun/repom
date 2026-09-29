@@ -3,6 +3,11 @@
 repom は Redis の設定、Compose 生成、起動・停止、password rotation を提供します。
 Python client を利用する場合は optional dependency を追加します。
 
+Docker Compose v2 plugin (`docker compose`) と standalone `docker-compose` のどちらも
+利用できます。両方がある場合は plugin を優先します。v1 で作成した stack を初めて
+v2 の `up -d` で起動すると、container が一度再作成される場合がありますが、named
+volume は保持されます。
+
 ```bash
 uv sync --extra redis
 ```
@@ -12,6 +17,7 @@ uv sync --extra redis
 ```dotenv
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
+# REDIS_HOST_PORT=6390
 REDIS_PASSWORD=CHANGE_ME
 REDIS_DB=0
 # REDIS_EXPOSE_TO_LAN=true
@@ -22,6 +28,8 @@ REDIS_DB=0
 
 `REDIS_PORT` は接続先と生成 Compose の公開 port です。利用側 hook では、
 プロジェクト既定値の後に environment override を適用します。
+`REDIS_HOST_PORT` を指定した場合は公開 host port にその値を使い、未指定の場合は
+`REDIS_PORT` を公開 host port の fallback として使います。
 
 ```python
 from repom.config_hooks.redis import apply_redis_env_overrides

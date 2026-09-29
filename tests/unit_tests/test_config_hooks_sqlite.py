@@ -91,7 +91,9 @@ def test_apply_sqlite_env_overrides_ignores_config_without_sqlite(monkeypatch):
     apply_sqlite_env_overrides(ConfigWithoutSqlite())
 
 
-def test_repom_config_singleton_applies_sqlite_env(monkeypatch):
+def test_repom_config_singleton_applies_sqlite_env(
+    monkeypatch, repom_config_hook_for_reload
+):
     import repom.config as config_module
 
     monkeypatch.setenv("SQLITE_DB_PATH", "env/data")
@@ -106,4 +108,5 @@ def test_repom_config_singleton_applies_sqlite_env(monkeypatch):
     finally:
         for name in SQLITE_ENV_NAMES:
             monkeypatch.delenv(name, raising=False)
+        repom_config_hook_for_reload()
         importlib.reload(config_module)

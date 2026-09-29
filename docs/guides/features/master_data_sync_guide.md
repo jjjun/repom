@@ -16,6 +16,8 @@
 ## 概要
 
 `db_sync_master` は、指定したテーブルにマスターデータを同期（Upsert）するコマンドです。
+Upsert は `session.merge()` を使い、モデルの primary key で既存行を照合します。
+`MASTER_DATA` から行を削除しても、データベース内の対応する行は削除されません。
 
 ### 主な機能
 
@@ -44,6 +46,8 @@ your_project/
 ### 設定
 
 デフォルトでは `root_path/data_master` がマスターデータディレクトリになります。
+`root_path` の既定値は repom package の親 directory なので、利用側 project の
+`data_master` を使う場合は CONFIG_HOOK で利用側の repository root に設定してください。
 
 ```python
 # repom/config.py（自動設定）
@@ -53,11 +57,12 @@ config.master_data_path  # => "<repo-root>/data_master"
 **カスタマイズ例**:
 
 ```python
-# mine_py/config.py
+# src/mine_py/config.py
 from pathlib import Path
 
 
 def get_repom_config(config):
+    config.root_path = str(Path(__file__).resolve().parents[2])
     # repository root からの相対位置を指定
     config.master_data_path = str(Path(config.root_path) / "custom_master_data")
     return config
@@ -121,6 +126,10 @@ data_master/
 uv run db_sync_master
 ```
 
+`config.db_type == 'postgres'` の場合、このコマンドは接続前に
+`ensure_running()` で PostgreSQL container を起動します。`db_create` と `db_delete`
+も PostgreSQL 使用時に同じ処理を行います。
+
 ### 環境指定
 
 ```bash
@@ -142,14 +151,14 @@ EXEC_ENV=test uv run db_sync_master
 ============================================================
 
 [1/3] モデルをロード中...
-✓ モデルのロード完了
+[OK] モデルのロード完了
 
 [2/3] マスターデータディレクトリ: <repo-root>/data_master
 
 [3/3] マスターデータを同期中...
-  ✓ Role: 3 件
-  ✓ User: 5 件
-  ✓ Category: 10 件
+  [OK] Role: 3 件
+  [OK] User: 5 件
+  [OK] Category: 10 件
 
 ============================================================
 同期完了: 3 ファイル、18 レコード
@@ -400,7 +409,7 @@ MASTER_DATA = [
 
 ```bash
 uv run db_sync_master
-# 出力: ✓ ModelName: 3 件
+# 出力: [OK] ModelName: 3 件
 ```
 
 ---

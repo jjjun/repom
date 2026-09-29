@@ -11,7 +11,7 @@ class RedisContainerConfig:
     """Redis Docker container settings."""
 
     container_name: Optional[str] = field(default=None)
-    host_port: int = field(default=6379)
+    host_port: Optional[int] = field(default=None)
     volume_name: Optional[str] = field(default=None)
     image: str = field(default="redis:7-alpine")
     # Bind the published port to 0.0.0.0 instead of 127.0.0.1. Only enable
@@ -37,6 +37,14 @@ class RedisConfig:
     password: Optional[str] = field(default=None, repr=False)
     database: int = field(default=0)
     container: RedisContainerConfig = field(default_factory=RedisContainerConfig)
+
+    @property
+    def published_port(self) -> int:
+        """Return the host port used to publish the Redis container."""
+
+        if self.container.host_port is not None:
+            return self.container.host_port
+        return self.port
 
     def __repr__(self) -> str:
         password_display = "***" if self.password else "None"

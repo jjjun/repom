@@ -482,6 +482,7 @@ class TestDisplayConfig:
         mock_config.model_locations = ['repom.examples.models']
         mock_config.allowed_package_prefixes = {'repom.'}
         mock_config.model_excluded_dirs = {'__pycache__'}
+        mock_config.redis.published_port = 6390
 
         mock_get_db_info.return_value = {
             'file_path': '/test/path/data/repom/db.dev.sqlite3',
@@ -507,6 +508,7 @@ class TestDisplayConfig:
         assert 'sqlite' in captured.out
         assert 'SQLite Details' in captured.out
         assert '2.50 MB' in captured.out
+        assert 'Published Port    : 6390' in captured.out
         assert 'User' in captured.out
         assert 'users' in captured.out
 

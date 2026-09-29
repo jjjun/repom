@@ -11,6 +11,22 @@ from repom.testing import create_test_fixtures, create_async_test_fixtures
 # テストモデルをインポート（自動登録される）
 
 
+@pytest.fixture
+def repom_config_hook_for_reload(monkeypatch):
+    """Set repom's default hook and return a callback to restore its prior value."""
+    had_config_hook = 'CONFIG_HOOK' in os.environ
+    original_config_hook = os.environ.get('CONFIG_HOOK')
+    monkeypatch.setenv('CONFIG_HOOK', 'repom.config_hook:hook_config')
+
+    def restore_config_hook():
+        if had_config_hook:
+            monkeypatch.setenv('CONFIG_HOOK', original_config_hook)
+        else:
+            monkeypatch.delenv('CONFIG_HOOK', raising=False)
+
+    return restore_config_hook
+
+
 def _debug_logging_enabled(config):
     """Return whether explicit verbose output should enable DEBUG logging."""
     # pyproject.toml adds -q, so an explicit -vv produces effective verbosity 1.

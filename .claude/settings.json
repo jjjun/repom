@@ -1,4 +1,11 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(issuekit protocol *)",
+      "Bash(issuekit info *)",
+      "Bash(issuekit queue *)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {

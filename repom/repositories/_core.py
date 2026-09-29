@@ -15,7 +15,7 @@ class FilterParams(BaseModel):
     """検索パラメータの基底クラス
 
     このクラスを継承してカスタムフィルタパラメータを定義し、
-    find_by_params() で使用します。
+    find(params=...) で使用します。
 
     使用例:
         class MyFilterParams(FilterParams):
@@ -24,7 +24,7 @@ class FilterParams(BaseModel):
             _internal_id: Optional[int] = None  # プライベート（除外される）
 
         filters = MyFilterParams(name="foo")
-        items = repo.find_by_params(filters)
+        items = repo.find(params=filters)
     """
 
 

@@ -14,13 +14,13 @@ logger = get_logger(__name__)
 logger.info("operation completed")
 ```
 
-最初の `get_logger()` 呼び出し時に、repom root logger に handler がなければ
-`config.log_file_path` を使った既定設定を行います。アプリケーションが先に
+`repom.database` は import 時に `get_logger(__name__)` を呼びます。そのため
+`import repom` だけで、repom root logger に handler がなければ `config.log_file_path`
+を使った既定の file / console handler が設定されます。アプリケーションが先に
 `logging.basicConfig()` や `dictConfig()` で handler を設定している場合は、その設定を
 優先します。
 
-利用側アプリケーションは、できるだけ process entry point で logging を設定してから
-repom の処理を開始してください。
+利用側アプリケーションは、repom を import する前に logging を設定してください。
 
 ログレベルは `EXEC_ENV` から決まり、`prod` では `INFO`、それ以外では `DEBUG` です。
 `LOG_LEVEL` 環境変数を設定すると、大文字小文字を区別せずにこの既定値を上書きできます。
@@ -30,6 +30,10 @@ repom の処理を開始してください。
 
 `LOG_LEVEL` には有効な logging level 名を指定してください。無効な値を指定すると、最初に
 logger を使用した時点で `ValueError` が発生します。
+
+既定の log file は `<data_path>/logs/main_YYYY-MM-DD.log` に作成され、
+`EXEC_ENV=test` では `test_...` の名前になります。file の mode は `0600` です。
+利用側の config hook で `config.log_level` を設定して、log level を変更できます。
 
 ## 日次ファイル
 
@@ -104,7 +108,8 @@ logging.getLogger("repom.repositories.base_repository").setLevel(logging.DEBUG)
 
 - log が出ない: application handler または `config.log_file_path` を確認。
 - handler が重複する: app と library の両方で同じ logger に handler を追加していないか確認。
-- SQL log が出ない: hook 適用後の `enable_sqlalchemy_echo` を `uv run repom_info` で確認。
+- SQL log が出ない: hook 適用後の `enable_sqlalchemy_echo` を
+  `uv run python -c "from repom.config import config; print(config.enable_sqlalchemy_echo)"` で確認。
 - 日次 file の場所が違う: `config.log_file_path` と `EXEC_ENV` を確認。
 
 関連資料:

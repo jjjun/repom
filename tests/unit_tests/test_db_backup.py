@@ -494,6 +494,45 @@ def test_backup_sqlite_rotation_keeps_max_backups_per_database(monkeypatch, tmp_
     assert len(remaining_prod) == db_backup.MAX_BACKUPS_PER_DB
 
 
+def test_backup_sqlite_db_extension_rotates_backups_per_database(monkeypatch, tmp_path):
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+
+    app_backups = [backup_dir / f"app_2026010{n}_000000.db" for n in range(1, 4)]
+    for i, path in enumerate(app_backups, start=1):
+        _make_finished_backup(path, mtime=i)
+        _backup_utils.write_checksum(path)
+
+    other_backups = [
+        backup_dir / f"app_dev_2026010{n}_000000.db" for n in range(1, 4)
+    ]
+    for i, path in enumerate(other_backups, start=1):
+        _make_finished_backup(path, mtime=i)
+
+    db_file = tmp_path / "app.db"
+    writer = sqlite3.connect(str(db_file))
+    writer.execute("CREATE TABLE items (id INTEGER)")
+    writer.commit()
+    config = _mock_sqlite_config(backup_dir, db_file)
+    monkeypatch.setattr(db_backup, "config", config)
+
+    try:
+        db_backup.backup_sqlite()
+    finally:
+        writer.close()
+
+    assert not app_backups[0].exists()
+    assert not _backup_utils.checksum_path(app_backups[0]).exists()
+    assert app_backups[1].exists() and app_backups[2].exists()
+    assert all(path.exists() for path in other_backups)
+    remaining_app_backups = [
+        path
+        for path in backup_dir.glob("app_*.db")
+        if re.fullmatch(r"app_\d{8}_\d{6}\.db", path.name)
+    ]
+    assert len(remaining_app_backups) == db_backup.MAX_BACKUPS_PER_DB
+
+
 def _mock_postgres_config_for_main(backup_dir, sslmode="prefer", sslrootcert=None):
     config = _mock_postgres_config(backup_dir, sslmode=sslmode, sslrootcert=sslrootcert)
     config.db_type = "postgres"

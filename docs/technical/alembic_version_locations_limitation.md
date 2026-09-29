@@ -18,6 +18,9 @@ version_locations = %(here)s/alembic/versions
 `alembic.ini`. A portable test fixture can use a relative `script_location` as
 well.
 
+For `version_table`, `version_table_schema`, `autogenerate_exclude_tables`, and
+`pre_migration_hook`, see the [Alembic migration guide](../guides/features/alembic_migration_guide.md).
+
 ## Why the old approach was removed
 
 An earlier design tried to place a migration path on `RepomConfig` and pass it

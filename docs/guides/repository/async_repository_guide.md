@@ -132,10 +132,9 @@ users = await user_repo.find(limit=10)
 ## Soft Delete
 
 `SoftDeletableMixin` を持つモデルでは `soft_delete()`、`restore()`、
-`permanent_delete()`、`find_deleted()` を await できます。現行の Repository
-Soft Delete メソッドは自身で commit するため、より大きな外部 transaction に
-まとめたい場合はモデルの `soft_delete()` / `restore()` を呼び、呼び出し側の
-session で flush / commit してください。
+`permanent_delete()`、`find_deleted()` を await できます。Repository の
+Soft Delete メソッドは、内部セッションなら commit し、外部セッションなら
+flush のみを行います。外部セッションでは呼び出し側が transaction を確定します。
 
 詳細は [Soft Delete ガイド](../model/soft_delete_guide.md)を参照してください。
 

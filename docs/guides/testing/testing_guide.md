@@ -16,7 +16,8 @@ uv run pytest -vv -s
 
 既定の pytest 設定は `pyproject.toml` の `[tool.pytest.ini_options]` にあります。
 通常実行は成功時の出力を抑え、`-vv -s` の明示時だけ詳細な stdout と DEBUG log を
-有効にします。
+有効にします。既定の `addopts` には、最初の失敗で停止する `-x` と benchmark を
+skip する `--benchmark-skip` も含まれます。
 
 ## 同期 fixture
 
@@ -29,9 +30,9 @@ db_engine, db_test = create_test_fixtures()
 ```
 
 - `db_engine`: session scope の SQLAlchemy Engine
-- `db_test`: function scope の Session
+- `db_test`: function scope の `scoped_session`
 
-`db_test` は rollback 対象の外部 session です。Repository に明示して使います。
+`db_test` は rollback 対象の外部 `scoped_session` です。Repository に明示して使います。
 
 ```python
 from repom import BaseRepository
@@ -72,6 +73,8 @@ async def test_async_save(async_db_test):
 
 SQLite async テストには `aiosqlite`、pytest には `pytest-asyncio` が必要です。
 このリポジトリの dev dependency には両方が含まれています。
+
+`repom.testing` は `repom.database.convert_to_async_uri` も再 export します。
 
 ## DB URL とモデル読み込み
 

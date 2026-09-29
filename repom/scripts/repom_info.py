@@ -251,7 +251,8 @@ def display_config():
     # Redis Configuration
     print("[Redis Configuration]")
     print(f"  Host              : {config.redis.host}")
-    print(f"  Port              : {config.redis.port}")
+    print(f"  Connection Port   : {config.redis.port}")
+    print(f"  Published Port    : {config.redis.published_port}")
     print(f"  Container Name    : {config.redis.container.get_container_name()}")
     print(f"  Image             : {config.redis.container.image}")
     print()

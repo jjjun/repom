@@ -62,7 +62,9 @@ setup.create_version_directory()
 - `version_table`: Alembic のバージョンテーブル名（デフォルト: `alembic_version`）
 - `version_table_schema`: Alembic のバージョンテーブルを配置するスキーマ（デフォルト: 明示的なスキーマなし）
 - `autogenerate_exclude_tables`: 除外する兄弟名前空間のバージョンテーブル名（文字列またはシーケンス）
-- `overwrite`: 既存の alembic.ini を上書きするか（デフォルト: `False`）
+
+既存の `alembic.ini` を上書きするには、`AlembicSetup(...)` の constructor ではなく
+`setup.create_alembic_ini(overwrite=True)` を呼び出します（デフォルト: `False`）。
 
 ### CLI コマンドで初期化
 
@@ -73,15 +75,15 @@ setup.create_version_directory()
 uv run alembic_init
 
 # 出力例:
-# ✓ Created alembic.ini: <repo-root>/alembic.ini
-# ✓ Created version directory: <repo-root>/alembic/versions
+# [OK] Created alembic.ini: <repo-root>/alembic.ini
+# [OK] Created version directory: <repo-root>/alembic/versions
 ```
 
 **動作**:
 - `config.root_path` と `config.db_url` を使用
 - alembic.ini を自動生成
 - alembic/versions/ ディレクトリを作成
-- 上書き保護付き（既存の alembic.ini がある場合はエラー）
+- 既存の `alembic.ini` があればその設定を読み込み、`[OK] alembic.ini already exists` を表示して ini は上書きせず、その ini に記載された `version_locations` のディレクトリを作成
 
 ### マイグレーションのリセット
 
@@ -113,7 +115,9 @@ setup.reset_migrations(drop_table=True, delete_files=False)
 setup.reset_migrations(drop_table=False, delete_files=True)
 ```
 
-**注意**: リセットは**開発環境のみ**で実行してください。本番環境では使用しないでください。
+`EXEC_ENV=prod` では `--yes` の有無に関わらず実行を拒否します。TTY では
+`--yes` を指定しても確認プロンプトが表示され、`y` の入力が必要です。非 TTY
+では `--yes` / `-y` が必要です。
 
 ---
 
@@ -126,15 +130,18 @@ repom は `EXEC_ENV` 環境変数で環境を切り替えます。
 ```bash
 # 開発環境（デフォルト）
 uv run alembic upgrade head
-# → data/repom/db.dev.sqlite3 に適用
+# .env.example の hook では PostgreSQL を使用
+# SQLite を選択した場合（db_name=repom）: data/repom/repom_dev.sqlite3
 
 # テスト環境
 EXEC_ENV=test uv run alembic upgrade head
-# → data/repom/db.test.sqlite3 に適用
+# .env.example の hook では in-memory SQLite を使用（DB ファイルは作成されない）
+# SQLite のファイル DB を選択した場合: data/repom/repom_test.sqlite3
 
 # 本番環境
 EXEC_ENV=prod uv run alembic upgrade head
-# → data/repom/db.sqlite3 に適用
+# .env.example の hook では PostgreSQL を使用
+# SQLite を選択した場合（db_name=repom）: data/repom/repom.sqlite3
 ```
 
 **PowerShell の場合**:
@@ -153,10 +160,15 @@ repom/
 ├── alembic.ini          # Alembic 設定
 └── data/
     └── repom/
-        ├── db.dev.sqlite3
-        ├── db.test.sqlite3
-        └── db.sqlite3
+        ├── repom_dev.sqlite3   # SQLite の dev 用ファイル DB
+        ├── repom_test.sqlite3  # SQLite の test 用ファイル DB
+        └── repom.sqlite3       # SQLite の prod 用ファイル DB
 ```
+
+SQLite のファイル名は `db_name` が `repom` の場合、`dev` / `test` では
+`{db_name}_{env}.sqlite3`、それ以外では `{db_name}.sqlite3` です。ファイルは
+`config.data_path` に作成され、既定では `<root_path>/data/repom` です。`test` は既定で
+in-memory SQLite を使用するため、通常はファイルを作成しません。
 
 ---
 
@@ -212,14 +224,22 @@ autogenerate は実行中の名前空間のバージョンテーブルだけを�
 mkdir -p alembic/versions
 ```
 
-### Step 3: CONFIG_HOOK を設定（オプション）
+### Step 3: CONFIG_HOOK を設定（必須）
 
-repom の設定をカスタマイズする場合のみ設定します。
+外部プロジェクトで Alembic を使う場合は、利用側の `CONFIG_HOOK` を設定してください。
+`model_locations` の既定値は空なので、hook で利用側モデルを読み込まないと
+autogenerate は空の metadata とデータベースを比較します。空 metadata の安全 guard は
+`model_locations` が設定された場合に働くため、利用側モデルのない状態では全テーブルの
+drop を含む migration を生成する可能性があります。`root_path` も設定し、DB と data の
+path が repom checkout ではなく利用側プロジェクトを基準に解決されるようにします。
 
 ```python
 # mine-py/src/mine_py/config.py
+from pathlib import Path
+
+
 def get_repom_config(config):
-    config.package_name = 'mine_py'
+    config.root_path = str(Path(__file__).resolve().parents[2])
     config.model_locations = ['mine_py.models']
     config.allowed_package_prefixes = {'mine_py.', 'repom.'}
     return config
@@ -258,12 +278,18 @@ mine-py/
 │           └── versions/          # repom のマイグレーション
 ├── src/
 │   └── mine_py/
-│       ├── config.py              # CONFIG_HOOK（オプション）
+│       ├── config.py              # CONFIG_HOOK
 │       └── models/
 └── data/
-    └── mine_py/                   # CONFIG_HOOK で設定
-        └── db.dev.sqlite3
+    └── repom/                     # config.data_path の既定ディレクトリ
+        ├── mine_py_dev.sqlite3    # db_name="mine_py" の dev 用ファイル DB
+        ├── mine_py_test.sqlite3   # SQLite の test 用ファイル DB
+        └── mine_py.sqlite3        # db_name="mine_py" の prod 用ファイル DB
 ```
+
+`RepomConfig.package_name` は `repom` のため、`config.data_path` を明示的に設定しない場合、
+利用側の `<root_path>/data/repom` が SQLite ファイルの保存先です。hook で
+`config.data_path` を設定すると保存先ディレクトリを変更できます。
 
 ---
 

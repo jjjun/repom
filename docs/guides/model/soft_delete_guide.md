@@ -7,6 +7,7 @@
 - [概要](#概要)
 - [基本的な使い方](#基本的な使い方)
 - [API リファレンス](#api-リファレンス)
+- [非同期 Repository とセッション管理](#非同期-repository-とセッション管理)
 - [使用例](#使用例)
 - [マイグレーション](#マイグレーション)
 - [ベストプラクティス](#ベストプラクティス)
@@ -80,10 +81,10 @@ repo.permanent_delete(article_id)
 
 ```python
 # 削除済みを除外（デフォルト）
-active_articles = repo.find()
+active_articles = repo.find(limit=100)
 
 # 削除済みも含める
-all_articles = repo.find(include_deleted=True)
+all_articles = repo.find(include_deleted=True, limit=100)
 
 # ID で取得（削除済みを除外）
 article = repo.get_by_id(1)
@@ -91,6 +92,14 @@ article = repo.get_by_id(1)
 # ID で取得（削除済みも含む）
 article = repo.get_by_id(1, include_deleted=True)
 ```
+
+`count()`、`get_all()`、`find_one()`、`find_by_ids()`、`get_by()` も
+`include_deleted` を受け付けます。既定値は `False` です。`SoftDeletableMixin` を
+持たないモデルでは、`find_deleted()` と `find_deleted_before()` は空リストを返します。
+
+`remove(instance)` は `SoftDeletableMixin` を持つモデルに対しても物理削除します。
+`bulk_delete()` は Mixin を持つモデルの該当行を論理削除し、Mixin を持たないモデルの
+該当行を物理削除します。
 
 ---
 
@@ -106,11 +115,15 @@ article = repo.get_by_id(1, include_deleted=True)
 - **デフォルト**: `None`
 - **インデックス**: あり
 
+SQLite から読み込んだ `deleted_at` は naive な datetime です。`AutoDateTime` を使う
+`created_at` / `updated_at` と異なり、読み込み時に UTC の `tzinfo` は付与されません。
+
 #### soft_delete() -> None
 
 論理削除を実行します。`deleted_at` に現在時刻（UTC）を設定します。
 
 ```python
+repo = BaseRepository(Article, session=session)
 article = repo.get_by_id(1)
 article.soft_delete()
 session.commit()
@@ -118,11 +131,17 @@ session.commit()
 
 **注意**: セッションのコミットは呼び出し側で行う必要があります。
 
+この例の `session` は呼び出し側が管理する SQLAlchemy `Session` です。モデルの
+メソッドを直接呼ぶ場合は Repository にこのセッションを渡してください。
+セッションを渡さない Repository の取得結果は内部セッション終了時にデタッチされる
+ため、この方法では変更が保存されません。
+
 #### restore() -> None
 
 削除を取り消します。`deleted_at` を NULL に戻します。
 
 ```python
+repo = BaseRepository(Article, session=session)
 article = repo.get_by_id(1, include_deleted=True)
 if article and article.is_deleted:
     article.restore()
@@ -142,25 +161,29 @@ if article.is_deleted:
 
 ### BaseRepository メソッド
 
-#### find(filters=None, include_deleted=False, **kwargs) -> List[T]
+#### find(params=None, filters=None, include_deleted=False, **kwargs) -> List[T]
 
 レコードを検索します。
 
 **パラメータ**:
+- `params`: `FilterParams` インスタンス（任意）
 - `filters`: SQLAlchemy フィルタ条件のリスト
 - `include_deleted`: 削除済みも含めるか（デフォルト: False）
 - `**kwargs`: `offset`, `limit`, `order_by` などのオプション
 
 ```python
 # 削除済みを除外
-active = repo.find()
+active = repo.find(limit=100)
 
 # 削除済みも含む
-all_items = repo.find(include_deleted=True)
+all_items = repo.find(include_deleted=True, limit=100)
 
 # 条件付き検索
-published = repo.find(filters=[Article.status == 'published'])
+published = repo.find(filters=[Article.status == 'published'], limit=100)
 ```
+
+`include_deleted` は `count()`、`get_all()`、`find_one()`、`find_by_ids()`、
+`get_by()`、`get_by_id()` でも利用できます。既定値は `False` です。
 
 #### get_by_id(id, include_deleted=False) -> Optional[T]
 
@@ -181,6 +204,10 @@ article = repo.get_by_id(1, include_deleted=True)
 #### soft_delete(id) -> bool
 
 論理削除を実行します。
+
+Repository の `soft_delete()`、`restore()`、`permanent_delete()` は、内部セッションを
+使う場合は commit し、`session=` で外部セッションが渡された場合は flush のみを
+行います。外部セッションのトランザクションは呼び出し側が管理します。
 
 **パラメータ**:
 - `id`: 削除するレコードの ID
@@ -233,12 +260,12 @@ if repo.permanent_delete(1):
     print("物理削除完了")
 ```
 
-#### find_deleted(**kwargs) -> List[T]
+#### find_deleted(filters=None, **kwargs) -> List[T]
 
 削除済みレコードのみを取得します。
 
 ```python
-deleted_articles = repo.find_deleted()
+deleted_articles = repo.find_deleted(limit=100)
 print(f"{len(deleted_articles)} 件の削除済み記事")
 ```
 
@@ -260,6 +287,36 @@ old_deleted = repo.find_deleted_before(threshold)
 for item in old_deleted:
     repo.permanent_delete(item.id)
 ```
+
+## 非同期 Repository とセッション管理
+
+`AsyncBaseRepository` の削除操作と削除済みレコード検索には `await` が必要です。
+`find_deleted()` と `find_deleted_before()` を含む `find_deleted*` メソッドも同様です。
+
+```python
+from datetime import datetime, timedelta, timezone
+
+from repom import AsyncBaseRepository
+
+
+async def manage_deleted_articles(article_id, async_session):
+    repo = AsyncBaseRepository(Article, session=async_session)
+
+    await repo.soft_delete(article_id)
+    deleted_articles = await repo.find_deleted(limit=100)
+    old_deleted = await repo.find_deleted_before(
+        datetime.now(timezone.utc) - timedelta(days=30),
+        limit=100,
+    )
+    await repo.restore(article_id)
+    await repo.permanent_delete(article_id)
+```
+
+`session=` を省略すると Repository は内部セッションを使い、書き込みをコミット
+します。外部の `Session` または `AsyncSession` を渡した場合、Repository は flush のみ
+を行います。トランザクションの commit / rollback は呼び出し側が行います。モデルの
+`soft_delete()` / `restore()` は属性を変更するだけなので、直接呼ぶ場合も外部
+セッションを使ってください。
 
 ---
 
@@ -326,7 +383,7 @@ def restore_article(article_id: int):
 def list_articles(include_deleted: bool = False):
     """記事一覧を取得"""
     repo = BaseRepository(Article)
-    articles = repo.find(include_deleted=include_deleted)
+    articles = repo.find(include_deleted=include_deleted, limit=100)
     return [article.to_dict() for article in articles]
 ```
 
@@ -408,7 +465,7 @@ class AssetRepository(BaseRepository[AssetItem]):
 マイグレーションファイルを自動生成します：
 
 ```bash
-poetry run alembic revision --autogenerate -m "add soft delete to articles"
+uv run alembic revision --autogenerate -m "add soft delete to articles"
 ```
 
 生成されるマイグレーション例：
@@ -428,7 +485,7 @@ def downgrade():
 適用：
 
 ```bash
-poetry run alembic upgrade head
+uv run alembic upgrade head
 ```
 
 ### 外部プロジェクトで使用する場合
@@ -437,8 +494,8 @@ poetry run alembic upgrade head
 
 ```bash
 # mine-py/ ディレクトリで実行
-poetry run alembic revision --autogenerate -m "add soft delete to asset_items"
-poetry run alembic upgrade head
+uv run alembic revision --autogenerate -m "add soft delete to asset_items"
+uv run alembic upgrade head
 ```
 
 ---
@@ -488,7 +545,7 @@ def daily_cleanup():
 def list_deleted_articles():
     """削除済み記事の管理画面"""
     repo = BaseRepository(Article)
-    deleted = repo.find_deleted(order_by="deleted_at:desc", limit=100)
+    deleted = repo.find_deleted(order_by=Article.deleted_at.desc(), limit=100)
     return [
         {
             "id": article.id,
@@ -498,6 +555,10 @@ def list_deleted_articles():
         for article in deleted
     ]
 ```
+
+`deleted_at` は `allowed_order_columns` に既定では含まれません。文字列でなく
+`Article.deleted_at.desc()` のような SQLAlchemy のカラム式を渡すと、このカラムで
+ソートできます。
 
 ### 4. ログ記録
 
@@ -571,8 +632,8 @@ print(hasattr(MyModel, 'deleted_at'))  # False の場合は Mixin がない
 3. マイグレーション実行
 
 ```bash
-poetry run alembic revision --autogenerate -m "add soft delete"
-poetry run alembic upgrade head
+uv run alembic revision --autogenerate -m "add soft delete"
+uv run alembic upgrade head
 ```
 
 既存のレコードは `deleted_at = NULL`（削除されていない）として扱われます。
@@ -594,8 +655,21 @@ repo.permanent_delete(item_id)
 **原因**: deleted_at にインデックスがない可能性
 
 **確認**:
+SQLite の場合:
+
 ```sql
-SHOW INDEX FROM articles WHERE Column_name = 'deleted_at';
+PRAGMA index_list('articles');
+```
+
+結果に `ix_articles_deleted_at` が表示されることを確認します。
+
+PostgreSQL の場合:
+
+```sql
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'articles'
+  AND indexname = 'ix_articles_deleted_at';
 ```
 
 **解決策**:

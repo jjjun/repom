@@ -77,21 +77,32 @@ class TaskRepository(BaseRepository[Task]):
 
 ```python
 from sqlalchemy import asc, desc
-from repom import VirtualColumnError
+from repom import BaseRepository, VirtualColumnError
 
-def find_with_rating(self, order_by: str = "created_at:desc"):
-    try:
-        order_expr = self.parse_order_by(Task, order_by)
-    except VirtualColumnError as e:
-        direction = desc if e.direction == "desc" else asc
-        if e.column_name == "rating":
-            order_expr = direction(Review.rating)
-        else:
-            raise
+class TaskRepository(BaseRepository[Task]):
+    allowed_order_columns = BaseRepository.allowed_order_columns + ["rating"]
+    virtual_order_columns = ["rating"]
 
-    stmt = select(Task).outerjoin(Review, ...).order_by(order_expr)
-    return self.session.execute(stmt).scalars().all()
+    def find_with_rating(self, order_by: str = "created_at:desc"):
+        try:
+            order_expr = self.parse_order_by(Task, order_by)
+        except VirtualColumnError as e:
+            direction = desc if e.direction == "desc" else asc
+            if e.column_name == "rating":
+                order_expr = direction(Review.rating)
+            else:
+                raise
+
+        filters = []
+        self._append_soft_delete_filter(filters)
+        stmt = self._base_select().outerjoin(Review, Review.task_id == Task.id)
+        if filters:
+            stmt = stmt.where(*filters)
+        stmt = self.set_find_option(stmt, order_by=order_expr, limit=100)
+        return self.session.execute(stmt).scalars().unique().all()
 ```
+
+このメソッドは `TaskRepository(session=session)` のように外部セッションを明示して使ってください。`_base_select()`、soft-delete filter、`set_find_option()` を使い、通常の検索条件と取得上限を保ちます。
 
 ## 運用上の推奨
 

@@ -78,7 +78,8 @@ warning だけで無視しません。
 
 確認項目:
 
-1. `CONFIG_HOOK` が `module:callable` 形式か。
+1. `CONFIG_HOOK` が `module:callable` または `module` 形式か。module だけの場合は
+   `hook_config` が使われます。
 2. 利用側 package が Python path にあるか。
 3. hook が config 引数を受け取るか。
 4. hook が config を返しているか。

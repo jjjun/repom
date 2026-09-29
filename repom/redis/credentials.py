@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Iterator
 
 from repom.config import config
+from repom.docker_compose_safety import reject_control_characters
 from repom.credentials import (
     CommandRunner,
     mask_secret as _mask_secret,
@@ -17,7 +18,7 @@ from repom.credentials import (
 
 
 class RedisCredentialRotationError(RuntimeError):
-    """Raised when a Redis rotation command exits with a non-zero status."""
+    """Raised when Redis rejects a password rotation command."""
 
 
 @dataclass(frozen=True)
@@ -116,19 +117,32 @@ def rotate_redis_password(
     """Apply a new Redis requirepass value to a running instance."""
 
     container_name = plan.container_name or config.redis.container.get_container_name()
-    input_text = f"CONFIG SET requirepass {plan.new_password}\n"
+    new_password = reject_control_characters(
+        plan.new_password, field_name="new_password"
+    )
+    escaped_password = new_password.replace("\\", "\\\\").replace('"', '\\"')
+    input_text = f'CONFIG SET requirepass "{escaped_password}"\n'
     secrets = (plan.old_password, plan.new_password)
 
     if not dry_run:
         with _rediscli_auth_env_file(plan.old_password) as env_file:
             command = build_redis_cli_command(container_name=container_name, env_file=env_file)
-            run_masked_command(
+            completed = run_masked_command(
                 command,
                 runner=runner,
                 secrets=secrets,
                 error_type=RedisCredentialRotationError,
                 action="redis-cli rotation",
                 input=input_text,
+            )
+        if (completed.stdout or "").strip() != "OK":
+            output = mask_secret(
+                f"stdout={(completed.stdout or '').strip()} "
+                f"stderr={(completed.stderr or '').strip()}",
+                *secrets,
+            )
+            raise RedisCredentialRotationError(
+                f"redis-cli rotation returned an unexpected reply: {output}"
             )
     else:
         placeholder_env_file = "<redis-auth-env-file>" if plan.old_password else None

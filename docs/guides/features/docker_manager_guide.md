@@ -33,10 +33,18 @@ ensure_redis_running(timeout_seconds=30)
 Docker CLI がない場合、起動失敗、readiness timeout は `RuntimeError` として
 呼び出し側へ伝播します。アプリケーションは lifecycle 境界で処理してください。
 
+`repom.postgres.manage.generate()` と `repom.redis.manage.generate()` は、password が
+未設定または `CHANGE_ME` のままの場合や、password に改行・復帰・NUL 文字が含まれる
+場合に `ValueError` を送出します。`repom.docker_service.DockerUnavailableError` は
+`RuntimeError` の subclass で、Docker CLI がない場合や daemon に接続できない場合に
+送出されます。`repom.docker_service.is_container_running(container_name)` は container
+の稼働状態を `bool` で返し、Docker が利用できない場合は `DockerUnavailableError` を
+送出します。
+
 関連資料:
 
 - [PostgreSQL ガイド](../postgresql/README.md)
 - [Redis ガイド](../redis/README.md)
 - [Compose 基盤の責務境界](docker_compose_guide.md)
 - [`repom/docker_service.py`](../../../repom/docker_service.py)
-- [Docker manager 移管の履歴](../../technical/docker_manager_code_reduction_analysis.md)
+- [Docker manager 移管の履歴](../../technical/docker_manager_history.md)

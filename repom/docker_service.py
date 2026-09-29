@@ -84,8 +84,7 @@ def is_container_running(container_name: str) -> bool:
     except FileNotFoundError as exc:
         raise DockerUnavailableError(
             "docker command not found. "
-            "Please install Docker Desktop: "
-            "https://www.docker.com/products/docker-desktop"
+            "Please install Docker Engine or Docker Desktop."
         ) from exc
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr

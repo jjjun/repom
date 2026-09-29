@@ -2,11 +2,14 @@
 
 ## 概要
 
-`QueryAnalyzer` は、SQLAlchemy クエリを監視して N+1 問題を検出するための診断ツールです。実際のクエリログを収集し、実行されたクエリの回数と種類を分析します。
+`QueryAnalyzer` は、SQLAlchemy クエリを監視して N+1 問題を検出するための診断ツールです。
+指定した同期 `Engine` 上で実行されたクエリを収集し、実行されたクエリの回数と種類を
+分析します。`AsyncEngine` のクエリを記録するには、その `.sync_engine` を
+`QueryAnalyzer` に渡してください。
 
 ## 主な機能
 
-- ✅ **クエリキャプチャ**: SQLAlchemy が実行する全てのクエリを記録
+- ✅ **クエリキャプチャ**: 指定した同期 `Engine` 上で実行されるクエリを記録
 - ✅ **N+1 問題検出**: 繰り返し実行されるクエリパターンを検出
 - ✅ **統計レポート**: クエリタイプごとの実行回数を集計
 - ✅ **詳細ログ**: verbose モードで全クエリの内容を表示
@@ -40,6 +43,10 @@ with analyzer.capture():
 analyzer.print_report()
 ```
 
+`capture(model=User)` でモデルを指定できます。`set_target_model()` も公開 API で、
+report に表示する対象モデルを設定します。存在しないモデル名を指定すると、利用可能な
+モデル名を示す `ValueError` が発生します。
+
 ### 3. レポート出力例
 
 ```
@@ -52,7 +59,7 @@ Total Queries: 11
 Query Type Breakdown:
   SELECT: 11
 
-⚠️  Potential N+1 Problem Detected!
+[WARN] Potential N+1 Problem Detected!
    Found 1 repeated query patterns
 
 Repeated Query Patterns:
@@ -97,7 +104,7 @@ Total Queries: 11
 Query Type Breakdown:
   SELECT: 11
 
-⚠️  Potential N+1 Problem Detected!
+[WARN] Potential N+1 Problem Detected!
    Found 1 repeated query patterns
 ```
 
@@ -127,7 +134,7 @@ Total Queries: 1
 Query Type Breakdown:
   SELECT: 1
 
-✅ No obvious N+1 problems detected
+[OK] No obvious N+1 problems detected
 ```
 
 ---
@@ -183,7 +190,7 @@ Total Queries: 1
 Query Type Breakdown:
   SELECT: 1
 
-✅ No obvious N+1 problems detected
+[OK] No obvious N+1 problems detected
 
 ----------------------------------------------------------------------
 All Captured Queries:
@@ -196,6 +203,17 @@ All Captured Queries:
 ```
 
 ---
+
+## repository query のデバッグスクリプト
+
+`python -m repom.scripts.debug_repository_queries [module:Class]` は、指定した repository
+の `find()` と `to_dict()` が発行するクエリを分析します。たとえば次のように実行します。
+
+```bash
+python -m repom.scripts.debug_repository_queries myapp.repositories:UserRepository
+```
+
+引数を省略すると、同梱の `SampleRepository` を調査します。
 
 ## ヘルパー関数
 

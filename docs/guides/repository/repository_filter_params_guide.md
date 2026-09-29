@@ -10,7 +10,7 @@
 
 FastAPI のクエリパラメータへの変換（旧 `as_query_depends()`）は利用側フレーム
 ワーク（fast-domain）に移管されました。このガイドでは repom に残る
-`FilterParams` 本体の使い方（`find_by_params()` と組み合わせた検索）を説明し
+`FilterParams` 本体の使い方（`find(params=...)` と組み合わせた検索）を説明し
 ます。
 
 ---
@@ -36,7 +36,7 @@ class TaskFilterParams(FilterParams):
 
 ```python
 repo = TaskRepository()
-tasks = repo.find_by_params(TaskFilterParams(status="active", priority="high"))
+tasks = repo.find(params=TaskFilterParams(status="active", priority="high"), limit=100)
 ```
 
 ---
@@ -72,23 +72,14 @@ class TaskRepository(BaseRepository[Task]):
         
         if params.title:
             # 部分一致検索
-            filters.append(Task.title.like(f"%{params.title}%"))
+            filters.append(Task.title.contains(params.title, autoescape=True))
         
         return filters
     
-    def find_by_params(
-        self,
-        params: Optional[TaskFilterParams] = None,
-        **kwargs
-    ) -> List[Task]:
-        """FilterParams を使って検索"""
-        filters = self._build_filters(params)
-        return self.find(filters=filters, **kwargs)
-    
-    def count_by_params(self, params: Optional[TaskFilterParams] = None) -> int:
-        """FilterParams を使ってカウント"""
-        filters = self._build_filters(params)
-        return self.count(filters=filters)
+repo = TaskRepository()
+params = TaskFilterParams(status="active", priority="high", title="task")
+tasks = repo.find(params=params, limit=100)
+count = repo.count_by_params(params)
 ```
 
 ### 方法2: `field_to_column` マッピング（シンプル）
@@ -114,8 +105,10 @@ class TaskRepository(BaseRepository[Task]):
 
 # 使い方
 repo = TaskRepository()
-tasks = repo.find_by_params(TaskFilterParams(status="active", title="task"))
+tasks = repo.find(params=TaskFilterParams(status="active", title="task"), limit=100)
 ```
+
+`find(params=..., filters=...)` の両方を指定した場合は、`filters` が使われ、`params` は無視されます。
 
 部分一致・前方一致が必要な場合は `contains_column()` / `prefix_column()` で
 明示してください。これらは SQL の `LIKE` を使いますが、値に含まれる `%` / `_`
@@ -245,9 +238,9 @@ class TaskFilterParams(FilterParams):
 ```python
 class TaskFilterParams(FilterParams):
     status: str = "active"  # デフォルトはアクティブのみ
-    limit: int = 10
-    offset: int = 0
 ```
+
+ページング値は `FilterParams` の検索フィールドとしては使われません。ページングもパラメータに持たせる場合は、`repo.find(params=params, limit=params.limit, offset=params.offset)` のように明示して渡してください。
 
 ---
 

@@ -215,7 +215,9 @@ def test_apply_database_env_overrides_rejects_invalid_pool_pre_ping(monkeypatch)
         apply_database_env_overrides(config)
 
 
-def test_repom_config_singleton_applies_database_env(monkeypatch):
+def test_repom_config_singleton_applies_database_env(
+    monkeypatch, repom_config_hook_for_reload
+):
     import repom.config as config_module
 
     monkeypatch.setenv("REPOM_DATABASE_URL", "postgresql://repom-specific")
@@ -232,4 +234,5 @@ def test_repom_config_singleton_applies_database_env(monkeypatch):
     finally:
         for name in DATABASE_ENV_NAMES:
             monkeypatch.delenv(name, raising=False)
+        repom_config_hook_for_reload()
         importlib.reload(config_module)

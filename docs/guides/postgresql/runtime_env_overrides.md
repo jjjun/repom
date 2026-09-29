@@ -35,13 +35,14 @@ Supported variables:
 | `POSTGRES_EXPOSE_TO_LAN` | `config.postgres.container.expose_to_lan` |
 | `PGADMIN_DEFAULT_EMAIL` | `config.pgadmin.email` |
 | `PGADMIN_DEFAULT_PASSWORD` | `config.pgadmin.password` |
+| `PGADMIN_HOST_PORT` | `config.pgadmin.container.host_port` |
 | `PGADMIN_EXPOSE_TO_LAN` | `config.pgadmin.container.expose_to_lan` |
 
-`POSTGRES_PORT` and `POSTGRES_HOST_PORT` are validated as integer ports between
-1 and 65535. `REPOM_POSTGRES_DB` pins the PostgreSQL database name exactly, so
-repom does not append the usual `exec_env` suffix. It only affects PostgreSQL
-URL construction; SQLite selection still follows `db_type`, including the
-default in-memory SQLite URL for `exec_env=test`.
+`POSTGRES_PORT`, `POSTGRES_HOST_PORT`, and `PGADMIN_HOST_PORT` are validated as
+integer ports between 1 and 65535. `REPOM_POSTGRES_DB` pins the PostgreSQL
+database name exactly, so repom does not append the usual `exec_env` suffix. It
+only affects PostgreSQL URL construction; SQLite selection still follows
+`db_type`, including the default in-memory SQLite URL for `exec_env=test`.
 
 `POSTGRES_EXPOSE_TO_LAN` and `PGADMIN_EXPOSE_TO_LAN` accept a boolean
 (`1`/`true`/`yes`/`on` or `0`/`false`/`no`/`off`). `postgres_generate` publishes

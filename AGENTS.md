@@ -9,10 +9,11 @@
 - **Language**: Python 3.12+
 - **Package Manager**: uv
 - **Build Backend**: hatchling
+- **Shared foundations**: basekit (config, discovery, logging, and Docker utilities)
 - **Database ORM**: SQLAlchemy 2.0+
 - **Migration Tool**: Alembic
 - **Testing Framework**: pytest (unit and behavior tests)
-- **Configuration**: python-dotenv for environment management
+- **Linting**: Ruff
 
 ## Project Structure
 
@@ -26,9 +27,20 @@ repom/
 │   ├── scripts/               # CLI scripts (console script entry points)
 │   ├── postgres/              # PostgreSQL / pgAdmin configuration and Docker management
 │   ├── redis/                 # Redis configuration and Docker management
+│   ├── sqlite/                # SQLite configuration
+│   ├── alembic/               # Alembic setup/reset helpers and alembic.ini templates
+│   ├── diagnostics/           # Database diagnostics and QueryAnalyzer
+│   ├── examples/              # Example models and repositories
 │   ├── config_hooks/          # Runtime environment override helpers
+│   ├── config_hook.py         # Default repom configuration hook
 │   ├── config.py              # Environment-aware configuration
 │   ├── database.py            # Database connection setup
+│   ├── credentials.py         # Shared credential helpers for PostgreSQL / pgAdmin / Redis rotation
+│   ├── docker_service.py      # Docker service helpers
+│   ├── docker_compose_safety.py # Docker Compose safety checks
+│   ├── logging.py             # Logging integration
+│   ├── nul_bytes.py           # NUL-byte utilities
+│   ├── exceptions.py          # Shared exceptions
 │   ├── testing.py             # Reusable pytest fixture factories
 │   └── utility.py             # Shared utility functions
 ├── tests/                     # Test suite for shared functionality
@@ -37,8 +49,9 @@ repom/
 │   ├── integration_tests/    # External-project and database integration tests
 │   ├── conftest.py           # Pytest configuration
 │   └── db_test_fixtures.py   # Backward-compatibility note; fixtures live in conftest.py
-├── alembic/                  # Database migration files
+├── alembic/                  # Shared migration environment referenced via script_location; versions/ holds repom's own migrations
 ├── data/                     # SQLite databases for each environment
+├── data_master/              # Master data files
 ├── docs/                     # Documentation and usage notes
 ├── pyproject.toml           # uv + pytest configuration ([tool.pytest.ini_options])
 └── alembic.ini             # Alembic configuration
@@ -55,27 +68,28 @@ in-memory SQLite for `test`. When file-based SQLite is selected with the default
 `db_name=repom`, the generated names are `repom_dev.sqlite3`,
 `repom_test.sqlite3`, and `repom.sqlite3`.
 
+### Setting Environment (POSIX shell)
+```bash
+export EXEC_ENV=dev  # for development
+export EXEC_ENV=prod # for production
+```
+
 ### Setting Environment (Windows PowerShell)
 ```powershell
 $env:EXEC_ENV='dev'  # for development
 $env:EXEC_ENV='prod' # for production
 ```
 
-## Available Commands (Console Scripts)
+## Available Commands
+
+The complete console-script list is maintained in [`pyproject.toml`](pyproject.toml)
+under `[project.scripts]`; the README documents common usage. Commands commonly
+needed during development are:
 
 ```bash
-# Database management
-uv run db_create          # Create database
-uv run db_delete          # Delete database
-uv run db_sync_master     # Sync master data
-uv run db_backup          # Backup database
-
-# Configuration / diagnostics
-uv run repom_info          # Show config and loaded models
-
-# Migration commands
-uv run alembic revision --autogenerate -m "description"  # Generate migration
-uv run alembic upgrade head                              # Apply migrations
+uv run pytest
+uv run ruff check .
+uv run issuekit check-encoding --gate
 ```
 
 ## Alembic Configuration
@@ -166,9 +180,16 @@ version_locations = %(here)s/alembic/versions
 # pre_migration_hook = mine_py.alembic_runtime:validate_alembic_database
 ```
 
-**Step 2: Set CONFIG_HOOK (optional)**
+**Step 2: Configure the consuming project (required)**
 
-Only needed if you want to customize other repom features (like model auto-import).
+Set `CONFIG_HOOK` to a consumer-owned hook. This is required for Alembic
+autogenerate: `RepomConfig.model_locations` defaults to an empty list, so no
+consumer models are loaded unless the hook sets it. Without model locations,
+the empty-metadata guard cannot protect the live database from a migration
+that drops every table. Set `root_path` as well so database and data paths
+resolve under the consumer project rather than the repom checkout. Set a
+project-specific `db_name` when using file-based SQLite or when distinct
+PostgreSQL database names are needed.
 
 ```bash
 # .env file
@@ -177,18 +198,17 @@ CONFIG_HOOK=mine_py.config:get_repom_config
 
 ```python
 # mine-py/src/mine_py/config.py
+from pathlib import Path
+
+
 def get_repom_config(config):
+    config.root_path = str(Path(__file__).resolve().parents[2])
+    config.db_name = "mine_py"
     config.model_locations = ['mine_py.models']
     config.allowed_package_prefixes = {'mine_py.', 'repom.'}
     config.model_excluded_dirs = {'base', 'mixin', '__pycache__'}
     return config
 ```
-
-**Key Changes from Previous Versions:**
-
-- ❌ **Removed**: `RepomConfig._alembic_versions_path` - no longer exists
-- ❌ **Removed**: `env.py` version_locations override - not needed
-- ✅ **Simplified**: Single source of truth (`alembic.ini` only)
 
 **Step 3: Define Repository (recommended)**
 
@@ -209,11 +229,6 @@ with get_reusable_sync_transaction() as session:
     user = repo.get_by_id(1)
 ```
 
-**メリット**:
-- インスタンス化時にモデル名を省略できる
-- カスタムメソッドを追加しやすい
-- コードが読みやすい
-
 ## Testing Framework
 
 ### Test Strategy: Transaction Rollback Pattern
@@ -227,11 +242,6 @@ repom uses **Transaction Rollback** approach for fast, isolated testing:
 - `db_test` (function scope): Provides isolated transaction per test
 - Automatic rollback after each test ensures clean state
 
-**Performance**:
-- Old approach (DB recreation): full-suite runs took ~30s
-- Transaction Rollback: ~3s for the same suite
-- **~9x speedup achieved**
-
 **Implementation**:
 ```python
 # tests/conftest.py
@@ -243,10 +253,11 @@ db_engine, db_test = create_test_fixtures()
 ### Test Structure
 - **Unit Tests**: `tests/unit_tests/` - Core functionality tests
 - **Behavior Tests**: `tests/behavior_tests/` - Integration scenarios
+- **Integration Tests**: `tests/integration_tests/` - External-project and database integration tests
 
 ### Running Tests
 ```bash
-# All tests
+# Full suite; .env is not required
 uv run pytest
 
 # Unit tests only
@@ -255,12 +266,22 @@ uv run pytest tests/unit_tests
 # Behavior tests only
 uv run pytest tests/behavior_tests
 
+# Integration tests only
+uv run pytest tests/integration_tests
+
+# Lint (also run in CI)
+uv run ruff check .
+
 # With verbose output
 uv run pytest -vv -s
 ```
 
-Default runs capture successful test output and keep logging concise. Use the
-verbose command above when detailed stdout and DEBUG logs are needed.
+The repository's `.env.example` enables `repom.config_hook:hook_config`, which
+selects PostgreSQL for `dev` / `prod` and in-memory SQLite for `test`. Pytest's
+configured `addopts` include `-x` (stop after the first failure) and
+`--benchmark-skip`. Default runs capture successful test output and keep
+logging concise. Use the verbose command above when detailed stdout and DEBUG
+logs are needed.
 
 ### For External Projects
 
@@ -286,14 +307,14 @@ db_engine, db_test = create_test_fixtures(
 
 ## Key Dependencies
 
+- **basekit**: Shared config, discovery, logging, and Docker foundations; the
+  source is configured in `[tool.uv.sources]` in `pyproject.toml`.
 - **sqlalchemy**: ORM and database toolkit
 - **alembic**: Database migration management
 - **pydantic**: Data validation and serialization
-- **python-dotenv**: Environment variable management
 - **inflect**: Pluralization utilities
-- **pytest**: Testing framework with extensions
-- **pytest-sqlalchemy**: SQLAlchemy testing utilities
-- **pytest-benchmark**: Performance testing
+- **pytest**, **pytest-sqlalchemy**, **pytest-benchmark**, and **pytest-asyncio**: Development test tools
+- **ruff**: Development linting
 
 ## Configuration
 
@@ -315,7 +336,7 @@ Use issuekit cross-project proposals when work in repom reveals that another pro
 
 - `docs/ideas/` is for repom's own feature ideas.
 - Issues live in the issuekit API (`project = "repom"`); inbound proposals arrive in the API proposal inbox (`issuekit incoming`).
-- Targets include `mine-py`, `fast-domain`, `mine-js-monorepo`, or `py_cr_wrapper`.
+- Targets include `mine-py`, `fast-domain`, `basekit`, `mine-js-monorepo`, or `py_cr_wrapper`.
 
 To propose a change:
 - Send: `issuekit propose --to <project>` posts to the target project's API proposal inbox.
@@ -342,3 +363,7 @@ issuekit MCP server instructions / `get_protocol` tool.
 
 Do not copy the steps here; issuekit is the source of truth. Launch your agent from the repo root so the MCP server resolves the repo configuration
 (the `project` key and API settings).
+
+If work originates in another project but belongs here, use the cross-project
+proposal flow from the origin project. Do not create a local issue here unless
+the protocol says the work is local to this repo.

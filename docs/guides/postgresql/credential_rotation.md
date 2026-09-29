@@ -10,23 +10,34 @@ self-managed environment without deleting PostgreSQL data.
 Dry-run the SQL plan first:
 
 ```bash
-printf '%s\n' 'new-password' | uv run postgres_rotate_credentials --new-password-stdin
+printf '%s\n%s\n' 'new-password' 'old-password' | uv run postgres_rotate_credentials \
+  --new-password-stdin \
+  --current-password-stdin
 ```
 
 Execute after reviewing the masked plan:
 
 ```bash
-printf '%s\n' 'new-password' | uv run postgres_rotate_credentials --new-password-stdin --execute
+printf '%s\n%s\n' 'new-password' 'old-password' | uv run postgres_rotate_credentials \
+  --new-password-stdin \
+  --current-password-stdin \
+  --execute
 ```
 
-Update the configured password holder first, then rotate the running role.
-When standard input is a TTY, omitting the new-password option prompts for it.
-`--new-password` remains available for compatibility, but exposes the value in
-process arguments. `--allow-config-password` explicitly opts in to using the
-configured password as the new value.
-`--current-password-stdin` also accepts the current password without placing it
-in process arguments; otherwise the configured current password is used.
-When more than one stdin option is used, the new password is read first.
+Update the configured password holder to the new password before rotating the
+running role. The PostgreSQL role still has its old password at that point, so
+pass that old value with `--current-password-stdin`, as above. If the configured
+password holder still contains the role's old password, that configured value is
+used as the current password when no current-password option is supplied.
+`--current-password` and `--new-password` expose their values in process
+arguments. Prefer the corresponding `*-stdin` options; when both are used, the
+new password is read from stdin first. When stdin is a TTY, omitting the
+new-password option prompts for the new password. `--allow-config-password`
+explicitly opts in to using the configured password as the new value.
+
+`--database` can be repeated to select databases; by default the command targets
+`db_name`, `db_name_dev`, and `db_name_test`. `--schema` can be repeated to
+select schemas and defaults to `public`.
 
 If you are replacing the application role rather than only rotating the
 password:
@@ -65,20 +76,23 @@ Execute after reviewing the masked command:
 printf '%s\n' 'new-password' | uv run pgadmin_rotate_password --new-password-stdin --execute
 ```
 
-If the update command is not usable for the installed pgAdmin image, recreate
-only the pgAdmin volume after regenerating compose with the new
-`PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD` values:
+repom invokes this command with `/venv/bin/python` and `/pgadmin4/setup.py`,
+paths hard-coded for the pgAdmin image. If that update command is not usable for
+the installed image, set the new `PGADMIN_DEFAULT_EMAIL` and
+`PGADMIN_DEFAULT_PASSWORD` values, then recreate only the pgAdmin volume. Review
+the dry-run before executing the removal:
 
 ```bash
 uv run pgadmin_rotate_password --recreate-volume
 uv run pgadmin_rotate_password --recreate-volume --execute --confirm-recreate-volume
-uv run postgres_generate
 uv run postgres_start
 ```
 
-This fallback removes pgAdmin's own saved UI state, but it does not remove the
-PostgreSQL data volume. It is also the lower exposure path when passing the
-new pgAdmin password through `setup.py update-user --password` is not acceptable.
+`postgres_start` regenerates compose using the current configuration before
+starting the containers. This fallback removes pgAdmin's own saved UI state,
+but it does not remove the PostgreSQL data volume. It is also the lower exposure
+path when passing the new pgAdmin password through `setup.py update-user
+--password` is not acceptable.
 
 ## Notes
 

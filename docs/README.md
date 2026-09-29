@@ -17,6 +17,9 @@ Issue は issuekit API の `project = "repom"` で管理します。廃止済み
 `docs/issue` / `docs/issues` トラッカーを作り直さないでください。手順は
 `issuekit protocol --role <role>` または MCP の `get_protocol` で確認します。
 
+`docs/issues/` には案内用の README のみを置きます。ローカルの Issue ファイルや
+索引は追加しないでください。
+
 repom 外の変更が必要な場合は `issuekit propose --to <project>` を使用します。
 ローカルの `docs/proposals` は使用しません。
 
