@@ -100,6 +100,12 @@ state, but it does not remove the PostgreSQL data volume. It is also the lower
 exposure path when passing the new pgAdmin password through `setup.py
 update-user --password` is not acceptable.
 
+The library functions `rotate_postgres_credentials`,
+`rotate_pgadmin_password`, and `recreate_pgadmin_volume` perform this
+compose-dir `.env` update themselves after a successful execution. Changed
+secrets keep the previous file as `.env.bak`; callers and downstream wrappers
+do not need an additional persistence step.
+
 ## Notes
 
 - Rotation output masks passwords.

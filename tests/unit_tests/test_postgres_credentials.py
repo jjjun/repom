@@ -2,7 +2,9 @@
 
 from io import StringIO
 import os
+import subprocess
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,6 +25,99 @@ from repom.postgres.credentials import (
     main_pgadmin,
     main_postgres,
 )
+
+
+def _configure_temp_secret_generation(monkeypatch, tmp_path):
+    from repom.postgres import manage
+
+    compose_dir = tmp_path / "postgres"
+    init_dir = compose_dir / "postgresql_init"
+    init_dir.mkdir(parents=True)
+    env_file = compose_dir / ".env"
+    original_env = (
+        'POSTGRES_PASSWORD="postgres-old-secret"\n'
+        'PGADMIN_DEFAULT_PASSWORD="pgadmin-old-secret"\n'
+    )
+    env_file.write_text(original_env, encoding="utf-8")
+
+    postgres_container = SimpleNamespace(
+        get_container_name=lambda: "repom_postgres",
+        get_volume_name=lambda: "repom_postgres_data",
+        host_port=5432,
+    )
+    pgadmin_container = SimpleNamespace(
+        enabled=True,
+        get_container_name=lambda: "repom_pgadmin",
+        get_volume_name=lambda: "repom_pgadmin_data",
+        host_port=5050,
+    )
+    mock_config = SimpleNamespace(
+        data_path=tmp_path / "data",
+        db_name="repom",
+        postgres=SimpleNamespace(
+            user="repom",
+            password="postgres-config-secret",
+            container=postgres_container,
+        ),
+        pgadmin=SimpleNamespace(
+            email="admin@example.com",
+            password="pgadmin-config-secret",
+            container=pgadmin_container,
+        ),
+    )
+
+    monkeypatch.setattr("repom.postgres.credentials.config", mock_config)
+    monkeypatch.setattr(manage, "config", mock_config)
+    monkeypatch.setattr(
+        manage.PostgresManager, "get_compose_dir", lambda self: compose_dir
+    )
+    monkeypatch.setattr(manage.PostgresManager, "get_init_dir", lambda self: init_dir)
+    monkeypatch.setattr(manage, "generate_docker_compose", lambda: MagicMock())
+    monkeypatch.setattr(manage, "generate_init_sql", lambda: "-- test init\n")
+    monkeypatch.setattr(manage, "generate_pgadmin_servers_json", lambda: {})
+    return mock_config, env_file, original_env
+
+
+def _rotation_runner(returncode=0):
+    def run(command, **kwargs):
+        if kwargs.get("check") and returncode:
+            raise subprocess.CalledProcessError(returncode, command)
+        return subprocess.CompletedProcess(
+            command,
+            returncode,
+            stdout="",
+            stderr="rotation failed" if returncode else "",
+        )
+
+    return run
+
+
+def _run_rotation(operation, *, execute, runner):
+    if operation == "postgres":
+        plan = PostgresCredentialRotationPlan(
+            current_user="repom",
+            current_password="postgres-old-secret",
+            new_password="postgres-rotated-secret",
+            databases=(),
+            container_name="repom_postgres",
+        )
+        return rotate_postgres_credentials(plan, dry_run=not execute, runner=runner)
+    if operation == "pgadmin":
+        plan = PgAdminCredentialRotationPlan(
+            email="admin@example.com",
+            new_password="pgadmin-rotated-secret",
+            container_name="repom_pgadmin",
+        )
+        return rotate_pgadmin_password(plan, dry_run=not execute, runner=runner)
+    if operation == "volume":
+        plan = PgAdminCredentialRotationPlan(
+            email="admin@example.com",
+            new_password="plan-password-is-unused",
+            container_name="repom_pgadmin",
+            volume_name="repom_pgadmin_data",
+        )
+        return recreate_pgadmin_volume(plan, confirm=execute, runner=runner)
+    raise AssertionError(f"Unexpected rotation operation: {operation}")
 
 
 def test_quote_identifier_escapes_double_quotes():
@@ -71,7 +166,10 @@ def test_replacement_user_plan_is_non_destructive_and_grants_access():
     assert "DROP ROLE" not in sql
 
 
-def test_postgres_rotation_executes_structured_commands_through_env_file():
+def test_postgres_rotation_executes_structured_commands_through_env_file(
+    monkeypatch, tmp_path
+):
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
     runner = MagicMock()
     runner.return_value = MagicMock(returncode=0, stdout="", stderr="")
     plan = PostgresCredentialRotationPlan(
@@ -97,7 +195,10 @@ def test_postgres_rotation_executes_structured_commands_through_env_file():
     assert "env" not in kwargs
 
 
-def test_postgres_rotation_env_file_holds_pgpassword_only_during_the_call():
+def test_postgres_rotation_env_file_holds_pgpassword_only_during_the_call(
+    monkeypatch, tmp_path
+):
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
     captured = {}
 
     def fake_runner(command, **kwargs):
@@ -123,7 +224,7 @@ def test_postgres_rotation_env_file_holds_pgpassword_only_during_the_call():
     assert not os.path.exists(captured["env_file"])
 
 
-def test_postgres_rotation_still_uses_stdin_and_env_file():
+def test_postgres_rotation_still_uses_stdin_and_env_file(monkeypatch, tmp_path):
     """Regression guard: PostgreSQL passwords never appear in argv.
 
     The current password travels through a short-lived ``docker exec
@@ -131,6 +232,7 @@ def test_postgres_rotation_still_uses_stdin_and_env_file():
     of the host process environment, and the new password travels through
     stdin as part of the SQL step.
     """
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
     runner = MagicMock()
     runner.return_value = MagicMock(returncode=0, stdout="", stderr="")
     plan = PostgresCredentialRotationPlan(
@@ -291,7 +393,8 @@ def test_pgadmin_volume_recreation_is_dry_run_without_confirm():
     assert build_pgadmin_volume_recreation_commands(plan) == result.commands
 
 
-def test_pgadmin_volume_recreation_executes_only_when_confirmed():
+def test_pgadmin_volume_recreation_executes_only_when_confirmed(monkeypatch, tmp_path):
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
     runner = MagicMock()
     plan = PgAdminCredentialRotationPlan(
         email="admin@example.com",
@@ -304,6 +407,80 @@ def test_pgadmin_volume_recreation_executes_only_when_confirmed():
 
     assert result.dry_run is False
     assert runner.call_count == 2
+
+
+@pytest.mark.parametrize("operation", ("postgres", "pgadmin", "volume"))
+def test_successful_rotation_persists_compose_secrets_and_backup(
+    operation, monkeypatch, tmp_path
+):
+    mock_config, env_file, original_env = _configure_temp_secret_generation(
+        monkeypatch, tmp_path
+    )
+
+    result = _run_rotation(operation, execute=True, runner=_rotation_runner())
+
+    assert result.dry_run is False
+    if operation == "postgres":
+        postgres_password = "postgres-rotated-secret"
+        pgadmin_password = "pgadmin-config-secret"
+    elif operation == "pgadmin":
+        postgres_password = "postgres-config-secret"
+        pgadmin_password = "pgadmin-rotated-secret"
+    else:
+        postgres_password = "postgres-config-secret"
+        pgadmin_password = "pgadmin-config-secret"
+    assert mock_config.postgres.password == postgres_password
+    assert mock_config.pgadmin.password == pgadmin_password
+    assert env_file.read_text(encoding="utf-8") == (
+        f'POSTGRES_PASSWORD="{postgres_password}"\n'
+        f'PGADMIN_DEFAULT_PASSWORD="{pgadmin_password}"\n'
+    )
+    assert env_file.with_name(".env.bak").read_text(encoding="utf-8") == original_env
+
+
+@pytest.mark.parametrize("operation", ("postgres", "pgadmin", "volume"))
+def test_dry_run_leaves_compose_secrets_untouched(operation, monkeypatch, tmp_path):
+    mock_config, env_file, original_env = _configure_temp_secret_generation(
+        monkeypatch, tmp_path
+    )
+    runner = MagicMock(return_value=subprocess.CompletedProcess((), 0))
+
+    result = _run_rotation(operation, execute=False, runner=runner)
+
+    assert result.dry_run is True
+    assert mock_config.postgres.password == "postgres-config-secret"
+    assert mock_config.pgadmin.password == "pgadmin-config-secret"
+    assert env_file.read_text(encoding="utf-8") == original_env
+    assert not env_file.with_name(".env.bak").exists()
+    runner.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "operation, error_type",
+    (
+        ("postgres", PostgresCredentialRotationError),
+        ("pgadmin", PgAdminCredentialRotationError),
+        ("volume", subprocess.CalledProcessError),
+    ),
+)
+def test_failed_rotation_leaves_compose_secrets_untouched(
+    operation, error_type, monkeypatch, tmp_path
+):
+    mock_config, env_file, original_env = _configure_temp_secret_generation(
+        monkeypatch, tmp_path
+    )
+
+    with pytest.raises(error_type):
+        _run_rotation(
+            operation,
+            execute=True,
+            runner=_rotation_runner(returncode=1),
+        )
+
+    assert mock_config.postgres.password == "postgres-config-secret"
+    assert mock_config.pgadmin.password == "pgadmin-config-secret"
+    assert env_file.read_text(encoding="utf-8") == original_env
+    assert not env_file.with_name(".env.bak").exists()
 
 
 def test_postgres_plan_from_config_uses_default_databases():
@@ -377,7 +554,7 @@ def test_postgres_main_prompts_for_new_password_in_a_tty(monkeypatch):
     assert rotate.call_args.args[0].new_password == "new-secret"
 
 
-def test_postgres_main_rewrites_generated_env_after_execute(monkeypatch):
+def test_postgres_main_delegates_execution_to_library(monkeypatch):
     mock_config = MagicMock()
     mock_config.postgres.password = "old-secret"
     monkeypatch.setattr(
@@ -397,12 +574,13 @@ def test_postgres_main_rewrites_generated_env_after_execute(monkeypatch):
         with patch(
             "repom.postgres.credentials.rotate_postgres_credentials",
             return_value=MagicMock(dry_run=False, masked_output=()),
-        ):
+        ) as rotate:
             with patch("repom.postgres.manage.generate") as generate:
                 main_postgres()
 
-    assert mock_config.postgres.password == "new-secret"
-    generate.assert_called_once_with(overwrite_secrets=True)
+    assert rotate.call_args.kwargs["dry_run"] is False
+    assert mock_config.postgres.password == "old-secret"
+    generate.assert_not_called()
 
 
 def test_pgadmin_main_keeps_new_password_argument_behavior(monkeypatch):
@@ -418,7 +596,7 @@ def test_pgadmin_main_keeps_new_password_argument_behavior(monkeypatch):
     assert rotate.call_args.args[0].new_password == "new-secret"
 
 
-def test_pgadmin_main_rewrites_generated_env_after_execute(monkeypatch):
+def test_pgadmin_main_delegates_execution_to_library(monkeypatch):
     mock_config = MagicMock()
     mock_config.pgadmin.password = "old-secret"
     monkeypatch.setattr(
@@ -431,12 +609,13 @@ def test_pgadmin_main_rewrites_generated_env_after_execute(monkeypatch):
         with patch(
             "repom.postgres.credentials.rotate_pgadmin_password",
             return_value=MagicMock(dry_run=False, masked_output=()),
-        ):
+        ) as rotate:
             with patch("repom.postgres.manage.generate") as generate:
                 main_pgadmin()
 
-    assert mock_config.pgadmin.password == "new-secret"
-    generate.assert_called_once_with(overwrite_secrets=True)
+    assert rotate.call_args.kwargs["dry_run"] is False
+    assert mock_config.pgadmin.password == "old-secret"
+    generate.assert_not_called()
 
 
 def test_pgadmin_main_requires_explicit_new_password(monkeypatch):

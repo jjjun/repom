@@ -103,6 +103,14 @@ class CredentialRotationResult:
     masked_output: tuple[str, ...]
 
 
+def _regenerate_compose_secrets() -> None:
+    """Persist the configured credentials to the generated compose files."""
+
+    from repom.postgres.manage import generate
+
+    generate(overwrite_secrets=True)
+
+
 def quote_identifier(value: str) -> str:
     """Quote a PostgreSQL identifier."""
 
@@ -271,6 +279,8 @@ def rotate_postgres_credentials(
                     action="psql rotation",
                     input=step.sql,
                 )
+        config.postgres.password = plan.new_password
+        _regenerate_compose_secrets()
     else:
         placeholder_env_file = "<postgres-auth-env-file>" if plan.current_password else None
         commands = tuple(
@@ -336,6 +346,8 @@ def rotate_pgadmin_password(
             error_type=PgAdminCredentialRotationError,
             action="pgAdmin update-user",
         )
+        config.pgadmin.password = plan.new_password
+        _regenerate_compose_secrets()
     masked_commands = tuple(mask_secret(part, secrets) for part in command)
     return CredentialRotationResult(
         dry_run=dry_run,
@@ -379,6 +391,7 @@ def recreate_pgadmin_volume(
         )
     for command in commands:
         runner(command, check=True, text=True)
+    _regenerate_compose_secrets()
     return CredentialRotationResult(
         dry_run=False,
         commands=commands,
@@ -474,11 +487,6 @@ def main_postgres() -> None:
         schemas=tuple(args.schemas or ("public",)),
     )
     result = rotate_postgres_credentials(plan, dry_run=not args.execute)
-    if args.execute and not result.dry_run:
-        config.postgres.password = new_password
-        from repom.postgres.manage import generate
-
-        generate(overwrite_secrets=True)
     _print_result(result)
 
 
@@ -544,10 +552,4 @@ def main_pgadmin() -> None:
         )
     else:
         result = rotate_pgadmin_password(plan, dry_run=not args.execute)
-    if args.execute and not result.dry_run:
-        if not args.recreate_volume:
-            config.pgadmin.password = new_password
-        from repom.postgres.manage import generate
-
-        generate(overwrite_secrets=True)
     _print_result(result)

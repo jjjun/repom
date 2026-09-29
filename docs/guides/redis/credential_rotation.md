@@ -63,6 +63,9 @@ After execution, repom regenerates the compose files and the `.env` secrets
 file with the new password only after Redis confirms the change. This update
 uses the explicit secret overwrite path and keeps the previous `.env` as
 `.env.bak` when its content changes.
+The library function `repom.redis.manage.rotate_password` performs this
+compose-dir `.env` update itself, so callers and downstream wrappers do not
+need an additional persistence step.
 The runtime command passes the old password through `REDISCLI_AUTH` when it is
 supplied with `--old-password` or `--old-password-stdin`, or entered at the TTY
 prompt, and sends the new password through stdin. `REDISCLI_AUTH` is written to

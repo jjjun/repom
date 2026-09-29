@@ -10,7 +10,11 @@
   refuse to replace a differing `.env` unless `--force-regenerate` is passed;
   replacements keep the previous `.env` as `.env.bak` with mode `0600` when
   its content changes.
-  Successful credential rotations synchronize the generated `.env`.
+  The library rotation functions `rotate_postgres_credentials`,
+  `rotate_pgadmin_password`, `recreate_pgadmin_volume`, and
+  `repom.redis.manage.rotate_password` persist credentials to the compose-dir
+  `.env` themselves, so CLI and downstream wrappers need no extra persistence
+  call.
 - Removed the PostgreSQL backup/restore duplication between the host and
   Docker paths and across `db_backup`, `db_restore`, and `pg_dump_tools`, and
   fixed the memory, deadlock, and Windows-portability problems that
