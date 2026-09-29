@@ -367,14 +367,20 @@ def main_rotate_password():
             option_name="--old-password",
             allow_empty=True,
         )
-    elif old_password is None and sys.stdin.isatty():
-        old_password = resolve_password(
-            password=None,
-            read_stdin=False,
-            prompt="Current Redis password (leave blank if unset): ",
-            option_name="--old-password",
-            allow_empty=True,
-        )
+    elif old_password is None:
+        if args.execute and not sys.stdin.isatty():
+            raise ValueError(
+                "--execute without a TTY requires --old-password or "
+                "--old-password-stdin"
+            )
+        if sys.stdin.isatty():
+            old_password = resolve_password(
+                password=None,
+                read_stdin=False,
+                prompt="Current Redis password (leave blank if unset): ",
+                option_name="--old-password",
+                allow_empty=True,
+            )
 
     rotate_password(
         new_password=new_password,
