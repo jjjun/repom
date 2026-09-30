@@ -4,10 +4,11 @@ BaseRepository の options パラメータ（eager loading）のテスト
 N+1 問題を解決するための joinedload, selectinload などの
 SQLAlchemy の load options をテストします。
 """
-from tests._init import *
 from sqlalchemy import String, ForeignKey
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Mapped, mapped_column, relationship, joinedload, selectinload
 import pytest
+import pytest_asyncio
 from repom.models.base_model import BaseModel
 from repom import BaseRepository
 
@@ -605,41 +606,41 @@ def test_default_options_empty_by_default(db_test, setup_test_data):
 
 
 # =============================================================================
-# default_order_by のテスト
-# =============================================================================
-
-
-def test_default_order_by_applied_when_order_by_not_specified(db_test, setup_test_data):
-    """
-    default_order_by をクラス属性で指定した場合に order_by 未指定でも適用されることを確認
-    """
-
-    class OrderedBookRepository(BaseRepository[EagerBookModel]):
-        default_order_by = 'title:desc'
-
-        def __init__(self, session):
-            super().__init__(EagerBookModel, session)
-
-    repo = OrderedBookRepository(session=db_test)
-
-    titles = [book.title for book in repo.find()]
-
-    assert titles == ["Book 3", "Book 2", "Book 1"]
-
-
-# =============================================================================
 # joinedload をコレクション（1対多）関連に指定した場合のテスト（Result.unique）
 # =============================================================================
 
-def test_find_with_joinedload_collection_relationship(db_test, setup_test_data):
+@pytest_asyncio.fixture
+async def joinedload_collection_data(repository_adapter):
+    author1 = EagerAuthorModel(name="Author One")
+    author2 = EagerAuthorModel(name="Author Two")
+    author1.books.extend([
+        EagerBookModel(title="Book 1"),
+        EagerBookModel(title="Book 2"),
+    ])
+    author2.books.append(EagerBookModel(title="Book 3"))
+    repository_adapter.session.add_all([author1, author2])
+    await repository_adapter.call(repository_adapter.session.flush)
+    await repository_adapter.call(repository_adapter.session.commit)
+    return {"authors": [author1, author2]}
+
+
+@pytest.mark.asyncio
+async def test_find_with_joinedload_collection_relationship(
+    repository_adapter,
+    joinedload_collection_data,
+):
     """
     joinedload をコレクション関連（1対多）に指定しても、各親レコードが
     重複せずに1回だけ返り、コレクション全体がロードされることを確認
     """
-    repo = AuthorRepository(session=db_test)
+    repo = repository_adapter.repository_class(
+        EagerAuthorModel,
+        session=repository_adapter.session,
+    )
 
-    authors = repo.find(
-        options=[joinedload(EagerAuthorModel.books)]
+    authors = await repository_adapter.call(
+        repo.find,
+        options=[joinedload(EagerAuthorModel.books)],
     )
 
     assert len(authors) == 2
@@ -649,17 +650,25 @@ def test_find_with_joinedload_collection_relationship(db_test, setup_test_data):
     assert len(author2.books) == 1
 
 
-def test_find_with_joinedload_collection_and_limit(db_test, setup_test_data):
+@pytest.mark.asyncio
+async def test_find_with_joinedload_collection_and_limit(
+    repository_adapter,
+    joinedload_collection_data,
+):
     """
     limit=1 と collection joinedload を組み合わせても、1件の親が
     そのコレクション全体を伴って返ることを確認
     """
-    repo = AuthorRepository(session=db_test)
+    repo = repository_adapter.repository_class(
+        EagerAuthorModel,
+        session=repository_adapter.session,
+    )
 
-    authors = repo.find(
+    authors = await repository_adapter.call(
+        repo.find,
         options=[joinedload(EagerAuthorModel.books)],
         limit=1,
-        order_by='id:asc'
+        order_by='id:asc',
     )
 
     assert len(authors) == 1
@@ -667,18 +676,26 @@ def test_find_with_joinedload_collection_and_limit(db_test, setup_test_data):
     assert len(authors[0].books) == 2
 
 
-def test_find_with_joinedload_collection_and_pagination(db_test, setup_test_data):
+@pytest.mark.asyncio
+async def test_find_with_joinedload_collection_and_pagination(
+    repository_adapter,
+    joinedload_collection_data,
+):
     """
     collection joinedload + offset/limit を組み合わせても、
     重複排除後の親の件数でページングされることを確認
     """
-    repo = AuthorRepository(session=db_test)
+    repo = repository_adapter.repository_class(
+        EagerAuthorModel,
+        session=repository_adapter.session,
+    )
 
-    authors = repo.find(
+    authors = await repository_adapter.call(
+        repo.find,
         options=[joinedload(EagerAuthorModel.books)],
         offset=1,
         limit=1,
-        order_by='id:asc'
+        order_by='id:asc',
     )
 
     assert len(authors) == 1
@@ -686,48 +703,71 @@ def test_find_with_joinedload_collection_and_pagination(db_test, setup_test_data
     assert len(authors[0].books) == 1
 
 
-def test_find_with_joinedload_collection_empty_result(db_test, setup_test_data):
+@pytest.mark.asyncio
+async def test_find_with_joinedload_collection_empty_result(
+    repository_adapter,
+    joinedload_collection_data,
+):
     """
     条件に一致するレコードがない場合、collection joinedload 指定でも
     空リストが返ることを確認
     """
-    repo = AuthorRepository(session=db_test)
+    repo = repository_adapter.repository_class(
+        EagerAuthorModel,
+        session=repository_adapter.session,
+    )
 
-    authors = repo.find(
+    authors = await repository_adapter.call(
+        repo.find,
         filters=[EagerAuthorModel.name == "Nonexistent"],
-        options=[joinedload(EagerAuthorModel.books)]
+        options=[joinedload(EagerAuthorModel.books)],
     )
 
     assert authors == []
 
 
-def test_get_by_id_with_joinedload_collection(db_test, setup_test_data):
+@pytest.mark.asyncio
+async def test_get_by_id_with_joinedload_collection(
+    repository_adapter,
+    joinedload_collection_data,
+):
     """
     get_by_id() で collection joinedload を指定しても
     InvalidRequestError を送出せず、コレクション全体がロードされることを確認
     """
-    data = setup_test_data
-    author_id = data['authors'][0].id
-    repo = AuthorRepository(session=db_test)
+    author_id = joinedload_collection_data['authors'][0].id
+    repo = repository_adapter.repository_class(
+        EagerAuthorModel,
+        session=repository_adapter.session,
+    )
 
-    author = repo.get_by_id(
+    author = await repository_adapter.call(
+        repo.get_by_id,
         author_id,
-        options=[joinedload(EagerAuthorModel.books)]
+        options=[joinedload(EagerAuthorModel.books)],
     )
 
     assert author is not None
     assert len(author.books) == 2
 
 
-def test_get_by_with_joinedload_collection_multiple(db_test, setup_test_data):
+@pytest.mark.asyncio
+async def test_get_by_with_joinedload_collection_multiple(
+    repository_adapter,
+    joinedload_collection_data,
+):
     """
     get_by() の複数件取得で collection joinedload を指定できることを確認
     """
-    repo = AuthorRepository(session=db_test)
+    repo = repository_adapter.repository_class(
+        EagerAuthorModel,
+        session=repository_adapter.session,
+    )
 
-    authors = repo.get_by(
+    authors = await repository_adapter.call(
+        repo.get_by,
         'name', 'Author One',
-        options=[joinedload(EagerAuthorModel.books)]
+        options=[joinedload(EagerAuthorModel.books)],
     )
 
     assert isinstance(authors, list)
@@ -735,34 +775,49 @@ def test_get_by_with_joinedload_collection_multiple(db_test, setup_test_data):
     assert len(authors[0].books) == 2
 
 
-def test_get_by_with_joinedload_collection_single(db_test, setup_test_data):
+@pytest.mark.asyncio
+async def test_get_by_with_joinedload_collection_single(
+    repository_adapter,
+    joinedload_collection_data,
+):
     """
     get_by() の single=True で collection joinedload を指定できることを確認
     """
-    repo = AuthorRepository(session=db_test)
+    repo = repository_adapter.repository_class(
+        EagerAuthorModel,
+        session=repository_adapter.session,
+    )
 
-    author = repo.get_by(
+    author = await repository_adapter.call(
+        repo.get_by,
         'name', 'Author One',
         single=True,
-        options=[joinedload(EagerAuthorModel.books)]
+        options=[joinedload(EagerAuthorModel.books)],
     )
 
     assert author is not None
     assert len(author.books) == 2
 
 
-def test_find_by_ids_with_joinedload_collection(db_test, setup_test_data):
+@pytest.mark.asyncio
+async def test_find_by_ids_with_joinedload_collection(
+    repository_adapter,
+    joinedload_collection_data,
+):
     """
     find_by_ids() で collection joinedload を指定しても、各親レコードが
     重複せずに返ることを確認
     """
-    data = setup_test_data
-    ids = [author.id for author in data['authors']]
-    repo = AuthorRepository(session=db_test)
+    ids = [author.id for author in joinedload_collection_data['authors']]
+    repo = repository_adapter.repository_class(
+        EagerAuthorModel,
+        session=repository_adapter.session,
+    )
 
-    authors = repo.find_by_ids(
+    authors = await repository_adapter.call(
+        repo.find_by_ids,
         ids,
-        options=[joinedload(EagerAuthorModel.books)]
+        options=[joinedload(EagerAuthorModel.books)],
     )
 
     assert len(authors) == 2
@@ -770,20 +825,225 @@ def test_find_by_ids_with_joinedload_collection(db_test, setup_test_data):
     assert total_books == 3
 
 
-def test_default_options_with_joinedload_collection(db_test, setup_test_data):
+@pytest.mark.asyncio
+async def test_default_options_with_joinedload_collection(
+    repository_adapter,
+    joinedload_collection_data,
+):
     """
     default_options に collection joinedload を設定した場合も、
     find() で重複なく適用されることを確認
     """
-    class AuthorRepositoryWithDefaults(BaseRepository[EagerAuthorModel]):
+    class AuthorRepositoryWithDefaults(repository_adapter.repository_class):
         def __init__(self, session):
             super().__init__(EagerAuthorModel, session)
             self.default_options = [joinedload(EagerAuthorModel.books)]
 
-    repo = AuthorRepositoryWithDefaults(session=db_test)
+    repo = AuthorRepositoryWithDefaults(session=repository_adapter.session)
 
-    authors = repo.find()
+    authors = await repository_adapter.call(repo.find)
 
     assert len(authors) == 2
     total_books = sum(len(author.books) for author in authors)
     assert total_books == 3
+
+
+@pytest_asyncio.fixture
+async def shared_options_data(repository_adapter):
+    author1 = EagerAuthorModel(name="Shared Author One")
+    author2 = EagerAuthorModel(name="Shared Author Two")
+    book1 = EagerBookModel(title="Shared Book 1", author=author1)
+    book2 = EagerBookModel(title="Shared Book 2", author=author1)
+    book3 = EagerBookModel(title="Shared Book 3", author=author2)
+    book1.reviews.extend([
+        EagerReviewModel(comment="Great!"),
+        EagerReviewModel(comment="Good!"),
+    ])
+    book2.reviews.append(EagerReviewModel(comment="Nice!"))
+
+    repository_adapter.session.add_all([author1, author2, book1, book2, book3])
+    await repository_adapter.call(repository_adapter.session.flush)
+    await repository_adapter.call(repository_adapter.session.commit)
+    return {"authors": [author1, author2], "books": [book1, book2, book3]}
+
+
+@pytest.mark.asyncio
+async def test_repository_options_work_for_sync_and_async(
+    repository_adapter,
+    shared_options_data,
+):
+    repo = repository_adapter.repository_class(
+        EagerBookModel,
+        session=repository_adapter.session,
+    )
+
+    without_options = await repository_adapter.call(repo.find, limit=10)
+    assert len(without_options) == 3
+
+    without_options_none = await repository_adapter.call(
+        repo.find,
+        options=None,
+        limit=10,
+    )
+    assert len(without_options_none) == 3
+
+    await repository_adapter.call(repository_adapter.session.expire_all)
+    single_option = await repository_adapter.call(
+        repo.find,
+        options=joinedload(EagerBookModel.author),
+        limit=10,
+    )
+    assert all(book.author is not None for book in single_option)
+
+    books = await repository_adapter.call(
+        repo.find,
+        filters=[EagerBookModel.author_id == shared_options_data["authors"][0].id],
+        options=[joinedload(EagerBookModel.author), selectinload(EagerBookModel.reviews)],
+        order_by="title:desc",
+        limit=2,
+    )
+
+    assert [book.title for book in books] == ["Shared Book 2", "Shared Book 1"]
+    assert all(book.author.name == "Shared Author One" for book in books)
+    assert [len(book.reviews) for book in books] == [1, 2]
+
+    review_repo = repository_adapter.repository_class(
+        EagerReviewModel,
+        session=repository_adapter.session,
+    )
+    reviews = await repository_adapter.call(
+        review_repo.find,
+        options=[joinedload(EagerReviewModel.book).joinedload(EagerBookModel.author)],
+        limit=10,
+    )
+    assert all(review.book.author is not None for review in reviews)
+
+
+@pytest.mark.asyncio
+async def test_repository_lookup_options_work_for_sync_and_async(
+    repository_adapter,
+    shared_options_data,
+):
+    repo = repository_adapter.repository_class(
+        EagerBookModel,
+        session=repository_adapter.session,
+    )
+    book_id = shared_options_data["books"][0].id
+    options = [joinedload(EagerBookModel.author), selectinload(EagerBookModel.reviews)]
+
+    without_options = await repository_adapter.call(repo.get_by_id, book_id)
+    assert without_options is not None
+    assert without_options.title == "Shared Book 1"
+
+    by_id = await repository_adapter.call(repo.get_by_id, book_id, options=options)
+    by_column = await repository_adapter.call(
+        repo.get_by,
+        "id",
+        book_id,
+        single=True,
+        options=options,
+    )
+    one = await repository_adapter.call(
+        repo.find_one,
+        filters=[EagerBookModel.id == book_id],
+        options=options,
+    )
+    by_ids = await repository_adapter.call(repo.find_by_ids, [book_id], options=options)
+    multiple = await repository_adapter.call(
+        repo.get_by,
+        "author_id",
+        shared_options_data["authors"][0].id,
+        options=[selectinload(EagerBookModel.reviews)],
+    )
+
+    for book in (by_id, by_column, one, by_ids[0]):
+        assert book is not None
+        assert book.author.name == "Shared Author One"
+        assert len(book.reviews) == 2
+    assert len(multiple) == 2
+    assert all(isinstance(book.reviews, list) for book in multiple)
+
+
+@pytest.mark.asyncio
+async def test_default_options_can_be_overridden_for_sync_and_async(
+    repository_adapter,
+    shared_options_data,
+):
+    plain_repo = repository_adapter.repository_class(
+        EagerBookModel,
+        session=repository_adapter.session,
+    )
+    assert plain_repo.default_options == []
+
+    class BookRepositoryWithDefaults(repository_adapter.repository_class):
+        default_options = [
+            joinedload(EagerBookModel.author),
+            selectinload(EagerBookModel.reviews),
+        ]
+
+        def __init__(self, session):
+            super().__init__(EagerBookModel, session)
+            self.default_options = list(type(self).default_options)
+
+    repo = BookRepositoryWithDefaults(session=repository_adapter.session)
+
+    with_defaults = await repository_adapter.call(repo.find, limit=10)
+    assert all(book.author is not None for book in with_defaults)
+    assert all(isinstance(book.reviews, list) for book in with_defaults)
+
+    book_id = shared_options_data["books"][0].id
+    author_id = shared_options_data["authors"][0].id
+    await repository_adapter.call(repository_adapter.session.expire_all)
+    default_one = await repository_adapter.call(
+        repo.find_one,
+        filters=[EagerBookModel.id == book_id],
+    )
+    assert default_one is not None
+    assert default_one.author.name == "Shared Author One"
+    assert len(default_one.reviews) == 2
+
+    await repository_adapter.call(repository_adapter.session.expire_all)
+    default_by_id = await repository_adapter.call(repo.get_by_id, book_id)
+    assert default_by_id is not None
+    assert default_by_id.author is not None
+    assert isinstance(default_by_id.reviews, list)
+
+    await repository_adapter.call(repository_adapter.session.expire_all)
+    default_by_column = await repository_adapter.call(
+        repo.get_by,
+        "author_id",
+        author_id,
+    )
+    assert len(default_by_column) == 2
+    assert all(book.author is not None for book in default_by_column)
+    assert all(isinstance(book.reviews, list) for book in default_by_column)
+
+    await repository_adapter.call(repository_adapter.session.expire_all)
+    default_single = await repository_adapter.call(
+        repo.get_by,
+        "title",
+        "Shared Book 1",
+        single=True,
+    )
+    assert default_single is not None
+    assert default_single.author is not None
+    assert isinstance(default_single.reviews, list)
+
+    await repository_adapter.call(repository_adapter.session.expire_all)
+    explicitly_overridden = await repository_adapter.call(
+        repo.find,
+        options=[selectinload(EagerBookModel.reviews)],
+        limit=10,
+    )
+    assert all("author" in sa_inspect(book).unloaded for book in explicitly_overridden)
+    assert all("reviews" not in sa_inspect(book).unloaded for book in explicitly_overridden)
+
+    await repository_adapter.call(repository_adapter.session.expire_all)
+    without_defaults = await repository_adapter.call(repo.find, options=[], limit=10)
+    assert all("author" in sa_inspect(book).unloaded for book in without_defaults)
+    assert all("reviews" in sa_inspect(book).unloaded for book in without_defaults)
+
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

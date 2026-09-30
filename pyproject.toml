@@ -37,14 +37,14 @@ list_models = "repom.scripts.list_models:main"
 alembic_init = "repom.scripts.alembic_init:main"
 alembic_reset = "repom.scripts.alembic_reset:main"
 repom_info = "repom.scripts.repom_info:main"
-postgres_generate = "repom.postgres.manage:generate"
-postgres_start = "repom.postgres.manage:start"
+postgres_generate = "repom.postgres.manage:main_generate"
+postgres_start = "repom.postgres.manage:main_start"
 postgres_stop = "repom.postgres.manage:stop"
 postgres_remove = "repom.postgres.manage:remove"
 postgres_rotate_credentials = "repom.postgres.credentials:main_postgres"
 pgadmin_rotate_password = "repom.postgres.credentials:main_pgadmin"
-redis_generate = "repom.redis.manage:generate"
-redis_start = "repom.redis.manage:start"
+redis_generate = "repom.redis.manage:main_generate"
+redis_start = "repom.redis.manage:main_start"
 redis_stop = "repom.redis.manage:stop"
 redis_remove = "repom.redis.manage:remove"
 redis_rotate_password = "repom.redis.manage:main_rotate_password"
@@ -56,6 +56,7 @@ dev = [
   "pytest-sqlalchemy>=0.3.0,<0.4.0",
   "pytest-benchmark>=5.1.0,<6.0.0",
   "pytest-asyncio>=0.24.0,<2.0.0",
+  "pyyaml>=6.0,<7.0",
   "aiosqlite>=0.22.1,<0.23.0",
   "requests>=2.33.1,<3.0.0",
   "ruff>=0.15.13",
@@ -74,28 +75,12 @@ basekit = { git = "https://github.com/jjjun/basekit.git", branch = "main" }
 [tool.pytest.ini_options]
 addopts = [
   "-q",
-  "-x",
   "--benchmark-skip",
-  "--ignore=tests/test_local.py",
 ]
 
 markers = [
   "run_benchmark: Run the benchmark",
-  "model: mark a test as related to model functionality",
-  "repo: mark a test as related to repo functionality",
-  "query: mark a test as related to query functionality",
 ]
-
-filterwarnings = [
-  "ignore::DeprecationWarning:sqlalchemy.*",
-  "ignore:The garbage collector is trying to clean up non-checked-in connection.*:sqlalchemy.exc.SAWarning",
-  "ignore:Task was destroyed but it is pending.*:RuntimeWarning",
-  "ignore:find\\(\\) was called without a limit:RuntimeWarning",
-]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["F403", "F405"]
-
 
 [tool.issuekit]
 disabled_agents = ["kimi"]

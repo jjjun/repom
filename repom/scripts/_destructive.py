@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from typing import TextIO
 
+from repom.exec_env import is_prod_exec_env
+
 
 def confirm_destructive_operation(
     *,
@@ -24,8 +26,8 @@ def confirm_destructive_operation(
     """
     stdin = stdin if stdin is not None else sys.stdin
 
-    if exec_env == "prod":
-        print(f"Refusing to {operation} in EXEC_ENV=prod: {target}")
+    if is_prod_exec_env(exec_env):
+        print(f"Refusing to {operation} in EXEC_ENV={exec_env!r} (production): {target}")
         raise SystemExit(1)
 
     print(f"About to {operation}: {target}")

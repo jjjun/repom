@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Protocol
 
 from basekit.docker_manager import DockerCommandExecutor
@@ -35,6 +37,16 @@ class DockerServiceManager(Protocol):
 
 ManagerFactory = Callable[[], DockerServiceManager]
 GenerateFn = Callable[[], None]
+
+
+def _force_regenerate_from_args(description: str) -> bool:
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument(
+        "--force-regenerate",
+        action="store_true",
+        help="Intentionally replace generated secrets; the previous .env is backed up.",
+    )
+    return parser.parse_args().force_regenerate
 
 
 def start_service(
@@ -103,8 +115,10 @@ def ensure_running(
     generate_fn: GenerateFn,
     service_label: str,
     timeout_seconds: int,
+    *,
+    generated_files: tuple[Path, ...] | Callable[[], tuple[Path, ...]] | None = None,
 ) -> None:
-    """Start a Docker-backed service when one or more containers are down."""
+    """Start a down service, reusing generated files when their paths are given."""
 
     running_by_label = {
         label: is_container_running(container_name)
@@ -114,17 +128,30 @@ def ensure_running(
     if all(running_by_label.values()):
         return
 
+    generated_file_paths = (
+        generated_files() if callable(generated_files) else generated_files
+    )
     status = ", ".join(
         f"{label}={'up' if is_running else 'down'}"
         for label, is_running in running_by_label.items()
     )
-    print(
-        f"\n[{service_label}] auto-start ({status}); "
-        "generating compose and starting containers..."
+    missing_files = (
+        tuple(path for path in generated_file_paths if not path.is_file())
+        if generated_file_paths is not None
+        else ()
     )
+    should_generate = generated_file_paths is None or bool(missing_files)
+    if generated_file_paths is None:
+        startup_action = "generating and starting..."
+    elif should_generate:
+        startup_action = "generated compose files are missing; generating and starting..."
+    else:
+        startup_action = "using existing generated compose files and starting..."
+    print(f"\n[{service_label}] auto-start ({status}); {startup_action}")
 
     try:
-        generate_fn()
+        if should_generate:
+            generate_fn()
         manager_factory().start(timeout_seconds=timeout_seconds)
     except (TimeoutError, SystemExit) as exc:
         raise RuntimeError(

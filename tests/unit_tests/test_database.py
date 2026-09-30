@@ -8,6 +8,7 @@ from repom.database import (
     get_db_session,
     get_db_transaction,
     get_reusable_sync_transaction,
+    get_standalone_sync_transaction,
     get_sync_engine,
     get_inspector,
     DatabaseManager,
@@ -17,17 +18,14 @@ import repom.database as database_module
 from repom.config import config
 from repom.models.base_model import BaseModel
 from contextlib import contextmanager
-import os
 import threading
 import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import Column, String, Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.engine import Inspector
-
-# CRITICAL: Set EXEC_ENV before importing repom modules
-os.environ['EXEC_ENV'] = 'test'
-
 
 # テスト用モデル
 class DatabaseTestModel(BaseModel):
@@ -61,27 +59,11 @@ class TestGetInspector:
         inspector = get_inspector()
         assert isinstance(inspector, Inspector)
 
-    def test_can_list_tables(self, db_test):
+    def test_can_list_tables(self):
         """Inspector でテーブル一覧が取得できることを確認"""
         inspector = get_inspector()
         tables = inspector.get_table_names()
         assert isinstance(tables, list)
-
-
-class TestGetDbSession:
-    """DEPRECATED: Tests for old 'with' statement behavior removed"""
-
-    def test_deprecated_with_statement_tests(self):
-        """Old tests removed - FastAPI Depends compatibility tests in TestFastAPIDependsPattern"""
-        pytest.skip("Old 'with' statement tests removed - generator protocol tested in TestFastAPIDependsPattern")
-
-
-class TestGetDbTransaction:
-    """DEPRECATED: Tests for old 'with' statement behavior removed"""
-
-    def test_deprecated_with_statement_tests(self):
-        """Old tests removed - FastAPI Depends compatibility tests in TestFastAPIDependsPattern"""
-        pytest.skip("Old 'with' statement tests removed - generator protocol tested in TestFastAPIDependsPattern")
 
 
 class TestReusableSyncTransaction:
@@ -163,6 +145,31 @@ class TestReusableSyncTransaction:
 
         assert manager._sync_engine is None
 
+    def test_public_standalone_transaction_delegates_to_manager(self, monkeypatch):
+        events = []
+
+        @contextmanager
+        def transaction():
+            events.append("enter")
+            yield "session"
+
+        monkeypatch.setattr(_db_manager, "get_standalone_sync_transaction", transaction)
+
+        with get_standalone_sync_transaction() as session:
+            assert session == "session"
+
+        assert events == ["enter"]
+
+
+@pytest.mark.asyncio
+async def test_dispose_engines_delegates_to_manager(monkeypatch):
+    dispose_all = AsyncMock()
+    monkeypatch.setattr(_db_manager, "dispose_all", dispose_all)
+
+    await database_module.dispose_engines()
+
+    dispose_all.assert_awaited_once_with()
+
 
 class TestDatabaseManager:
     """DatabaseManager クラスのテスト"""
@@ -187,12 +194,12 @@ class TestDatabaseManager:
         assert factory.kw["autoflush"] is True
         manager.dispose_sync()
 
-    def test_sync_session_context_manager(self, db_test):
+    def test_sync_session_context_manager(self):
         """Sync Session の context manager 動作確認"""
         with get_reusable_sync_transaction() as session:
             assert isinstance(session, Session)
 
-    def test_sync_transaction_auto_commit(self, db_test):
+    def test_sync_transaction_auto_commit(self):
         """トランザクションの自動コミット確認"""
         from sqlalchemy import select
 
@@ -220,8 +227,10 @@ class TestDatabaseManager:
 
     def test_get_inspector_from_manager(self):
         """DatabaseManager から Inspector を取得"""
-        inspector = get_inspector()
+        manager = DatabaseManager()
+        inspector = manager.get_inspector()
         assert isinstance(inspector, Inspector)
+        manager.dispose_sync()
 
 
 class TestSyncEngineThreadSafety:
@@ -268,52 +277,29 @@ class TestSyncEngineThreadSafety:
 class TestSessionIsolation:
     """セッションの独立性のテスト"""
 
-    @pytest.mark.skip(reason=":memory: + StaticPool では全セッションが同じ接続を共有するため、トランザクション分離が機能しない。ファイルベースDBでのみ有効なテスト。")
-    def test_sessions_are_independent(self, db_test):
-        """各セッションが独立していることを確認"""
+    def test_sessions_are_independent(self, monkeypatch, tmp_path):
+        """A file-based SQLite session cannot see another session's uncommitted row."""
         from sqlalchemy import select
 
-        # セッション1でデータを追加（コミットしない）
-        with get_db_session() as session1:
-            item1 = DatabaseTestModel(name="test_isolation_1")
-            session1.add(item1)
-            session1.flush()
+        manager = DatabaseManager()
+        monkeypatch.setattr(database_module.config, "db_url", f"sqlite:///{tmp_path / 'isolation.sqlite3'}")
+        try:
+            BaseModel.metadata.create_all(manager.get_sync_engine())
 
-            # セッション2では見えない（独立している）
-            with get_db_session() as session2:
-                result = session2.execute(select(DatabaseTestModel).where(
-                    DatabaseTestModel.name == "test_isolation_1"
-                ))
-                items = result.scalars().all()
-                assert len(items) == 0
+            with manager.get_sync_session() as session1:
+                item1 = DatabaseTestModel(name="test_isolation_1")
+                session1.add(item1)
+                session1.flush()
 
-    @pytest.mark.skip(reason=":memory: + StaticPool では全セッションが同じ接続を共有するため、トランザクション分離が機能しない。ファイルベースDBでのみ有効なテスト。")
-    def test_multiple_transactions_do_not_interfere(self, db_test):
-        """複数のトランザクションが互いに干渉しないことを確認"""
-        from sqlalchemy import select
-
-        # トランザクション1
-        with get_db_transaction() as session1:
-            item1 = DatabaseTestModel(name="test_multi_tx_1")
-            session1.add(item1)
-
-        # トランザクション2
-        with get_db_transaction() as session2:
-            item2 = DatabaseTestModel(name="test_multi_tx_2")
-            session2.add(item2)
-
-        # 両方のデータが独立して保存されている
-        with get_db_transaction() as session3:
-            result1 = session3.execute(select(DatabaseTestModel).where(
-                DatabaseTestModel.name == "test_multi_tx_1"
-            ))
-            result2 = session3.execute(select(DatabaseTestModel).where(
-                DatabaseTestModel.name == "test_multi_tx_2"
-            ))
-            items1 = result1.scalars().all()
-            items2 = result2.scalars().all()
-            assert len(items1) == 1
-            assert len(items2) == 1
+                # セッション2では見えない（独立している）
+                with manager.get_sync_session() as session2:
+                    result = session2.execute(select(DatabaseTestModel).where(
+                        DatabaseTestModel.name == "test_isolation_1"
+                    ))
+                    items = result.scalars().all()
+                    assert len(items) == 0
+        finally:
+            manager.dispose_sync()
 
 
 class TestFastAPIDependsPattern:
@@ -362,24 +348,6 @@ class TestFastAPIDependsPattern:
                 next(gen)
             except StopIteration:
                 pass  # Expected
-
-    def test_get_db_session_context_manager_compatibility(self):
-        """get_db_session() should also work with 'with' statement for backward compatibility"""
-        # This tests the old behavior (with statement)
-        # If @contextmanager is removed, this test should be updated or removed
-        try:
-            with get_db_session() as session:
-                # Session であることを確認
-                assert isinstance(session, Session)
-
-                # session.execute() が動作することを確認
-                from sqlalchemy import select
-                result = session.execute(select(DatabaseTestModel))
-                items = result.scalars().all()
-                assert isinstance(items, list)
-        except (AttributeError, TypeError) as e:
-            # If @contextmanager is removed, generator doesn't support 'with'
-            pytest.skip(f"Context manager protocol not supported: {e}")
 
     def test_get_db_transaction_is_generator_function(self):
         """get_db_transaction() should be a generator function"""
@@ -547,3 +515,19 @@ class TestDependencyExceptionForwarding:
             pass
 
         assert events == ['open', 'commit', 'close']
+
+
+@pytest.mark.parametrize("exec_env", ["prod", "production", " Production "])
+def test_prod_sslmode_warning_includes_production_aliases(monkeypatch, caplog, exec_env):
+    test_config = SimpleNamespace(
+        db_type="postgres",
+        exec_env=exec_env,
+        postgres_sslmode="prefer",
+        postgres=SimpleNamespace(host="localhost"),
+    )
+    monkeypatch.setattr(database_module, "config", test_config)
+
+    with caplog.at_level("WARNING", logger="repom.database"):
+        database_module._warn_if_prod_sslmode_not_enforced()
+
+    assert any("TLS is not enforced" in record.message for record in caplog.records)

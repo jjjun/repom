@@ -123,3 +123,7 @@ class TestCreateRepositoryInstanceAsync:
         assert repo.model is IntrospectionModel
         assert repo.custom_marker == "async-pattern-b"
         assert repo._session_override is sentinel
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

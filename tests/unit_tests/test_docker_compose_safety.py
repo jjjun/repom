@@ -100,3 +100,31 @@ class TestWriteSecretFile:
 
         assert path.read_text() == "VALUE=1\n"
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+    @pytest.mark.skipif(
+        os.name != "posix",
+        reason="POSIX permission bits are not enforced on Windows",
+    )
+    def test_backup_keeps_latest_prior_content_across_rewrites(self, tmp_path):
+        path = tmp_path / ".env"
+        backup_path = tmp_path / ".env.bak"
+
+        write_secret_file(path, "SECRET=A\n")
+        write_secret_file(path, "SECRET=B\n")
+        write_secret_file(path, "SECRET=C\n")
+
+        assert path.read_text() == "SECRET=C\n"
+        assert backup_path.read_text() == "SECRET=B\n"
+        assert stat.S_IMODE(backup_path.stat().st_mode) == 0o600
+
+    def test_identical_rewrite_does_not_create_or_change_backup(self, tmp_path):
+        path = tmp_path / ".env"
+        backup_path = tmp_path / ".env.bak"
+
+        write_secret_file(path, "SECRET=A\n")
+        write_secret_file(path, "SECRET=A\n")
+        assert not backup_path.exists()
+
+        backup_path.write_text("OLDER=backup\n", encoding="utf-8")
+        write_secret_file(path, "SECRET=A\n")
+        assert backup_path.read_text(encoding="utf-8") == "OLDER=backup\n"

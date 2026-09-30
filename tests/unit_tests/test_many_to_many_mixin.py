@@ -1,4 +1,4 @@
-from tests._init import *
+import pytest
 
 from sqlalchemy import Integer, String, func, select
 from sqlalchemy.orm import Mapped, mapped_column
@@ -131,3 +131,45 @@ def test_remove_related_item_returns_false_when_link_missing(db_test):
     )
 
     assert removed is False
+
+
+def test_many_to_many_guards_require_attached_persisted_owner(db_test):
+    kwargs = {
+        "data": {"name": "Target", "slug": "target"},
+        "target_model_class": ManyToManyTargetModel,
+        "link_model_class": ManyToManyLinkModel,
+        "self_foreign_key": "owner_id",
+        "target_foreign_key": "target_id",
+        "lookup_fields": ["slug"],
+    }
+    detached_owner = ManyToManyOwnerModel(name="detached")
+
+    with pytest.raises(ValueError, match="attached to a session"):
+        detached_owner.add_related_item(**kwargs)
+    with pytest.raises(ValueError, match="attached to a session"):
+        detached_owner.remove_related_item(
+            item_id=1,
+            link_model_class=ManyToManyLinkModel,
+            self_foreign_key="owner_id",
+            target_foreign_key="target_id",
+        )
+    with pytest.raises(ValueError, match="attached to a session"):
+        detached_owner._find_link(
+            link_model_class=ManyToManyLinkModel,
+            self_foreign_key="owner_id",
+            self_id=1,
+            target_foreign_key="target_id",
+            target_id=1,
+        )
+
+    pending_owner = ManyToManyOwnerModel(name="pending")
+    db_test.add(pending_owner)
+    with pytest.raises(ValueError, match="self.id to be populated"):
+        pending_owner.add_related_item(**kwargs)
+    with pytest.raises(ValueError, match="self.id to be populated"):
+        pending_owner.remove_related_item(
+            item_id=1,
+            link_model_class=ManyToManyLinkModel,
+            self_foreign_key="owner_id",
+            target_foreign_key="target_id",
+        )

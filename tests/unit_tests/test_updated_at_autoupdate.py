@@ -1,4 +1,4 @@
-from tests._init import *
+import pytest
 
 import time
 from datetime import datetime, timezone
@@ -11,6 +11,7 @@ from repom.models.base_model import BaseModel
 
 class UpdatedAtBumpModel(BaseModel):
     __tablename__ = 'updated_at_bump_models'
+    use_created_at = True
     use_updated_at = True
 
     name: Mapped[str] = mapped_column(String(50), default='')
@@ -90,3 +91,15 @@ async def test_unchanged_value_reassignment_keeps_updated_at_async(async_db_test
     await async_db_test.commit()
 
     assert record.updated_at == original_updated_at
+
+
+def test_created_at_does_not_change_on_update(db_test):
+    record = UpdatedAtBumpModel(name='alice')
+    db_test.add(record)
+    db_test.commit()
+    original_created_at = record.created_at
+
+    record.name = 'bob'
+    db_test.commit()
+
+    assert record.created_at == original_created_at

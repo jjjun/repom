@@ -88,11 +88,23 @@ uv run pgadmin_rotate_password --recreate-volume --execute --confirm-recreate-vo
 uv run postgres_start
 ```
 
-`postgres_start` regenerates compose using the current configuration before
-starting the containers. This fallback removes pgAdmin's own saved UI state,
-but it does not remove the PostgreSQL data volume. It is also the lower exposure
-path when passing the new pgAdmin password through `setup.py update-user
---password` is not acceptable.
+After a successful rotation or confirmed volume recreation, repom updates the
+generated `.env` with the configured password. `postgres_start` can then
+regenerate the compose files without changing the credentials. Application
+`ensure_running()` uses existing compose files when they and `.env` are
+present. If the configured secret differs from the generated `.env`, use the
+matching rotation command; `postgres_start --force-regenerate` is an explicit
+override that can make a PostgreSQL or pgAdmin volume's stored credential
+differ from its configuration. This fallback removes pgAdmin's own saved UI
+state, but it does not remove the PostgreSQL data volume. It is also the lower
+exposure path when passing the new pgAdmin password through `setup.py
+update-user --password` is not acceptable.
+
+The library functions `rotate_postgres_credentials`,
+`rotate_pgadmin_password`, and `recreate_pgadmin_volume` perform this
+compose-dir `.env` update themselves after a successful execution. Changed
+secrets keep the previous file as `.env.bak`; callers and downstream wrappers
+do not need an additional persistence step.
 
 ## Notes
 

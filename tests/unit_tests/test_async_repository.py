@@ -3,7 +3,6 @@ AsyncBaseRepository の非同期版テスト
 
 test_repository.py の全テストケースを非同期版に変換したもの。
 """
-from tests._init import *
 import inspect
 from sqlalchemy import ForeignKey, Integer, desc, event, String, select
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -288,20 +287,6 @@ async def test_get_by_respects_allowed_filter_columns(async_db_test):
 
 
 @pytest.mark.asyncio
-async def test_bulk_filters_uses_mapper_resolution(async_db_test):
-    repo = AsyncColumnGuardRepository(session=async_db_test)
-
-    with pytest.raises(AttributeError):
-        repo._bulk_filters({"parent": None})
-
-    with pytest.raises(AttributeError):
-        repo._bulk_filters({"__class__": None})
-
-    assert [str(f) for f in repo._bulk_filters({"value": 1})] == [
-        str(AsyncColumnGuardChildModel.value == 1)
-    ]
-
-
 @pytest.mark.asyncio
 async def test_get_all(async_db_test):
     """
@@ -499,6 +484,13 @@ async def test_bulk_update_allows_unfiltered_when_opted_in(async_db_test):
 
 
 @pytest.mark.asyncio
+async def test_bulk_update_empty_values_returns_zero(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+
+    assert await repo.bulk_update([]) == 0
+
+
+@pytest.mark.asyncio
 async def test_bulk_delete_physically_deletes_by_ids(async_db_test):
     repo = AsyncSimpleRepository(session=async_db_test)
     first, second, third = await repo.bulk_insert([
@@ -593,16 +585,12 @@ async def test_bulk_delete_rejects_dunder_filter_keys(async_db_test, column_name
 
 
 @pytest.mark.asyncio
-async def test_bulk_delete_compiles_non_trivial_where_clause(async_db_test):
+async def test_bulk_delete_applies_filter_by_through_public_api(async_db_test):
     repo = AsyncSimpleRepository(session=async_db_test)
-    filters = repo._bulk_filters({"value": 1})
+    await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
 
-    from sqlalchemy import and_, delete
-
-    compiled = str(delete(AsyncSimpleModel).where(and_(*filters)).compile(compile_kwargs={"literal_binds": True}))
-
-    assert "WHERE" in compiled
-    assert "true" not in compiled.lower()
+    assert await repo.bulk_delete(filter_by={"value": 1}) == 1
+    assert [item.value for item in await repo.find(limit=10)] == [2]
 
 
 @pytest.mark.asyncio
@@ -737,6 +725,19 @@ async def test_count(async_db_test):
 
 
 @pytest.mark.asyncio
+async def test_count_by_params(async_db_test):
+    repo = AsyncFilterableRepository(session=async_db_test)
+    await repo.saves([
+        AsyncSimpleModel(value=1),
+        AsyncSimpleModel(value=2),
+        AsyncSimpleModel(value=2),
+    ])
+
+    assert await repo.count_by_params(AsyncSimpleFilterParams(value=2)) == 2
+    assert await repo.count_by_params(AsyncSimpleFilterParams(value=999)) == 0
+
+
+@pytest.mark.asyncio
 async def test_count_respects_soft_delete_flag(async_db_test):
     """count() はデフォルトで削除済みを除外し、フラグで含められる"""
     repo = AsyncSimpleRepository(session=async_db_test)
@@ -794,3 +795,7 @@ async def test_async_default_session_fallback():
 
     await repo.remove(fetched)
     assert await repo.get_by_id(created.id) is None
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

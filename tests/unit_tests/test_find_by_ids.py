@@ -11,7 +11,7 @@ N+1 問題を解決するための一括取得メソッドです。
 5. include_deleted パラメータ
 """
 
-from sqlalchemy import String
+from sqlalchemy import String, event
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.models.base_model import BaseModel
 from repom import BaseRepository
@@ -250,11 +250,20 @@ class TestFindByIdsPerformance:
 
         ids = [item.id for item in items]
 
-        # 一括取得（1回のクエリ）
-        results = repo.find_by_ids(ids)
+        statements = []
+        engine = db_test.get_bind()
 
-        # 全件取得できている
+        def record_statement(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record_statement)
+        try:
+            results = repo.find_by_ids(ids)
+        finally:
+            event.remove(engine, "before_cursor_execute", record_statement)
+
         assert len(results) == 10
+        assert len(statements) == 1
 
         # IDマッピングを作成
         result_map = {r.id: r for r in results}
@@ -284,12 +293,11 @@ class TestFindByIdsIntegration:
 
         ids = [item.id for item in items]
 
-        # id で昇順ソート（allowed_order_columns にデフォルトで含まれる）
-        results = repo.find_by_ids(ids, order_by="id:asc")
+        # id で降順ソート（allowed_order_columns にデフォルトで含まれる）
+        results = repo.find_by_ids(ids, order_by="id:desc")
 
         assert len(results) == 3
-        # ID順にソートされている
-        assert results[0].id < results[1].id < results[2].id
+        assert results[0].id > results[1].id > results[2].id
 
     def test_real_world_scenario(self, db_test):
         """実際のユースケースをシミュレート"""

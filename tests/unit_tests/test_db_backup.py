@@ -1,4 +1,3 @@
-from tests._init import *
 
 import gzip
 import io

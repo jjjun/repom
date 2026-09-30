@@ -1,158 +1,13 @@
-"""
-Tests for discovery-based model import functions and configuration integration.
-
-This test suite verifies:
-1. import_package_directory() - Package-based model import with security
-2. import_from_packages() - Batch import from multiple packages with hook
-3. RepomConfig properties - model_locations, allowed_package_prefixes, model_excluded_dirs
-4. load_models() - Integration with config settings
-5. Security validation - allowed_prefixes enforcement
-6. Backward compatibility - Existing behavior without model_locations
-"""
+"""Tests for repom model import configuration and load_models integration."""
 
 import logging
 
 import pytest
-from unittest.mock import patch, MagicMock
-from basekit.discovery import (
-    import_package_directory,
-    import_from_packages
-)
-from repom.utility import load_models
+from unittest.mock import ANY, patch
+
 from repom.config import config
 from repom.logging import get_logger
-
-
-class TestImportPackageDirectory:
-    """Test import_package_directory() function"""
-
-    def test_security_validation_raises_value_error(self):
-        """許可されていないパッケージはValueErrorを送出"""
-        with pytest.raises(ValueError, match="Security: Package 'untrusted.models' is not in allowed list"):
-            import_package_directory(
-                'untrusted.models',
-                allowed_prefixes={'trusted.', 'repom.'}
-            )
-
-    def test_security_validation_allows_prefix_match(self):
-        """許可されたプレフィックスにマッチするパッケージはOK"""
-        failures = import_package_directory(
-            'repom.examples.models',
-            allowed_prefixes={'repom.', 'myapp.'}
-        )
-        # 成功した場合は空リスト
-        assert isinstance(failures, list)
-
-    def test_security_validation_skipped_when_none(self):
-        """allowed_prefixes=None の場合はセキュリティチェックをスキップ"""
-        failures = import_package_directory(
-            'repom.examples.models',
-            allowed_prefixes=None
-        )
-        # 成功した場合は空リスト
-        assert isinstance(failures, list)
-
-    def test_import_error_for_nonexistent_package(self):
-        """存在しないパッケージは失敗リストを返す"""
-        failures = import_package_directory(
-            'nonexistent_package.models',
-            allowed_prefixes={'nonexistent_package.'}
-        )
-        assert len(failures) == 1
-        assert failures[0].target == 'nonexistent_package.models'
-        assert failures[0].exception_type == 'ModuleNotFoundError'
-
-    def test_value_error_for_module_not_package(self):
-        """モジュール（パッケージではない）は失敗リストを返す"""
-        failures = import_package_directory(
-            'repom.config',  # モジュールなので __path__ がない
-            allowed_prefixes={'repom.'}
-        )
-        assert len(failures) == 1
-        assert 'is not a package' in failures[0].message
-
-    @patch('basekit.discovery.import_from_directory')
-    def test_calls_import_from_directory_with_correct_params(self, mock_import_from_dir):
-        """import_from_directory を正しいパラメータで呼び出す"""
-        mock_import_from_dir.return_value = []
-        excluded = {'tests', 'migrations'}
-
-        # Mock the package import
-        with patch('importlib.import_module') as mock_importlib:
-            mock_package = MagicMock()
-            mock_package.__path__ = ['/fake/path']
-            mock_importlib.return_value = mock_package
-
-            import_package_directory(
-                'test.models',
-                excluded_dirs=excluded,
-                allowed_prefixes={'test.'}
-            )
-
-        # import_from_directory が呼ばれたことを確認
-        assert mock_import_from_dir.called
-
-
-class TestImportFromPackages:
-    """Test import_from_packages() function"""
-
-    def test_batch_import_multiple_packages(self):
-        """複数パッケージを一括インポート"""
-        failures = import_from_packages(
-            package_names=['repom.examples.models'],
-            allowed_prefixes={'repom.'}
-        )
-        # エラーが出なければ成功
-        assert isinstance(failures, list)
-
-    def test_fail_on_error_false_continues_on_error(self):
-        """fail_on_error=False の場合、エラーで停止しない"""
-        failures = import_from_packages(
-            package_names=['nonexistent.models', 'repom.examples.models'],
-            allowed_prefixes={'nonexistent.', 'repom.'},
-            fail_on_error=False
-        )
-
-        # 失敗リストが返される
-        assert len(failures) >= 1
-        assert any(f.target == 'nonexistent.models' for f in failures)
-
-    def test_fail_on_error_true_raises_exception(self):
-        """fail_on_error=True の場合、最初のエラーで例外を送出"""
-        from basekit.discovery import DiscoveryError
-
-        with pytest.raises(DiscoveryError):
-            import_from_packages(
-                package_names=['nonexistent.models'],
-                allowed_prefixes={'nonexistent.'},
-                fail_on_error=True
-            )
-
-    def test_security_validation_for_all_packages(self):
-        """すべてのパッケージでセキュリティ検証が実行される"""
-        # import_package_directory はセキュリティエラーを例外として raise する
-        # なので import_from_packages でもセキュリティエラーは fail_on_error に関わらず例外
-        with pytest.raises(ValueError, match="Security"):
-            import_from_packages(
-                package_names=['untrusted.models'],  # 許可されていないパッケージ
-                allowed_prefixes={'trusted.'},
-                fail_on_error=False  # セキュリティエラーは常に例外
-            )
-
-    def test_post_import_hook_called(self):
-        """post_import_hook が呼ばれることを確認"""
-        hook_called = []
-
-        def test_hook():
-            hook_called.append(True)
-
-        import_from_packages(
-            package_names=['repom.examples.models'],
-            post_import_hook=test_hook,
-            fail_on_error=False
-        )
-
-        assert len(hook_called) == 1
+from repom.utility import DEFAULT_EXCLUDED_DIRS, DiscoveryError, load_models
 
 
 class TestRepomConfigProperties:
@@ -262,42 +117,33 @@ class TestLoadModelsIntegration:
         assert len(detail_records) == 1
         assert detail_records[0].getMessage().startswith('Loaded models:')
 
-    def test_load_models_uses_model_locations(self):
+    def test_load_models_uses_model_locations(self, monkeypatch):
         """model_locations が設定されている場合、auto_import_models_from_list を呼び出す"""
-        # 一時的に config を変更
-        original_locations = config.model_locations
-        original_excluded = config.model_excluded_dirs
-        original_prefixes = config.allowed_package_prefixes
+        with patch('repom.utility.import_from_packages', return_value=[]) as import_models:
+            monkeypatch.setattr(config, 'model_locations', ['repom.examples.models'])
+            monkeypatch.setattr(config, 'model_excluded_dirs', {'tests'})
+            monkeypatch.setattr(config, 'allowed_package_prefixes', {'repom.'})
 
-        try:
-            config.model_locations = ['repom.examples.models']  # 実際に存在するパッケージ
-            config.model_excluded_dirs = {'tests'}
-            config.allowed_package_prefixes = {'repom.'}
+            failures = load_models()
 
-            # load_models() を呼び出してエラーが出ないことを確認
-            load_models()
+        assert failures == []
+        import_models.assert_called_once_with(
+            package_names=['repom.examples.models'],
+            excluded_dirs={'tests'},
+            allowed_prefixes={'repom.'},
+            fail_on_error=False,
+            post_import_hook=ANY,
+        )
 
-            # 正常に実行できれば成功（モデルがインポートされた）
-        finally:
-            # 元に戻す
-            config.model_locations = original_locations
-            config.model_excluded_dirs = original_excluded
-            config.allowed_package_prefixes = original_prefixes
+    def test_load_models_skips_import_when_model_locations_are_unset(self, monkeypatch):
+        """Unset model locations must not trigger the removed default import."""
+        with patch('repom.utility.import_from_packages') as import_models:
+            monkeypatch.setattr(config, 'model_locations', None)
 
-    def test_load_models_backward_compatibility(self):
-        """model_locations が None の場合、従来の動作（repom.examples.models インポート）"""
-        # 一時的に config を変更
-        original_locations = config.model_locations
+            failures = load_models()
 
-        try:
-            config.model_locations = None
-
-            # load_models() を呼び出してエラーが出ないことを確認
-            load_models()
-
-            # repom.examples.models がインポートされれば成功
-        finally:
-            config.model_locations = original_locations
+        assert failures == []
+        import_models.assert_not_called()
 
     def test_load_models_uses_model_import_strict(self):
         """model_import_strict が True の場合、エラーで停止する"""
@@ -311,7 +157,6 @@ class TestLoadModelsIntegration:
             config.model_import_strict = True
 
             # DiscoveryError が発生することを確認
-            from basekit.discovery import DiscoveryError
             with pytest.raises(DiscoveryError):
                 load_models()
         finally:
@@ -330,9 +175,10 @@ class TestLoadModelsIntegration:
             config.allowed_package_prefixes = {'nonexistent.'}
             config.model_import_strict = False  # 明示的なオプトアウト
 
-            # エラーが出ないことを確認（失敗リストは内部で処理される）
-            load_models()
-            # 成功（例外が発生しない）
+            failures = load_models()
+
+            assert len(failures) == 1
+            assert failures[0].target == 'nonexistent.models'
         finally:
             config.model_locations = original_locations
             config.model_import_strict = original_strict
@@ -370,123 +216,14 @@ class TestLoadModelsIntegration:
             config.allowed_package_prefixes = original_prefixes
 
 
-class TestSecurityScenarios:
-    """Security-focused test scenarios"""
+class TestRepomDiscoveryDefaults:
+    """Repom-specific model discovery defaults."""
 
-    def test_default_config_only_allows_repom(self):
-        """デフォルト設定では repom. パッケージのみ許可"""
-        from repom.config import RepomConfig
-        test_config = RepomConfig()
-
-        # デフォルトは {'repom.'}
-        assert test_config.allowed_package_prefixes == {'repom.'}
-
-    def test_explicit_configuration_required_for_custom_packages(self):
-        """カスタムパッケージには明示的な設定が必要"""
-        # デフォルト設定で myapp.models をインポートしようとするとエラー
-        with pytest.raises(ValueError, match="Security"):
-            import_from_packages(
-                package_names=['myapp.models'],
-                allowed_prefixes={'repom.'},  # myapp. が含まれていない
-                fail_on_error=True
-            )
-
-    def test_multiple_prefixes_can_be_allowed(self):
-        """複数のプレフィックスを許可できる"""
-        # repom.examples.models は実際に存在するので、セキュリティチェックのみ確認
-        failures = import_package_directory(
-            'repom.examples.models',
-            allowed_prefixes={'myapp.', 'shared.', 'repom.', 'plugins.'}
-        )
-        # セキュリティチェックが通れば成功
-        assert isinstance(failures, list)
-
-
-class TestErrorHandling:
-    """Error handling and edge cases"""
-
-    def test_empty_package_list(self):
-        """空のパッケージリストは何もしない"""
-        failures = import_from_packages(
-            package_names=[],
-            allowed_prefixes={'myapp.'}
-        )
-        # エラーが出なければ成功
-        assert failures == []
-
-    def test_none_excluded_dirs_uses_default(self):
-        """excluded_dirs=None の場合、DEFAULT_EXCLUDED_DIRS を使用"""
+    def test_utility_default_excluded_directories_include_model_dirs(self):
         # これは auto_import_models の動作だが、連鎖的に影響する
         # discovery.py の DEFAULT_EXCLUDED_DIRS は汎用的
-        from repom.utility import DEFAULT_EXCLUDED_DIRS as UTILITY_EXCLUDED_DIRS
-        assert UTILITY_EXCLUDED_DIRS == {'base', 'mixin', 'validators', 'utils', 'helpers', '__pycache__'}
-
-    def test_warning_output_on_import_failure(self):
-        """インポート失敗時に失敗リストを返す"""
-        failures = import_from_packages(
-            package_names=['nonexistent.package'],
-            allowed_prefixes={'nonexistent.'},
-            fail_on_error=False
-        )
-
-        # 失敗リストが返される
-        assert len(failures) >= 1
-        assert failures[0].target == 'nonexistent.package'
-
-
-class TestRealWorldScenarios:
-    """Real-world usage scenarios"""
-
-    def test_monorepo_multiple_packages(self):
-        """モノレポ構成: 複数パッケージからインポート"""
-        # repom.examples.models のみ実在するので、他はエラーを無視
-        failures = import_from_packages(
-            package_names=['repom.examples.models'],  # 実在するパッケージのみ
-            excluded_dirs={'tests', 'migrations'},
-            allowed_prefixes={'myapp.', 'shared.', 'repom.'},
-            fail_on_error=False
-        )
-        # エラーが出なければ成功
-        assert isinstance(failures, list)
-
-    def test_config_hook_pattern(self):
-        """CONFIG_HOOK パターン: 親プロジェクトでの設定"""
-        from repom.config import RepomConfig
-        test_config = RepomConfig()
-
-        # 親プロジェクトでの設定をシミュレート
-        test_config.model_locations = [
-            'myapp.models',
-            'myapp.modules.user',
-            'myapp.modules.task',
-            'repom.examples.models'
-        ]
-        test_config.model_excluded_dirs = {'tests', 'migrations', 'scripts'}
-        test_config.allowed_package_prefixes = {'myapp.', 'repom.'}
-
-        # 設定が正しく保存されることを確認
-        assert len(test_config.model_locations) == 4
-        assert 'tests' in test_config.model_excluded_dirs
-        assert 'myapp.' in test_config.allowed_package_prefixes
-        assert 'repom.' in test_config.allowed_package_prefixes
-
-    def test_environment_specific_configuration(self):
-        """環境別設定: EXEC_ENV による切り替え"""
-        from repom.config import RepomConfig
-        import os
-
-        test_config = RepomConfig()
-
-        # テスト環境のシミュレーション
-        if os.getenv('EXEC_ENV') == 'test':
-            test_config.model_locations = ['myapp.models', 'myapp.test_models']
-        else:
-            test_config.model_locations = ['myapp.models']
-
-        # 設定が適用されることを確認
-        assert test_config.model_locations is not None
+        assert DEFAULT_EXCLUDED_DIRS == {'base', 'mixin', 'validators', 'utils', 'helpers', '__pycache__'}
 
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
-

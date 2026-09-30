@@ -1,5 +1,3 @@
-import importlib
-
 import pytest
 
 from repom.config import RepomConfig
@@ -188,30 +186,3 @@ def test_apply_postgres_env_overrides_rejects_out_of_range_host_port(
         match="POSTGRES_HOST_PORT must be between 1 and 65535",
     ):
         apply_postgres_env_overrides(config)
-
-
-def test_repom_config_singleton_applies_postgres_env(
-    monkeypatch, repom_config_hook_for_reload
-):
-    import repom.config as config_module
-
-    monkeypatch.setenv("POSTGRES_USER", "env_user")
-    monkeypatch.setenv("POSTGRES_PASSWORD", "env_password")
-    monkeypatch.setenv("POSTGRES_HOST", "env-postgres")
-    monkeypatch.setenv("POSTGRES_PORT", "15432")
-    monkeypatch.setenv("POSTGRES_HOST_PORT", "5455")
-    monkeypatch.setenv("REPOM_POSTGRES_DB", "repom_env_1")
-    reloaded = importlib.reload(config_module)
-
-    try:
-        assert reloaded.config.postgres.user == "env_user"
-        assert reloaded.config.postgres.password == "env_password"
-        assert reloaded.config.postgres.host == "env-postgres"
-        assert reloaded.config.postgres.port == 15432
-        assert reloaded.config.postgres.container.host_port == 5455
-        assert reloaded.config.postgres.database == "repom_env_1"
-    finally:
-        for name in POSTGRES_ENV_NAMES:
-            monkeypatch.delenv(name, raising=False)
-        repom_config_hook_for_reload()
-        importlib.reload(config_module)

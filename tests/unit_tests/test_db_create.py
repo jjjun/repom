@@ -1,6 +1,5 @@
 """Strict model-import guard tests for the db_create console script (repom#138)."""
 
-from tests._init import *
 
 from unittest.mock import MagicMock
 
@@ -86,3 +85,28 @@ def test_db_create_logs_safe_db_url(monkeypatch):
     logged_message = fake_logger.info.call_args[0][0]
     assert "secret" not in logged_message
     assert "password=***" in logged_message
+
+
+def test_db_create_starts_postgres_before_getting_engine(monkeypatch):
+    events = []
+    fake_config = MagicMock()
+    fake_config.db_type = "postgres"
+    monkeypatch.setattr(db_create, "config", fake_config)
+    monkeypatch.setattr(db_create, "load_models", lambda **_kwargs: events.append("models"))
+
+    fake_engine = MagicMock()
+    fake_engine.url = "postgresql://localhost/app"
+    monkeypatch.setattr(
+        db_create,
+        "get_sync_engine",
+        lambda: events.append("engine") or fake_engine,
+    )
+    monkeypatch.setattr(db_create.Base.metadata, "create_all", lambda **_kwargs: events.append("create"))
+
+    from repom.postgres import manage as postgres_manage
+
+    monkeypatch.setattr(postgres_manage, "ensure_running", lambda: events.append("postgres"))
+
+    db_create.main()
+
+    assert events == ["models", "postgres", "engine", "create"]

@@ -174,6 +174,10 @@ SQLite の自動ファイル名は `db_name` と `EXEC_ENV` から生成され�
 `db_name=repom` では `repom_dev.sqlite3`、`repom_test.sqlite3`、
 `repom.sqlite3` です。実際の有効値は `uv run repom_info` で確認してください。
 
+`EXEC_ENV=production` is treated like `prod` (case-insensitively and after trimming
+surrounding whitespace). Unknown values produce a warning and use the dev database
+name/file for both PostgreSQL and SQLite.
+
 設定フックでは、プロジェクト既定値を設定した後に必要な環境変数 helper を
 適用します。
 

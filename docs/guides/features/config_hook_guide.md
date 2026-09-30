@@ -23,6 +23,12 @@ hook は必ず1個の config 引数を受け取り、設定オブジェクトを
 import した時点で新しい `RepomConfig` を作ったり、引数なし関数を登録したりしないで
 ください。
 
+## Execution environment names
+
+`EXEC_ENV=production` is treated like `prod`, ignoring case and surrounding whitespace.
+Other values besides `dev`, `test`, `prod`, and `production` produce a warning and use
+the dev database name/file for both PostgreSQL and SQLite.
+
 ## runtime environment override
 
 project の既定値を先に設定し、環境変数 helper を最後に呼びます。

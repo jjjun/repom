@@ -18,19 +18,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, joinedload
 from repom.models.base_model import BaseModel
 from repom.repositories import AsyncBaseRepository, BaseRepository
 from repom.mixins import SoftDeletableMixin
+from tests.fixtures.models import SimpleRecord
 
 
 # テスト用モデル
 class SoftDeleteTestModel(BaseModel, SoftDeletableMixin):
     """論理削除対応テストモデル"""
     __tablename__ = "soft_delete_test_items"
-
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
-
-
-class NormalTestModel(BaseModel):
-    """論理削除非対応テストモデル"""
-    __tablename__ = "normal_test_items"
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
@@ -107,8 +101,8 @@ def setup_normal_item(db_test):
     Returns:
         dict: repo, item を含む辞書
     """
-    repo = BaseRepository(NormalTestModel, db_test)
-    item = NormalTestModel(name="test")
+    repo = BaseRepository(SimpleRecord, db_test)
+    item = SimpleRecord(name="test")
     db_test.add(item)
     db_test.commit()
 
@@ -402,6 +396,16 @@ class TestAsyncRepositoryInternalSessionSoftDelete:
         assert await verify_repo.get_by_id(item_id, include_deleted=True) is None
 
 
+@pytest.mark.asyncio
+async def test_soft_delete_methods_reject_unsupported_model(repository_adapter):
+    repo = repository_adapter.repository_class(SimpleRecord)
+
+    with pytest.raises(ValueError, match="does not support soft delete"):
+        await repository_adapter.call(repo.soft_delete, 1)
+    with pytest.raises(ValueError, match="does not support soft delete"):
+        await repository_adapter.call(repo.restore, 1)
+
+
 class TestFindDeleted:
     """find_deleted() と find_deleted_before() のテスト"""
 
@@ -425,9 +429,9 @@ class TestFindDeleted:
 
     def test_find_deleted_returns_empty_for_normal_model(self, db_test):
         """論理削除非対応モデルは空リスト"""
-        repo = BaseRepository(NormalTestModel, db_test)
+        repo = BaseRepository(SimpleRecord, db_test)
 
-        item = NormalTestModel(name="test")
+        item = SimpleRecord(name="test")
         db_test.add(item)
         db_test.commit()
 
@@ -461,7 +465,7 @@ class TestFindDeleted:
 
     def test_find_deleted_before_returns_empty_for_normal_model(self, db_test):
         """論理削除非対応モデルは空リスト"""
-        repo = BaseRepository(NormalTestModel, db_test)
+        repo = BaseRepository(SimpleRecord, db_test)
 
         threshold = datetime.now(timezone.utc) - timedelta(days=30)
         results = repo.find_deleted_before(threshold)
@@ -657,3 +661,7 @@ class TestSoftDeleteIntegration:
         # find(include_deleted=True) は5つ
         all_items = repo.find(include_deleted=True)
         assert len(all_items) == 5
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

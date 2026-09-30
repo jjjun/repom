@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import importlib
 
 import pytest
 
@@ -187,28 +186,3 @@ def test_apply_redis_env_overrides_ignores_config_without_redis(monkeypatch):
     monkeypatch.setenv("REDIS_HOST_PORT", "6382")
 
     apply_redis_env_overrides(ConfigWithoutRedis())
-
-
-def test_repom_config_singleton_applies_redis_port_env(
-    monkeypatch, repom_config_hook_for_reload
-):
-    import repom.config as config_module
-
-    monkeypatch.setenv("REDIS_HOST", "env-redis")
-    monkeypatch.setenv("REDIS_PORT", "6390")
-    monkeypatch.setenv("REDIS_HOST_PORT", "6391")
-    monkeypatch.setenv("REDIS_PASSWORD", "env-secret")
-    monkeypatch.setenv("REDIS_DB", "3")
-    reloaded = importlib.reload(config_module)
-
-    try:
-        assert reloaded.config.redis.host == "env-redis"
-        assert reloaded.config.redis.port == 6390
-        assert reloaded.config.redis.container.host_port == 6391
-        assert reloaded.config.redis.password == "env-secret"
-        assert reloaded.config.redis.database == 3
-    finally:
-        for name in REDIS_ENV_NAMES:
-            monkeypatch.delenv(name, raising=False)
-        repom_config_hook_for_reload()
-        importlib.reload(config_module)

@@ -10,6 +10,7 @@ from repom.config import config
 from repom.redis.credentials import (
     RedisCredentialRotationError,
     RedisCredentialRotationPlan,
+    RedisCredentialRotationResult,
     build_redis_cli_command,
     build_redis_ping_command,
     rotate_redis_password,
@@ -24,10 +25,11 @@ def test_redis_cli_command_without_env_file():
     assert command == ("docker", "exec", "-i", "repom_redis", "redis-cli")
 
 
-def test_redis_cli_command_uses_env_file_when_given():
+def test_redis_cli_command_uses_env_file_when_given(tmp_path):
+    env_file = tmp_path / "repom-redis-auth-xyz.env"
     command = build_redis_cli_command(
         container_name="repom_redis",
-        env_file="/tmp/repom-redis-auth-xyz.env",
+        env_file=str(env_file),
     )
 
     assert command == (
@@ -35,7 +37,7 @@ def test_redis_cli_command_uses_env_file_when_given():
         "exec",
         "-i",
         "--env-file",
-        "/tmp/repom-redis-auth-xyz.env",
+        str(env_file),
         "repom_redis",
         "redis-cli",
     )
@@ -154,6 +156,24 @@ def test_redis_rotate_does_not_regenerate_env_after_error_reply(tmp_path):
 
     generate.assert_not_called()
     assert env_file.read_text(encoding="utf-8") == original_env
+
+
+def test_redis_rotate_rewrites_generated_env_after_success():
+    result = RedisCredentialRotationResult(
+        dry_run=False,
+        command=("docker", "exec", "repom_redis", "redis-cli"),
+        input_text="CONFIG SET requirepass new-secret\n",
+        masked_command="docker exec repom_redis redis-cli",
+        masked_input="CONFIG SET requirepass ***",
+    )
+
+    with patch.object(config.redis, "password", "old-secret"):
+        with patch.object(redis_manage, "rotate_redis_password", return_value=result):
+            with patch.object(redis_manage, "generate") as generate:
+                rotate_password("new-secret", old_password="old-secret", dry_run=False)
+
+                assert config.redis.password == "new-secret"
+                generate.assert_called_once_with(overwrite_secrets=True)
 
 
 def test_redis_plan_from_config_does_not_infer_old_password():

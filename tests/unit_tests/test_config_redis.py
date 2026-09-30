@@ -4,17 +4,15 @@ Redis config support tests
 このテストファイルは RepomConfig の Redis 関連プロパティのみをテストし、
 実際のデータベース接続は行いません。
 """
-import os
-
 
 class TestRedisProperties:
     """Redis connection properties tests"""
 
-    def test_redis_host_default(self):
+    def test_redis_host_default(self, monkeypatch):
         """デフォルトは 127.0.0.1"""
         from repom.config import RepomConfig
         config = RepomConfig()
-        os.environ.pop('REDIS_HOST', None)
+        monkeypatch.delenv('REDIS_HOST', raising=False)
         assert config.redis.host == '127.0.0.1'
 
     def test_redis_host_setter(self):
@@ -24,11 +22,11 @@ class TestRedisProperties:
         config.redis.host = 'redis.example.com'
         assert config.redis.host == 'redis.example.com'
 
-    def test_redis_port_default(self):
+    def test_redis_port_default(self, monkeypatch):
         """デフォルトは 6379"""
         from repom.config import RepomConfig
         config = RepomConfig()
-        os.environ.pop('REDIS_PORT', None)
+        monkeypatch.delenv('REDIS_PORT', raising=False)
         assert config.redis.port == 6379
 
     def test_redis_port_setter(self):
@@ -38,11 +36,11 @@ class TestRedisProperties:
         config.redis.port = 6380
         assert config.redis.port == 6380
 
-    def test_redis_password_default(self):
+    def test_redis_password_default(self, monkeypatch):
         """デフォルトは None"""
         from repom.config import RepomConfig
         config = RepomConfig()
-        os.environ.pop('REDIS_PASSWORD', None)
+        monkeypatch.delenv('REDIS_PASSWORD', raising=False)
         assert config.redis.password is None
 
     def test_redis_password_setter(self):
@@ -157,6 +155,8 @@ class TestRedisConfigIntegration:
         config = RepomConfig()
         assert hasattr(config, 'redis')
         assert config.redis.host == '127.0.0.1'
+        assert isinstance(config.redis.port, int)
+        assert config.redis.port > 0
         assert config.redis.port == 6379
 
     def test_redis_container_in_redis_config(self):

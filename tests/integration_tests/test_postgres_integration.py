@@ -2,8 +2,12 @@
 from repom.config import config
 import pytest
 import os
+from uuid import uuid4
 from sqlalchemy import text
+from sqlalchemy import create_engine
 from sqlalchemy.exc import DataError
+from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy.schema import CreateSchema, DropSchema
 
 # PostgreSQL 統合テスト用に db_type を設定
 # EXEC_ENV='test' のまま（repom_test データベースに接続）
@@ -246,17 +250,17 @@ class TestPostgreSQLIntegration:
 class TestPostgreSQLModelOperations:
     """PostgreSQL での BaseModel 操作テスト"""
 
-    def test_basemodel_crud(self, db_test):
+    def test_basemodel_crud(self, postgres_db_test):
         """BaseModel を使った CRUD 操作"""
         from repom.examples.models import SampleModel
         from repom import BaseRepository
 
-        repo = BaseRepository(SampleModel, db_test)
+        repo = BaseRepository(SampleModel, postgres_db_test)
 
         # Create
         sample = SampleModel(value="PostgreSQL Test")
         saved = repo.save(sample)
-        db_test.flush()
+        postgres_db_test.flush()
 
         assert saved.id is not None
         assert saved.value == "PostgreSQL Test"
@@ -269,15 +273,63 @@ class TestPostgreSQLModelOperations:
         # Update
         found.value = "Updated value"
         updated = repo.save(found)
-        db_test.flush()
+        postgres_db_test.flush()
         assert updated.value == "Updated value"
 
         # Delete
         repo.remove(updated)
-        db_test.flush()
+        postgres_db_test.flush()
 
         deleted = repo.get_by_id(updated.id)
         assert deleted is None
+
+
+@pytest.fixture(scope="module")
+def postgres_model_engine():
+    from repom.database import Base
+    from repom.examples.models import SampleModel
+
+    schema_name = f"repom_integration_{uuid4().hex}"
+    engine = create_engine(
+        config.db_url,
+        **config.engine_kwargs_for_url(config.db_url),
+    )
+
+    try:
+        with engine.begin() as connection:
+            connection.execute(CreateSchema(schema_name))
+
+        with engine.begin() as connection:
+            connection = connection.execution_options(
+                schema_translate_map={None: schema_name}
+            )
+            Base.metadata.create_all(bind=connection, tables=[SampleModel.__table__])
+
+        yield engine, schema_name
+    finally:
+        with engine.begin() as connection:
+            connection.execute(DropSchema(schema_name, cascade=True, if_exists=True))
+        engine.dispose()
+
+
+@pytest.fixture
+def postgres_db_test(postgres_model_engine):
+    engine, schema_name = postgres_model_engine
+    connection = engine.connect().execution_options(
+        schema_translate_map={None: schema_name}
+    )
+    transaction = connection.begin()
+    session = scoped_session(
+        sessionmaker(autocommit=False, autoflush=config.autoflush, bind=connection)
+    )
+
+    try:
+        yield session
+    finally:
+        session.close()
+        if transaction.is_active:
+            transaction.rollback()
+        connection.close()
 
 
 def print_test_info():
@@ -297,5 +349,4 @@ def print_test_info():
 
 # テスト実行前に情報表示
 if POSTGRES_INTEGRATION_ENABLED:
-    config.db_type = 'postgres'
     print_test_info()

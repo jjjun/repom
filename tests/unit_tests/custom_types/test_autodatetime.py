@@ -1,4 +1,4 @@
-from tests._init import *
+import pytest
 from sqlalchemy import Integer
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.custom_types.AutoDateTime import AutoDateTime
@@ -11,8 +11,7 @@ class CreatedAtModel(BaseModel):
     __tablename__ = 'test_model_createdat'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(
-        AutoDateTime,
-        default=lambda: datetime.now(timezone.utc)
+        AutoDateTime
     )
 
 

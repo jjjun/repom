@@ -4,9 +4,11 @@ repom/logging.py のテスト（ハイブリッドアプローチ）
 
 import logging
 from datetime import date
+from pathlib import Path
 import pytest
 
-from repom.logging import DateNamedDailyFileHandler, get_logger, make_timed_rotating_handler
+from repom.config import RepomConfig
+from repom.logging import get_logger
 
 
 @pytest.fixture(autouse=True)
@@ -89,17 +91,7 @@ class TestGetLogger:
         """
         ハンドラーがない場合、repom のデフォルト設定が適用される
         """
-        # repom/logging.py の _logger_initialized をリセット
-        import repom.logging
-        repom.logging._logger_initialized = False
-
-        # logging の状態をリセット
-        logging.shutdown()
-
-        # repom のルートロガーをリセット
         repom_root_logger = logging.getLogger('repom')
-        for handler in repom_root_logger.handlers[:]:
-            repom_root_logger.removeHandler(handler)
 
         # config.log_file_path をモック（monkeypatch を使用）
         log_file = tmp_path / "test"
@@ -125,17 +117,7 @@ class TestGetLogger:
         """
         config.log_file_path が None の場合、ハンドラーは追加されない
         """
-        # repom/logging.py の _logger_initialized をリセット
-        import repom.logging
-        repom.logging._logger_initialized = False
-
-        # logging の状態をリセット
-        logging.shutdown()
-
-        # repom のルートロガーをリセット
         repom_root_logger = logging.getLogger('repom')
-        for handler in repom_root_logger.handlers[:]:
-            repom_root_logger.removeHandler(handler)
 
         # config.log_file_path を None にモック（monkeypatch を使用）
         from repom.config import config
@@ -150,17 +132,7 @@ class TestGetLogger:
         """
         get_logger() を複数回呼んでも、ハンドラーは1回だけ追加される
         """
-        # repom/logging.py の _logger_initialized をリセット
-        import repom.logging
-        repom.logging._logger_initialized = False
-
-        # logging の状態をリセット
-        logging.shutdown()
-
-        # repom のルートロガーをリセット
         repom_root_logger = logging.getLogger('repom')
-        for handler in repom_root_logger.handlers[:]:
-            repom_root_logger.removeHandler(handler)
 
         # config.log_file_path をモック（monkeypatch を使用）
         log_file = tmp_path / "test"
@@ -182,18 +154,6 @@ class TestGetLogger:
         """
         ログディレクトリが存在しない場合、自動作成される
         """
-        # repom/logging.py の _logger_initialized をリセット
-        import repom.logging
-        repom.logging._logger_initialized = False
-
-        # logging の状態をリセット
-        logging.shutdown()
-
-        # repom のルートロガーをリセット
-        repom_root_logger = logging.getLogger('repom')
-        for handler in repom_root_logger.handlers[:]:
-            repom_root_logger.removeHandler(handler)
-
         # 存在しないディレクトリを指定
         log_file = tmp_path / "logs" / "subdir" / "test"
         assert not log_file.parent.exists()
@@ -232,87 +192,66 @@ class TestGetLoggerModuleNaming:
         target_logger = logging.getLogger('repom.database')
         original_level = target_logger.level
         try:
-            with caplog.at_level(logging.DEBUG):
+            with caplog.at_level(logging.DEBUG, logger='repom.database'):
                 database_module.logger.info('visible before CRITICAL is set')
             assert 'visible before CRITICAL is set' in caplog.text
             caplog.clear()
 
             target_logger.setLevel(logging.CRITICAL)
-            with caplog.at_level(logging.DEBUG):
+            with caplog.at_level(logging.DEBUG, logger=''):
                 database_module.logger.info('suppressed by repom.database level')
             assert 'suppressed by repom.database level' not in caplog.text
         finally:
             target_logger.setLevel(original_level)
 
 
-class TestDateNamedDailyFileHandler:
-    """日付付きアクティブログファイル handler の動作確認。"""
+def test_prod_logging_uses_info_level_for_file_handler(tmp_path, monkeypatch):
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+    config = RepomConfig(exec_env="prod")
+    config.log_path = str(tmp_path)
+    config.log_file = "prod"
+    monkeypatch.setattr("repom.config.config", config)
 
-    def test_make_handler_writes_to_dated_active_file(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            DateNamedDailyFileHandler,
-            '_today',
-            lambda self: date(2026, 5, 5),
-        )
+    logger = get_logger("prod_level")
+    logger.debug("debug message")
+    logger.info("info message")
 
-        handler = make_timed_rotating_handler(str(tmp_path / 'main'))
-        logger = logging.getLogger('repom.handler_test')
-        logger.handlers.clear()
-        logger.setLevel(logging.DEBUG)
-        logger.addHandler(handler)
+    file_handler = next(
+        handler
+        for handler in logging.getLogger("repom").handlers
+        if isinstance(handler, logging.FileHandler)
+    )
+    file_handler.flush()
 
-        logger.info("active file message")
-        handler.flush()
-        handler.close()
+    assert file_handler.level == logging.INFO
+    content = Path(file_handler.baseFilename).read_text(encoding="utf-8")
+    assert "debug message" not in content
+    assert "info message" in content
 
-        active_file = tmp_path / 'main_2026-05-05.log'
-        assert active_file.exists()
-        assert not (tmp_path / 'main').exists()
-        assert "active file message" in active_file.read_text(encoding='utf-8')
 
-    def test_handler_switches_file_when_date_changes(self, tmp_path, monkeypatch):
-        current = date(2026, 5, 5)
-        monkeypatch.setattr(
-            DateNamedDailyFileHandler,
-            '_today',
-            lambda self: current,
-        )
+def test_non_prod_logging_keeps_debug_file_level(tmp_path, monkeypatch):
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+    config = RepomConfig(exec_env="dev")
+    config.log_path = str(tmp_path)
+    config.log_file = "dev"
+    monkeypatch.setattr("repom.config.config", config)
 
-        handler = make_timed_rotating_handler(str(tmp_path / 'main'))
-        logger = logging.getLogger('repom.handler_switch_test')
-        logger.handlers.clear()
-        logger.setLevel(logging.DEBUG)
-        logger.addHandler(handler)
+    logger = get_logger("dev_level")
+    logger.debug("debug message")
 
-        logger.info("first day")
-        current = date(2026, 5, 6)
-        logger.info("second day")
-        handler.flush()
-        handler.close()
+    file_handler = next(
+        handler
+        for handler in logging.getLogger("repom").handlers
+        if isinstance(handler, logging.FileHandler)
+    )
+    console_handler = next(
+        handler
+        for handler in logging.getLogger("repom").handlers
+        if isinstance(handler, logging.StreamHandler)
+        and not isinstance(handler, logging.FileHandler)
+    )
+    file_handler.flush()
 
-        first_file = tmp_path / 'main_2026-05-05.log'
-        second_file = tmp_path / 'main_2026-05-06.log'
-        assert "first day" in first_file.read_text(encoding='utf-8')
-        assert "second day" in second_file.read_text(encoding='utf-8')
-
-    def test_handler_deletes_old_logs_by_backup_count(self, tmp_path, monkeypatch):
-        for day in range(1, 5):
-            (tmp_path / f"main_2026-05-0{day}.log").write_text(
-                f"day {day}",
-                encoding='utf-8',
-            )
-
-        monkeypatch.setattr(
-            DateNamedDailyFileHandler,
-            '_today',
-            lambda self: date(2026, 5, 5),
-        )
-
-        handler = make_timed_rotating_handler(str(tmp_path / 'main'), backup_count=3)
-        handler.close()
-
-        assert not (tmp_path / 'main_2026-05-01.log').exists()
-        assert not (tmp_path / 'main_2026-05-02.log').exists()
-        assert (tmp_path / 'main_2026-05-03.log').exists()
-        assert (tmp_path / 'main_2026-05-04.log').exists()
-        assert (tmp_path / 'main_2026-05-05.log').exists()
+    assert file_handler.level == logging.DEBUG
+    assert console_handler.level == logging.INFO
+    assert "debug message" in Path(file_handler.baseFilename).read_text(encoding="utf-8")

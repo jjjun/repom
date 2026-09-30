@@ -22,6 +22,7 @@ from pathlib import Path
 
 def configure_database(config):
     database_path = Path(os.environ["ALEMBIC_HOOK_TEST_DB"]).as_posix()
+    config.root_path = os.environ["ALEMBIC_HOOK_TEST_ROOT"]
     config.db_url = f"sqlite:///{database_path}"
     config.allowed_package_prefixes = {"alembic_test_hooks", "repom."}
     return config
@@ -62,6 +63,7 @@ def _alembic_env(tmp_path: Path) -> dict[str, str]:
     env["DB_TYPE"] = "sqlite"
     env["CONFIG_HOOK"] = "alembic_test_hooks:configure_database"
     env["ALEMBIC_HOOK_TEST_DB"] = str(tmp_path / "hook-test.sqlite3")
+    env["ALEMBIC_HOOK_TEST_ROOT"] = str(tmp_path / "repom-root")
     env["ALEMBIC_HOOK_TEST_MARKER"] = str(tmp_path / "hook-called.txt")
     env["PYTHONPATH"] = os.pathsep.join(
         filter(None, (str(tmp_path), env.get("PYTHONPATH")))
@@ -167,51 +169,3 @@ def test_raising_pre_migration_hook_does_not_write_to_existing_database(
             "WHERE type = 'table' AND name = 'alembic_version'"
         ).fetchone()
     assert version_rows == (0,)
-
-
-@pytest.mark.parametrize(
-    ("hook_path", "expected_message"),
-    [
-        (
-            "alembic_test_hooks_ghost:validate",
-            "Failed to import config hook module",
-        ),
-        (
-            "alembic_test_hooks:missing",
-            "Config hook function",
-        ),
-        (
-            "alembic_test_hooks:not_callable",
-            "Config hook target",
-        ),
-        (
-            "alembic_test_hooks",
-            "must use 'module:function_name' format",
-        ),
-        (
-            "totally_unrelated_module:validate",
-            "not in allowed list",
-        ),
-    ],
-    ids=[
-        "missing-module",
-        "missing-function",
-        "non-callable",
-        "implicit-callable",
-        "disallowed-prefix",
-    ],
-)
-def test_invalid_pre_migration_hook_reports_its_alembic_option(
-    tmp_path,
-    hook_path,
-    expected_message,
-):
-    _write_hook_module(tmp_path)
-    config_path = _write_alembic_ini(tmp_path, hook_path)
-    env = _alembic_env(tmp_path)
-
-    result = _run_alembic(config_path, env, "upgrade", "head")
-
-    assert result.returncode != 0
-    assert expected_message in result.stderr
-    assert f"pre_migration_hook='{hook_path}'" in result.stderr

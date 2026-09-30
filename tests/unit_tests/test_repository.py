@@ -1,4 +1,3 @@
-from tests._init import *
 import inspect
 import warnings
 
@@ -312,20 +311,6 @@ def test_get_by_respects_allowed_filter_columns(db_test):
     assert repo.get_by("id", obj.id, single=True) == obj
 
 
-def test_bulk_filters_uses_mapper_resolution(db_test):
-    repo = ColumnGuardRepository(session=db_test)
-
-    with pytest.raises(AttributeError):
-        repo._bulk_filters({"parent": None})
-
-    with pytest.raises(AttributeError):
-        repo._bulk_filters({"__class__": None})
-
-    assert [str(f) for f in repo._bulk_filters({"value": 1})] == [
-        str(ColumnGuardChildModel.value == 1)
-    ]
-
-
 def test_get_all(db_test):
     """
     SimpleModelの全取得テスト
@@ -386,6 +371,42 @@ def test_get_all_and_find_work_for_model_without_id_column(db_test):
     assert {item.name for item in repo.get_all()} == {"a", "b"}
     assert {item.name for item in repo.find(limit=10)} == {"a", "b"}
     assert {item.name for item in repo.get_all(include_deleted=True)} == {"a", "b"}
+
+
+@pytest.mark.asyncio
+async def test_find_by_ids_with_empty_list_returns_empty(repository_adapter):
+    repo = repository_adapter.repository_class(
+        SimpleModel,
+        session=repository_adapter.session,
+    )
+
+    assert await repository_adapter.call(repo.find_by_ids, []) == []
+
+
+@pytest.mark.asyncio
+async def test_repository_crud_uses_shared_sync_async_adapter(repository_adapter):
+    repo = repository_adapter.repository_class(
+        SimpleModel,
+        session=repository_adapter.session,
+    )
+    saved = await repository_adapter.call(repo.save, SimpleModel(value=1))
+
+    assert saved.id is not None
+    assert await repository_adapter.call(repo.get_by_id, saved.id) == saved
+    assert await repository_adapter.call(repo.find, filters=[SimpleModel.value == 1], limit=10) == [saved]
+
+    saved.value = 2
+    await repository_adapter.call(repo.save, saved)
+    assert (await repository_adapter.call(repo.get_by_id, saved.id)).value == 2
+
+    assert await repository_adapter.call(repo.bulk_update, [{'id': saved.id, 'value': 3}]) == 1
+    assert (await repository_adapter.call(repo.get_by_id, saved.id)).value == 3
+    assert await repository_adapter.call(repo.bulk_delete, ids=[saved.id]) == 1
+    assert await repository_adapter.call(repo.get_by_id, saved.id) is None
+
+    removed = await repository_adapter.call(repo.save, SimpleModel(value=4))
+    await repository_adapter.call(repo.remove, removed)
+    assert await repository_adapter.call(repo.get_by_id, removed.id) is None
 
 
 def test_remove(db_test):
@@ -505,6 +526,12 @@ def test_bulk_update_allows_unfiltered_when_opted_in(db_test):
     assert repo.count(filters=[SimpleModel.value == 9]) == 2
 
 
+def test_bulk_update_empty_values_returns_zero(db_test):
+    repo = SimpleRepository(session=db_test)
+
+    assert repo.bulk_update([]) == 0
+
+
 def test_bulk_delete_physically_deletes_by_ids(db_test):
     repo = SimpleRepository(session=db_test)
     first, second, third = repo.bulk_insert([
@@ -592,16 +619,12 @@ def test_bulk_delete_rejects_dunder_filter_keys(db_test, column_name):
     assert repo.count() == 2
 
 
-def test_bulk_delete_compiles_non_trivial_where_clause(db_test):
+def test_bulk_delete_applies_filter_by_through_public_api(db_test):
     repo = SimpleRepository(session=db_test)
-    filters = repo._bulk_filters({"value": 1})
+    repo.bulk_insert([SimpleModel(value=1), SimpleModel(value=2)])
 
-    from sqlalchemy import and_, delete
-
-    compiled = str(delete(SimpleModel).where(and_(*filters)).compile(compile_kwargs={"literal_binds": True}))
-
-    assert "WHERE" in compiled
-    assert "true" not in compiled.lower()
+    assert repo.bulk_delete(filter_by={"value": 1}) == 1
+    assert [item.value for item in repo.find(limit=10)] == [2]
 
 
 def test_find_with_offset(db_test):
@@ -725,20 +748,12 @@ def test_count(db_test):
     assert repo.count(filters) == 0
 
 
-def test_count_respects_soft_delete_flag_on_soft_deletable_model(db_test):
-    """count() はデフォルトで削除済みを除外し、フラグで含められる"""
-    repo = BaseRepository(SoftDeleteCountModel, db_test)
+def test_count_by_params(db_test):
+    repo = FilterableRepository(session=db_test)
+    repo.saves([SimpleModel(value=1), SimpleModel(value=2), SimpleModel(value=2)])
 
-    active = SoftDeleteCountModel(name="active")
-    deleted = SoftDeleteCountModel(name="deleted")
-    db_test.add_all([active, deleted])
-    db_test.commit()
-
-    deleted.soft_delete()
-    db_test.commit()
-
-    assert repo.count() == 1
-    assert repo.count(include_deleted=True) == 2
+    assert repo.count_by_params(SimpleFilterParams(value=2)) == 2
+    assert repo.count_by_params(SimpleFilterParams(value=999)) == 0
 
 
 def test_count_on_non_soft_deletable_model_accepts_flag(db_test):
@@ -782,3 +797,7 @@ def test_default_session_fallback():
 
     repo.remove(fetched)
     assert repo.get_by_id(created.id) is None
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

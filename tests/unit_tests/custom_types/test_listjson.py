@@ -1,4 +1,4 @@
-from tests._init import *
+import pytest
 import warnings
 from sqlalchemy import Integer, select
 from sqlalchemy.dialects import postgresql, sqlite
@@ -258,3 +258,32 @@ def test_listjson_filter_empty_list_no_cache_warning_with_sqlalchemy_utils(db_te
         results = repo.find(ListModelFilterParams(option_list=[]))
     ids = [item.id for item in results]
     assert log.id in ids
+
+
+def test_listjson_filter_respects_element_boundaries(db_test):
+    """"admin" というフィルタが "superadministrator" という要素にヒットしないこと"""
+    row = ListModel(option_list=["superadministrator"])
+    db_test.add(row)
+    db_test.commit()
+
+    repo = ListModelRepository(session=db_test)
+    results = repo.find(ListModelFilterParams(option_list=["admin"]))
+
+    assert results == []
+
+
+def test_listjson_filter_treats_wildcards_as_literal(db_test):
+    """要素の一致は等価比較のため、"%" を含む値もワイルドカードとして解釈されない"""
+    match = ListModel(option_list=["100%"])
+    other = ListModel(option_list=["other"])
+    db_test.add_all([match, other])
+    db_test.commit()
+
+    repo = ListModelRepository(session=db_test)
+    results = repo.find(ListModelFilterParams(option_list=["100%"]), limit=10)
+
+    assert [item.id for item in results] == [match.id]
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

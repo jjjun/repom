@@ -12,6 +12,7 @@ async_db_test フィクスチャの動作を検証します。
 
 import pytest
 from sqlalchemy import String, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.config import config
 from repom.models.base_model import BaseModel
@@ -103,47 +104,36 @@ class TestTransactionRollback:
     """Transaction Rollback によるテスト分離"""
 
     @pytest.mark.asyncio
-    async def test_first_test_adds_data(self, async_db_test):
-        """最初のテストでデータを追加"""
+    async def test_transaction_fixture_rolls_back_inserted_data(self, async_db_engine):
+        """Each fixture transaction is rolled back when its generator closes."""
+        _, async_db_test_fixture = create_async_test_fixtures()
+        fixture_generator = async_db_test_fixture.__wrapped__(async_db_engine)
+        session = await anext(fixture_generator)
         user = AsyncTestUser(
-            email="rollback_test1@example.com",
-            hashed_password="hash1"
+            email="rollback_test@example.com",
+            hashed_password="hash"
         )
-        async_db_test.add(user)
-        await async_db_test.flush()
-        # Note: flush() のみで commit しないため、トランザクション内に留まる
-        # これは意図的な動作で、テスト終了時に自動ロールバックされる
+        session.add(user)
+        await session.flush()
 
-        # データが存在することを確認
-        stmt = select(AsyncTestUser).where(
-            AsyncTestUser.email == "rollback_test1@example.com"
-        )
-        result = await async_db_test.execute(stmt)
-        found = result.scalar_one_or_none()
+        try:
+            result = await session.execute(
+                select(AsyncTestUser).where(
+                    AsyncTestUser.email == "rollback_test@example.com"
+                )
+            )
+            assert result.scalar_one_or_none() is not None
+        finally:
+            with pytest.raises(StopAsyncIteration):
+                await anext(fixture_generator)
 
-        assert found is not None
-
-    @pytest.mark.asyncio
-    async def test_second_test_data_is_rolled_back(self, async_db_test):
-        """2番目のテストでは前のデータが残っていない"""
-        # 前のテストのデータは存在しない
-        stmt = select(AsyncTestUser).where(
-            AsyncTestUser.email == "rollback_test1@example.com"
-        )
-        result = await async_db_test.execute(stmt)
-        found = result.scalar_one_or_none()
-
-        assert found is None  # ロールバックされている
-
-    @pytest.mark.asyncio
-    async def test_third_test_also_clean(self, async_db_test):
-        """3番目のテストもクリーンな状態"""
-        # 全てのテストデータが残っていない
-        stmt = select(AsyncTestUser)
-        result = await async_db_test.execute(stmt)
-        all_users = result.scalars().all()
-
-        assert len(all_users) == 0
+        async with AsyncSession(async_db_engine) as verify_session:
+            result = await verify_session.execute(
+                select(AsyncTestUser).where(
+                    AsyncTestUser.email == "rollback_test@example.com"
+                )
+            )
+            assert result.scalar_one_or_none() is None
 
 
 class TestCRUDOperations:
@@ -226,109 +216,3 @@ class TestCRUDOperations:
         found = result.scalar_one_or_none()
 
         assert found is None
-
-
-class TestFastAPIUsersPattern:
-    """FastAPI Users パターンのテスト"""
-
-    @pytest.mark.asyncio
-    async def test_user_registration_pattern(self, async_db_test):
-        """ユーザー登録パターン"""
-        # FastAPI Users と同じパターンでユーザーを作成
-        user = AsyncTestUser(
-            email="fastapi_user@example.com",
-            hashed_password="hashed_password_123"
-        )
-        async_db_test.add(user)
-        await async_db_test.flush()
-
-        # FastAPI Users と同じパターンで検索
-        stmt = select(AsyncTestUser).where(
-            AsyncTestUser.email == "fastapi_user@example.com"
-        )
-        result = await async_db_test.execute(stmt)
-        found_user = result.scalar_one_or_none()
-
-        assert found_user is not None
-        assert found_user.email == "fastapi_user@example.com"
-
-    @pytest.mark.asyncio
-    async def test_get_by_email_pattern(self, async_db_test):
-        """メールアドレスでユーザーを取得するパターン"""
-        # 複数ユーザー作成
-        users = [
-            AsyncTestUser(email=f"user{i}@example.com", hashed_password="hash")
-            for i in range(3)
-        ]
-        for user in users:
-            async_db_test.add(user)
-        await async_db_test.flush()
-
-        # 特定のユーザーを取得
-        stmt = select(AsyncTestUser).where(
-            AsyncTestUser.email == "user1@example.com"
-        )
-        result = await async_db_test.execute(stmt)
-        found = result.scalar_one_or_none()
-
-        assert found is not None
-        assert found.email == "user1@example.com"
-
-    @pytest.mark.asyncio
-    async def test_user_not_found_pattern(self, async_db_test):
-        """ユーザーが見つからないパターン"""
-        stmt = select(AsyncTestUser).where(
-            AsyncTestUser.email == "nonexistent@example.com"
-        )
-        result = await async_db_test.execute(stmt)
-        found = result.scalar_one_or_none()
-
-        assert found is None
-
-
-class TestMultipleQueries:
-    """複数クエリのテスト"""
-
-    @pytest.mark.asyncio
-    async def test_multiple_inserts(self, async_db_test):
-        """複数レコードの挿入"""
-        users = [
-            AsyncTestUser(email=f"multi{i}@example.com", hashed_password=f"hash{i}")
-            for i in range(5)
-        ]
-
-        for user in users:
-            async_db_test.add(user)
-        await async_db_test.flush()
-
-        # 全件取得
-        stmt = select(AsyncTestUser)
-        result = await async_db_test.execute(stmt)
-        all_users = result.scalars().all()
-
-        assert len(all_users) == 5
-
-    @pytest.mark.asyncio
-    async def test_filtered_query(self, async_db_test):
-        """フィルタ付きクエリ"""
-        # テストデータ作成
-        users = [
-            AsyncTestUser(email=f"filter{i}@example.com", hashed_password="common")
-            for i in range(3)
-        ]
-        users.append(
-            AsyncTestUser(email="different@example.com", hashed_password="unique")
-        )
-
-        for user in users:
-            async_db_test.add(user)
-        await async_db_test.flush()
-
-        # フィルタクエリ
-        stmt = select(AsyncTestUser).where(
-            AsyncTestUser.hashed_password == "common"
-        )
-        result = await async_db_test.execute(stmt)
-        filtered = result.scalars().all()
-
-        assert len(filtered) == 3

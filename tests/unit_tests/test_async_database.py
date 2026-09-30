@@ -21,7 +21,6 @@ from repom.config import config, RepomConfig
 from contextlib import asynccontextmanager
 import asyncio
 import inspect
-import os
 import ssl
 import threading
 import time
@@ -35,10 +34,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
-# CRITICAL: Set EXEC_ENV before importing repom modules
-os.environ['EXEC_ENV'] = 'test'
-
 
 class TestConvertToAsyncUri:
     """URL 変換機能のテスト"""
@@ -387,38 +382,6 @@ class TestGetAsyncEngineEchoKwarg:
             await manager.dispose_async()
 
 
-class TestGetAsyncDbSession:
-    """DEPRECATED: These tests relied on 'async with' statement which no longer works.
-
-    After removing @asynccontextmanager decorator to fix FastAPI Depends compatibility,
-    get_async_db_session() returns an async generator, not a context manager.
-    For context manager usage, use DatabaseManager methods directly.
-    """
-
-    def test_deprecated_context_manager_usage(self):
-        """Skip old tests that used 'async with' statement"""
-        pytest.skip(
-            "get_async_db_session() no longer supports 'async with' statement. "
-            "Use DatabaseManager().get_async_session() for context manager usage."
-        )
-
-
-class TestGetAsyncDbTransaction:
-    """DEPRECATED: These tests relied on 'async with' statement which no longer works.
-
-    After removing @asynccontextmanager decorator to fix FastAPI Depends compatibility,
-    get_async_db_transaction() returns an async generator, not a context manager.
-    For context manager usage, use DatabaseManager methods directly.
-    """
-
-    def test_deprecated_context_manager_usage(self):
-        """Skip old tests that used 'async with' statement"""
-        pytest.skip(
-            "get_async_db_transaction() no longer supports 'async with' statement. "
-            "Use DatabaseManager().get_async_transaction() for context manager usage."
-        )
-
-
 class TestDatabaseManager:
     """DatabaseManager クラスの非同期機能テスト"""
 
@@ -447,14 +410,14 @@ class TestDatabaseManager:
         await manager.dispose_async()
 
     @pytest.mark.asyncio
-    async def test_async_session_context_manager(self, async_db_test):
+    async def test_async_session_context_manager(self):
         """Async Session の context manager 動作確認"""
         manager = DatabaseManager()
         async with manager.get_async_session() as session:
             assert isinstance(session, AsyncSession)
 
     @pytest.mark.asyncio
-    async def test_async_transaction_auto_commit(self, async_db_test):
+    async def test_async_transaction_auto_commit(self):
         """トランザクションの自動コミット確認"""
         # テスト用に独立したマネージャーを作成し、自身の engine にテーブルを準備する
         manager = DatabaseManager()
@@ -552,88 +515,6 @@ class TestLifespanManager:
         assert manager._async_engine is None
 
 
-class TestAsyncTransactionIntegration:
-    """非同期トランザクションの統合テスト"""
-
-    @pytest.mark.asyncio
-    async def test_create_and_query(self, async_db_test):
-        """Should be able to create and query records"""
-        # Create
-        sample = SampleModel(value="async_test")
-        async_db_test.add(sample)
-        await async_db_test.flush()
-
-        # Query
-        result = await async_db_test.execute(
-            select(SampleModel).where(SampleModel.value == "async_test")
-        )
-        found = result.scalar_one()
-        assert found.value == "async_test"
-
-    @pytest.mark.asyncio
-    async def test_isolation_between_tests(self, async_db_test):
-        """Each test should have isolated transaction"""
-        result = await async_db_test.execute(select(SampleModel))
-        samples = result.scalars().all()
-        assert isinstance(samples, list)
-
-    @pytest.mark.asyncio
-    async def test_update_record(self, async_db_test):
-        """Should be able to update records"""
-        # Create
-        sample = SampleModel(value="update_test")
-        async_db_test.add(sample)
-        await async_db_test.flush()
-
-        # Update
-        sample.value = "updated_value"
-        await async_db_test.flush()
-
-        # Verify
-        result = await async_db_test.execute(
-            select(SampleModel).where(SampleModel.value == "updated_value")
-        )
-        updated = result.scalar_one()
-        assert updated.value == "updated_value"
-
-    @pytest.mark.asyncio
-    async def test_delete_record(self, async_db_test):
-        """Should be able to delete records"""
-        # Create
-        sample = SampleModel(value="delete_test")
-        async_db_test.add(sample)
-        await async_db_test.flush()
-
-        # Delete
-        await async_db_test.delete(sample)
-        await async_db_test.flush()
-
-        # Verify
-        result = await async_db_test.execute(
-            select(SampleModel).where(SampleModel.value == "delete_test")
-        )
-        deleted = result.scalar_one_or_none()
-        assert deleted is None
-
-
-@pytest.mark.skip(reason="get_async_db_session is an async generator for FastAPI Depends")
-class TestFastAPIDependsContextManagerCompatibility:
-    """FastAPI Depends パターンのテスト"""
-
-    @pytest.mark.asyncio
-    async def test_get_async_db_session_yields_session(self):
-        """get_async_db_session() should yield AsyncSession for FastAPI Depends"""
-        # asynccontextmanager デコレータにより、context manager として動作
-        async with get_async_db_session() as session:
-            # AsyncSession であることを確認
-            assert isinstance(session, AsyncSession)
-
-            # session.execute() が動作することを確認
-            result = await session.execute(select(SampleModel))
-            samples = result.scalars().all()
-            assert isinstance(samples, list)
-
-
 class TestFastAPIDependsPattern:
     """FastAPI Depends パターンのテスト - 実際の async generator protocol をテスト"""
 
@@ -681,21 +562,6 @@ class TestFastAPIDependsPattern:
                 await gen.__anext__()
             except StopAsyncIteration:
                 pass  # Expected
-
-    @pytest.mark.asyncio
-    async def test_get_async_db_session_context_manager_compatibility(self):
-        """get_async_db_session() should also work with 'async with' for backward compatibility"""
-        # This tests the old behavior (async with statement)
-        # If @asynccontextmanager is removed, this test should be updated or removed
-        try:
-            async with get_async_db_session() as session:
-                assert isinstance(session, AsyncSession)
-                result = await session.execute(select(SampleModel))
-                items = result.scalars().all()
-                assert isinstance(items, list)
-        except (AttributeError, TypeError) as e:
-            # If @asynccontextmanager is removed, async generator doesn't support 'async with'
-            pytest.skip(f"Async context manager protocol not supported: {e}")
 
     @pytest.mark.asyncio
     async def test_get_async_db_transaction_is_async_generator_function(self):
@@ -758,13 +624,13 @@ class TestFastAPIDependsPattern:
     async def test_fastapi_depends_real_simulation(self):
         """Simulate REAL FastAPI Depends behavior (using anext())"""
         # This is how FastAPI actually processes async dependencies
-        async def simulate_fastapi_depends(dependency_func):
+        async def simulate_fastapi_depends(dependency_func, operation):
             """Simulates FastAPI's async dependency injection"""
             gen = dependency_func()
             try:
                 # Get the dependency value
                 value = await gen.__anext__()
-                return value
+                return await operation(value)
             finally:
                 # Cleanup
                 try:
@@ -772,17 +638,18 @@ class TestFastAPIDependsPattern:
                 except StopAsyncIteration:
                     pass
 
+        async def use_session(session):
+            # AsyncSession であることを確認
+            assert isinstance(session, AsyncSession), \
+                f"Expected AsyncSession but got {type(session).__name__}"
+
+            # session.execute() が動作することを確認
+            result = await session.execute(select(SampleModel))
+            items = result.scalars().all()
+            return isinstance(items, list)
+
         # Use the simulated Depends
-        session = await simulate_fastapi_depends(get_async_db_session)
-
-        # AsyncSession であることを確認
-        assert isinstance(session, AsyncSession), \
-            f"Expected AsyncSession but got {type(session).__name__}"
-
-        # session.execute() が動作することを確認
-        result = await session.execute(select(SampleModel))
-        items = result.scalars().all()
-        assert isinstance(items, list)
+        assert await simulate_fastapi_depends(get_async_db_session, use_session)
 
     @pytest.mark.asyncio
     async def test_session_has_required_methods(self):
@@ -815,6 +682,10 @@ class TestStandaloneAsyncTransaction:
     注意: standalone transaction は自動的に dispose するため、
     通常の fixture とは分離してテストする必要があります。
     """
+
+    @pytest.fixture(autouse=True)
+    def isolate_database_manager(self, monkeypatch):
+        monkeypatch.setattr(database_module, "_db_manager", DatabaseManager())
 
     @pytest.mark.asyncio
     async def test_yields_async_session(self):

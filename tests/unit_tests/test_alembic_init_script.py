@@ -4,7 +4,6 @@ alembic_init must read version_locations from an existing alembic.ini
 instead of falling back to AlembicSetup's built-in defaults.
 """
 
-from tests._init import *
 
 from unittest.mock import MagicMock
 

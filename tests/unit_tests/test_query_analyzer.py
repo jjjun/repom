@@ -159,15 +159,16 @@ class TestQueryAnalyzer:
             db_test.query(Author).all()
 
         first_count = len(analyzer.get_queries())
+        assert first_count == 1
 
         # Second capture should reset
         with analyzer.capture():
+            assert analyzer.get_queries() == []
             db_test.query(Book).all()
 
         second_count = len(analyzer.get_queries())
 
-        # Counts should be different (not accumulated)
-        assert second_count != first_count + len(analyzer.get_queries())
+        assert second_count == 1
 
     def test_analyzer_with_repository(self, db_test, setup_data):
         """Test QueryAnalyzer with BaseRepository."""

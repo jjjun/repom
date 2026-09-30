@@ -48,7 +48,6 @@ repom/
 │   ├── behavior_tests/       # Behavioural notes & examples
 │   ├── integration_tests/    # External-project and database integration tests
 │   ├── conftest.py           # Pytest configuration
-│   └── db_test_fixtures.py   # Backward-compatibility note; fixtures live in conftest.py
 ├── alembic/                  # Shared migration environment referenced via script_location; versions/ holds repom's own migrations
 ├── data/                     # SQLite databases for each environment
 ├── data_master/              # Master data files
@@ -275,6 +274,8 @@ uv run ruff check .
 # With verbose output
 uv run pytest -vv -s
 ```
+
+- PostgreSQL integration: start `docker run -d --rm -e POSTGRES_DB=repom_test -e POSTGRES_USER=repom -e POSTGRES_PASSWORD=repom-local-password -p 5433:5432 postgres:16-alpine`, then run `CONFIG_HOOK=repom.config_hook:hook_config EXEC_ENV=test DB_TYPE=postgres POSTGRES_PASSWORD=repom-local-password uv run pytest tests/integration_tests/test_postgres_integration.py`.
 
 The repository's `.env.example` enables `repom.config_hook:hook_config`, which
 selects PostgreSQL for `dev` / `prod` and in-memory SQLite for `test`. Pytest's

@@ -19,6 +19,14 @@
 | `uv run postgres_stop` | `uv run redis_stop` |
 | `uv run postgres_remove` | `uv run redis_remove` |
 
+`ensure_running()` starts from the existing compose files and `.env` when both
+files are present. It generates files only when one is missing. Explicit
+`*_generate` and `*_start` commands still regenerate files, but refuse to
+replace a `.env` that differs from the active credentials. Use the matching
+credential rotation command for an existing service, or pass
+`--force-regenerate` to intentionally replace secrets; changed content keeps
+the previous `.env` as `.env.bak` with mode `0600`.
+
 アプリ起動時に必要なサービスを保証する場合は、サービス固有の
 `ensure_running()` を利用できます。
 

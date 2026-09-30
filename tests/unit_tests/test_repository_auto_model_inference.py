@@ -15,8 +15,9 @@ Expected behavior:
 import pytest
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from repom import BaseRepository
+from repom import AsyncBaseRepository, BaseRepository
 from repom.models import BaseModel
+from tests.fixtures.models import SimpleRecord
 
 
 class AutoInferenceModel(BaseModel):
@@ -35,6 +36,14 @@ class RepositoryWithInit(BaseRepository[AutoInferenceModel]):
 
 class RepositoryWithoutInit(BaseRepository[AutoInferenceModel]):
     """Repository without __init__ - now works with auto inference"""
+    pass
+
+
+class SimpleRecordRepository(BaseRepository[SimpleRecord]):
+    pass
+
+
+class AsyncSimpleRecordRepository(AsyncBaseRepository[SimpleRecord]):
     pass
 
 
@@ -97,3 +106,32 @@ def test_repository_auto_inference_without_type_param_error():
     error_msg = str(exc_info.value)
     assert "Could not infer model type" in error_msg
     assert "NoTypeParamRepository" in error_msg
+
+
+@pytest.mark.asyncio
+async def test_repository_initialization_patterns_share_simple_model(repository_adapter):
+    repository_type = (
+        SimpleRecordRepository
+        if repository_adapter.mode == 'sync'
+        else AsyncSimpleRecordRepository
+    )
+
+    inferred_repo = repository_type(session=repository_adapter.session)
+    assert inferred_repo.model is SimpleRecord
+    saved = await repository_adapter.call(
+        inferred_repo.save,
+        SimpleRecord(name='inferred model'),
+    )
+    assert saved.name == 'inferred model'
+
+    explicit_repo = repository_type(
+        SimpleRecord,
+        session=repository_adapter.session,
+    )
+    assert explicit_repo.model is SimpleRecord
+    results = await repository_adapter.call(explicit_repo.find, limit=10)
+    assert [record.name for record in results] == ['inferred model']
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

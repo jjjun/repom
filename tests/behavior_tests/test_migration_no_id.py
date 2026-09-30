@@ -22,6 +22,13 @@ from repom.database import Base
 from repom.alembic import AlembicSetup  # Use AlembicSetup for alembic.ini generation
 
 
+def _remove_test_tables(*table_names):
+    for table_name in table_names:
+        table = Base.metadata.tables.get(table_name)
+        if table is not None:
+            Base.metadata.remove(table)
+
+
 def test_alembic_migration_without_id():
     """
     use_id=Falseのモデルに対して生成されるマイグレーションファイルに
@@ -35,12 +42,12 @@ def test_alembic_migration_without_id():
     Note: Models are defined within this test function to ensure independence.
     Note: Now uses AlembicSetup for cleaner alembic.ini generation.
     """
-    from sqlalchemy.orm import clear_mappers, configure_mappers
+    from sqlalchemy.orm import configure_mappers
 
     # Define models within test function for complete independence
-    class MigrationTestModelNoId(BaseModel):
+    class MigrationNoIdAutogenerateModel(BaseModel):
         """マイグレーションテスト用: use_id=Falseのモデル"""
-        __tablename__ = 'test_migration_no_id'
+        __tablename__ = 'repom_issue_185_migration_no_id'
         __table_args__ = {'extend_existing': True}
 
         use_id = False
@@ -48,9 +55,9 @@ def test_alembic_migration_without_id():
         code: Mapped[str] = mapped_column(String(50), primary_key=True)
         name: Mapped[Optional[str]] = mapped_column(String(100))
 
-    class MigrationTestModelWithId(BaseModel):
+    class MigrationWithIdAutogenerateModel(BaseModel):
         """マイグレーションテスト用: use_id=Trueのモデル"""
-        __tablename__ = 'test_migration_with_id'
+        __tablename__ = 'repom_issue_185_migration_with_id'
         __table_args__ = {'extend_existing': True}
 
         name: Mapped[Optional[str]] = mapped_column(String(100))
@@ -116,19 +123,19 @@ def test_alembic_migration_without_id():
             with open(migration_file_path, 'r', encoding='utf-8') as f:
                 migration_content = f.read()
 
-            # 検証: test_migration_no_idテーブルの作成部分だけを抽出してチェック
+            # 検証: repom_issue_185_migration_no_idテーブルの作成部分だけを抽出してチェック
             # （他のテーブルのidカラムと混同しないため）
             import re
-            # op.create_table('test_migration_no_id', から次の ) までを抽出
-            table_pattern = r"op\.create_table\('test_migration_no_id'.*?\n\s*\)"
+            # op.create_table('repom_issue_185_migration_no_id', から次の ) までを抽出
+            table_pattern = r"op\.create_table\('repom_issue_185_migration_no_id'.*?\n\s*\)"
             table_match = re.search(table_pattern, migration_content, re.DOTALL)
 
             assert table_match is not None, \
-                "Could not find test_migration_no_id table creation in migration"
+                "Could not find repom_issue_185_migration_no_id table creation in migration"
 
             table_creation_code = table_match.group(0)
 
-            # 検証: test_migration_no_idテーブルにidカラムの作成コードが含まれていないこと
+            # 検証: repom_issue_185_migration_no_idテーブルにidカラムの作成コードが含まれていないこと
             assert "sa.Column('id'" not in table_creation_code, \
                 f"Migration should not contain 'id' column for use_id=False model. Found: {table_creation_code}"
             assert 'Column("id"' not in table_creation_code, \
@@ -140,13 +147,15 @@ def test_alembic_migration_without_id():
             assert "'name'" in table_creation_code or '"name"' in table_creation_code, \
                 f"Migration should contain 'name' column. Found: {table_creation_code}"
 
-            # 検証: test_migration_no_idテーブルの作成が含まれていること
-            assert 'test_migration_no_id' in migration_content, \
+            # 検証: repom_issue_185_migration_no_idテーブルの作成が含まれていること
+            assert 'repom_issue_185_migration_no_id' in migration_content, \
                 "Migration should contain the table name"
     finally:
-        # Cleanup mappers to prevent interference with other tests
-        clear_mappers()
-        configure_mappers()
+        # Remove these test tables from repom's metadata.
+        _remove_test_tables(
+            "repom_issue_185_migration_no_id",
+            "repom_issue_185_migration_with_id",
+        )
 
 
 def test_alembic_migration_with_id():
@@ -156,13 +165,13 @@ def test_alembic_migration_with_id():
 
     Note: Models are defined within this test function to ensure independence.
     """
-    from sqlalchemy.orm import clear_mappers, configure_mappers
+    from sqlalchemy.orm import configure_mappers
     from sqlalchemy import inspect as sqla_inspect
 
     # Define model within test function
-    class MigrationTestModelWithId(BaseModel):
+    class MigrationWithIdMetadataModel(BaseModel):
         """マイグレーションテスト用: use_id=Trueのモデル"""
-        __tablename__ = 'test_migration_with_id'
+        __tablename__ = 'repom_issue_185_migration_metadata_with_id'
         __table_args__ = {'extend_existing': True}
 
         name: Mapped[Optional[str]] = mapped_column(String(100))
@@ -173,13 +182,13 @@ def test_alembic_migration_with_id():
 
         # テスト用エンジンを作成
         engine = create_engine('sqlite:///:memory:')
-        Base.metadata.create_all(engine)
+        Base.metadata.create_all(engine, tables=[MigrationWithIdMetadataModel.__table__])
 
         inspector = sqla_inspect(engine)
 
-        # test_migration_with_idテーブルのカラムを確認
-        if 'test_migration_with_id' in inspector.get_table_names():
-            columns = inspector.get_columns('test_migration_with_id')
+        # repom_issue_185_migration_metadata_with_idテーブルのカラムを確認
+        if 'repom_issue_185_migration_metadata_with_id' in inspector.get_table_names():
+            columns = inspector.get_columns('repom_issue_185_migration_metadata_with_id')
             column_names = [col['name'] for col in columns]
 
             # idカラムが存在することを確認
@@ -187,9 +196,8 @@ def test_alembic_migration_with_id():
             assert 'name' in column_names
 
     finally:
-        # Cleanup mappers to prevent interference with other tests
-        clear_mappers()
-        configure_mappers()
+        # Remove this test table from repom's metadata.
+        _remove_test_tables("repom_issue_185_migration_metadata_with_id")
 
 
 # 注意: 上記のtest_alembic_migration_without_id()は複雑で環境依存です。
@@ -202,13 +210,13 @@ def test_model_metadata_without_id():
 
     Note: Models are defined within this test function to ensure independence.
     """
-    from sqlalchemy.orm import clear_mappers, configure_mappers
+    from sqlalchemy.orm import configure_mappers
     from sqlalchemy import inspect as sqla_inspect
 
     # Define model within test function
-    class MigrationTestModelNoId(BaseModel):
+    class MigrationNoIdMetadataModel(BaseModel):
         """マイグレーションテスト用: use_id=Falseのモデル"""
-        __tablename__ = 'test_migration_no_id'
+        __tablename__ = 'repom_issue_185_migration_metadata_no_id'
         __table_args__ = {'extend_existing': True}
 
         use_id = False
@@ -222,13 +230,13 @@ def test_model_metadata_without_id():
 
         # テスト用エンジン
         engine = create_engine('sqlite:///:memory:')
-        Base.metadata.create_all(engine)
+        Base.metadata.create_all(engine, tables=[MigrationNoIdMetadataModel.__table__])
 
         inspector = sqla_inspect(engine)
 
         # use_id=Falseのテーブル
-        if 'test_migration_no_id' in inspector.get_table_names():
-            columns = inspector.get_columns('test_migration_no_id')
+        if 'repom_issue_185_migration_metadata_no_id' in inspector.get_table_names():
+            columns = inspector.get_columns('repom_issue_185_migration_metadata_no_id')
             column_names = [col['name'] for col in columns]
 
             assert 'id' not in column_names
@@ -236,6 +244,5 @@ def test_model_metadata_without_id():
             assert 'name' in column_names
 
     finally:
-        # Cleanup mappers to prevent interference with other tests
-        clear_mappers()
-        configure_mappers()
+        # Remove this test table from repom's metadata.
+        _remove_test_tables("repom_issue_185_migration_metadata_no_id")

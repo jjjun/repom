@@ -7,6 +7,7 @@ Repository が外部セッションと内部セッションを正しく区別し
 
 from sqlalchemy import String, select
 from sqlalchemy.orm import Mapped, mapped_column
+import pytest
 from repom.models.base_model import BaseModel
 from repom.repositories import BaseRepository
 from repom.database import get_reusable_sync_transaction
@@ -227,3 +228,7 @@ def test_multiple_repos_in_one_transaction(db_test):
     multi_items = [item for item in all_items if item.name.startswith("multi_")]
 
     assert len(multi_items) == 2
+
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:find\(\) was called without a limit:RuntimeWarning"
+)

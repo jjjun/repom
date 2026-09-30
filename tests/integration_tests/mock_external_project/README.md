@@ -17,8 +17,8 @@ consumer's `CONFIG_HOOK` does not configure migration paths.
 
 To verify the resolved paths:
 
-```powershell
-uv run python tests/integration_tests/mock_external_project/debug_migration_location.py
+```bash
+uv run pytest tests/unit_tests/test_external_project_alembic.py
 ```
 
 Migration files created with this configuration belong under

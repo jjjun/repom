@@ -5,7 +5,6 @@ these tests only cover the script's confirmation guard and alembic.ini
 resolution (repom#160).
 """
 
-from tests._init import *
 
 import sys
 from io import BytesIO, StringIO, TextIOWrapper
@@ -21,7 +20,7 @@ from repom.scripts import alembic_reset
 def _mock_config(
     exec_env="dev",
     db_url="sqlite:///data/repom_dev.sqlite3",
-    root_path="/tmp/repom"
+    root_path=None
 ):
     config = MagicMock()
     config.exec_env = exec_env

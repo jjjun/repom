@@ -1,145 +1,61 @@
+"""Regression coverage for model discovery with circular relationships."""
+
+from pathlib import Path
+import subprocess
+import sys
+
+
+def test_load_models_configures_circular_relationship_models():
+    script = """
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+from repom.config import config
+from repom.utility import load_models
+
+config.model_locations = [
+    "tests.fixtures.circular_import.package_a",
+    "tests.fixtures.circular_import.package_b",
+]
+config.model_excluded_dirs = set()
+config.allowed_package_prefixes = {"tests.fixtures.circular_import.", "repom."}
+
+failures = load_models(strict=True)
+assert failures == []
+
+from repom.models.base_model import BaseModel
+from tests.fixtures.circular_import.package_a.model_a import ModelA
+from tests.fixtures.circular_import.package_b.model_b import ModelB
+
+assert "test_model_a" in BaseModel.metadata.tables
+assert "test_model_b" in BaseModel.metadata.tables
+
+engine = create_engine("sqlite:///:memory:")
+BaseModel.metadata.create_all(
+    engine,
+    tables=[
+        BaseModel.metadata.tables["test_model_a"],
+        BaseModel.metadata.tables["test_model_b"],
+    ],
+)
+
+with Session(engine) as session:
+    parent = ModelA(name="parent")
+    parent.children.append(ModelB())
+    session.add(parent)
+    session.commit()
+    parent_id = parent.id
+
+with Session(engine) as session:
+    parent = session.get(ModelA, parent_id)
+    assert len(parent.children) == 1
+    assert parent.children[0].parent is parent
 """
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+    )
 
-Behavior coverage for circular SQLAlchemy mapper initialization.
-
-Issue history is stored in issuekit; this file is the executable regression
-specification.
-"""
-import pytest
-from repom.models.base_model import Base
-from sqlalchemy.orm import clear_mappers
-
-
-@pytest.fixture
-def clean_circular_import_env():
-    """循環参照テスト用の環境をクリーンアップ
-
-    各テスト前後で以下を実行：
-    - Base.metadata のクリア
-    - SQLAlchemy マッパーのクリア
-    - モジュールキャッシュのクリア（tests.fixtures.circular_import）
-
-    これにより、テストの独立性を保証し、循環参照エラーを正確に再現できる。
-    """
-    # 前処理
-    Base.metadata.clear()
-    clear_mappers()
-
-    import sys
-    for key in list(sys.modules.keys()):
-        if 'tests.fixtures.circular_import' in key:
-            del sys.modules[key]
-
-    yield  # テスト実行
-
-    # 後処理
-    Base.metadata.clear()
-    clear_mappers()
-
-    for key in list(sys.modules.keys()):
-        if 'tests.fixtures.circular_import' in key:
-            del sys.modules[key]
-
-
-class TestCircularImportIssue:
-    """Issue #020: 循環参照問題の再現テスト
-
-    検証内容：
-    1. 問題の再現：早期マッパー初期化で循環参照エラーが発生
-    2. 解決策の検証：遅延マッパー初期化で正常動作
-
-    背景：
-    mine-py で発生している「警告」は、import_from_packages の
-    fail_on_error=False でキャッチされた例外が処理されたもの。
-    本質的な問題は、マッパー初期化時に参照先のモデルクラスが
-    まだ定義されていない（クラスレジストリに未登録）こと。
-    """
-
-    def test_reproduce_circular_import_error(self, clean_circular_import_env):
-        """循環参照エラーの再現
-
-        条件：package_a のみをインポート後、configure_mappers() を呼ぶ
-        期待：ModelB が見つからないエラーが発生
-        目的：Issue #020 の問題を再現し、実装前のベースラインを確立
-
-        エラー詳細：
-        - ModelA は ModelB を参照している
-        - ModelB はまだインポートされていない
-        - マッパー初期化時に 'ModelB' という名前が解決できない
-        """
-        from basekit.discovery import import_package_directory
-        from sqlalchemy.orm import configure_mappers
-
-        # package_a のみをインポート
-        import_package_directory(
-            package_name='tests.fixtures.circular_import.package_a',
-            excluded_dirs=set(),
-            allowed_prefixes={'tests.fixtures.', 'repom.'}
-        )
-
-        # マッパーを強制的に初期化 → エラー発生
-        with pytest.raises(Exception) as exc_info:
-            configure_mappers()
-
-        # エラーメッセージの検証
-        error_message = str(exc_info.value)
-        assert "failed to locate a name" in error_message.lower(), (
-            f"Expected 'failed to locate a name' in error: {error_message}"
-        )
-        assert "'ModelB'" in error_message, (
-            f"Expected 'ModelB' in error: {error_message}"
-        )
-
-    def test_verify_deferred_mapper_solution(self, clean_circular_import_env):
-        """遅延マッパー初期化による解決策の検証
-
-        条件：すべてのパッケージをインポート後、configure_mappers() を呼ばない
-        期待：マッパーが遅延初期化され、モデルが正常に使用可能
-        目的：Issue #020 の解決策（マッパー遅延初期化）が有効であることを検証
-
-        重要な知見：
-        - configure_mappers() を明示的に呼ばなければ、エラーは発生しない
-        - マッパーは最初のアクセス時に自動的に初期化される
-        - その時点ですべてのモデルがインポート済みなら問題なし
-
-        これが解決策1の基礎となる動作である。
-        """
-        from basekit.discovery import import_package_directory
-        from sqlalchemy.orm import class_mapper
-
-        # すべてのパッケージをインポート
-        import_package_directory(
-            package_name='tests.fixtures.circular_import.package_a',
-            excluded_dirs=set(),
-            allowed_prefixes={'tests.fixtures.', 'repom.'}
-        )
-
-        import_package_directory(
-            package_name='tests.fixtures.circular_import.package_b',
-            excluded_dirs=set(),
-            allowed_prefixes={'tests.fixtures.', 'repom.'}
-        )
-
-        # configure_mappers() は呼ばない（遅延初期化に任せる）
-
-        # モデルクラスを取得
-        from tests.fixtures.circular_import.package_a.model_a import ModelA
-        from tests.fixtures.circular_import.package_b.model_b import ModelB
-
-        # リレーションシップの確認
-        assert hasattr(ModelA, 'children'), "ModelA should have 'children' relationship"
-        assert hasattr(ModelB, 'parent'), "ModelB should have 'parent' relationship"
-
-        # マッパーが遅延初期化されることを確認
-        mapper_a = class_mapper(ModelA)
-        mapper_b = class_mapper(ModelB)
-
-        assert mapper_a is not None, "ModelA mapper should be initialized"
-        assert mapper_b is not None, "ModelB mapper should be initialized"
-
-        # テーブルが正しく登録されていることを確認
-        tables = list(Base.metadata.tables.keys())
-        assert 'test_model_a' in tables, "test_model_a should be registered"
-        assert 'test_model_b' in tables, "test_model_b should be registered"
-
-
+    assert result.returncode == 0, result.stdout + result.stderr
