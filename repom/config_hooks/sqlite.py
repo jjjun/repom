@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from repom.config_hooks._parsing import TRUE_VALUES, parse_bool_env
+from repom.config_hooks.parsing import TRUE_VALUES, parse_bool_env
 
 
 def apply_sqlite_env_overrides(config: Any) -> None:

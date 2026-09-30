@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added shared config override and public environment parsing helpers, plus
+  Redis client keyword arguments and credential-safe URL helpers on
+  `RedisConfig`.
 - `AutoDateTime` now converts timezone-aware values to UTC on read; previously
   they were returned unchanged. Naive values are still labeled UTC.
 - BREAKING: `SoftDeletableMixin.deleted_at` now reads back as a timezone-aware

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from repom.config_hooks._parsing import parse_bool_env, parse_int_env, parse_port_env
+from repom.config_hooks.parsing import parse_bool_env, parse_int_env, parse_port_env
 
 
 def apply_redis_env_overrides(config: Any) -> None:
