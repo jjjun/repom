@@ -192,13 +192,13 @@ class TestGetLoggerModuleNaming:
         target_logger = logging.getLogger('repom.database')
         original_level = target_logger.level
         try:
-            with caplog.at_level(logging.DEBUG):
+            with caplog.at_level(logging.DEBUG, logger='repom.database'):
                 database_module.logger.info('visible before CRITICAL is set')
             assert 'visible before CRITICAL is set' in caplog.text
             caplog.clear()
 
             target_logger.setLevel(logging.CRITICAL)
-            with caplog.at_level(logging.DEBUG):
+            with caplog.at_level(logging.DEBUG, logger=''):
                 database_module.logger.info('suppressed by repom.database level')
             assert 'suppressed by repom.database level' not in caplog.text
         finally:

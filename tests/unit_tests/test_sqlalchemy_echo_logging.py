@@ -32,7 +32,7 @@ class TestEnableSqlalchemyEchoRuntimeToggle:
             test_config.enable_sqlalchemy_echo = True
 
             caplog.clear()
-            with caplog.at_level(logging.DEBUG):
+            with caplog.at_level(logging.DEBUG, logger=""):
                 with engine.begin() as conn:
                     conn.execute(text("SELECT 1"))
             assert any(
@@ -42,7 +42,7 @@ class TestEnableSqlalchemyEchoRuntimeToggle:
             test_config.enable_sqlalchemy_echo = False
 
             caplog.clear()
-            with caplog.at_level(logging.DEBUG):
+            with caplog.at_level(logging.DEBUG, logger=""):
                 with engine.begin() as conn:
                     conn.execute(text("SELECT 1"))
             assert not any(
