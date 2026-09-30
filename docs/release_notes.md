@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- PostgreSQL credential rotation now applies database and schema grants before
+  changing the current role's password, and successful replacement-user
+  rotations update both the configured user and password before regenerating
+  compose secrets.
 - Repository queries now order by all primary-key attributes by default. String
   `order_by` values use remaining primary-key attributes as same-direction
   tie-breakers, making paginated results deterministic; explicit SQLAlchemy

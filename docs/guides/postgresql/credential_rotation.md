@@ -35,6 +35,10 @@ new password is read from stdin first. When stdin is a TTY, omitting the
 new-password option prompts for the new password. `--allow-config-password`
 explicitly opts in to using the configured password as the new value.
 
+For password-only rotation, all requested database and schema grants run before
+the current role's password is changed. A failed grant therefore leaves the
+current login credentials unchanged.
+
 `--database` can be repeated to select databases; by default the command targets
 `db_name`, `db_name_dev`, and `db_name_test`. `--schema` can be repeated to
 select schemas and defaults to `public`.
@@ -56,7 +60,8 @@ printf '%s\n%s\n' 'new-password' 'old-password' | uv run postgres_rotate_credent
 
 The replacement-user path creates or updates the new role, grants database,
 schema, table, sequence, and future default privileges, and does not drop the
-old role.
+old role. On success, the configured PostgreSQL user and password are both
+updated before the compose secrets are regenerated.
 
 ## pgAdmin
 

@@ -146,6 +146,22 @@ def test_password_only_postgres_plan_masks_password():
     assert "***" in result.masked_output[0]
 
 
+def test_password_only_postgres_dry_run_changes_password_after_grants():
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="old-secret",
+        new_password="new-secret",
+        databases=("app",),
+        schemas=("public",),
+        container_name="repom_postgres",
+    )
+
+    result = rotate_postgres_credentials(plan, dry_run=True)
+
+    assert 'ALTER ROLE "repom" WITH PASSWORD' in result.masked_output[-1]
+    assert all("GRANT " in output for output in result.masked_output[:-1])
+
+
 def test_replacement_user_plan_is_non_destructive_and_grants_access():
     plan = PostgresCredentialRotationPlan(
         current_user="repom",
@@ -159,6 +175,8 @@ def test_replacement_user_plan_is_non_destructive_and_grants_access():
     steps = build_postgres_rotation_steps(plan)
     sql = "\n".join(step.sql for step in steps)
 
+    assert "CREATE ROLE" in steps[0].sql
+    assert all("GRANT " in step.sql for step in steps[1:])
     assert "CREATE ROLE" in sql
     assert 'GRANT ALL PRIVILEGES ON DATABASE "app" TO "app_user";' in sql
     assert 'GRANT USAGE, CREATE ON SCHEMA "public" TO "app_user";' in sql
@@ -222,6 +240,70 @@ def test_postgres_rotation_env_file_holds_pgpassword_only_during_the_call(
     assert captured["exists_during_call"] is True
     assert captured["contents"] == "PGPASSWORD=old-secret\n"
     assert not os.path.exists(captured["env_file"])
+
+
+def test_postgres_grant_failure_leaves_credentials_and_env_untouched(
+    monkeypatch, tmp_path
+):
+    mock_config, env_file, original_env = _configure_temp_secret_generation(
+        monkeypatch, tmp_path
+    )
+    executed_sql = []
+
+    def fail_on_grant(command, **kwargs):
+        sql = kwargs["input"]
+        executed_sql.append(sql)
+        return subprocess.CompletedProcess(
+            command,
+            1 if sql.startswith("GRANT ") else 0,
+            stdout="",
+            stderr="grant failed",
+        )
+
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="postgres-old-secret",
+        new_password="postgres-new-secret",
+        databases=("app",),
+        schemas=("public",),
+        container_name="repom_postgres",
+    )
+
+    with pytest.raises(PostgresCredentialRotationError):
+        rotate_postgres_credentials(plan, dry_run=False, runner=fail_on_grant)
+
+    assert executed_sql
+    assert all('ALTER ROLE "repom" WITH PASSWORD' not in sql for sql in executed_sql)
+    assert mock_config.postgres.user == "repom"
+    assert mock_config.postgres.password == "postgres-config-secret"
+    assert env_file.read_text(encoding="utf-8") == original_env
+    assert not env_file.with_name(".env.bak").exists()
+
+
+def test_replacement_user_success_updates_config_and_compose_secrets(
+    monkeypatch, tmp_path
+):
+    mock_config, env_file, original_env = _configure_temp_secret_generation(
+        monkeypatch, tmp_path
+    )
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        new_user="app_user",
+        current_password="postgres-old-secret",
+        new_password="postgres-new-secret",
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    rotate_postgres_credentials(plan, dry_run=False, runner=_rotation_runner())
+
+    assert mock_config.postgres.user == "app_user"
+    assert mock_config.postgres.password == "postgres-new-secret"
+    assert env_file.read_text(encoding="utf-8") == (
+        'POSTGRES_PASSWORD="postgres-new-secret"\n'
+        'PGADMIN_DEFAULT_PASSWORD="pgadmin-config-secret"\n'
+    )
+    assert env_file.with_name(".env.bak").read_text(encoding="utf-8") == original_env
 
 
 def test_postgres_rotation_still_uses_stdin_and_env_file(monkeypatch, tmp_path):
