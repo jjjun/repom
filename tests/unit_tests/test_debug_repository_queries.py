@@ -37,10 +37,20 @@ def test_importing_module_does_not_register_samples_table():
 
 def test_main_imports_module_class_target(monkeypatch):
     calls = []
-    monkeypatch.setattr(sys, "argv", ["debug_repository_queries", "repom.examples.repositories.sample:SampleRepository"])
     monkeypatch.setattr(query_script, "debug_repository_queries", calls.append)
 
-    query_script.main()
+    query_script.main(["repom.examples.repositories.sample:SampleRepository"])
+
+    assert calls == [SampleRepository]
+
+
+def test_debug_repository_queries_cli_is_callable_without_argv(monkeypatch):
+    calls = []
+    monkeypatch.setattr(query_script, "debug_repository_queries", calls.append)
+
+    query_script.debug_repository_queries_cli(
+        target="repom.examples.repositories.sample:SampleRepository"
+    )
 
     assert calls == [SampleRepository]
 

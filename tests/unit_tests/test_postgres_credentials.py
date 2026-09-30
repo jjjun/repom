@@ -21,7 +21,9 @@ from repom.postgres.credentials import (
     quote_literal,
     recreate_pgadmin_volume,
     rotate_pgadmin_password,
+    rotate_pgadmin_credentials_cli,
     rotate_postgres_credentials,
+    rotate_postgres_credentials_cli,
     main_pgadmin,
     main_postgres,
 )
@@ -620,21 +622,9 @@ def test_postgres_main_prompts_for_new_password_in_a_tty(monkeypatch):
     assert rotate.call_args.args[0].new_password == "new-secret"
 
 
-def test_postgres_main_delegates_execution_to_library(monkeypatch):
+def test_postgres_main_delegates_execution_to_library():
     mock_config = MagicMock()
     mock_config.postgres.password = "old-secret"
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "postgres_rotate_credentials",
-            "--new-password",
-            "new-secret",
-            "--current-password",
-            "old-secret",
-            "--execute",
-        ],
-    )
 
     with patch("repom.postgres.credentials.config", mock_config):
         with patch(
@@ -642,24 +632,53 @@ def test_postgres_main_delegates_execution_to_library(monkeypatch):
             return_value=MagicMock(dry_run=False, masked_output=()),
         ) as rotate:
             with patch("repom.postgres.manage.generate") as generate:
-                main_postgres()
+                main_postgres(
+                    [
+                        "--new-password",
+                        "new-secret",
+                        "--current-password",
+                        "old-secret",
+                        "--execute",
+                    ]
+                )
 
     assert rotate.call_args.kwargs["dry_run"] is False
     assert mock_config.postgres.password == "old-secret"
     generate.assert_not_called()
 
 
-def test_pgadmin_main_keeps_new_password_argument_behavior(monkeypatch):
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["pgadmin_rotate_password", "--new-password", "new-secret"],
-    )
+def test_postgres_credentials_cli_is_callable_without_argv():
+    with patch("repom.postgres.credentials.config", MagicMock()):
+        with patch(
+            "repom.postgres.credentials.rotate_postgres_credentials",
+            return_value=MagicMock(dry_run=False, masked_output=()),
+        ) as rotate:
+            rotate_postgres_credentials_cli(
+                new_password="new-secret",
+                current_password="old-secret",
+                current_user="repom",
+                execute=True,
+            )
 
+    assert rotate.call_args.kwargs["dry_run"] is False
+
+
+def test_pgadmin_main_keeps_new_password_argument_behavior(monkeypatch):
     with patch("repom.postgres.credentials.rotate_pgadmin_password") as rotate:
-        main_pgadmin()
+        main_pgadmin(["--new-password", "new-secret"])
 
     assert rotate.call_args.args[0].new_password == "new-secret"
+
+
+def test_pgadmin_credentials_cli_is_callable_without_argv():
+    with patch("repom.postgres.credentials.config", MagicMock()):
+        with patch(
+            "repom.postgres.credentials.rotate_pgadmin_password",
+            return_value=MagicMock(dry_run=False, masked_output=()),
+        ) as rotate:
+            rotate_pgadmin_credentials_cli(new_password="new-secret", execute=True)
+
+    assert rotate.call_args.kwargs["dry_run"] is False
 
 
 def test_pgadmin_main_delegates_execution_to_library(monkeypatch):

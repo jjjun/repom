@@ -76,31 +76,66 @@ def test_alembic_reset_refuses_prod_env(monkeypatch, tmp_path):
 def test_alembic_reset_proceeds_with_yes_flag_on_non_tty(monkeypatch, tmp_path):
     _write_default_ini(tmp_path)
     monkeypatch.setattr(alembic_reset, "config", _mock_config(root_path=str(tmp_path)))
-    monkeypatch.setattr(sys, "argv", ["alembic_reset", "--yes"])
     monkeypatch.setattr(sys, "stdin", StringIO(""))
     setup_cls = MagicMock()
     monkeypatch.setattr(alembic_reset, "AlembicSetup", setup_cls)
 
-    alembic_reset.main()
+    alembic_reset.main(["--yes"])
 
     setup_cls.from_ini.return_value.reset_migrations.assert_called_once()
 
 
-def test_alembic_reset_requires_ini_file(monkeypatch, tmp_path):
-    """repom#160: fail with a clear error instead of falling back to
-    AlembicSetup's built-in defaults when the ini file is missing.
-    """
+def test_reset_alembic_migrations_is_callable_without_argv(monkeypatch, tmp_path):
+    _write_default_ini(tmp_path)
     monkeypatch.setattr(alembic_reset, "config", _mock_config(root_path=str(tmp_path)))
-    monkeypatch.setattr(sys, "argv", ["alembic_reset", "--yes"])
     monkeypatch.setattr(sys, "stdin", StringIO(""))
     setup_cls = MagicMock()
     monkeypatch.setattr(alembic_reset, "AlembicSetup", setup_cls)
 
-    with pytest.raises(SystemExit) as exc_info:
-        alembic_reset.main()
+    alembic_reset.reset_alembic_migrations(yes=True)
 
-    assert exc_info.value.code != 0
-    setup_cls.from_ini.assert_not_called()
+    setup_cls.from_ini.return_value.reset_migrations.assert_called_once()
+
+
+def test_describe_alembic_reset_returns_confirmation_target(monkeypatch, tmp_path):
+    ini_path = _write_default_ini(tmp_path)
+    db_url = "sqlite:///tmp/reset.db"
+    monkeypatch.setattr(
+        alembic_reset, "config", _mock_config(db_url=db_url, root_path=str(tmp_path))
+    )
+
+    target = alembic_reset.describe_alembic_reset(ini_path)
+
+    assert "sqlite:///tmp/reset.db" in target
+    assert "version table: alembic_version" in target
+    assert f"version directories: {tmp_path / 'alembic' / 'versions'}" in target
+
+
+def test_describe_alembic_reset_raises_for_missing_ini(monkeypatch, tmp_path):
+    ini_path = tmp_path / "missing.ini"
+    monkeypatch.setattr(alembic_reset, "config", _mock_config(root_path=str(tmp_path)))
+
+    with pytest.raises(
+        FileNotFoundError,
+        match=f"Alembic config file not found: {ini_path}",
+    ):
+        alembic_reset.describe_alembic_reset(ini_path)
+
+
+def test_alembic_reset_requires_ini_file(monkeypatch, tmp_path, capsys):
+    """repom#160: fail with a clear error instead of falling back to
+    AlembicSetup's built-in defaults when the ini file is missing.
+    """
+    monkeypatch.setattr(alembic_reset, "config", _mock_config(root_path=str(tmp_path)))
+    ini_path = tmp_path / "missing.ini"
+
+    with pytest.raises(SystemExit) as exc_info:
+        alembic_reset.main(["--yes", "--config", str(ini_path)])
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.out == f"Alembic config file not found: {ini_path}\n"
+    assert captured.err == ""
 
 
 def test_alembic_reset_completes_with_cp932_stdout(monkeypatch, tmp_path):

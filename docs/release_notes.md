@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `RepomConfig` can configure the Alembic script location, version locations,
+  version table, and version table schema when `alembic_init` creates a new ini.
+  The Alembic reset, credential rotation, and query debugging entry points now
+  accept explicit arguments and expose reusable functions for task runners.
 - Repository bulk update and delete methods accept arbitrary SQLAlchemy filters,
   and `bulk_permanent_delete()` physically deletes matching rows even for
   soft-deletable models. `count()` and `find_deleted()` can combine explicit

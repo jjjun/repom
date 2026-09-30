@@ -137,10 +137,26 @@ def debug_repository_queries(repo_class: Type[BaseRepository]) -> None:
     analyzer.print_report(verbose=True)
 
 
-def main():
+def debug_repository_queries_cli(*, target: str | None = None) -> None:
+    """Resolve a repository class target and run the query debugger."""
+    import importlib
+
+    if target:
+        module_name, _, class_name = target.partition(":")
+        if not class_name:
+            raise ValueError('target は "module:ClassName" 形式で指定してください')
+        module = importlib.import_module(module_name)
+        repo_class = getattr(module, class_name)
+    else:
+        from repom.examples.repositories.sample import SampleRepository
+        repo_class = SampleRepository
+
+    debug_repository_queries(repo_class)
+
+
+def main(argv: list[str] | None = None):
     """エントリーポイント"""
     import argparse
-    import importlib
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -150,19 +166,10 @@ def main():
         help='調査対象のリポジトリクラス（"module:ClassName" 形式）。'
              '省略時は repom.examples.repositories.sample.SampleRepository を使用する。',
     )
-    args = parser.parse_args()
-
-    if args.target:
-        module_name, _, class_name = args.target.partition(":")
-        if not class_name:
-            parser.error('target は "module:ClassName" 形式で指定してください')
-        module = importlib.import_module(module_name)
-        repo_class = getattr(module, class_name)
-    else:
-        from repom.examples.repositories.sample import SampleRepository
-        repo_class = SampleRepository
-
-    debug_repository_queries(repo_class)
+    args = parser.parse_args(argv)
+    if args.target and not args.target.partition(":")[2]:
+        parser.error('target は "module:ClassName" 形式で指定してください')
+    debug_repository_queries_cli(target=args.target)
 
 
 if __name__ == "__main__":

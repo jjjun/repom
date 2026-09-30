@@ -16,7 +16,11 @@ from repom.redis.credentials import (
     rotate_redis_password,
 )
 from repom.redis import manage as redis_manage
-from repom.redis.manage import main_rotate_password, rotate_password
+from repom.redis.manage import (
+    main_rotate_password,
+    rotate_password,
+    rotate_redis_password_cli,
+)
 
 
 def test_redis_cli_command_without_env_file():
@@ -271,18 +275,21 @@ def test_redis_rotate_password_rejects_empty_new_password():
 
 
 def test_redis_main_reads_new_password_from_stdin_without_command_exposure(monkeypatch):
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["redis_rotate_password", "--new-password-stdin"],
-    )
     monkeypatch.setattr(sys, "stdin", StringIO("new-secret\n"))
 
     with patch("repom.redis.manage.rotate_password") as rotate:
-        main_rotate_password()
+        main_rotate_password(["--new-password-stdin"])
 
     assert rotate.call_args.kwargs["new_password"] == "new-secret"
     assert "new-secret" not in " ".join(sys.argv)
+
+
+def test_redis_password_cli_is_callable_without_argv(monkeypatch):
+    with patch("repom.redis.manage.rotate_password") as rotate:
+        rotate_redis_password_cli(new_password="new-secret")
+
+    assert rotate.call_args.kwargs["new_password"] == "new-secret"
+    assert rotate.call_args.kwargs["dry_run"] is True
 
 
 def test_redis_main_prompts_for_new_password_in_a_tty(monkeypatch):
