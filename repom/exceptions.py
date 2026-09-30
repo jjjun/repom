@@ -1,4 +1,4 @@
-from sqlalchemy.exc import DontWrapMixin
+from sqlalchemy.exc import DontWrapMixin, IntegrityError
 
 
 class NulByteError(ValueError, DontWrapMixin):
@@ -13,3 +13,27 @@ class NulByteError(ValueError, DontWrapMixin):
         super().__init__(
             f"NUL (0x00) byte at offset {offset} in column '{column_name}'{location} is not storable"
         )
+
+
+def is_unique_violation(exc: IntegrityError) -> bool:
+    """Return whether an integrity error represents a unique constraint violation."""
+    original = exc.orig
+    sqlstate = getattr(original, 'sqlstate', None)
+    pgcode = getattr(original, 'pgcode', None)
+    if sqlstate is not None or pgcode is not None:
+        return sqlstate == '23505' or pgcode == '23505'
+
+    sqlite_errorname = getattr(original, 'sqlite_errorname', None)
+    if sqlite_errorname is not None:
+        return sqlite_errorname in {
+            'SQLITE_CONSTRAINT_UNIQUE',
+            'SQLITE_CONSTRAINT_PRIMARYKEY',
+        }
+
+    return 'unique' in str(original or exc).lower()
+
+
+def unique_violation_constraint_name(exc: IntegrityError) -> str | None:
+    """Return the violated unique constraint name when the driver exposes it."""
+    diagnostic = getattr(exc.orig, 'diag', None)
+    return getattr(diagnostic, 'constraint_name', None)

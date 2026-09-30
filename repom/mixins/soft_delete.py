@@ -5,9 +5,9 @@
 
 from typing import Optional
 from datetime import datetime, timezone
-from sqlalchemy import DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 import logging
+from repom.custom_types import UTCDateTime
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +34,14 @@ class SoftDeletableMixin:
         - is_deleted プロパティ: 削除済みかどうかを確認
 
     注意:
-        - deleted_at は UTC タイムゾーン付きの DateTime 型です（ただし SQLite では
-          タイムゾーン情報が保持されず、読み込み時は naive な datetime になります）
+        - deleted_at は UTC タイムゾーン付きの DateTime 型です。SQLite では
+          保存時にタイムゾーン情報が失われますが、読み込み時に UTC として復元されます
         - セッションへの追加やコミットは呼び出し側で行う必要があります
         - BaseRepository を使用すると、削除済みレコードの自動除外が有効になります
     """
 
     deleted_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         nullable=True,
         default=None,
         index=True,  # パフォーマンス向上のためインデックスを作成

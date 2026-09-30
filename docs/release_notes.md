@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `AutoDateTime` now converts timezone-aware values to UTC on read; previously
+  they were returned unchanged. Naive values are still labeled UTC.
+- BREAKING: `SoftDeletableMixin.deleted_at` now reads back as a timezone-aware
+  UTC datetime on SQLite. Consumers comparing it with naive datetimes should
+  use timezone-aware UTC values.
 - Added `get_reusable_sync_session()` and `get_reusable_async_session()` for
   caller-managed session lifetimes. They do not commit, roll back any open
   transaction, and close the session without disposing the reusable engine.

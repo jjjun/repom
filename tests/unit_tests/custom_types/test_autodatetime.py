@@ -113,3 +113,12 @@ def test_process_result_value_naive_datetime_is_normalized_to_utc():
 
 def test_process_result_value_none_is_unchanged():
     assert AutoDateTime().process_result_value(None, None) is None
+
+
+def test_process_result_value_aware_datetime_with_offset_is_normalized_to_utc():
+    aware_value = datetime(2026, 4, 22, 12, 0, 0, tzinfo=timezone(timedelta(hours=9)))
+
+    result = AutoDateTime().process_result_value(aware_value, None)
+
+    assert result == aware_value.astimezone(timezone.utc)
+    assert result.tzinfo == timezone.utc

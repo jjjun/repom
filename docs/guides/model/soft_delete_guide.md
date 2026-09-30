@@ -53,7 +53,7 @@ class Article(BaseModel, SoftDeletableMixin):
 
 これだけで、以下が自動的に追加されます：
 
-- `deleted_at` カラム（DateTime(timezone=True)、インデックス付き）
+- `deleted_at` カラム（`UTCDateTime` / `DateTime(timezone=True)`、インデックス付き）
 - `soft_delete()` メソッド
 - `restore()` メソッド
 - `is_deleted` プロパティ
@@ -113,12 +113,12 @@ article = repo.get_by_id(1, include_deleted=True)
 
 削除日時を記録するカラム。NULL の場合は削除されていません。
 
-- **型**: `DateTime(timezone=True)`
+- **型**: `UTCDateTime` (`DateTime(timezone=True)`)
 - **デフォルト**: `None`
 - **インデックス**: あり
 
-SQLite から読み込んだ `deleted_at` は naive な datetime です。`AutoDateTime` を使う
-`created_at` / `updated_at` と異なり、読み込み時に UTC の `tzinfo` は付与されません。
+SQLite では保存時にタイムゾーン情報が保持されませんが、`UTCDateTime` が読み込み時に
+UTC の `tzinfo` を付与するため、`deleted_at` は常に UTC-aware な datetime として返ります。
 
 #### soft_delete() -> None
 
