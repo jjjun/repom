@@ -20,6 +20,7 @@ from contextlib import contextmanager
 import os
 import threading
 import time
+from types import SimpleNamespace
 import pytest
 from sqlalchemy import Column, String, Engine
 from sqlalchemy.orm import Session
@@ -492,3 +493,19 @@ class TestDependencyExceptionForwarding:
             pass
 
         assert events == ['open', 'commit', 'close']
+
+
+@pytest.mark.parametrize("exec_env", ["prod", "production", " Production "])
+def test_prod_sslmode_warning_includes_production_aliases(monkeypatch, caplog, exec_env):
+    test_config = SimpleNamespace(
+        db_type="postgres",
+        exec_env=exec_env,
+        postgres_sslmode="prefer",
+        postgres=SimpleNamespace(host="localhost"),
+    )
+    monkeypatch.setattr(database_module, "config", test_config)
+
+    with caplog.at_level("WARNING", logger="repom.database"):
+        database_module._warn_if_prod_sslmode_not_enforced()
+
+    assert any("TLS is not enforced" in record.message for record in caplog.records)

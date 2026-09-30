@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `EXEC_ENV=production` now receives the same production PostgreSQL database name,
+  TLS defaults, TLS enforcement, and destructive-operation guard as `prod`, with
+  surrounding whitespace and case ignored. Unknown environment values now warn and
+  use the dev database name/file for both PostgreSQL and SQLite; previously SQLite
+  used the production file for unknown values while PostgreSQL used its dev name.
 - The shared Alembic environment now preserves existing application and Repom
   loggers when it configures Alembic logging for in-process migrations.
 - Docker service auto-start now reuses existing compose files and `.env` when

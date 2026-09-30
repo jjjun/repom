@@ -34,8 +34,9 @@ def test_db_delete_requires_confirmation(monkeypatch):
     fake_base.metadata.drop_all.assert_not_called()
 
 
-def test_db_delete_refuses_prod_env(monkeypatch):
-    monkeypatch.setattr(db_delete, "config", _mock_config(exec_env="prod"))
+@pytest.mark.parametrize("exec_env", ["prod", "production", " Production "])
+def test_db_delete_refuses_prod_env(monkeypatch, capsys, exec_env):
+    monkeypatch.setattr(db_delete, "config", _mock_config(exec_env=exec_env))
     monkeypatch.setattr(sys, "argv", ["db_delete", "--yes"])
     monkeypatch.setattr(sys, "stdin", StringIO(""))
     fake_base = MagicMock()
@@ -48,6 +49,7 @@ def test_db_delete_refuses_prod_env(monkeypatch):
 
     assert exc_info.value.code != 0
     fake_base.metadata.drop_all.assert_not_called()
+    assert f"EXEC_ENV={exec_env!r} (production)" in capsys.readouterr().out
 
 
 def test_db_delete_proceeds_with_yes_flag_on_non_tty(monkeypatch):

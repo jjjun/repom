@@ -1,6 +1,7 @@
 """Tests for :mod:`repom.config`."""
 
 from __future__ import annotations
+import logging
 from repom.config import RepomConfig
 import pytest
 
@@ -198,6 +199,15 @@ def test_postgres_db_uses_db_name(config_factory):
     assert config_prod.postgres_db == "myapp"
 
 
+@pytest.mark.parametrize("exec_env", ["production", " Production "])
+def test_postgres_db_production_alias_uses_db_name(config_factory, exec_env):
+    config = config_factory(exec_env=exec_env)
+    config.db_name = "x"
+    config.db_type = "postgres"
+
+    assert config.postgres_db == "x"
+
+
 def test_postgres_database_overrides_db_name(config_factory):
     """``postgres.database`` takes precedence over ``db_name``."""
     config = config_factory(exec_env="dev")
@@ -217,10 +227,31 @@ def test_sqlite_db_file_uses_db_name(config_factory):
     assert config.sqlite.get_default_db_file("dev") == expected_file
 
 
-def test_sqlite_db_file_prod_uses_db_name(config_factory):
+@pytest.mark.parametrize("exec_env", ["prod", "production", " Production "])
+def test_sqlite_db_file_prod_uses_db_name(config_factory, exec_env):
     """SQLite db_file for prod uses ``db_name`` without suffix."""
-    config = config_factory(exec_env="prod")
+    config = config_factory(exec_env=exec_env)
     config.db_name = "myapp"
     config.sqlite.bind(config)
     expected_file = "myapp.sqlite3"
-    assert config.sqlite.get_default_db_file("prod") == expected_file
+    assert config.sqlite.get_default_db_file(exec_env) == expected_file
+
+
+@pytest.mark.parametrize("exec_env", ["prdo", "", "default"])
+def test_unknown_exec_env_uses_dev_database_defaults_and_warns_once(
+    config_factory, caplog, exec_env
+):
+    config = config_factory(exec_env=exec_env)
+    config.db_name = "myapp"
+    config.sqlite.bind(config)
+
+    with caplog.at_level(logging.WARNING, logger="repom.exec_env"):
+        assert config.postgres_db == "myapp_dev"
+        assert config.sqlite.get_default_db_file(exec_env) == "myapp_dev.sqlite3"
+        assert config.postgres_db == "myapp_dev"
+
+    warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "Unknown EXEC_ENV" in warnings[0].message
+    assert repr(exec_env) in warnings[0].message
+    assert "dev database defaults" in warnings[0].message

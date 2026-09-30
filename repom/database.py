@@ -56,6 +56,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import Session, sessionmaker, declarative_base
 
 from repom.config import config
+from repom.exec_env import is_prod_exec_env
 from repom.logging import get_logger
 
 logger = get_logger(__name__)
@@ -111,7 +112,7 @@ def _warn_if_prod_sslmode_not_enforced() -> None:
     sslmode = config.postgres_sslmode
     if (
         config.db_type == "postgres"
-        and config.exec_env == "prod"
+        and is_prod_exec_env(config.exec_env)
         and sslmode != "require"
         and not sslmode.startswith("verify")
     ):

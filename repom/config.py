@@ -17,6 +17,7 @@ from repom.postgres.config import (
 )
 from repom.redis.config import RedisConfig as _RedisConfig
 from repom.sqlite.config import SqliteConfig as _SqliteConfig
+from repom.exec_env import is_prod_exec_env, normalize_exec_env
 
 
 # ローカル接続とみなすホスト名 - prod の sslmode 検証で除外する
@@ -185,16 +186,13 @@ class RepomConfig(Config):
             return self.postgres.database
 
         base = self.db_name
-        env = self.exec_env
+        env = normalize_exec_env(self.exec_env)
 
         if env == "test":
             return f"{base}_test"
-        elif env == "dev":
-            return f"{base}_dev"
         elif env == "prod":
             return base
-        else:
-            return f"{base}_dev"
+        return f"{base}_dev"
 
     @property
     def postgres_sslmode(self) -> str:
@@ -218,7 +216,7 @@ class RepomConfig(Config):
         """
         if self.postgres.sslmode is not None:
             return self.postgres.sslmode
-        if self.exec_env != "prod":
+        if normalize_exec_env(self.exec_env) != "prod":
             return "prefer"
         if self.postgres.host in _POSTGRES_LOCAL_HOSTS:
             return "prefer"
@@ -240,7 +238,7 @@ class RepomConfig(Config):
         """
         sslmode = self.postgres_sslmode
         if (
-            self.exec_env == "prod"
+            is_prod_exec_env(self.exec_env)
             and self.postgres.host not in _POSTGRES_LOCAL_HOSTS
             and sslmode in _POSTGRES_WEAK_SSLMODES
         ):

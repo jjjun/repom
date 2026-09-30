@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
+from repom.exec_env import normalize_exec_env
+
 if TYPE_CHECKING:
     from repom.config import RepomConfig
 
@@ -26,9 +28,15 @@ class SqliteConfig:
     def get_default_db_file(self, exec_env: str) -> str:
         """Get default SQLite DB file name by environment."""
         prefix = self._config.db_name if self._config else "db"
-        if exec_env in ("test", "dev"):
-            return f"{prefix}_{exec_env}.sqlite3"
-        return f"{prefix}.sqlite3"
+        normalized = normalize_exec_env(exec_env)
+
+        if normalized == "test":
+            return f"{prefix}_{normalized}.sqlite3"
+
+        if normalized == "prod":
+            return f"{prefix}.sqlite3"
+
+        return f"{prefix}_dev.sqlite3"
 
     @property
     def db_file(self) -> Optional[str]:

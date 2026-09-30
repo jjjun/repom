@@ -392,10 +392,11 @@ class TestPostgresSSLMode:
         assert config.postgres_sslmode == 'verify-full'
         assert "sslmode=verify-full" in config.db_url
 
-    def test_prod_requires_ssl_for_remote_host(self):
+    @pytest.mark.parametrize("exec_env", ["prod", "production", " Production "])
+    def test_prod_requires_ssl_for_remote_host(self, exec_env):
         """exec_env=prod + リモートホスト + 弱い sslmode は db_url で拒否される"""
         from repom.config import RepomConfig
-        config = RepomConfig(exec_env='prod')
+        config = RepomConfig(exec_env=exec_env)
         config.db_type = 'postgres'
         config.postgres.host = 'db.example.com'
         config.postgres.sslmode = 'prefer'
@@ -430,10 +431,11 @@ class TestPostgresTlsSettings:
 
         assert tls == PostgresTlsSettings(sslmode='prefer', sslrootcert=None)
 
-    def test_remote_prod_default_is_require(self):
+    @pytest.mark.parametrize("exec_env", ["prod", "production", " Production "])
+    def test_remote_prod_default_is_require(self, exec_env):
         """明示指定なし + prod + リモートホストは require"""
         from repom.config import RepomConfig
-        config = RepomConfig(exec_env='prod')
+        config = RepomConfig(exec_env=exec_env)
         config.postgres.host = 'db.example.com'
 
         tls = config.postgres_tls_settings()
@@ -454,10 +456,11 @@ class TestPostgresTlsSettings:
         assert tls.sslmode == 'verify-full'
         assert tls.sslrootcert == '/etc/ssl/certs/test-ca.pem'
 
-    def test_remote_prod_weak_sslmode_raises(self):
+    @pytest.mark.parametrize("exec_env", ["prod", "production", " Production "])
+    def test_remote_prod_weak_sslmode_raises(self, exec_env):
         """prod + リモートホスト + 弱い sslmode は ValueError を送出する"""
         from repom.config import RepomConfig
-        config = RepomConfig(exec_env='prod')
+        config = RepomConfig(exec_env=exec_env)
         config.postgres.host = 'db.example.com'
         config.postgres.sslmode = 'prefer'
 
