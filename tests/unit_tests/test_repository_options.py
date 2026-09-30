@@ -598,7 +598,7 @@ def test_default_options_empty_by_default(db_test, setup_test_data):
 
     # default_options が存在し、空リストであることを確認
     assert hasattr(repo, 'default_options')
-    assert repo.default_options == []
+    assert repo.default_options == ()
 
     # 既存の動作は変わらない
     books = repo.find()
@@ -973,20 +973,21 @@ async def test_default_options_can_be_overridden_for_sync_and_async(
         EagerBookModel,
         session=repository_adapter.session,
     )
-    assert plain_repo.default_options == []
+    assert plain_repo.default_options == ()
 
     class BookRepositoryWithDefaults(repository_adapter.repository_class):
-        default_options = [
+        default_options = (
             joinedload(EagerBookModel.author),
             selectinload(EagerBookModel.reviews),
-        ]
+        )
 
-        def __init__(self, session):
-            super().__init__(EagerBookModel, session)
-            self.default_options = list(type(self).default_options)
+    repo = BookRepositoryWithDefaults(
+        EagerBookModel,
+        session=repository_adapter.session,
+    )
+    assert repo.default_options is BookRepositoryWithDefaults.default_options
 
-    repo = BookRepositoryWithDefaults(session=repository_adapter.session)
-
+    await repository_adapter.call(repository_adapter.session.expire_all)
     with_defaults = await repository_adapter.call(repo.find, limit=10)
     assert all(book.author is not None for book in with_defaults)
     assert all(isinstance(book.reviews, list) for book in with_defaults)
@@ -1032,7 +1033,7 @@ async def test_default_options_can_be_overridden_for_sync_and_async(
     await repository_adapter.call(repository_adapter.session.expire_all)
     explicitly_overridden = await repository_adapter.call(
         repo.find,
-        options=[selectinload(EagerBookModel.reviews)],
+        options=(selectinload(EagerBookModel.reviews),),
         limit=10,
     )
     assert all("author" in sa_inspect(book).unloaded for book in explicitly_overridden)
@@ -1042,6 +1043,40 @@ async def test_default_options_can_be_overridden_for_sync_and_async(
     without_defaults = await repository_adapter.call(repo.find, options=[], limit=10)
     assert all("author" in sa_inspect(book).unloaded for book in without_defaults)
     assert all("reviews" in sa_inspect(book).unloaded for book in without_defaults)
+
+
+@pytest.mark.asyncio
+async def test_instance_default_options_override_class_defaults_without_leaking(
+    repository_adapter,
+    shared_options_data,
+):
+    class_default_options = (joinedload(EagerBookModel.author),)
+
+    class BookRepositoryWithClassDefaults(repository_adapter.repository_class):
+        default_options = class_default_options
+
+    first_repo = BookRepositoryWithClassDefaults(
+        EagerBookModel,
+        session=repository_adapter.session,
+    )
+    second_repo = BookRepositoryWithClassDefaults(
+        EagerBookModel,
+        session=repository_adapter.session,
+    )
+    first_repo.default_options = (selectinload(EagerBookModel.reviews),)
+
+    assert BookRepositoryWithClassDefaults.default_options is class_default_options
+    assert second_repo.default_options is BookRepositoryWithClassDefaults.default_options
+
+    await repository_adapter.call(repository_adapter.session.expire_all)
+    first_results = await repository_adapter.call(first_repo.find, limit=10)
+    assert all("author" in sa_inspect(book).unloaded for book in first_results)
+    assert all("reviews" not in sa_inspect(book).unloaded for book in first_results)
+
+    await repository_adapter.call(repository_adapter.session.expire_all)
+    second_results = await repository_adapter.call(second_repo.find, limit=10)
+    assert all("author" not in sa_inspect(book).unloaded for book in second_results)
+    assert all("reviews" in sa_inspect(book).unloaded for book in second_results)
 
 
 pytestmark = pytest.mark.filterwarnings(

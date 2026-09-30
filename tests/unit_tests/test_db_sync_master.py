@@ -10,6 +10,7 @@ db_sync_master のテスト
 
 from contextlib import contextmanager
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import event
@@ -299,7 +300,9 @@ def test_main_starts_postgres_and_reports_empty_directory(monkeypatch, tmp_path,
     monkeypatch.setattr(
         db_sync_master_script,
         "config",
-        SimpleNamespace(master_data_path=str(tmp_path), db_type="postgres"),
+        SimpleNamespace(
+            master_data_path=str(tmp_path), db_type="postgres", db_url_overridden=False
+        ),
     )
     monkeypatch.setattr(db_sync_master_script, "load_models", lambda: None)
 
@@ -320,6 +323,33 @@ def test_main_starts_postgres_and_reports_empty_directory(monkeypatch, tmp_path,
     assert events == ["postgres", "transaction"]
     assert "マスターデータファイルが見つかりません" in output
     assert "同期完了: 0 ファイル、0 レコード" in output
+
+
+def test_main_skips_managed_postgres_for_url_override(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        db_sync_master_script,
+        "config",
+        SimpleNamespace(
+            master_data_path=str(tmp_path), db_type="postgres", db_url_overridden=True
+        ),
+    )
+    monkeypatch.setattr(db_sync_master_script, "load_models", lambda: None)
+
+    from repom.postgres import manage as postgres_manage
+
+    ensure_running = MagicMock(side_effect=AssertionError("managed container must not start"))
+    monkeypatch.setattr(postgres_manage, "ensure_running", ensure_running)
+
+    @contextmanager
+    def transaction():
+        yield object()
+
+    monkeypatch.setattr(db_sync_master_script, "get_standalone_sync_transaction", transaction)
+    monkeypatch.setattr(db_sync_master_script, "load_master_data_files", lambda _directory: iter([]))
+
+    db_sync_master_script.main()
+
+    ensure_running.assert_not_called()
 
 
 @pytest.mark.parametrize(

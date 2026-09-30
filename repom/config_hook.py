@@ -6,6 +6,7 @@ from repom.config_hooks.pgadmin import apply_pgadmin_env_overrides
 from repom.config_hooks.postgres import apply_postgres_env_overrides
 from repom.config_hooks.redis import apply_redis_env_overrides
 from repom.config_hooks.sqlite import apply_sqlite_env_overrides
+from repom.exec_env import normalize_exec_env
 
 
 def hook_config(config: dataclass) -> dataclass:
@@ -33,7 +34,11 @@ def hook_config(config: dataclass) -> dataclass:
 
         # データベースタイプの設定
         # テスト環境では SQLite（高速）、それ以外は PostgreSQL
-        config.db_type = 'sqlite' if config.exec_env == 'test' else 'postgres'
+        config.db_type = (
+            'sqlite'
+            if normalize_exec_env(config.exec_env) == 'test'
+            else 'postgres'
+        )
         config.db_name = "repom"
 
         # PostgreSQL

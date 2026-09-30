@@ -2,6 +2,7 @@
 
 from sqlalchemy.engine.url import make_url
 
+from repom.config import RepomConfig
 from repom.database import DatabaseManager
 
 
@@ -26,3 +27,15 @@ def test_resolve_engine_settings_keeps_sync_pair_and_adapts_async_pair():
         "timeout": 7,
         "server_settings": {"application_name": "repom"},
     }
+
+
+def test_prod_postgres_override_resolves_sslmode_for_async_engine():
+    config = RepomConfig(exec_env="prod")
+    config.db_url = "postgresql+psycopg://user:secret@db.example.internal/appdb"
+
+    (_, _), (async_url, async_kwargs) = DatabaseManager.resolve_engine_settings(
+        config.db_url, {}
+    )
+
+    assert make_url(async_url).drivername == "postgresql+asyncpg"
+    assert async_kwargs["connect_args"]["ssl"] == "require"

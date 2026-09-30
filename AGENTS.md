@@ -309,7 +309,8 @@ db_engine, db_test = create_test_fixtures(
 ## Key Dependencies
 
 - **basekit**: Shared config, discovery, logging, and Docker foundations; the
-  source is configured in `[tool.uv.sources]` in `pyproject.toml`.
+  source is configured in `[tool.uv.sources]` in `pyproject.toml`. To update its
+  pin, change the `rev`, run `uv lock`, then run the tests.
 - **sqlalchemy**: ORM and database toolkit
 - **alembic**: Database migration management
 - **pydantic**: Data validation and serialization

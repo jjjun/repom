@@ -5,7 +5,8 @@
 クエリ構築・フィルタリング関連のメソッドを提供します。
 """
 
-from typing import Generic, Optional, TypeVar
+from collections.abc import Sequence
+from typing import Any, Generic, Mapping, Optional, TypeVar
 
 from sqlalchemy import select
 
@@ -39,9 +40,12 @@ class QueryBuilderMixin(Generic[T]):
         'started_at', 'finished_at', 'executed_at'
     ]
     virtual_order_columns: list[str] = []
+    # デフォルトの eager loading options
+    default_options: Sequence[Any] = ()
     default_order_by = None
     # limit の上限（サブクラスで上書き可能）。None で上限チェックを無効化。
     max_limit: Optional[int] = 1000
+    field_to_column: Optional[Mapping[str, Any]] = None
 
     def _base_select(self):
         """Build the base SELECT for this repository.
@@ -55,17 +59,14 @@ class QueryBuilderMixin(Generic[T]):
 
     def set_find_option(self, query, **kwargs):
         """クエリにオプションを設定するメソッド（_core.set_find_option を呼び出し）"""
-        default_options = self._get_attr_with_class_priority('default_options')
-        default_order_by = self._get_attr_with_class_priority('default_order_by')
-        max_limit = self._get_attr_with_class_priority('max_limit')
         return set_find_option(
             query,
             self.model,
             self.allowed_order_columns,
             self.virtual_order_columns,
-            default_options,
-            default_order_by,
-            max_limit,
+            self.default_options,
+            self.default_order_by,
+            self.max_limit,
             **kwargs
         )
 
@@ -78,16 +79,9 @@ class QueryBuilderMixin(Generic[T]):
             self.virtual_order_columns,
         )
 
-    def _get_attr_with_class_priority(self, attr_name: str):
-        """クラス属性を優先し、未設定の場合はインスタンス属性を参照する"""
-        class_value = getattr(type(self), attr_name, None)
-        if class_value is not None:
-            return class_value
-
-        if attr_name in self.__dict__:
-            return self.__dict__[attr_name]
-
-        return getattr(self, attr_name, None)
+    def _uses_default_filter_builder(self) -> bool:
+        # Overrides may handle additional fields after delegating mapped fields to super().
+        return type(self)._build_filters is QueryBuilderMixin._build_filters
 
     def _build_filters(self, params: Optional[FilterParams]) -> list:
         """FilterParams からフィルタ条件を構築
@@ -101,11 +95,18 @@ class QueryBuilderMixin(Generic[T]):
         if all(value is None for value in params.model_dump().values()):
             return []
 
-        filters = []
+        mapping = self.field_to_column or {}
+        unhandled_fields = set(params.model_dump(exclude_none=True)) - {
+            field_name for field_name, column in mapping.items() if column is not None
+        }
+        if unhandled_fields and self._uses_default_filter_builder():
+            fields = ", ".join(sorted(unhandled_fields))
+            raise ValueError(
+                f"{type(self).__name__} has unmapped FilterParams fields: {fields}. "
+                "Add a field_to_column mapping or override _build_filters()."
+            )
 
-        mapping = None
-        if hasattr(self, 'field_to_column'):
-            mapping = self._get_attr_with_class_priority('field_to_column')
+        filters = []
 
         if mapping:
             filters.extend(build_filters_from_mapping(params, mapping))

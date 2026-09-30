@@ -362,6 +362,25 @@ def test_run_postgres_via_docker_or_host_accepts_explicit_container_name(monkeyp
     is_running.assert_called_once_with("custom-postgres")
 
 
+def test_run_postgres_via_docker_or_host_skips_docker_when_disallowed(monkeypatch):
+    is_running = MagicMock(side_effect=AssertionError("Docker must not be probed"))
+    via_docker = MagicMock()
+    via_host = MagicMock(return_value="host-result")
+    monkeypatch.setattr(_backup_utils, "is_container_running", is_running)
+
+    result = run_postgres_via_docker_or_host(
+        via_docker=via_docker,
+        via_host=via_host,
+        operation="backup",
+        allow_docker=False,
+    )
+
+    assert result == "host-result"
+    is_running.assert_not_called()
+    via_docker.assert_not_called()
+    via_host.assert_called_once_with()
+
+
 @POSIX_ONLY
 def test_ensure_backup_dir_creates_with_mode_0700(tmp_path):
     backup_dir = tmp_path / "backups"
@@ -498,6 +517,35 @@ def test_build_pg_client_command_builds_docker_argv_without_host_flags():
         "-d", "repom_test",
         "--clean",
     ]
+
+
+@pytest.mark.parametrize("container_name", [None, "repom-postgres"])
+def test_build_pg_client_command_preserves_atomic_psql_restore_args(container_name):
+    extra_args = [
+        "--no-psqlrc",
+        "--single-transaction",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-f",
+        "-",
+    ]
+
+    command = build_pg_client_command(
+        "psql",
+        host="localhost",
+        port=5432,
+        user="postgres",
+        database="repom_test",
+        extra_args=extra_args,
+        container_name=container_name,
+        stdin=True,
+    )
+
+    assert command[-len(extra_args) :] == extra_args
+    if container_name:
+        assert command[:4] == ["docker", "exec", "-i", container_name]
+    else:
+        assert command[0] == "psql"
 
 
 def test_build_pg_client_command_docker_stdin_adds_interactive_flag():

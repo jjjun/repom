@@ -1,5 +1,7 @@
 from repom.config import config
 from repom.logging import get_logger
+from repom.diagnostics import resolve_sqlite_db_path
+from repom.scripts.pg_dump_tools import PgConnParams
 import os
 import re
 import gzip
@@ -35,10 +37,24 @@ def cleanup_stale_backups(
         logger.warning(f"Removed incomplete backup: {incomplete_backup.name}")
 
 
+def sqlite_database_path() -> Path:
+    """Return the file used by the active SQLite configuration."""
+    if config.db_url_overridden:
+        db_path = resolve_sqlite_db_path(config.db_url, config.root_path)
+        if db_path is None:
+            raise BackupError(
+                "SQLite backup requires a file-based database URL; "
+                "in-memory SQLite URLs are not supported."
+            )
+        return db_path
+    return Path(config.sqlite.db_file_path)
+
+
 def backup_sqlite():
     """SQLite データベースのバックアップ処理"""
+    db_file_path = sqlite_database_path()
     logger.debug(f"Backup directory: {config.db_backup_path}")
-    logger.debug(f"Database file: {config.sqlite.db_file_path}")
+    logger.debug(f"Database file: {db_file_path}")
 
     # Ensure backup directory exists with restrictive permissions
     try:
@@ -50,7 +66,7 @@ def backup_sqlite():
     logger.debug(f"Backup directory created/verified: {config.db_backup_path}")
 
     # Get original db file name and extension
-    base_name = os.path.basename(config.sqlite.db_file_path)
+    base_name = os.path.basename(db_file_path)
     name, ext = os.path.splitext(base_name)
     # Format datetime (no milliseconds)
     now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -69,7 +85,7 @@ def backup_sqlite():
     # by its owner from creation, so committed-but-uncheckpointed WAL data is
     # included instead of copying a raw file that may not be a consistent
     # point-in-time image while another connection holds it open.
-    logger.debug(f"Backing up {config.sqlite.db_file_path} to {partial_path}")
+    logger.debug(f"Backing up {db_file_path} to {partial_path}")
     try:
         open_backup_temp_file(partial_path).close()
     except OSError as e:
@@ -78,7 +94,7 @@ def backup_sqlite():
         raise BackupError(f"Backup failed: {e}") from e
 
     try:
-        snapshot_sqlite_database(Path(config.sqlite.db_file_path), partial_path)
+        snapshot_sqlite_database(db_file_path, partial_path)
         publish_backup(
             partial_path,
             backup_path,
@@ -107,12 +123,13 @@ def _pg_dump_command(container_name: str | None) -> list[str]:
     so tests can substitute a stand-in child process while still exercising
     the real Popen-based streaming path in _backup_postgresql.
     """
+    params = PgConnParams.from_config(config)
     return build_pg_client_command(
         "pg_dump",
-        host=config.postgres.host,
-        port=config.postgres.port,
-        user=config.postgres.user,
-        database=config.postgres_db,
+        host=params.host,
+        port=params.port,
+        user=params.user,
+        database=params.database,
         extra_args=[
             "--clean",      # DROP statements を含める
             "--if-exists",  # DROP IF EXISTS で中断防止
@@ -132,16 +149,16 @@ def _backup_postgresql(container_name: str | None) -> None:
     保持しない）、stderr は別スレッドでドレインしてデッドロックを防ぐ
     （repom#167）。
     """
+    params = PgConnParams.from_config(config)
     logger.debug(f"Backup directory: {config.db_backup_path}")
-    logger.debug(f"Database: {config.postgres_db}")
+    logger.debug(f"Database: {params.database}")
 
     env = None
     if container_name is None:
         # sslmode / sslrootcert を解決・検証する（db_url と同じロジックを共有）。
         # subprocess を起動する前に検証することで、prod での弱い sslmode を
         # プロセス起動前に拒否する。
-        tls = config.postgres_tls_settings()
-        env = build_host_pg_env(config.postgres.password, tls.sslmode, tls.sslrootcert)
+        env = build_host_pg_env(params.password, params.sslmode, params.sslrootcert)
 
     # Ensure backup directory exists with restrictive permissions
     ensure_backup_dir(config.db_backup_path)
@@ -149,14 +166,14 @@ def _backup_postgresql(container_name: str | None) -> None:
 
     # Create backup file name: <postgres_db>_<datetime>.sql.gz
     now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_name = f"{config.postgres_db}_{now_str}.sql.gz"
+    backup_name = f"{params.database}_{now_str}.sql.gz"
     backup_path = Path(config.db_backup_path) / backup_name
     partial_path = backup_path.with_name(f"{backup_path.name}.partial")
     logger.debug(f"Backup file name: {backup_name}")
 
     backup_dir = Path(config.db_backup_path)
-    backup_pattern = f"{config.postgres_db}_*.sql.gz"
-    name_pattern = backup_name_pattern(config.postgres_db, ".sql.gz")
+    backup_pattern = f"{params.database}_*.sql.gz"
+    name_pattern = backup_name_pattern(params.database, ".sql.gz")
     cleanup_stale_backups(backup_dir, backup_pattern, name_pattern)
 
     command = _pg_dump_command(container_name)
@@ -176,7 +193,7 @@ def _backup_postgresql(container_name: str | None) -> None:
             with gzip.open(raw_file, 'wb') as gz_file:
                 writer = ByteCountingWriter(gz_file)
                 result = run_streaming_command(
-                    command, env=env, stdout_file=writer, password=config.postgres.password
+                    command, env=env, stdout_file=writer, password=params.password
                 )
         bytes_written = writer.bytes_written
 
@@ -250,16 +267,22 @@ def backup_postgresql():
     Docker コンテナが起動中の場合は docker exec を使用し、
     停止中の場合はホスト側の pg_dump にフォールバックします。
     """
+    params = PgConnParams.from_config(config)
     run_postgres_via_docker_or_host(
         via_docker=backup_postgresql_via_docker,
         via_host=backup_postgresql_via_host,
         operation="backup",
         host_tools="host pg_dump",
+        container_name=params.container_name,
+        allow_docker=params.use_docker,
     )
 
 
 def main():
     logger.info("Starting database backup process")
+
+    if config.db_type not in ("sqlite", "postgres"):
+        raise BackupError(f"Unsupported database type for backup: {config.db_type}")
 
     if config.db_type == 'sqlite':
         backup_sqlite()
@@ -271,4 +294,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

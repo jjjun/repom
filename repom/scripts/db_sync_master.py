@@ -124,7 +124,7 @@ def main():
         sys.exit(1)
 
     # PostgreSQL 使用時、コンテナが未起動なら自動起動
-    if config.db_type == 'postgres':
+    if config.db_type == 'postgres' and not config.db_url_overridden:
         from repom.postgres.manage import ensure_running
         ensure_running()
 

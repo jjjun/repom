@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import Lock
 from typing import List, Optional, Set
 
 from basekit.config_hook import Config, get_config_from_hook
@@ -18,6 +20,10 @@ from repom.postgres.config import (
 from repom.redis.config import RedisConfig as _RedisConfig
 from repom.sqlite.config import SqliteConfig as _SqliteConfig
 from repom.exec_env import is_prod_exec_env, normalize_exec_env
+
+logger = logging.getLogger(__name__)
+_warned_db_type_mismatches: set[tuple[str, str]] = set()
+_db_type_warning_lock = Lock()
 
 
 # ローカル接続とみなすホスト名 - prod の sslmode 検証で除外する
@@ -111,6 +117,10 @@ class RepomConfig(Config):
     def db_type(self) -> str:
         """データベースタイプ（sqlite/postgres）
 
+        明示的に上書きされたデータベース URL がある場合は、その URL のバックエンドを返します。
+        PostgreSQL のバックエンド名は ``postgres`` です。明示設定された ``db_type`` が URL の
+        バックエンドと異なる場合は警告を1回だけ記録し、URL のバックエンドを優先します。
+
         デフォルト: sqlite
 
         使用例:
@@ -124,10 +134,33 @@ class RepomConfig(Config):
             from repom.config import config
             config.db_type = 'postgres'
         """
+        if self.db_url_overridden:
+            url_db_type = make_url(self._db_url).get_backend_name()
+            if url_db_type == "postgresql":
+                url_db_type = "postgres"
+
+            if self._db_type is not None and self._db_type != url_db_type:
+                mismatch = (self._db_type, url_db_type)
+                with _db_type_warning_lock:
+                    if mismatch not in _warned_db_type_mismatches:
+                        _warned_db_type_mismatches.add(mismatch)
+                        logger.warning(
+                            "Configured db_type %r disagrees with the database URL "
+                            "backend %r; using the URL backend.",
+                            self._db_type,
+                            url_db_type,
+                        )
+            return url_db_type
+
         if self._db_type is not None:
             return self._db_type
 
         return "sqlite"
+
+    @property
+    def db_url_overridden(self) -> bool:
+        """Whether an explicit database URL has been configured."""
+        return self._db_url is not None
 
     @db_type.setter
     def db_type(self, value: str):
@@ -214,13 +247,41 @@ class RepomConfig(Config):
         require 未満（disable/allow/prefer）の値は db_url 生成時に拒否
         されます。
         """
-        if self.postgres.sslmode is not None:
-            return self.postgres.sslmode
-        if normalize_exec_env(self.exec_env) != "prod":
-            return "prefer"
-        if self.postgres.host in _POSTGRES_LOCAL_HOSTS:
-            return "prefer"
-        return "require"
+        return self._resolve_postgres_tls(self.postgres.host).sslmode
+
+    def _resolve_postgres_tls(
+        self, host: Optional[str], sslmode: Optional[str] = None
+    ) -> PostgresTlsSettings:
+        """Resolve and validate PostgreSQL TLS settings for *host*."""
+        if sslmode is None:
+            sslmode = self.postgres.sslmode
+        if sslmode is None:
+            if (
+                not is_prod_exec_env(self.exec_env)
+                or host is None
+                or host in _POSTGRES_LOCAL_HOSTS
+            ):
+                sslmode = "prefer"
+            else:
+                sslmode = "require"
+
+        if (
+            is_prod_exec_env(self.exec_env)
+            and host is not None
+            and host not in _POSTGRES_LOCAL_HOSTS
+            and sslmode in _POSTGRES_WEAK_SSLMODES
+        ):
+            raise ValueError(
+                f"PostgreSQL sslmode {sslmode!r} is not allowed in prod for "
+                f"a non-local host ({host!r}); set sslmode to 'require' or "
+                "stronger (config.postgres.sslmode for generated URLs, or "
+                "the URL query for URL overrides)."
+            )
+
+        return PostgresTlsSettings(
+            sslmode=sslmode,
+            sslrootcert=self.postgres.sslrootcert,
+        )
 
     def postgres_tls_settings(self) -> PostgresTlsSettings:
         """PostgreSQL の TLS 設定を解決・検証する
@@ -236,18 +297,7 @@ class RepomConfig(Config):
             ValueError: prod でリモートホストへ接続し、sslmode が require
                 未満（disable/allow/prefer）の場合。
         """
-        sslmode = self.postgres_sslmode
-        if (
-            is_prod_exec_env(self.exec_env)
-            and self.postgres.host not in _POSTGRES_LOCAL_HOSTS
-            and sslmode in _POSTGRES_WEAK_SSLMODES
-        ):
-            raise ValueError(
-                f"PostgreSQL sslmode {sslmode!r} is not allowed in prod for "
-                f"a non-local host ({self.postgres.host!r}); set "
-                "config.postgres.sslmode to 'require' or stronger."
-            )
-        return PostgresTlsSettings(sslmode=sslmode, sslrootcert=self.postgres.sslrootcert)
+        return self._resolve_postgres_tls(self.postgres.host)
 
     @property
     def db_url(self) -> Optional[str]:
@@ -291,7 +341,21 @@ class RepomConfig(Config):
             # 何も設定しない場合は自動的に SQLite
         """
         if self._db_url is not None:
-            return self._db_url
+            url = make_url(self._db_url)
+            if url.get_backend_name() not in {"postgres", "postgresql"}:
+                return self._db_url
+
+            query = dict(url.query)
+            if "sslmode" in query:
+                self._resolve_postgres_tls(url.host, sslmode=query["sslmode"])
+            else:
+                tls = self._resolve_postgres_tls(url.host)
+                query["sslmode"] = tls.sslmode
+                if tls.sslrootcert and "sslrootcert" not in query:
+                    query["sslrootcert"] = tls.sslrootcert
+                url = url.set(query=query)
+
+            return url.render_as_string(hide_password=False)
 
         # PostgreSQL
         if self.db_type == "postgres":
@@ -316,7 +380,7 @@ class RepomConfig(Config):
         # ファイルベースが必要な場合は config.sqlite.use_in_memory_for_tests
         # または repom.config_hooks.sqlite の env override helper で切り替える。
         if (
-            self.exec_env == "test"
+            normalize_exec_env(self.exec_env) == "test"
             and self.sqlite.use_in_memory_for_tests
         ):
             return "sqlite:///:memory:"
@@ -388,8 +452,10 @@ class RepomConfig(Config):
 
         使用例（CONFIG_HOOK で有効化）:
             # mine-py/config.py
+            from repom.exec_env import normalize_exec_env
+
             def hook_config(config):
-                if config.exec_env == 'dev':
+                if normalize_exec_env(config.exec_env) == 'dev':
                     config.enable_sqlalchemy_echo = True
                 return config
 

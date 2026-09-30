@@ -524,7 +524,7 @@ task_ids = [task.id for task in repo.find(options=[], limit=100)]  # 高速
 
 #### クラス属性で default_options / default_order_by を設定する
 
-コンストラクタで代入する代わりに、クラス属性でまとめて持つこともできます。`QueryBuilderMixin` がクラス属性を優先して参照するため、継承構造があっても上書きが簡単です。
+コンストラクタで代入する代わりに、クラス属性でデフォルト値を定義できます。属性は通常の Python の属性検索順序で参照され、インスタンス属性がクラス属性の値を上書きします。クラス属性はサブクラス間でデフォルト値を共有するのに便利です。
 
 ```python
 from sqlalchemy.orm import joinedload

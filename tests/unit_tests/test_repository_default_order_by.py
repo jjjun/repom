@@ -120,6 +120,35 @@ async def test_default_order_by_accepts_sqlalchemy_expression(
     assert [item.priority for item in results] == [3, 2, 1]
 
 
+@pytest.mark.asyncio
+async def test_instance_order_and_limit_defaults_override_class_defaults(
+    repository_adapter,
+    ordered_repo,
+):
+    class RepositoryWithDefaults(repository_adapter.repository_class):
+        allowed_order_columns = [
+            'id', 'name', 'priority', 'created_at', 'updated_at'
+        ]
+        default_order_by = 'id:desc'
+        max_limit = 3
+
+    repo = RepositoryWithDefaults(
+        OrderTestModel,
+        session=repository_adapter.session,
+    )
+    repo.default_order_by = 'priority:asc'
+    repo.max_limit = 1
+
+    assert RepositoryWithDefaults.default_order_by == 'id:desc'
+    assert RepositoryWithDefaults.max_limit == 3
+
+    with pytest.raises(ValueError, match=r'limit must not exceed max_limit \(1\)'):
+        await repository_adapter.call(repo.find, limit=2)
+
+    results = await repository_adapter.call(repo.find, limit=1)
+    assert [item.priority for item in results] == [1]
+
+
 pytestmark = pytest.mark.filterwarnings(
     r"ignore:find\(\) was called without a limit:RuntimeWarning"
 )

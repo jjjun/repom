@@ -105,7 +105,6 @@ class RepositoryBase(Generic[T]):
         self._scoped_session_var: contextvars.ContextVar = contextvars.ContextVar(
             f"{type(self).__name__}._scoped_session"
         )
-        self.default_options: List = []  # デフォルトの eager loading options
 
     @classmethod
     def _infer_model_from_type_params(cls) -> Type[T]:

@@ -33,6 +33,68 @@ def _params(
     )
 
 
+def test_pg_conn_params_from_overridden_url():
+    config = RepomConfig()
+    config.db_url = (
+        "postgresql+psycopg://url_user:url_password@db.example.internal:5544/url_db"
+        "?sslmode=verify-full&sslrootcert=%2Ftmp%2Fca.pem"
+    )
+
+    params = PgConnParams.from_config(config)
+
+    assert params.host == "db.example.internal"
+    assert params.port == 5544
+    assert params.user == "url_user"
+    assert params.password == "url_password"
+    assert params.database == "url_db"
+    assert params.sslmode == "verify-full"
+    assert params.sslrootcert == "/tmp/ca.pem"
+    assert params.use_docker is False
+    assert "url_password" not in repr(params)
+
+
+def test_pg_conn_params_from_config_keeps_structured_settings():
+    config = RepomConfig()
+    config.db_type = "postgres"
+    config.postgres.host = "configured-host"
+    config.postgres.port = 5543
+    config.postgres.user = "configured-user"
+    config.postgres.password = "configured-password"
+    config.postgres.database = "configured-db"
+
+    params = PgConnParams.from_config(config)
+
+    assert params.host == "configured-host"
+    assert params.port == 5543
+    assert params.user == "configured-user"
+    assert params.password == "configured-password"
+    assert params.database == "configured-db"
+    assert params.use_docker is True
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql://url_user:url_password@/url_db?host=/var/run/postgresql",
+        "postgresql://db.example.internal/url_db",
+        "postgresql://url_user@db.example.internal/",
+    ],
+)
+def test_pg_conn_params_rejects_urls_without_host_user_or_database(url):
+    config = RepomConfig()
+    config.db_url = url
+
+    with pytest.raises(ValueError, match="require a URL with"):
+        PgConnParams.from_config(config)
+
+
+def test_pg_conn_params_uses_default_postgres_port():
+    config = RepomConfig()
+    config.db_url = "postgresql://url_user:url_password@db.example.internal/url_db"
+
+    assert PgConnParams.from_config(config).port == 5432
+
+
 def test_pg_dump_custom_uses_docker_stdout_without_file(monkeypatch, tmp_path: Path):
     """The Docker custom-format dump must stream pg_dump's stdout straight
     into dump_path via the shared Popen-based streaming helper, never
@@ -159,7 +221,13 @@ def test_pg_restore_custom_streams_dump_bytes_to_docker(monkeypatch, tmp_path: P
     tool, kwargs = build_calls[-1]
     assert tool == "pg_restore"
     assert kwargs["container_name"] == "managed-postgres"
-    assert kwargs["extra_args"] == ["--clean", "--if-exists", "--no-owner", "--no-acl"]
+    assert kwargs["extra_args"] == [
+        "--clean",
+        "--if-exists",
+        "--no-owner",
+        "--no-acl",
+        "--single-transaction",
+    ]
     assert kwargs["stdin"] is True
     assert str(dump_path) not in repr(kwargs)
 
@@ -376,6 +444,7 @@ def test_pg_restore_custom_falls_back_to_host_when_docker_daemon_unavailable(
 ):
     dump_path = tmp_path / "db.dump"
     dump_path.write_bytes(b"CUSTOM-DUMP")
+    commands = []
 
     monkeypatch.setattr(
         pg_dump_tools.DockerCommandExecutor,
@@ -390,6 +459,7 @@ def test_pg_restore_custom_falls_back_to_host_when_docker_daemon_unavailable(
     )
 
     def fake_run(command, **kwargs):
+        commands.append(command)
         if command == ["pg_restore", "--version"]:
             return subprocess.CompletedProcess(command, 0, "pg_restore (PostgreSQL) 16.3\n", "")
         return subprocess.CompletedProcess(command, 0, "", "")
@@ -400,6 +470,14 @@ def test_pg_restore_custom_falls_back_to_host_when_docker_daemon_unavailable(
 
     assert result.returncode == 0
     assert result.used_docker is False
+    assert commands[-1][-6:] == [
+        "--clean",
+        "--if-exists",
+        "--no-owner",
+        "--no-acl",
+        "--single-transaction",
+        str(dump_path),
+    ]
 
 
 def test_pg_tool_result_redacts_password_and_adds_version_mismatch_hint(

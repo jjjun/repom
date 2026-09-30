@@ -274,7 +274,7 @@ def test_env_escapes_percent_signs_in_db_url_for_configparser(monkeypatch):
     # raw DSN (password included) in a ValueError here.
     runpy.run_path(env_path)
 
-    assert real_config.get_main_option("sqlalchemy.url") == raw_url
+    assert real_config.get_main_option("sqlalchemy.url") == f"{raw_url}?sslmode=prefer"
 
 
 def _run_env_with_pre_migration_hook(monkeypatch, hook_path):

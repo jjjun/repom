@@ -68,6 +68,24 @@ class AutoFilterRepository(BaseRepository[AutoFilterModel]):
         super().__init__(AutoFilterModel, session)
 
 
+class PartiallyMappedSimpleRepository(SimpleRepository):
+    field_to_column = {"value": SimpleModel.value}
+
+
+class NoneMappedSimpleRepository(SimpleRepository):
+    field_to_column = {"value": None}
+
+
+class ExtendedFilterableRepository(SimpleRepository):
+    field_to_column = {"value": SimpleModel.value}
+
+    def _build_filters(self, params: Optional[FilterParams]) -> list:
+        filters = super()._build_filters(params)
+        if params is not None and params.other is not None:
+            filters.append(SimpleModel.id == params.other)
+        return filters
+
+
 class ColumnGuardParentModel(BaseModel):
     __tablename__ = 'column_guard_parent_model'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -532,6 +550,88 @@ def test_bulk_update_empty_values_returns_zero(db_test):
     assert repo.bulk_update([]) == 0
 
 
+@pytest.mark.asyncio
+async def test_bulk_update_excludes_soft_deleted_rows_by_default_with_filter_by(repository_adapter):
+    repo = repository_adapter.repository_class(SoftDeleteCountModel, session=repository_adapter.session)
+    active, deleted = await repository_adapter.call(
+        repo.bulk_insert,
+        [SoftDeleteCountModel(name="stale"), SoftDeleteCountModel(name="stale")],
+    )
+    await repository_adapter.call(repo.bulk_delete, ids=[deleted.id])
+
+    rowcount = await repository_adapter.call(repo.bulk_update, [{"name": "archived"}], filter_by={"name": "stale"})
+
+    assert rowcount == 1
+    assert (await repository_adapter.call(repo.get_by_id, active.id)).name == "archived"
+    assert await repository_adapter.call(repo.get_by_id, deleted.id) is None
+    deleted_with_filter = await repository_adapter.call(repo.get_by_id, deleted.id, include_deleted=True)
+    assert deleted_with_filter.name == "stale"
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_excludes_soft_deleted_rows_by_default_with_ids(repository_adapter):
+    repo = repository_adapter.repository_class(SoftDeleteCountModel, session=repository_adapter.session)
+    active, deleted = await repository_adapter.call(
+        repo.bulk_insert,
+        [SoftDeleteCountModel(name="before"), SoftDeleteCountModel(name="before")],
+    )
+    await repository_adapter.call(repo.bulk_delete, ids=[deleted.id])
+
+    rowcount = await repository_adapter.call(
+        repo.bulk_update,
+        [{"id": active.id, "name": "after"}, {"id": deleted.id, "name": "after"}],
+    )
+
+    assert rowcount == 1
+    assert (await repository_adapter.call(repo.get_by_id, active.id)).name == "after"
+    assert await repository_adapter.call(repo.get_by_id, deleted.id) is None
+    deleted_with_filter = await repository_adapter.call(repo.get_by_id, deleted.id, include_deleted=True)
+    assert deleted_with_filter.name == "before"
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_can_include_soft_deleted_rows(repository_adapter):
+    repo = repository_adapter.repository_class(SoftDeleteCountModel, session=repository_adapter.session)
+    (deleted,) = await repository_adapter.call(repo.bulk_insert, [SoftDeleteCountModel(name="before")])
+    await repository_adapter.call(repo.bulk_delete, ids=[deleted.id])
+
+    rowcount = await repository_adapter.call(
+        repo.bulk_update,
+        [{"id": deleted.id, "name": "restored", "deleted_at": None}],
+        include_deleted=True,
+    )
+
+    assert rowcount == 1
+    restored = await repository_adapter.call(repo.get_by_id, deleted.id)
+    assert restored.name == "restored"
+    assert not restored.is_deleted
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_include_deleted_is_ignored_for_models_without_soft_delete(repository_adapter):
+    repo = repository_adapter.repository_class(SimpleModel, session=repository_adapter.session)
+    await repository_adapter.call(repo.bulk_insert, [SimpleModel(value=1), SimpleModel(value=1)])
+
+    default_rowcount = await repository_adapter.call(repo.bulk_update, [{"value": 2}], filter_by={"value": 1})
+    assert default_rowcount == 2
+
+    rowcount = await repository_adapter.call(
+        repo.bulk_update,
+        [{"value": 3}],
+        filter_by={"value": 2},
+        include_deleted=True,
+    )
+
+    assert rowcount == 2
+    records = await repository_adapter.call(repo.find, limit=10)
+    assert [record.value for record in records] == [3, 3]
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_signature_accepts_include_deleted(repository_adapter):
+    assert "include_deleted" in inspect.signature(repository_adapter.repository_class.bulk_update).parameters
+
+
 def test_bulk_delete_physically_deletes_by_ids(db_test):
     repo = SimpleRepository(session=db_test)
     first, second, third = repo.bulk_insert([
@@ -710,6 +810,7 @@ def test_build_filters_from_mapping_applies_ops(db_test):
 
     assert {item.number for item in results} == {2}
     assert {item.name for item in results} == {"alphabet"}
+    assert repo.count_by_params(params) == 1
 
 
 def test_find_uses_params_when_filters_not_provided(db_test):
@@ -721,13 +822,59 @@ def test_find_uses_params_when_filters_not_provided(db_test):
     assert {item.value for item in results} == {1}
 
 
-def test_find_prefers_explicit_filters_over_params(db_test):
+def test_find_combines_explicit_filters_with_params(db_test):
     repo = FilterableRepository(session=db_test)
     repo.saves([SimpleModel(value=1), SimpleModel(value=2)])
 
     results = repo.find(params=SimpleFilterParams(value=1), filters=[SimpleModel.value == 2])
 
-    assert {item.value for item in results} == {2}
+    assert results == []
+
+
+def test_build_filters_raises_for_unmapped_non_none_fields(db_test):
+    repo = PartiallyMappedSimpleRepository(session=db_test)
+
+    with pytest.raises(ValueError, match="other") as exc_info:
+        repo._build_filters(SimpleFilterParams(other=1))
+
+    assert "PartiallyMappedSimpleRepository" in str(exc_info.value)
+    assert "field_to_column" in str(exc_info.value)
+    assert "override _build_filters()" in str(exc_info.value)
+
+
+def test_build_filters_raises_for_fields_mapped_to_none(db_test):
+    repo = NoneMappedSimpleRepository(session=db_test)
+
+    with pytest.raises(ValueError, match="value"):
+        repo._build_filters(SimpleFilterParams(value=1))
+
+
+def test_build_filters_raises_without_field_mapping(db_test):
+    repo = SimpleRepository(session=db_test)
+
+    with pytest.raises(ValueError, match="value"):
+        repo._build_filters(SimpleFilterParams(value=1))
+
+
+def test_build_filters_ignores_none_fields_when_other_fields_are_mapped(db_test):
+    repo = PartiallyMappedSimpleRepository(session=db_test)
+
+    assert repo._build_filters(SimpleFilterParams()) == []
+    assert len(repo._build_filters(SimpleFilterParams(value=1, other=None))) == 1
+
+
+def test_build_filters_override_handles_extra_fields_after_super(db_test):
+    repo = ExtendedFilterableRepository(session=db_test)
+    items = [SimpleModel(value=1), SimpleModel(value=1)]
+    repo.saves(items)
+    second = items[1]
+
+    results = repo.find(
+        params=SimpleFilterParams(value=1, other=second.id),
+        limit=10,
+    )
+
+    assert [item.id for item in results] == [second.id]
 
 
 def test_count(db_test):
@@ -754,6 +901,13 @@ def test_count_by_params(db_test):
 
     assert repo.count_by_params(SimpleFilterParams(value=2)) == 2
     assert repo.count_by_params(SimpleFilterParams(value=999)) == 0
+
+
+def test_count_by_params_raises_for_unmapped_fields(db_test):
+    repo = SimpleRepository(session=db_test)
+
+    with pytest.raises(ValueError, match="value"):
+        repo.count_by_params(SimpleFilterParams(value=1))
 
 
 def test_count_on_non_soft_deletable_model_accepts_flag(db_test):

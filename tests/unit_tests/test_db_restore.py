@@ -14,6 +14,7 @@ from repom.scripts._backup_utils import ChecksumError, RestoreError, checksum_pa
 
 def _mock_postgres_config(backup_dir, sslmode="prefer", sslrootcert=None):
     config = MagicMock()
+    config.db_url_overridden = False
     config.db_backup_path = str(backup_dir)
     config.postgres.host = "localhost"
     config.postgres.port = 5432
@@ -44,6 +45,27 @@ def _read_echoed_env(env_sink):
     return dict(
         line.split("=", 1) for line in env_sink.read_text(encoding="utf-8").splitlines()
     )
+
+
+def test_psql_command_uses_atomic_restore_args_for_host_and_docker(monkeypatch, tmp_path):
+    config = _mock_postgres_config(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+
+    host_command = db_restore._psql_command(None)
+    docker_command = db_restore._psql_command("managed-postgres")
+    expected_args = [
+        "--no-psqlrc",
+        "--single-transaction",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-f",
+        "-",
+    ]
+
+    assert host_command[-len(expected_args) :] == expected_args
+    assert host_command[0] == "psql"
+    assert docker_command[-len(expected_args) :] == expected_args
+    assert docker_command[:4] == ["docker", "exec", "-i", "managed-postgres"]
 
 
 def test_restore_raises_when_psql_fails(monkeypatch, tmp_path):
@@ -191,6 +213,48 @@ def test_restore_postgresql_via_host_overrides_inherited_sslmode(monkeypatch, tm
     assert _read_echoed_env(env_sink)["PGSSLMODE"] == "require"
 
 
+def test_postgres_restore_override_uses_url_host_and_credentials(monkeypatch, tmp_path):
+    from repom.config import RepomConfig
+
+    backup_file = _make_backup_file(tmp_path, name="url_db_20260101_000000.sql.gz")
+    config = RepomConfig()
+    config.db_url = (
+        "postgresql://url_user:url_password@db.example.internal:5544/url_db"
+        "?sslmode=verify-full&sslrootcert=%2Ftmp%2Furl-ca.pem"
+    )
+    monkeypatch.setattr(db_restore, "config", config)
+
+    build_calls = []
+
+    def fake_build_command(tool, **kwargs):
+        build_calls.append((tool, kwargs))
+        return fake_client_command()
+
+    monkeypatch.setattr(db_restore, "build_pg_client_command", fake_build_command)
+    monkeypatch.setattr(
+        _backup_utils,
+        "is_container_running",
+        MagicMock(side_effect=AssertionError("Docker must not be probed")),
+    )
+    env_sink = tmp_path / "child-env.txt"
+    monkeypatch.setenv("FAKE_CHILD_ECHO_ENV_SINK", str(env_sink))
+    monkeypatch.setenv("FAKE_CHILD_ECHO_ENV_KEYS", "PGPASSWORD,PGSSLMODE,PGSSLROOTCERT")
+
+    db_restore.restore_postgresql(backup_file)
+
+    tool, kwargs = build_calls[0]
+    assert tool == "psql"
+    assert kwargs["host"] == "db.example.internal"
+    assert kwargs["port"] == 5544
+    assert kwargs["user"] == "url_user"
+    assert kwargs["database"] == "url_db"
+    assert kwargs["container_name"] is None
+    child_env = _read_echoed_env(env_sink)
+    assert child_env["PGPASSWORD"] == "url_password"
+    assert child_env["PGSSLMODE"] == "verify-full"
+    assert child_env["PGSSLROOTCERT"] == "/tmp/url-ca.pem"
+
+
 def test_restore_postgresql_via_host_raises_before_launching_process_on_invalid_tls(
     monkeypatch, tmp_path
 ):
@@ -249,6 +313,7 @@ class TestRestoreStreamingWithoutDeadlock:
 
 def _mock_sqlite_config(backup_dir, db_file_path):
     config = MagicMock()
+    config.db_url_overridden = False
     config.db_backup_path = str(backup_dir)
     config.sqlite.db_file_path = str(db_file_path)
     return config
@@ -460,6 +525,46 @@ def test_restore_sqlite_aborts_on_checksum_mismatch_without_touching_db(monkeypa
         live_conn.close()
 
 
+def test_sqlite_restore_override_targets_url_file(monkeypatch, tmp_path):
+    from repom.config import RepomConfig
+
+    current_db = tmp_path / "url-db.sqlite3"
+    live_conn = _make_sqlite_db(current_db, row_id=1)
+    try:
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        backup_file = backup_dir / "url-db_20260101_000000.sqlite3"
+        restore_source = _make_sqlite_db(backup_file, row_id=99)
+        restore_source.close()
+        write_checksum(backup_file)
+
+        config = RepomConfig()
+        config.root_path = str(tmp_path)
+        config.db_url = "sqlite:///url-db.sqlite3"
+        config.db_backup_path = str(backup_dir)
+        monkeypatch.setattr(db_restore, "config", config)
+
+        assert db_restore.target_database_name() == "url-db"
+        db_restore.restore_sqlite(backup_file)
+
+        assert live_conn.execute("SELECT id FROM items").fetchall() == [(99,)]
+    finally:
+        live_conn.close()
+
+
+def test_sqlite_restore_override_rejects_in_memory_url(monkeypatch, tmp_path):
+    from repom.config import RepomConfig
+
+    config = RepomConfig()
+    config.root_path = str(tmp_path)
+    config.db_url = "sqlite:///:memory:"
+    config.db_backup_path = str(tmp_path / "backups")
+    monkeypatch.setattr(db_restore, "config", config)
+
+    with pytest.raises(RestoreError, match="in-memory SQLite URLs are not supported"):
+        db_restore.restore_sqlite(tmp_path / "backup.sqlite3")
+
+
 def _mock_postgres_config_for_main(backup_dir, sslmode="prefer", sslrootcert=None):
     config = _mock_postgres_config(backup_dir, sslmode=sslmode, sslrootcert=sslrootcert)
     config.db_type = "postgres"
@@ -583,6 +688,15 @@ def test_main_returns_normally_on_successful_restore(monkeypatch, tmp_path):
 
     with gzip.open(backup_file, "rb") as backup:
         assert psql_stdin.read_bytes() == backup.read()
+
+
+def test_main_raises_restore_error_for_unsupported_db_type(monkeypatch):
+    config = MagicMock()
+    config.db_type = "mysql"
+    monkeypatch.setattr(db_restore, "config", config)
+
+    with pytest.raises(RestoreError, match="Unsupported database type"):
+        db_restore.main()
 
 
 def test_main_returns_normally_when_restore_cancelled_at_selection(monkeypatch, tmp_path):

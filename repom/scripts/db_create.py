@@ -12,7 +12,7 @@ def main():
     # failed to import.
     load_models(context="db_create", strict=True)
 
-    if config.db_type == 'postgres':
+    if config.db_type == 'postgres' and not config.db_url_overridden:
         from repom.postgres.manage import ensure_running
         ensure_running()
 

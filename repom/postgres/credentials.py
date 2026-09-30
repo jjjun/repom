@@ -163,16 +163,6 @@ def build_postgres_rotation_steps(
             ]
         )
         steps.append(SqlStep(database=plan.maintenance_database, sql=role_sql))
-    else:
-        steps.append(
-            SqlStep(
-                database=plan.maintenance_database,
-                sql=(
-                    f"ALTER ROLE {quote_identifier(plan.current_user)} "
-                    f"WITH PASSWORD {quote_literal(plan.new_password)};"
-                ),
-            )
-        )
 
     for database in plan.databases:
         steps.append(
@@ -211,6 +201,17 @@ def build_postgres_rotation_steps(
                     ),
                 ]
             )
+
+    if not (plan.new_user and plan.new_user != plan.current_user):
+        steps.append(
+            SqlStep(
+                database=plan.maintenance_database,
+                sql=(
+                    f"ALTER ROLE {quote_identifier(plan.current_user)} "
+                    f"WITH PASSWORD {quote_literal(plan.new_password)};"
+                ),
+            )
+        )
 
     return tuple(steps)
 
@@ -280,6 +281,8 @@ def rotate_postgres_credentials(
                     input=step.sql,
                 )
         config.postgres.password = plan.new_password
+        if plan.new_user:
+            config.postgres.user = plan.new_user
         _regenerate_compose_secrets()
     else:
         placeholder_env_file = "<postgres-auth-env-file>" if plan.current_password else None

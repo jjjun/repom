@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 from repom.database import get_async_db_session
 from repom.nul_bytes import validate_values_no_nul_bytes
-from repom.repositories._core import FilterParams
+from repom.repositories._core import FilterParams, _primary_key_order
 from repom.repositories._repository_base import RepositoryBase
 from repom.repositories._soft_delete import AsyncSoftDeleteRepositoryMixin
 from repom.repositories._query_builder import QueryBuilderMixin
@@ -184,7 +184,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             include_deleted=include_deleted,
             options=options,
             limit=1 if single else None,
-            apply_order_by=not single,
+            order_by=_primary_key_order(self.model) if single else None,
         )
         if single:
             return results[0] if results else None
@@ -314,7 +314,12 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
         return instances
 
     async def bulk_update(
-        self, values: Sequence[dict], *, filter_by: dict | None = None, allow_unfiltered: bool = False
+        self,
+        values: Sequence[dict],
+        *,
+        filter_by: dict | None = None,
+        allow_unfiltered: bool = False,
+        include_deleted: bool = False,
     ) -> int:
         """複数レコードを一括更新し、影響行数を返す。
 
@@ -322,6 +327,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
         ``filter_by`` 指定時は渡された条件に対して各 dict の値を適用します。
         ``filter_by`` に空の dict を渡すと全件が対象になるため、
         ``allow_unfiltered=True`` を明示しない限り ``ValueError`` を送出します。
+        ``include_deleted=True`` を指定すると、論理削除済みの行も更新対象にします。
         """
         if not values:
             return 0
@@ -338,12 +344,14 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
 
         async with self._session_scope() as session:
             rowcount = 0
+            filters = self._bulk_filters(filter_by)
+            self._append_soft_delete_filter(filters, include_deleted)
             async with self._commit_or_flush(session):
                 for row in values:
                     update_values = dict(row)
-                    filters = self._bulk_filters(filter_by)
+                    row_filters = list(filters)
                     if filter_by is None:
-                        filters.append(self.model.id == update_values.pop("id"))
+                        row_filters.append(self.model.id == update_values.pop("id"))
                     if not update_values:
                         continue
 
@@ -351,7 +359,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
 
                     result = await session.execute(
                         update(self.model)
-                        .where(and_(*filters) if filters else true())
+                        .where(and_(*row_filters) if row_filters else true())
                         .values(**update_values)
                         .execution_options(synchronize_session="fetch")
                     )
@@ -439,7 +447,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
                 - offset (int): 取得開始位置
                 - limit (int): 取得件数
                 - order_by (str | UnaryExpression): ソート順
-                - options (list | Load): SQLAlchemy クエリオプション（eager loading等）
+                - options (list | tuple | Load): SQLAlchemy クエリオプション（eager loading等）
 
         Returns:
             List[T]: モデルのリスト
@@ -469,7 +477,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
                 stacklevel=2,
             )
 
-        base_filters = filters if filters is not None else self._build_filters(params)
+        base_filters = [*(filters or []), *self._build_filters(params)]
         return await self._find_with_filters(base_filters, include_deleted=include_deleted, **kwargs)
 
     async def _find_with_filters(

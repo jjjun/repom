@@ -22,6 +22,40 @@ class TestPostgresDBType:
         monkeypatch.delenv('DB_TYPE', raising=False)
         assert config.db_type == 'sqlite'
 
+    def test_db_type_follows_overridden_url_backend(self):
+        from repom.config import RepomConfig
+
+        config = RepomConfig()
+        config.db_url = "postgresql://app:secret@db.example.internal/appdb"
+
+        assert config.db_url_overridden is True
+        assert config.db_type == "postgres"
+
+        config.db_url = "sqlite:///app.sqlite3"
+        assert config.db_type == "sqlite"
+
+    def test_conflicting_db_type_warns_once_and_url_wins(self, caplog):
+        from repom.config import RepomConfig
+
+        config = RepomConfig()
+        config.db_type = "postgres"
+        config.db_url = "sqlite:///app.sqlite3"
+
+        with caplog.at_level("WARNING"):
+            assert config.db_type == "sqlite"
+            assert config.db_type == "sqlite"
+
+        assert caplog.text.count("disagrees with the database URL backend") == 1
+
+    def test_db_type_without_url_override_keeps_configured_value(self):
+        from repom.config import RepomConfig
+
+        config = RepomConfig()
+        config.db_type = "postgres"
+
+        assert config.db_url_overridden is False
+        assert config.db_type == "postgres"
+
     def test_db_type_setter_postgres(self):
         """Setter で postgres に設定"""
         from repom.config import RepomConfig
@@ -183,7 +217,7 @@ class TestURLOverride:
         config.db_type = 'postgres'
         config._db_url = 'postgresql://custom:url@example.com/db'
 
-        assert config.db_url == 'postgresql://custom:url@example.com/db'
+        assert config.db_url == 'postgresql://custom:url@example.com/db?sslmode=prefer'
 
     def test_db_url_setter_overrides_sqlite(self):
         """_db_url が設定されていれば、SQLite 設定より優先"""
@@ -193,6 +227,102 @@ class TestURLOverride:
         config._db_url = 'sqlite:///custom/path/db.sqlite3'
 
         assert config.db_url == 'sqlite:///custom/path/db.sqlite3'
+
+    def test_prod_remote_postgres_override_adds_required_sslmode(self):
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.db_url = (
+            'postgresql+psycopg://app:secret@db.example.internal:5432/appdb'
+            '?application_name=worker&connect_timeout=8'
+        )
+
+        url = make_url(config.db_url)
+
+        assert url.password == 'secret'
+        assert url.query == {
+            'application_name': 'worker',
+            'connect_timeout': '8',
+            'sslmode': 'require',
+        }
+
+    @pytest.mark.parametrize('sslmode', ['disable', 'prefer'])
+    def test_prod_remote_postgres_override_rejects_weak_sslmode(self, sslmode):
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.db_url = (
+            'postgresql://app:secret@db.example.internal/appdb'
+            f'?sslmode={sslmode}'
+        )
+
+        with pytest.raises(ValueError, match="db.example.internal.*URL query"):
+            config.db_url
+
+    @pytest.mark.parametrize(
+        ('exec_env', 'host', 'expected_sslmode'),
+        [
+            ('prod', 'localhost', 'prefer'),
+            ('prod', None, 'prefer'),
+            ('dev', 'db.example.internal', 'prefer'),
+            ('test', 'db.example.internal', 'prefer'),
+        ],
+    )
+    def test_postgres_override_defaults_by_environment_and_host(
+        self, exec_env, host, expected_sslmode
+    ):
+        from repom.config import RepomConfig
+        if host is None:
+            override = 'postgresql+psycopg:///appdb'
+        else:
+            override = f'postgresql+psycopg://{host}/appdb'
+        config = RepomConfig(exec_env=exec_env)
+        config.db_url = override
+
+        url = make_url(config.db_url)
+
+        assert url.host == host
+        assert url.query['sslmode'] == expected_sslmode
+
+    def test_postgres_override_respects_url_tls_and_config_defaults(self):
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.postgres.sslmode = 'verify-full'
+        config.postgres.sslrootcert = '/etc/ssl/certs/default-ca.pem'
+        config.db_url = (
+            'postgresql://app:secret@db.example.internal/appdb'
+            '?sslmode=verify-full&sslrootcert=/etc/ssl/certs/url-ca.pem'
+        )
+
+        explicit_url = make_url(config.db_url)
+
+        assert explicit_url.query['sslmode'] == 'verify-full'
+        assert explicit_url.query['sslrootcert'] == '/etc/ssl/certs/url-ca.pem'
+
+        config.db_url = 'postgresql://app:secret@db.example.internal/appdb'
+        configured_url = make_url(config.db_url)
+
+        assert configured_url.query['sslmode'] == 'verify-full'
+        assert configured_url.query['sslrootcert'] == '/etc/ssl/certs/default-ca.pem'
+
+    def test_postgres_override_keeps_configured_sslrootcert_with_existing_mode_absent_cert(self):
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.postgres.sslrootcert = '/etc/ssl/certs/default-ca.pem'
+        config.db_url = (
+            'postgresql://app:secret@db.example.internal/appdb?sslmode=verify-full'
+        )
+
+        url = make_url(config.db_url)
+
+        assert url.query['sslmode'] == 'verify-full'
+        assert 'sslrootcert' not in url.query
+
+    def test_sqlite_override_is_returned_unchanged(self):
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        override = 'sqlite:///custom/path/db.sqlite3?mode=ro'
+        config.db_url = override
+
+        assert config.db_url == override
 
 
 class TestPostgresURLEncoding:

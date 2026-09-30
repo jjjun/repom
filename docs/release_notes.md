@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+- Database URL overrides now determine `db_type` and the target used by
+  `db_backup`, `db_restore`, `db_create`, `db_delete`, and `db_sync_master`.
+  PostgreSQL backup and restore tools use URL credentials and TLS settings from
+  the host without probing the managed container; file-based SQLite overrides
+  use the URL path, and in-memory SQLite backup/restore is rejected.
+- BREAKING: PostgreSQL URL overrides now receive the host-aware TLS policy used
+  by generated URLs. A remote prod URL without `sslmode` defaults to `require`,
+  and explicit `disable`, `allow`, or `prefer` modes raise `ValueError`; set the
+  URL's `sslmode` to `require` or stronger. Local/hostless URLs and non-prod
+  environments keep the `prefer` default, and non-PostgreSQL overrides are
+  unchanged.
+- PostgreSQL plain-SQL restores now disable user `psqlrc` settings, stop on the
+  first SQL error, and run in a single transaction; custom-format restores also
+  use a single transaction so failed restores roll back instead of leaving a
+  partially restored database. The backup guide documents the plain-dump large
+  object transaction limitation.
+- PostgreSQL credential rotation now applies database and schema grants before
+  changing the current role's password, and successful replacement-user
+  rotations update both the configured user and password before regenerating
+  compose secrets.
+- Repository queries now order by all primary-key attributes by default. String
+  `order_by` values use remaining primary-key attributes as same-direction
+  tie-breakers, making paginated results deterministic; explicit SQLAlchemy
+  expressions define the full ordering. `get_by(..., single=True)` returns the
+  matching row with the lowest primary key, independent of `default_order_by`.
+- BREAKING: `find()` now ANDs conditions from both `params` and `filters`. The
+  default `_build_filters()` raises `ValueError` when a non-None FilterParams
+  field has no non-None `field_to_column` mapping.
+- Repository defaults now follow normal Python attribute lookup, so instance
+  values for `default_options`, `default_order_by`, `max_limit`, and
+  `field_to_column` override class values. Repositories without configured
+  eager-loading defaults expose `default_options == ()` instead of `[]`, and
+  tuple load options are accepted alongside lists.
+- Test environment checks now normalize `EXEC_ENV` consistently, so mixed case
+  and surrounding whitespace select in-memory SQLite, the SQLite default hook,
+  and the test fixture safety guard as expected.
 - `EXEC_ENV=production` now receives the same production PostgreSQL database name,
   TLS defaults, TLS enforcement, and destructive-operation guard as `prod`, with
   surrounding whitespace and case ignored. Unknown environment values now warn and
@@ -260,6 +296,9 @@
   keep returning rows in unspecified order) instead of always returning rows
   in unspecified order. Consuming projects that relied on `get_all()`
   returning soft-deleted rows must pass `include_deleted=True` explicitly.
+- BREAKING: `bulk_update()` now excludes soft-deleted rows by default on models
+  with `SoftDeletableMixin`. Callers that need to update or restore deleted
+  rows must pass `include_deleted=True`.
 - BREAKING: `bulk_update()` and `bulk_delete()` now raise `ValueError` when the
   resolved filter list is empty (`bulk_delete()` with neither `filter_by` nor
   `ids`, or `bulk_update(..., filter_by={})`). Pass `allow_unfiltered=True` to

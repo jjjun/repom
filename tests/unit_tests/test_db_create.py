@@ -16,6 +16,7 @@ def test_db_create_calls_load_models_with_strict_true(monkeypatch):
     """
     fake_config = MagicMock()
     fake_config.db_type = 'sqlite'
+    fake_config.db_url_overridden = False
     fake_config.model_import_strict = False
     monkeypatch.setattr(db_create, "config", fake_config)
 
@@ -39,6 +40,7 @@ def test_db_create_raises_on_import_failure(monkeypatch):
     """
     fake_config = MagicMock()
     fake_config.db_type = 'sqlite'
+    fake_config.db_url_overridden = False
     fake_config.model_import_strict = False
     monkeypatch.setattr(db_create, "config", fake_config)
 
@@ -68,6 +70,7 @@ def test_db_create_logs_safe_db_url(monkeypatch):
     """
     fake_config = MagicMock()
     fake_config.db_type = 'sqlite'
+    fake_config.db_url_overridden = False
     monkeypatch.setattr(db_create, "config", fake_config)
 
     monkeypatch.setattr(db_create, "load_models", MagicMock(return_value=[]))
@@ -91,6 +94,7 @@ def test_db_create_starts_postgres_before_getting_engine(monkeypatch):
     events = []
     fake_config = MagicMock()
     fake_config.db_type = "postgres"
+    fake_config.db_url_overridden = False
     monkeypatch.setattr(db_create, "config", fake_config)
     monkeypatch.setattr(db_create, "load_models", lambda **_kwargs: events.append("models"))
 
@@ -110,3 +114,22 @@ def test_db_create_starts_postgres_before_getting_engine(monkeypatch):
     db_create.main()
 
     assert events == ["models", "postgres", "engine", "create"]
+
+
+def test_db_create_does_not_start_managed_postgres_for_url_override(monkeypatch):
+    fake_config = MagicMock()
+    fake_config.db_type = "postgres"
+    fake_config.db_url_overridden = True
+    monkeypatch.setattr(db_create, "config", fake_config)
+    monkeypatch.setattr(db_create, "load_models", lambda **_kwargs: None)
+    monkeypatch.setattr(db_create, "Base", MagicMock())
+    monkeypatch.setattr(db_create, "get_sync_engine", MagicMock())
+
+    from repom.postgres import manage as postgres_manage
+
+    ensure_running = MagicMock(side_effect=AssertionError("managed container must not start"))
+    monkeypatch.setattr(postgres_manage, "ensure_running", ensure_running)
+
+    db_create.main()
+
+    ensure_running.assert_not_called()

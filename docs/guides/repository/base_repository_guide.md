@@ -69,13 +69,13 @@ with get_reusable_sync_transaction() as session:
 | `save(instance)` | 保存 | `T` |
 | `saves(instances)` | 一括保存 | `None` |
 | `bulk_insert(objects)` | 一括作成 | `list[T]` |
-| `bulk_update(values, filter_by=None, allow_unfiltered=False)` | 一括更新 | `int` |
+| `bulk_update(values, filter_by=None, allow_unfiltered=False, include_deleted=False)` | 一括更新 | `int` |
 | `bulk_delete(filter_by=None, ids=None, allow_unfiltered=False)` | 一括削除 | `int` |
 | `remove(instance)` | 削除 | `None` |
 
 `find()` の `filters=` はキーワードで指定してください。位置引数は `params` として解釈されます。
 
-`get_by(..., single=True)` と `get_by_id()` は `ORDER BY` を適用しません。`get_by(..., single=True)` で複数行が一致する場合、返される行は決定的ではありません。`get_all()` は全件を取得し、`max_limit` の制限も適用しません。
+`get_by(..., single=True)` は主キー属性すべての昇順で並べ、最小の主キーを返します（`default_order_by` は適用しません）。`get_by_id()` は主キーの等価条件で最大 1 行に一致するため、`ORDER BY` を追加しません。`get_all()` は全件を取得し、`max_limit` の制限も適用しません。
 
 ---
 
@@ -260,7 +260,7 @@ deleted = repo.bulk_delete(allow_unfiltered=True)
 `bulk_update()` も `filter_by` に空の dict を渡すと同様に `ValueError` を送出します。
 `filter_by` 未指定時は各 dict の `id` を条件に使うため、この制限の対象外です。
 
-`bulk_update()` は論理削除済みの行も更新対象にします。`bulk_delete()` は論理削除対応モデルでは未削除の行だけを対象にします。同期版の `bulk_update()` / `bulk_delete()` は外部セッションでも `expire_all()` を呼びますが、非同期版は呼びません。
+`bulk_update()` はデフォルトで論理削除済みの行を除外し、`include_deleted=True` を指定すると更新対象に含めます。`bulk_delete()` は論理削除対応モデルでは未削除の行だけを対象にします。同期版の `bulk_update()` / `bulk_delete()` は外部セッションでも `expire_all()` を呼びますが、非同期版は呼びません。
 
 ---
 

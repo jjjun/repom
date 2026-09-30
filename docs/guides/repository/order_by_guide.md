@@ -39,6 +39,28 @@ Repository 定義から OpenAPI 用の `order_by` dependency を構築する機�
 移管されました。repom には並び替え候補を取得する introspection API のみが
 残ります。
 
+## 決定的な並び順
+
+`order_by` と `default_order_by` のどちらも指定しない場合、すべての主キー属性の
+昇順で並びます。これは `id` 属性を持たないモデルや複合主キーにも適用されます。
+
+`"created_at:desc"` のように文字列で並び順を指定すると、ソート列として既に使われている
+ものを除き、主キー属性が同じ方向のキーとして末尾に追加されます。これにより、同じ
+ソート値の行も `limit` と `offset` を使う場合を含めて安定した順序になります。たとえば
+`"created_at:desc"` は `created_at DESC, id DESC` の順で並び、`"id:desc"` では `id` は
+一度だけ指定されます。
+
+SQLAlchemy の並び替え式を指定すると、指定した内容が完全な並び順になります。複数の式を
+指定するには、リストまたはタプルを渡します。
+
+```python
+order_by=[Task.created_at.desc(), Task.id.desc()]
+```
+
+`get_by(..., single=True)` は一致した行を主キー属性すべての昇順で並べてから先頭を返し、
+`default_order_by`（仮想カラムを指定している場合があります）は適用しません。
+`get_by_id()` は主キーの等価条件で最大 1 行に一致するため、並び順を追加しません。
+
 ## introspection API
 
 候補や既定値はプログラムから参照できます。

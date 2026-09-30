@@ -618,8 +618,12 @@ def run_postgres_via_docker_or_host(
     operation: str,
     host_tools: str = "host tools",
     container_name: str | None = None,
+    allow_docker: bool = True,
 ) -> T:
     """Run a PostgreSQL operation via Docker when available, otherwise host tools."""
+    if not allow_docker:
+        return via_host()
+
     resolved_container_name = container_name or config.postgres.container.get_container_name()
 
     try:

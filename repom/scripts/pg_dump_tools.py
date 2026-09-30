@@ -8,8 +8,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from basekit.docker_manager import DockerCommandExecutor
+from sqlalchemy.engine import make_url
 
-from repom.config import config
+from repom.config import RepomConfig, config
 from repom.docker_service import DockerUnavailableError, is_container_running
 from repom.scripts._backup_utils import (
     ByteCountingWriter,
@@ -38,6 +39,7 @@ class PgConnParams:
     container_name: str | None = None
     sslmode: str | None = None
     sslrootcert: str | None = None
+    use_docker: bool = True
 
     def __repr__(self) -> str:
         password_display = "***" if self.password else "None"
@@ -45,20 +47,57 @@ class PgConnParams:
             f"{self.__class__.__name__}(host={self.host!r}, port={self.port!r}, "
             f"user={self.user!r}, password={password_display}, "
             f"database={self.database!r}, container_name={self.container_name!r}, "
-            f"sslmode={self.sslmode!r}, sslrootcert={self.sslrootcert!r})"
+            f"sslmode={self.sslmode!r}, sslrootcert={self.sslrootcert!r}, "
+            f"use_docker={self.use_docker!r})"
         )
 
     @classmethod
-    def from_config(cls) -> "PgConnParams":
+    def from_config(cls, config_obj: RepomConfig | None = None) -> "PgConnParams":
         """Build connection parameters from the active repom config."""
-        tls = config.postgres_tls_settings()
+        active_config = config_obj or config
+        if active_config.db_url_overridden:
+            url = make_url(active_config.db_url)
+            missing = [
+                name
+                for name, value in (
+                    ("host", url.host),
+                    ("user", url.username),
+                    ("database", url.database),
+                )
+                if not value
+            ]
+            if missing:
+                raise ValueError(
+                    "PostgreSQL client tools require a URL with "
+                    f"{', '.join(missing)}; Unix-socket URLs are not supported."
+                )
+
+            def query_value(name: str) -> str | None:
+                value = url.query.get(name)
+                if isinstance(value, tuple):
+                    return value[-1] if value else None
+                return value
+
+            return cls(
+                host=url.host,
+                port=url.port if url.port is not None else 5432,
+                user=url.username,
+                password=url.password,
+                database=url.database,
+                container_name=active_config.postgres.container.get_container_name(),
+                sslmode=query_value("sslmode"),
+                sslrootcert=query_value("sslrootcert"),
+                use_docker=False,
+            )
+
+        tls = active_config.postgres_tls_settings()
         return cls(
-            host=config.postgres.host,
-            port=config.postgres.port,
-            user=config.postgres.user,
-            password=config.postgres.password,
-            database=config.postgres_db,
-            container_name=config.postgres.container.get_container_name(),
+            host=active_config.postgres.host,
+            port=active_config.postgres.port,
+            user=active_config.postgres.user,
+            password=active_config.postgres.password,
+            database=active_config.postgres_db,
+            container_name=active_config.postgres.container.get_container_name(),
             sslmode=tls.sslmode,
             sslrootcert=tls.sslrootcert,
         )
@@ -86,6 +125,7 @@ def pg_dump_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
         operation="custom-format dump",
         host_tools="host pg_dump",
         container_name=params.container_name,
+        allow_docker=params.use_docker,
     )
 
 
@@ -100,18 +140,20 @@ def pg_restore_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
         operation="custom-format restore",
         host_tools="host pg_restore",
         container_name=params.container_name,
+        allow_docker=params.use_docker,
     )
 
 
 def pg_tools_available(params: PgConnParams) -> bool:
     """Return True when Docker client tools or both host tools are available."""
 
-    container_name = params.container_name or config.postgres.container.get_container_name()
-    try:
-        if is_container_running(container_name):
-            return True
-    except DockerUnavailableError:
-        pass
+    if params.use_docker:
+        container_name = params.container_name or config.postgres.container.get_container_name()
+        try:
+            if is_container_running(container_name):
+                return True
+        except DockerUnavailableError:
+            pass
 
     return shutil.which("pg_dump") is not None and shutil.which("pg_restore") is not None
 
@@ -196,7 +238,7 @@ def _pg_restore_custom_via_docker(params: PgConnParams, dump_path: Path) -> PgTo
         port=params.port,
         user=params.user,
         database=params.database,
-        extra_args=["--clean", "--if-exists", "--no-owner", "--no-acl"],
+        extra_args=["--clean", "--if-exists", "--no-owner", "--no-acl", "--single-transaction"],
         container_name=container_name,
         stdin=True,
     )
@@ -228,7 +270,14 @@ def _pg_restore_custom_via_host(params: PgConnParams, dump_path: Path) -> PgTool
         port=params.port,
         user=params.user,
         database=params.database,
-        extra_args=["--clean", "--if-exists", "--no-owner", "--no-acl", str(dump_path)],
+        extra_args=[
+            "--clean",
+            "--if-exists",
+            "--no-owner",
+            "--no-acl",
+            "--single-transaction",
+            str(dump_path),
+        ],
     )
     completed = _run_host_command(command, params)
     return PgToolResult(
