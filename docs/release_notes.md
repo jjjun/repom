@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Repository defaults now follow normal Python attribute lookup, so instance
+  values for `default_options`, `default_order_by`, `max_limit`, and
+  `field_to_column` override class values. Repositories without configured
+  eager-loading defaults expose `default_options == ()` instead of `[]`, and
+  tuple load options are accepted alongside lists.
 - Test environment checks now normalize `EXEC_ENV` consistently, so mixed case
   and surrounding whitespace select in-memory SQLite, the SQLite default hook,
   and the test fixture safety guard as expected.

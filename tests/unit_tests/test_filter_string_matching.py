@@ -124,6 +124,23 @@ def test_contains_filter_rejects_value_over_max_length(db_test):
     with pytest.raises(ValueError, match="exceeds the maximum length"):
         repo.find(params=FilterMatchParams(name=long_value))
 
+
+@pytest.mark.asyncio
+async def test_instance_field_mapping_overrides_class_mapping(repository_adapter):
+    class ClassMappedRepository(repository_adapter.repository_class):
+        field_to_column = {"name": FilterMatchModel.id}
+
+    repo = ClassMappedRepository(
+        FilterMatchModel,
+        session=repository_adapter.session,
+    )
+    repo.field_to_column = {"name": FilterMatchModel.name}
+
+    filters = repo._build_filters(FilterMatchParams(name="alpha"))
+
+    assert filters[0].left.key == "name"
+    assert ClassMappedRepository.field_to_column["name"].key == "id"
+
 pytestmark = pytest.mark.filterwarnings(
     r"ignore:find\(\) was called without a limit:RuntimeWarning"
 )

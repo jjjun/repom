@@ -447,7 +447,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
                 - offset (int): 取得開始位置
                 - limit (int): 取得件数
                 - order_by (str | UnaryExpression): ソート順
-                - options (list | Load): SQLAlchemy クエリオプション（eager loading等）
+                - options (list | tuple | Load): SQLAlchemy クエリオプション（eager loading等）
 
         Returns:
             List[T]: モデルのリスト

@@ -3,8 +3,8 @@
 このモジュールは、同期版・非同期版リポジトリで共有されるロジックを提供します。
 """
 
+from collections.abc import Iterable, Sequence
 from typing import Optional, List, Mapping, Any
-from collections.abc import Iterable
 from enum import Enum
 from sqlalchemy import ColumnElement, UnaryExpression, asc, desc
 from pydantic import BaseModel
@@ -215,7 +215,7 @@ def set_find_option(
     model,
     allowed_order_columns: List[str],
     virtual_order_columns: Optional[List[str]] = None,
-    default_options: Optional[List] = None,
+    default_options: Optional[Sequence[Any]] = None,
     default_order_by=None,
     max_limit: Optional[int] = None,
     **kwargs
@@ -236,9 +236,9 @@ def set_find_option(
         model: SQLAlchemy モデルクラス
         allowed_order_columns: ソート可能なカラム名のリスト
         default_options: デフォルトの eager loading options（リポジトリの default_options）
-            クラス属性が優先され、options=None のときのみ適用されます。
+            インスタンス属性がクラス属性の値を上書きし、options=None の場合にのみ適用されます。
         default_order_by: デフォルトの order_by 設定（リポジトリの default_order_by）
-            クラス属性が優先され、order_by が未指定の場合に適用されます。
+            インスタンス属性がクラス属性の値を上書きし、order_by が指定されていない場合に適用されます。
         max_limit: 許可する limit の最大値（リポジトリの max_limit クラス属性）。
             limit がこれを超えると ValueError を送出します。None の場合は上限
             チェックを行いません。
@@ -250,7 +250,7 @@ def set_find_option(
               上限なしで全件を取得します（find() は limit 省略時に
               RuntimeWarning を送出します。呼び出し側が明示的に制限してください）。
             - order_by (Callable | str): 結果を並べ替えるための呼び出し可能オブジェクト。デフォルトはモデルの id フィールドの昇順。
-            - options (list | Load): SQLAlchemy の load options (joinedload, selectinload など)。
+            - options (list | tuple | Load): SQLAlchemy の load options (joinedload, selectinload など)。
               None の場合は default_options を使用。空リスト [] を渡すと eager loading なし。
 
     Returns:
@@ -292,7 +292,7 @@ def set_find_option(
         options = default_options
 
     if options is not None:
-        if isinstance(options, list):
+        if isinstance(options, (list, tuple)):
             for opt in options:
                 query = query.options(opt)
         else:
