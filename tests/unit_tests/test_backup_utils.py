@@ -362,6 +362,25 @@ def test_run_postgres_via_docker_or_host_accepts_explicit_container_name(monkeyp
     is_running.assert_called_once_with("custom-postgres")
 
 
+def test_run_postgres_via_docker_or_host_skips_docker_when_disallowed(monkeypatch):
+    is_running = MagicMock(side_effect=AssertionError("Docker must not be probed"))
+    via_docker = MagicMock()
+    via_host = MagicMock(return_value="host-result")
+    monkeypatch.setattr(_backup_utils, "is_container_running", is_running)
+
+    result = run_postgres_via_docker_or_host(
+        via_docker=via_docker,
+        via_host=via_host,
+        operation="backup",
+        allow_docker=False,
+    )
+
+    assert result == "host-result"
+    is_running.assert_not_called()
+    via_docker.assert_not_called()
+    via_host.assert_called_once_with()
+
+
 @POSIX_ONLY
 def test_ensure_backup_dir_creates_with_mode_0700(tmp_path):
     backup_dir = tmp_path / "backups"

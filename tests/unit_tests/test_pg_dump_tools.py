@@ -33,6 +33,68 @@ def _params(
     )
 
 
+def test_pg_conn_params_from_overridden_url():
+    config = RepomConfig()
+    config.db_url = (
+        "postgresql+psycopg://url_user:url_password@db.example.internal:5544/url_db"
+        "?sslmode=verify-full&sslrootcert=%2Ftmp%2Fca.pem"
+    )
+
+    params = PgConnParams.from_config(config)
+
+    assert params.host == "db.example.internal"
+    assert params.port == 5544
+    assert params.user == "url_user"
+    assert params.password == "url_password"
+    assert params.database == "url_db"
+    assert params.sslmode == "verify-full"
+    assert params.sslrootcert == "/tmp/ca.pem"
+    assert params.use_docker is False
+    assert "url_password" not in repr(params)
+
+
+def test_pg_conn_params_from_config_keeps_structured_settings():
+    config = RepomConfig()
+    config.db_type = "postgres"
+    config.postgres.host = "configured-host"
+    config.postgres.port = 5543
+    config.postgres.user = "configured-user"
+    config.postgres.password = "configured-password"
+    config.postgres.database = "configured-db"
+
+    params = PgConnParams.from_config(config)
+
+    assert params.host == "configured-host"
+    assert params.port == 5543
+    assert params.user == "configured-user"
+    assert params.password == "configured-password"
+    assert params.database == "configured-db"
+    assert params.use_docker is True
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql://url_user:url_password@/url_db?host=/var/run/postgresql",
+        "postgresql://db.example.internal/url_db",
+        "postgresql://url_user@db.example.internal/",
+    ],
+)
+def test_pg_conn_params_rejects_urls_without_host_user_or_database(url):
+    config = RepomConfig()
+    config.db_url = url
+
+    with pytest.raises(ValueError, match="require a URL with"):
+        PgConnParams.from_config(config)
+
+
+def test_pg_conn_params_uses_default_postgres_port():
+    config = RepomConfig()
+    config.db_url = "postgresql://url_user:url_password@db.example.internal/url_db"
+
+    assert PgConnParams.from_config(config).port == 5432
+
+
 def test_pg_dump_custom_uses_docker_stdout_without_file(monkeypatch, tmp_path: Path):
     """The Docker custom-format dump must stream pg_dump's stdout straight
     into dump_path via the shared Popen-based streaming helper, never

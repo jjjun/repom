@@ -20,6 +20,7 @@ POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="POSIX file mode bits
 
 def _mock_postgres_config(backup_dir, sslmode="prefer", sslrootcert=None):
     config = MagicMock()
+    config.db_url_overridden = False
     config.db_backup_path = str(backup_dir)
     config.postgres.host = "localhost"
     config.postgres.port = 5432
@@ -285,6 +286,7 @@ class TestStreamingWithoutDeadlock:
 
 def _mock_sqlite_config(backup_dir, db_file_path):
     config = MagicMock()
+    config.db_url_overridden = False
     config.db_backup_path = str(backup_dir)
     config.sqlite.db_file_path = str(db_file_path)
     return config
@@ -659,6 +661,92 @@ def test_main_returns_normally_on_successful_backup(monkeypatch, tmp_path):
     db_backup.main()
 
     assert len(list(tmp_path.glob("*.sql.gz"))) == 1
+
+
+def test_postgres_backup_override_uses_url_host_and_credentials(monkeypatch, tmp_path):
+    from repom.config import RepomConfig
+
+    config = RepomConfig()
+    config.db_url = (
+        "postgresql://url_user:url_password@db.example.internal:5544/url_db"
+        "?sslmode=verify-full&sslrootcert=%2Ftmp%2Furl-ca.pem"
+    )
+    config.db_backup_path = str(tmp_path)
+    monkeypatch.setattr(db_backup, "config", config)
+
+    build_calls = []
+
+    def fake_build_command(tool, **kwargs):
+        build_calls.append((tool, kwargs))
+        return fake_client_command()
+
+    monkeypatch.setattr(db_backup, "build_pg_client_command", fake_build_command)
+    env_sink = tmp_path / "child-env.txt"
+    monkeypatch.setenv("FAKE_CHILD_ECHO_ENV_SINK", str(env_sink))
+    monkeypatch.setenv("FAKE_CHILD_ECHO_ENV_KEYS", "PGPASSWORD,PGSSLMODE,PGSSLROOTCERT")
+    monkeypatch.setenv("FAKE_CHILD_STDOUT_BYTES", "10")
+
+    db_backup.backup_postgresql()
+
+    tool, kwargs = build_calls[0]
+    assert tool == "pg_dump"
+    assert kwargs["host"] == "db.example.internal"
+    assert kwargs["port"] == 5544
+    assert kwargs["user"] == "url_user"
+    assert kwargs["database"] == "url_db"
+    assert kwargs["container_name"] is None
+    child_env = _read_echoed_env(env_sink)
+    assert child_env["PGPASSWORD"] == "url_password"
+    assert child_env["PGSSLMODE"] == "verify-full"
+    assert child_env["PGSSLROOTCERT"] == "/tmp/url-ca.pem"
+    assert len(list(tmp_path.glob("url_db_*.sql.gz"))) == 1
+
+
+def test_sqlite_backup_override_uses_url_file(monkeypatch, tmp_path):
+    from repom.config import RepomConfig
+
+    db_file = tmp_path / "url-db.sqlite3"
+    writer = _make_wal_db_with_uncheckpointed_row(db_file)
+    try:
+        config = RepomConfig()
+        config.root_path = str(tmp_path)
+        config.db_url = "sqlite:///url-db.sqlite3"
+        config.db_backup_path = str(tmp_path / "backups")
+        monkeypatch.setattr(db_backup, "config", config)
+
+        db_backup.backup_sqlite()
+
+        backups = list((tmp_path / "backups").glob("url-db_*.sqlite3"))
+        assert len(backups) == 1
+        backup = sqlite3.connect(str(backups[0]))
+        try:
+            assert backup.execute("SELECT id FROM items").fetchall() == [(42,)]
+        finally:
+            backup.close()
+    finally:
+        writer.close()
+
+
+def test_sqlite_backup_override_rejects_in_memory_url(monkeypatch, tmp_path):
+    from repom.config import RepomConfig
+
+    config = RepomConfig()
+    config.root_path = str(tmp_path)
+    config.db_url = "sqlite:///:memory:"
+    config.db_backup_path = str(tmp_path / "backups")
+    monkeypatch.setattr(db_backup, "config", config)
+
+    with pytest.raises(BackupError, match="in-memory SQLite URLs are not supported"):
+        db_backup.backup_sqlite()
+
+
+def test_main_raises_backup_error_for_unsupported_db_type(monkeypatch):
+    config = MagicMock()
+    config.db_type = "mysql"
+    monkeypatch.setattr(db_backup, "config", config)
+
+    with pytest.raises(BackupError, match="Unsupported database type"):
+        db_backup.main()
 
 
 def _mock_sqlite_config_for_main(backup_dir, db_file_path):

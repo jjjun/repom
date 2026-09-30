@@ -22,6 +22,40 @@ class TestPostgresDBType:
         monkeypatch.delenv('DB_TYPE', raising=False)
         assert config.db_type == 'sqlite'
 
+    def test_db_type_follows_overridden_url_backend(self):
+        from repom.config import RepomConfig
+
+        config = RepomConfig()
+        config.db_url = "postgresql://app:secret@db.example.internal/appdb"
+
+        assert config.db_url_overridden is True
+        assert config.db_type == "postgres"
+
+        config.db_url = "sqlite:///app.sqlite3"
+        assert config.db_type == "sqlite"
+
+    def test_conflicting_db_type_warns_once_and_url_wins(self, caplog):
+        from repom.config import RepomConfig
+
+        config = RepomConfig()
+        config.db_type = "postgres"
+        config.db_url = "sqlite:///app.sqlite3"
+
+        with caplog.at_level("WARNING"):
+            assert config.db_type == "sqlite"
+            assert config.db_type == "sqlite"
+
+        assert caplog.text.count("disagrees with the database URL backend") == 1
+
+    def test_db_type_without_url_override_keeps_configured_value(self):
+        from repom.config import RepomConfig
+
+        config = RepomConfig()
+        config.db_type = "postgres"
+
+        assert config.db_url_overridden is False
+        assert config.db_type == "postgres"
+
     def test_db_type_setter_postgres(self):
         """Setter で postgres に設定"""
         from repom.config import RepomConfig

@@ -29,7 +29,7 @@ def main():
 
     load_models(context="db_delete")
 
-    if config.db_type == 'postgres':
+    if config.db_type == 'postgres' and not config.db_url_overridden:
         from repom.postgres.manage import ensure_running
         ensure_running()
 

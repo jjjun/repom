@@ -11,11 +11,17 @@ from repom.scripts import db_delete
 from repom.scripts._destructive import confirm_destructive_operation
 
 
-def _mock_config(exec_env="dev", db_url="sqlite:///data/repom_dev.sqlite3", db_type="sqlite"):
+def _mock_config(
+    exec_env="dev",
+    db_url="sqlite:///data/repom_dev.sqlite3",
+    db_type="sqlite",
+    db_url_overridden=False,
+):
     config = MagicMock()
     config.exec_env = exec_env
     config.db_url = db_url
     config.db_type = db_type
+    config.db_url_overridden = db_url_overridden
     return config
 
 
@@ -91,6 +97,28 @@ def test_db_delete_starts_postgres_before_getting_engine(monkeypatch):
     db_delete.main()
 
     assert events == ["models", "postgres", "engine", "drop"]
+
+
+def test_db_delete_does_not_start_managed_postgres_for_url_override(monkeypatch):
+    monkeypatch.setattr(
+        db_delete,
+        "config",
+        _mock_config(db_type="postgres", db_url_overridden=True),
+    )
+    monkeypatch.setattr(sys, "argv", ["db_delete", "--yes"])
+    monkeypatch.setattr(sys, "stdin", StringIO(""))
+    monkeypatch.setattr(db_delete, "load_models", MagicMock())
+    monkeypatch.setattr(db_delete, "get_sync_engine", MagicMock())
+    monkeypatch.setattr(db_delete.Base.metadata, "drop_all", MagicMock())
+
+    from repom.postgres import manage as postgres_manage
+
+    ensure_running = MagicMock(side_effect=AssertionError("managed container must not start"))
+    monkeypatch.setattr(postgres_manage, "ensure_running", ensure_running)
+
+    db_delete.main()
+
+    ensure_running.assert_not_called()
 
 
 @pytest.mark.parametrize("answer", ["y", "Y"])

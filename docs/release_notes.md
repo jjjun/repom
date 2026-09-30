@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Database URL overrides now determine `db_type` and the target used by
+  `db_backup`, `db_restore`, `db_create`, `db_delete`, and `db_sync_master`.
+  PostgreSQL backup and restore tools use URL credentials and TLS settings from
+  the host without probing the managed container; file-based SQLite overrides
+  use the URL path, and in-memory SQLite backup/restore is rejected.
 - BREAKING: PostgreSQL URL overrides now receive the host-aware TLS policy used
   by generated URLs. A remote prod URL without `sslmode` defaults to `require`,
   and explicit `disable`, `allow`, or `prefer` modes raise `ValueError`; set the

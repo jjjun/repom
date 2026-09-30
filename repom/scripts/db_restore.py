@@ -12,6 +12,7 @@ Usage:
 
 from repom.config import config
 from repom.logging import get_logger
+from repom.diagnostics import resolve_sqlite_db_path
 import gzip
 import os
 from datetime import datetime
@@ -35,8 +36,22 @@ from repom.scripts._backup_utils import (
     warn_if_checksum_missing,
     write_checksum,
 )
+from repom.scripts.pg_dump_tools import PgConnParams
 
 logger = get_logger(__name__)
+
+
+def sqlite_database_path() -> Path:
+    """Return the file used by the active SQLite configuration."""
+    if config.db_url_overridden:
+        db_path = resolve_sqlite_db_path(config.db_url, config.root_path)
+        if db_path is None:
+            raise RestoreError(
+                "SQLite restore requires a file-based database URL; "
+                "in-memory SQLite URLs are not supported."
+            )
+        return db_path
+    return Path(config.sqlite.db_file_path)
 
 
 def _backup_suffix(name: str, suffixes: tuple[str, ...]) -> Optional[str]:
@@ -112,11 +127,10 @@ def restore_sqlite(backup_file: Path):
         backup_file: source backup file to restore from
     """
     logger.info(f"Starting SQLite restore from {backup_file.name}")
+    current_db = sqlite_database_path()
 
     try:
         warn_if_checksum_missing(backup_file)
-
-        current_db = Path(config.sqlite.db_file_path)
 
         # If the current DB exists, create an automatic backup of it first. This
         # goes through the same snapshot -> partial -> replace -> checksum path
@@ -163,12 +177,13 @@ def _psql_command(container_name: str | None) -> list[str]:
     A separate function so tests can substitute a stand-in child process
     while still exercising the real streaming path in _restore_postgresql.
     """
+    params = PgConnParams.from_config(config)
     return build_pg_client_command(
         "psql",
-        host=config.postgres.host,
-        port=config.postgres.port,
-        user=config.postgres.user,
-        database=config.postgres_db,
+        host=params.host,
+        port=params.port,
+        user=params.user,
+        database=params.database,
         # -f - makes psql apply --single-transaction to the streamed SQL input.
         extra_args=[
             "--no-psqlrc",
@@ -194,13 +209,13 @@ def _restore_postgresql(backup_file: Path, container_name: str | None) -> None:
     """
     logger.info(f"Starting PostgreSQL restore from {backup_file.name}")
 
+    params = PgConnParams.from_config(config)
     env = None
     if container_name is None:
         # sslmode / sslrootcert を解決・検証する（db_url と同じロジックを共有）。
         # subprocess を起動する前に検証することで、prod での弱い sslmode を
         # プロセス起動前に拒否する。
-        tls = config.postgres_tls_settings()
-        env = build_host_pg_env(config.postgres.password, tls.sslmode, tls.sslrootcert)
+        env = build_host_pg_env(params.password, params.sslmode, params.sslrootcert)
 
     try:
         warn_if_checksum_missing(backup_file)
@@ -215,7 +230,7 @@ def _restore_postgresql(backup_file: Path, container_name: str | None) -> None:
 
             with open(sql_path, "rb") as sql_file:
                 result = run_streaming_command(
-                    command, env=env, stdin_file=sql_file, password=config.postgres.password
+                    command, env=env, stdin_file=sql_file, password=params.password
                 )
         finally:
             sql_path.unlink(missing_ok=True)
@@ -226,7 +241,7 @@ def _restore_postgresql(backup_file: Path, container_name: str | None) -> None:
             raise RestoreError(f"psql failed with exit code {result.returncode}: {result.stderr}")
 
         print("\nRestore completed successfully")
-        print(f"  Database: {config.postgres_db}")
+        print(f"  Database: {params.database}")
         logger.info("PostgreSQL restore completed successfully")
 
     except FileNotFoundError as e:
@@ -286,22 +301,30 @@ def restore_postgresql(backup_file: Path):
     Args:
         backup_file: source backup file to restore from (.sql.gz)
     """
+    params = PgConnParams.from_config(config)
     run_postgres_via_docker_or_host(
         via_docker=lambda: restore_postgresql_via_docker(backup_file),
         via_host=lambda: restore_postgresql_via_host(backup_file),
         operation="restore",
+        container_name=params.container_name,
+        allow_docker=params.use_docker,
     )
 
 
 def target_database_name() -> str:
     """Return the name of the database a restore would write into."""
     if config.db_type == "postgres":
-        return config.postgres_db
-    return Path(config.sqlite.db_file_path).stem
+        return PgConnParams.from_config(config).database
+    return sqlite_database_path().stem
 
 
 def main():
     logger.info("Starting database restore process")
+
+    if config.db_type not in ("sqlite", "postgres"):
+        raise RestoreError(f"Unsupported database type for restore: {config.db_type}")
+
+    sqlite_db_path = sqlite_database_path() if config.db_type == "sqlite" else None
 
     # Check that the backup directory exists
     if not os.path.exists(config.db_backup_path):
@@ -313,7 +336,7 @@ def main():
     suffixes = (
         (".sql.gz",)
         if config.db_type == "postgres"
-        else sqlite_backup_suffixes(config.sqlite.db_file_path)
+        else sqlite_backup_suffixes(sqlite_db_path)
     )
     backups = get_backups(config.db_backup_path, config.db_type, suffixes)
 

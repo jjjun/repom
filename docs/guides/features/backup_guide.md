@@ -42,15 +42,15 @@ uv run db_backup
 
 ## データベース接続先
 
-`db_backup` / `db_restore` は `config.db_url` を使いません。PostgreSQL では
-`config.postgres.*` と `config.postgres_db`、SQLite では
-`config.sqlite.db_file_path` を対象にします。一方、Alembic と `db_sync_master` は
-`db_url` を使います。そのため `REPOM_DATABASE_URL` または `DATABASE_URL` で URL を
-上書きすると、バックアップ／リストア先と Alembic／同期コマンドの接続先が異なる
-場合があります。
+`config.db_url` が上書きされている場合、`db_backup` / `db_restore` はその URL を接続先に
+します。PostgreSQL ではクライアント引数、パスワード、TLS 設定を URL から取得し、管理対象
+コンテナの状態確認や `docker exec` を行わず、host 上で `pg_dump` / `psql` を実行します。
+SQLite では URL が示すファイルをバックアップ／リストア対象にし、インメモリ SQLite の URL
+は拒否します。
 
-PostgreSQL のバックアップ／リストアは、container が起動中なら `docker exec` を使い、
-起動していなければ host の `pg_dump` / `psql` に fallback します。
+URL の上書きがない場合、PostgreSQL のバックアップ／リストアは管理対象コンテナが起動中なら
+`docker exec` を使い、起動していなければ host 上の `pg_dump` / `psql` に fallback します。
+SQLite では `config.sqlite.db_file_path` を対象にします。
 
 ## ローテーション
 

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import Lock
 from typing import List, Optional, Set
 
 from basekit.config_hook import Config, get_config_from_hook
@@ -18,6 +20,10 @@ from repom.postgres.config import (
 from repom.redis.config import RedisConfig as _RedisConfig
 from repom.sqlite.config import SqliteConfig as _SqliteConfig
 from repom.exec_env import is_prod_exec_env, normalize_exec_env
+
+logger = logging.getLogger(__name__)
+_warned_db_type_mismatches: set[tuple[str, str]] = set()
+_db_type_warning_lock = Lock()
 
 
 # ローカル接続とみなすホスト名 - prod の sslmode 検証で除外する
@@ -111,6 +117,10 @@ class RepomConfig(Config):
     def db_type(self) -> str:
         """データベースタイプ（sqlite/postgres）
 
+        明示的に上書きされたデータベース URL がある場合は、その URL のバックエンドを返します。
+        PostgreSQL のバックエンド名は ``postgres`` です。明示設定された ``db_type`` が URL の
+        バックエンドと異なる場合は警告を1回だけ記録し、URL のバックエンドを優先します。
+
         デフォルト: sqlite
 
         使用例:
@@ -124,10 +134,33 @@ class RepomConfig(Config):
             from repom.config import config
             config.db_type = 'postgres'
         """
+        if self.db_url_overridden:
+            url_db_type = make_url(self._db_url).get_backend_name()
+            if url_db_type == "postgresql":
+                url_db_type = "postgres"
+
+            if self._db_type is not None and self._db_type != url_db_type:
+                mismatch = (self._db_type, url_db_type)
+                with _db_type_warning_lock:
+                    if mismatch not in _warned_db_type_mismatches:
+                        _warned_db_type_mismatches.add(mismatch)
+                        logger.warning(
+                            "Configured db_type %r disagrees with the database URL "
+                            "backend %r; using the URL backend.",
+                            self._db_type,
+                            url_db_type,
+                        )
+            return url_db_type
+
         if self._db_type is not None:
             return self._db_type
 
         return "sqlite"
+
+    @property
+    def db_url_overridden(self) -> bool:
+        """Whether an explicit database URL has been configured."""
+        return self._db_url is not None
 
     @db_type.setter
     def db_type(self, value: str):

@@ -41,7 +41,10 @@ Supported variables:
 `POSTGRES_PORT`, `POSTGRES_HOST_PORT`, and `PGADMIN_HOST_PORT` are validated as
 integer ports between 1 and 65535. `REPOM_POSTGRES_DB` pins the PostgreSQL
 database name exactly, so repom does not append the usual `exec_env` suffix. It
-only affects PostgreSQL URL construction; SQLite selection still follows
+affects PostgreSQL URL construction when no full database URL override is set.
+When `config.db_url` is overridden, `db_type` follows the URL backend instead;
+if an explicit `DB_TYPE` disagrees, the URL backend wins and repom logs one
+warning for that mismatch. SQLite selection without a URL override still follows
 `db_type`, including the default in-memory SQLite URL for `exec_env=test`.
 
 `POSTGRES_EXPOSE_TO_LAN` and `PGADMIN_EXPOSE_TO_LAN` accept a boolean
