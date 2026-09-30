@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added `get_reusable_sync_session()` and `get_reusable_async_session()` for
+  caller-managed session lifetimes. They do not commit, roll back any open
+  transaction, and close the session without disposing the reusable engine.
+  The async helper does not change the commit-on-success behavior of the
+  FastAPI dependency `get_async_db_session()`.
 - Database URL overrides now determine `db_type` and the target used by
   `db_backup`, `db_restore`, `db_create`, `db_delete`, and `db_sync_master`.
   PostgreSQL backup and restore tools use URL credentials and TLS settings from

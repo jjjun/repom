@@ -38,7 +38,7 @@ Example (CLI script - async):
     >>>     asyncio.run(main())
 """
 
-from typing import Optional, AsyncGenerator, Generator
+from typing import Optional, AsyncGenerator, Generator, ContextManager, AsyncContextManager
 from contextlib import contextmanager, asynccontextmanager  # Only for DatabaseManager internal use
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import asyncio
@@ -293,6 +293,20 @@ class DatabaseManager:
             session.close()
 
     @contextmanager
+    def get_sync_session_no_commit(self) -> Generator[Session, None, None]:
+        """Get a session that rolls back open work and closes without committing."""
+        factory = self.get_sync_session_factory()
+        session = factory()
+        try:
+            yield session
+        finally:
+            try:
+                if session.in_transaction():
+                    session.rollback()
+            finally:
+                session.close()
+
+    @contextmanager
     def get_sync_transaction(self) -> Generator[Session, None, None]:
         """
         Get a synchronous database session with automatic transaction management.
@@ -474,6 +488,20 @@ class DatabaseManager:
             raise
         finally:
             await _run_shielded(session.close())
+
+    @asynccontextmanager
+    async def get_async_session_no_commit(self) -> AsyncGenerator[AsyncSession, None]:
+        """Get an async session that rolls back open work and closes without committing."""
+        factory = await self.get_async_session_factory()
+        session = factory()
+        try:
+            yield session
+        finally:
+            try:
+                if session.in_transaction():
+                    await _run_shielded(session.rollback())
+            finally:
+                await _run_shielded(session.close())
 
     @asynccontextmanager
     async def get_async_transaction(self) -> AsyncGenerator[AsyncSession, None]:
@@ -944,6 +972,16 @@ def get_reusable_sync_transaction():
     return _db_manager.get_sync_transaction()
 
 
+def get_reusable_sync_session() -> ContextManager[Session]:
+    """Get a reusable session that never commits and rolls back on exit.
+
+    Use this for reads or when the caller needs to manage commit boundaries.
+    Unlike ``get_db_session()``, this is a context manager. The FastAPI
+    dependency ``get_db_session()`` also does not commit on exit.
+    """
+    return _db_manager.get_sync_session_no_commit()
+
+
 def get_inspector():
     """
     Get database inspector for schema introspection.
@@ -1078,6 +1116,17 @@ def get_reusable_async_transaction():
     return _db_manager.get_async_transaction()
 
 
+def get_reusable_async_session() -> AsyncContextManager[AsyncSession]:
+    """Get a reusable async session that never commits and rolls back on exit.
+
+    Use this for reads or when the caller needs to manage commit boundaries.
+    Unlike ``get_async_db_session()``, this is a context manager and does not
+    commit on exit. The FastAPI dependency ``get_async_db_session()`` commits
+    on success.
+    """
+    return _db_manager.get_async_session_no_commit()
+
+
 # ========================================
 # Public API - Lifecycle
 # ========================================
@@ -1129,6 +1178,7 @@ __all__ = [
     'get_db_session',
     'get_db_transaction',
     'get_reusable_sync_transaction',
+    'get_reusable_sync_session',
     'get_standalone_sync_transaction',
     'get_inspector',
     # Async API
@@ -1136,6 +1186,7 @@ __all__ = [
     'get_async_db_session',
     'get_async_db_transaction',
     'get_reusable_async_transaction',
+    'get_reusable_async_session',
     'get_standalone_async_transaction',
     'convert_to_async_uri',
     # Lifecycle
