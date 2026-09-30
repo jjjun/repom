@@ -14,10 +14,12 @@
 
 from tests.fixtures.models.basic import User, Post
 from tests.fixtures.models.relationship import Parent, Child
+from tests.fixtures.models.simple import SimpleRecord
 
 __all__ = [
     'User',
     'Post',
     'Parent',
     'Child',
+    'SimpleRecord',
 ]

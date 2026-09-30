@@ -252,23 +252,6 @@ def test_to_dict_includes_uuid_id(db_test):
     assert isinstance(data['id'], str)
 
 
-def test_update_from_dict_protects_uuid_id(db_test):
-    """update_from_dict() が UUID id の変更を防ぐこと"""
-    model = UuidModel(name='Original')
-    db_test.add(model)
-    db_test.commit()
-    original_id = model.id
-
-    # id を変更しようとする
-    model.update_from_dict({'id': str(uuid.uuid4()), 'name': 'Updated'})
-    db_test.commit()
-
-    # id は変更されていないこと
-    assert model.id == original_id
-    # name は変更されていること
-    assert model.name == 'Updated'
-
-
 # ========================================
 # Tests: created_at and updated_at
 # ========================================

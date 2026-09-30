@@ -287,20 +287,6 @@ async def test_get_by_respects_allowed_filter_columns(async_db_test):
 
 
 @pytest.mark.asyncio
-async def test_bulk_filters_uses_mapper_resolution(async_db_test):
-    repo = AsyncColumnGuardRepository(session=async_db_test)
-
-    with pytest.raises(AttributeError):
-        repo._bulk_filters({"parent": None})
-
-    with pytest.raises(AttributeError):
-        repo._bulk_filters({"__class__": None})
-
-    assert [str(f) for f in repo._bulk_filters({"value": 1})] == [
-        str(AsyncColumnGuardChildModel.value == 1)
-    ]
-
-
 @pytest.mark.asyncio
 async def test_get_all(async_db_test):
     """
@@ -599,16 +585,12 @@ async def test_bulk_delete_rejects_dunder_filter_keys(async_db_test, column_name
 
 
 @pytest.mark.asyncio
-async def test_bulk_delete_compiles_non_trivial_where_clause(async_db_test):
+async def test_bulk_delete_applies_filter_by_through_public_api(async_db_test):
     repo = AsyncSimpleRepository(session=async_db_test)
-    filters = repo._bulk_filters({"value": 1})
+    await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
 
-    from sqlalchemy import and_, delete
-
-    compiled = str(delete(AsyncSimpleModel).where(and_(*filters)).compile(compile_kwargs={"literal_binds": True}))
-
-    assert "WHERE" in compiled
-    assert "true" not in compiled.lower()
+    assert await repo.bulk_delete(filter_by={"value": 1}) == 1
+    assert [item.value for item in await repo.find(limit=10)] == [2]
 
 
 @pytest.mark.asyncio
@@ -721,13 +703,6 @@ async def test_async_build_filters_from_mapping_applies_ops(async_db_test):
 
     assert {item.number for item in results} == {2}
     assert {item.name for item in results} == {"alphabet"}
-
-
-@pytest.mark.asyncio
-async def test_find_by_ids_with_empty_list_returns_empty(async_db_test):
-    repo = AsyncSimpleRepository(session=async_db_test)
-
-    assert await repo.find_by_ids([]) == []
 
 
 @pytest.mark.asyncio

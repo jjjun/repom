@@ -175,6 +175,30 @@ db_engine, db_test = create_test_fixtures()
 async_db_engine, async_db_test = create_async_test_fixtures()
 
 
+@pytest_asyncio.fixture(params=('sync', 'async'))
+async def repository_adapter(request, db_test, async_db_test):
+    """Run shared repository tests against sync and async implementations."""
+    from inspect import isawaitable
+    from repom.repositories import AsyncBaseRepository, BaseRepository
+
+    class RepositoryAdapter:
+        def __init__(self, mode, session):
+            self.mode = mode
+            self.session = session
+            self.repository_class = (
+                BaseRepository if mode == 'sync' else AsyncBaseRepository
+            )
+
+        async def call(self, method, *args, **kwargs):
+            result = method(*args, **kwargs)
+            if isawaitable(result):
+                return await result
+            return result
+
+    session = db_test if request.param == 'sync' else async_db_test
+    return RepositoryAdapter(request.param, session)
+
+
 @pytest_asyncio.fixture
 async def isolated_async_database_manager(monkeypatch):
     """Provide a fresh application async engine with the mapped tables created."""

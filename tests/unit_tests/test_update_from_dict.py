@@ -1,9 +1,13 @@
 """
 update_from_dict() が余計なキー（モデルに存在しないキー）と読み取り専用プロパティを正しく処理することを確認
 """
+import pytest
+from datetime import datetime
+from time import sleep
 from sqlalchemy import String, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from repom.models.base_model import BaseModel
+from repom.mixins import SoftDeletableMixin
 
 
 class SimpleTestModel(BaseModel):
@@ -334,3 +338,182 @@ def test_update_from_dict_mixed_columns_and_properties(db_test):
 
     # 変更があったことが返り値で示される
     assert result is True
+
+
+class AllowlistedModel(BaseModel):
+    __tablename__ = 'allowlisted_model_mass_assignment'
+    updatable_fields = {'name'}
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_admin: Mapped[bool] = mapped_column(default=False)
+
+
+class NoAllowlistModel(BaseModel):
+    __tablename__ = 'no_allowlist_model_mass_assignment'
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class CustomPrimaryKeyModel(BaseModel, use_id=False):
+    __tablename__ = 'custom_pk_model_mass_assignment'
+    updatable_fields = {'uuid', 'name'}
+
+    uuid: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class SoftDeletableAllowlistModel(BaseModel, SoftDeletableMixin):
+    __tablename__ = 'soft_deletable_allowlist_model_mass_assignment'
+    updatable_fields = {'name', 'deleted_at'}
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class SystemProtectionModel(BaseModel):
+    __tablename__ = 'system_protection_model'
+    use_created_at = True
+    use_updated_at = True
+    updatable_fields = {'id', 'created_at', 'updated_at', 'name'}
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class UuidUpdateModel(BaseModel, use_uuid=True):
+    __tablename__ = 'uuid_update_model'
+    updatable_fields = {'id', 'name'}
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+def test_update_from_dict_rejects_unlisted_field(db_test):
+    model = AllowlistedModel(name='original', is_admin=False)
+    db_test.add(model)
+    db_test.commit()
+
+    result = model.update_from_dict({'is_admin': True})
+    db_test.commit()
+
+    assert model.is_admin is False
+    assert result is False
+
+
+def test_update_from_dict_requires_explicit_allowlist(db_test):
+    model = NoAllowlistModel(name='original')
+    db_test.add(model)
+    db_test.commit()
+
+    with pytest.raises(ValueError):
+        model.update_from_dict({'name': 'updated'})
+
+
+def test_update_from_dict_excludes_all_primary_keys(db_test):
+    model = CustomPrimaryKeyModel(
+        uuid='11111111-1111-1111-1111-111111111111',
+        name='original',
+    )
+    db_test.add(model)
+    db_test.commit()
+
+    model.update_from_dict({
+        'uuid': '22222222-2222-2222-2222-222222222222',
+        'name': 'updated',
+    })
+    db_test.commit()
+
+    assert model.uuid == '11111111-1111-1111-1111-111111111111'
+    assert model.name == 'updated'
+
+
+def test_update_from_dict_excludes_deleted_at(db_test):
+    model = SoftDeletableAllowlistModel(name='original')
+    db_test.add(model)
+    db_test.commit()
+
+    model.update_from_dict({
+        'deleted_at': '2020-01-01T00:00:00+00:00',
+        'name': 'updated',
+    })
+    db_test.commit()
+
+    assert model.deleted_at is None
+    assert model.name == 'updated'
+
+
+def test_update_from_dict_excludes_id(db_test):
+    model = SystemProtectionModel(name='original')
+    db_test.add(model)
+    db_test.commit()
+    original_id = model.id
+
+    model.update_from_dict({'id': 999, 'name': 'updated'})
+    db_test.commit()
+
+    assert model.id == original_id
+    assert model.name == 'updated'
+
+
+def test_update_from_dict_excludes_created_at(db_test):
+    model = SystemProtectionModel(name='original')
+    db_test.add(model)
+    db_test.commit()
+    original_created_at = model.created_at
+
+    model.update_from_dict({
+        'created_at': datetime(2020, 1, 1),
+        'name': 'updated',
+    })
+    db_test.commit()
+
+    assert model.created_at == original_created_at
+    assert model.name == 'updated'
+
+
+def test_update_from_dict_excludes_updated_at(db_test):
+    model = SystemProtectionModel(name='original')
+    db_test.add(model)
+    db_test.commit()
+
+    model.update_from_dict({
+        'updated_at': datetime(2020, 1, 1),
+        'name': 'updated',
+    })
+    db_test.commit()
+
+    assert model.updated_at != datetime(2020, 1, 1)
+    assert model.name == 'updated'
+
+
+def test_update_from_dict_protects_uuid_id(db_test):
+    model = UuidUpdateModel(name='Original')
+    db_test.add(model)
+    db_test.commit()
+    original_id = model.id
+
+    model.update_from_dict({'id': '00000000-0000-0000-0000-000000000000', 'name': 'Updated'})
+    db_test.commit()
+
+    assert model.id == original_id
+    assert model.name == 'Updated'
+
+
+def test_update_from_dict_protects_system_columns_together(db_test):
+    model = SystemProtectionModel(name='original')
+    db_test.add(model)
+    db_test.commit()
+    original_id = model.id
+    original_created_at = model.created_at
+    original_updated_at = model.updated_at
+    sleep(0.01)
+
+    model.update_from_dict({
+        'id': 999,
+        'created_at': datetime(2020, 1, 1),
+        'updated_at': datetime(2020, 1, 1),
+        'name': 'updated',
+    })
+    db_test.commit()
+
+    assert model.id == original_id
+    assert model.created_at == original_created_at
+    assert model.updated_at > original_updated_at
+    assert model.name == 'updated'

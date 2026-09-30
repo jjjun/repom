@@ -1,17 +1,13 @@
-"""
-BaseRepository の default_order_by のテスト
-
-order_by=None および空文字が渡された場合に default_order_by が
-正しく適用されることをテストします。
-"""
-from sqlalchemy import Integer, String
+"""Default ordering shared by the sync and async repositories."""
+from sqlalchemy import Integer, String, desc
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
+import pytest_asyncio
+
 from repom.models.base_model import BaseModel
-from repom.repositories import BaseRepository
+from repom.repositories import AsyncBaseRepository, BaseRepository
 
 
-# テスト用モデル定義
 class OrderTestModel(BaseModel):
     __tablename__ = 'order_test_items'
 
@@ -19,195 +15,110 @@ class OrderTestModel(BaseModel):
     priority: Mapped[int] = mapped_column(Integer, default=0)
 
 
-# default_order_by を設定したリポジトリ
-class OrderTestRepository(BaseRepository[OrderTestModel]):
+class SyncOrderTestRepository(BaseRepository[OrderTestModel]):
     allowed_order_columns = ['id', 'name', 'priority', 'created_at', 'updated_at']
     default_order_by = 'id:desc'
 
-    def __init__(self, session):
-        super().__init__(OrderTestModel, session)
 
-
-# default_order_by なしのリポジトリ
-class SimpleOrderRepository(BaseRepository[OrderTestModel]):
+class AsyncOrderTestRepository(AsyncBaseRepository[OrderTestModel]):
     allowed_order_columns = ['id', 'name', 'priority', 'created_at', 'updated_at']
-
-    def __init__(self, session):
-        super().__init__(OrderTestModel, session)
+    default_order_by = 'id:desc'
 
 
-class TestDefaultOrderBy:
-    """default_order_by の動作をテスト"""
-
-    @pytest.fixture(autouse=True)
-    def setup_method(self, db_test):
-        """各テスト前にテストデータを作成"""
-        repo = OrderTestRepository(session=db_test)
-
-        # テストデータ作成（id: 1, 2, 3 の順）
-        item1 = repo.save(OrderTestModel(name='First', priority=1))
-        item2 = repo.save(OrderTestModel(name='Second', priority=2))
-        item3 = repo.save(OrderTestModel(name='Third', priority=3))
-
-        self.item1_id = item1.id
-        self.item2_id = item2.id
-        self.item3_id = item3.id
-
-    def test_find_without_order_by_uses_default(self, db_test):
-        """order_by 未指定の場合、default_order_by が適用される"""
-        repo = OrderTestRepository(session=db_test)
-
-        results = repo.find()
-
-        # default_order_by = 'id:desc' なので降順
-        assert len(results) == 3
-        assert results[0].id == self.item3_id
-        assert results[1].id == self.item2_id
-        assert results[2].id == self.item1_id
-
-    def test_find_with_none_uses_default(self, db_test):
-        """order_by=None の場合、default_order_by が適用される"""
-        repo = OrderTestRepository(session=db_test)
-
-        results = repo.find(order_by=None)
-
-        # default_order_by = 'id:desc' なので降順
-        assert len(results) == 3
-        assert results[0].id == self.item3_id
-        assert results[1].id == self.item2_id
-        assert results[2].id == self.item1_id
-
-    def test_find_with_empty_string_uses_default(self, db_test):
-        """order_by="" の場合、default_order_by が適用される"""
-        repo = OrderTestRepository(session=db_test)
-
-        results = repo.find(order_by="")
-
-        # default_order_by = 'id:desc' なので降順
-        assert len(results) == 3
-        assert results[0].id == self.item3_id
-        assert results[1].id == self.item2_id
-        assert results[2].id == self.item1_id
-
-    def test_find_with_explicit_order_overrides_default(self, db_test):
-        """明示的な order_by が default_order_by を上書きする"""
-        repo = OrderTestRepository(session=db_test)
-
-        results = repo.find(order_by='id:asc')
-
-        # 明示的に id:asc を指定したので昇順
-        assert len(results) == 3
-        assert results[0].id == self.item1_id
-        assert results[1].id == self.item2_id
-        assert results[2].id == self.item3_id
-
-    def test_find_with_different_column_order(self, db_test):
-        """別カラムでのソート指定が default_order_by を上書きする"""
-        repo = OrderTestRepository(session=db_test)
-
-        results = repo.find(order_by='priority:asc')
-
-        # priority 昇順でソート
-        assert len(results) == 3
-        assert results[0].priority == 1
-        assert results[1].priority == 2
-        assert results[2].priority == 3
-
-    def test_find_without_default_order_by_uses_fallback(self, db_test):
-        """default_order_by なしの場合、id:asc がフォールバック"""
-        repo = SimpleOrderRepository(session=db_test)
-
-        results = repo.find()
-
-        # default_order_by がないので id:asc（フォールバック）
-        assert len(results) == 3
-        assert results[0].id == self.item1_id
-        assert results[1].id == self.item2_id
-        assert results[2].id == self.item3_id
-
-    def test_find_without_default_and_none_uses_fallback(self, db_test):
-        """default_order_by なしで order_by=None の場合も id:asc がフォールバック"""
-        repo = SimpleOrderRepository(session=db_test)
-
-        results = repo.find(order_by=None)
-
-        # default_order_by がないので id:asc（フォールバック）
-        assert len(results) == 3
-        assert results[0].id == self.item1_id
-        assert results[1].id == self.item2_id
-        assert results[2].id == self.item3_id
+@pytest_asyncio.fixture
+async def ordered_repo(repository_adapter):
+    repository_class = (
+        SyncOrderTestRepository
+        if repository_adapter.mode == 'sync'
+        else AsyncOrderTestRepository
+    )
+    repo = repository_class(session=repository_adapter.session)
+    items = [
+        OrderTestModel(name='First', priority=1),
+        OrderTestModel(name='Second', priority=2),
+        OrderTestModel(name='Third', priority=3),
+    ]
+    await repository_adapter.call(repo.saves, items)
+    return repo, items
 
 
-class TestDefaultOrderByWithOtherMethods:
-    """default_order_by が他のメソッドでも機能することをテスト"""
+@pytest.mark.asyncio
+@pytest.mark.parametrize('order_by', ['omitted', None, ''])
+async def test_find_uses_default_order(repository_adapter, ordered_repo, order_by):
+    repo, items = ordered_repo
+    kwargs = {} if order_by == 'omitted' else {'order_by': order_by}
 
-    @pytest.fixture(autouse=True)
-    def setup_method(self, db_test):
-        """各テスト前にテストデータを作成"""
-        repo = OrderTestRepository(session=db_test)
+    results = await repository_adapter.call(repo.find, limit=10, **kwargs)
 
-        # テストデータ作成
-        item1 = repo.save(OrderTestModel(name='First', priority=1))
-        item2 = repo.save(OrderTestModel(name='Second', priority=2))
-        item3 = repo.save(OrderTestModel(name='Third', priority=3))
-
-        self.item1_id = item1.id
-        self.item2_id = item2.id
-        self.item3_id = item3.id
-
-    def test_find_uses_default_order(self, db_test):
-        """find() で default_order_by が適用される"""
-        repo = OrderTestRepository(session=db_test)
-
-        results = repo.find()
-
-        # default_order_by = 'id:desc' なので降順
-        assert len(results) == 3
-        assert results[0].id == self.item3_id
-        assert results[1].id == self.item2_id
-        assert results[2].id == self.item1_id
+    assert [item.id for item in results] == [item.id for item in reversed(items)]
 
 
-class TestDefaultOrderByEdgeCases:
-    """エッジケースのテスト"""
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('order_by', 'expected_priorities'),
+    [('id:asc', [1, 2, 3]), ('priority:asc', [1, 2, 3])],
+)
+async def test_explicit_order_overrides_default(
+    repository_adapter,
+    ordered_repo,
+    order_by,
+    expected_priorities,
+):
+    repo, _ = ordered_repo
 
-    def test_default_order_by_with_invalid_column(self, db_test):
-        """default_order_by に無効なカラムを指定した場合"""
-        class InvalidOrderRepository(BaseRepository[OrderTestModel]):
-            default_order_by = 'invalid_column:desc'
+    results = await repository_adapter.call(repo.find, order_by=order_by, limit=10)
 
-            def __init__(self, session):
-                super().__init__(OrderTestModel, session)
+    assert [item.priority for item in results] == expected_priorities
 
-        repo = InvalidOrderRepository(session=db_test)
-        repo.save(OrderTestModel(name='Test', priority=1))
 
-        # 無効なカラムなのでエラーが発生すべき
-        with pytest.raises(ValueError, match="not allowed for sorting"):
-            repo.find()
+@pytest.mark.asyncio
+@pytest.mark.parametrize('order_by', ['omitted', None])
+async def test_repository_without_default_order_uses_ascending_id(
+    repository_adapter,
+    ordered_repo,
+    order_by,
+):
+    _, items = ordered_repo
+    repo = repository_adapter.repository_class(
+        OrderTestModel,
+        session=repository_adapter.session,
+    )
+    repo.allowed_order_columns = ['id', 'name', 'priority', 'created_at', 'updated_at']
 
-    def test_default_order_by_with_sqlalchemy_expression(self, db_test):
-        """default_order_by に SQLAlchemy 式を指定した場合"""
-        from sqlalchemy import desc
+    kwargs = {} if order_by == 'omitted' else {'order_by': order_by}
+    results = await repository_adapter.call(repo.find, limit=10, **kwargs)
 
-        class ExpressionOrderRepository(BaseRepository[OrderTestModel]):
-            default_order_by = desc(OrderTestModel.priority)
+    assert [item.id for item in results] == [item.id for item in items]
 
-            def __init__(self, session):
-                super().__init__(OrderTestModel, session)
 
-        repo = ExpressionOrderRepository(session=db_test)
+@pytest.mark.asyncio
+async def test_invalid_default_order_column_raises(repository_adapter):
+    repo = repository_adapter.repository_class(
+        OrderTestModel,
+        session=repository_adapter.session,
+    )
+    repo.default_order_by = 'invalid_column:desc'
 
-        repo.save(OrderTestModel(name='First', priority=1))
-        repo.save(OrderTestModel(name='Second', priority=2))
-        repo.save(OrderTestModel(name='Third', priority=3))
+    with pytest.raises(ValueError, match='not allowed for sorting'):
+        await repository_adapter.call(repo.find, limit=10)
 
-        results = repo.find()
 
-        # priority の降順
-        assert results[0].priority == 3
-        assert results[1].priority == 2
-        assert results[2].priority == 1
+@pytest.mark.asyncio
+async def test_default_order_by_accepts_sqlalchemy_expression(
+    repository_adapter,
+    ordered_repo,
+):
+    _, _ = ordered_repo
+    repo = repository_adapter.repository_class(
+        OrderTestModel,
+        session=repository_adapter.session,
+    )
+    repo.default_order_by = desc(OrderTestModel.priority)
+
+    results = await repository_adapter.call(repo.find, limit=10)
+
+    assert [item.priority for item in results] == [3, 2, 1]
+
 
 pytestmark = pytest.mark.filterwarnings(
     r"ignore:find\(\) was called without a limit:RuntimeWarning"
