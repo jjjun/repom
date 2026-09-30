@@ -65,7 +65,12 @@ class TestPostgresManagerComposePath:
 class TestPostgresManagerWaitForService:
     """Test wait_for_service method"""
 
-    def test_wait_for_service_immediate_success(self):
+    @pytest.fixture(autouse=True)
+    def _patch_readiness_sleep(self):
+        with patch("basekit.docker_manager.time.sleep") as sleep:
+            yield sleep
+
+    def test_wait_for_service_immediate_success(self, _patch_readiness_sleep):
         """Test wait_for_service succeeds immediately"""
         manager = PostgresManager()
 
@@ -76,7 +81,10 @@ class TestPostgresManagerWaitForService:
             # Should not raise
             manager.wait_for_service(max_retries=2)
 
-    def test_wait_for_service_timeout(self):
+        assert mock_run.call_count == 1
+        _patch_readiness_sleep.assert_not_called()
+
+    def test_wait_for_service_timeout(self, _patch_readiness_sleep):
         """Test wait_for_service timeout"""
         manager = PostgresManager()
 
@@ -86,6 +94,8 @@ class TestPostgresManagerWaitForService:
 
             with pytest.raises(TimeoutError):
                 manager.wait_for_service(max_retries=1)
+
+        assert _patch_readiness_sleep.call_count == 1
 
 
 class TestPostgresManagerConnectionInfo:

@@ -78,7 +78,12 @@ class TestRedisManagerComposePath:
 class TestRedisManagerWaitForService:
     """Test wait_for_service method"""
 
-    def test_wait_for_service_immediate_success(self):
+    @pytest.fixture(autouse=True)
+    def _patch_readiness_sleep(self):
+        with patch("basekit.docker_manager.time.sleep") as sleep:
+            yield sleep
+
+    def test_wait_for_service_immediate_success(self, _patch_readiness_sleep):
         """Test wait_for_service succeeds immediately with PONG response"""
         manager = RedisManager()
 
@@ -92,7 +97,10 @@ class TestRedisManagerWaitForService:
             # Should not raise
             manager.wait_for_service(max_retries=2)
 
-    def test_wait_for_service_timeout(self):
+        assert mock_run.call_count == 1
+        _patch_readiness_sleep.assert_not_called()
+
+    def test_wait_for_service_timeout(self, _patch_readiness_sleep):
         """Test wait_for_service timeout"""
         manager = RedisManager()
 
@@ -106,7 +114,9 @@ class TestRedisManagerWaitForService:
             with pytest.raises(TimeoutError):
                 manager.wait_for_service(max_retries=1)
 
-    def test_wait_for_service_retries(self):
+        assert _patch_readiness_sleep.call_count == 1
+
+    def test_wait_for_service_retries(self, _patch_readiness_sleep):
         """Test wait_for_service retries before success"""
         manager = RedisManager()
 
@@ -123,8 +133,11 @@ class TestRedisManagerWaitForService:
             # Should not raise (succeeds after retries)
             manager.wait_for_service(max_retries=3)
             assert mock_run.call_count == 3
+        assert _patch_readiness_sleep.call_count == 2
 
-    def test_wait_for_service_never_places_password_in_argv(self):
+    def test_wait_for_service_never_places_password_in_argv(
+        self, _patch_readiness_sleep
+    ):
         """The readiness poll never carries the password, even when one is set."""
         manager = RedisManager()
 
@@ -138,11 +151,15 @@ class TestRedisManagerWaitForService:
                 manager.wait_for_service(max_retries=2)
 
         command = mock_run.call_args.args[0]
+        assert mock_run.call_count == 1
         assert "-e" not in command
         assert "secret" not in " ".join(command)
         assert command[-1] == "ping"
+        _patch_readiness_sleep.assert_not_called()
 
-    def test_wait_for_service_password_not_in_argv_across_every_poll(self):
+    def test_wait_for_service_password_not_in_argv_across_every_poll(
+        self, _patch_readiness_sleep
+    ):
         """No poll iteration ever places the password in argv, even across retries."""
         manager = RedisManager()
         side_effects = [
@@ -161,8 +178,11 @@ class TestRedisManagerWaitForService:
         assert mock_run.call_count == 3
         for call in mock_run.call_args_list:
             assert "sentinel-secret" not in " ".join(call.args[0])
+        assert _patch_readiness_sleep.call_count == 3
 
-    def test_wait_for_service_treats_noauth_response_as_ready(self):
+    def test_wait_for_service_treats_noauth_response_as_ready(
+        self, _patch_readiness_sleep
+    ):
         """A NOAUTH reply confirms the server is up without ever authenticating."""
         manager = RedisManager()
 
@@ -176,6 +196,9 @@ class TestRedisManagerWaitForService:
 
                 # Should not raise: NOAUTH means the server responded.
                 manager.wait_for_service(max_retries=1)
+
+        assert mock_run.call_count == 1
+        _patch_readiness_sleep.assert_not_called()
 
 
 class TestRedisManagerConnectionInfo:
@@ -380,7 +403,12 @@ class TestRedisDockerCompose:
 class TestRedisManagerErrorHandling:
     """Test error handling"""
 
-    def test_wait_for_service_handles_exception(self):
+    @pytest.fixture(autouse=True)
+    def _patch_readiness_sleep(self):
+        with patch("basekit.docker_manager.time.sleep") as sleep:
+            yield sleep
+
+    def test_wait_for_service_handles_exception(self, _patch_readiness_sleep):
         """Test wait_for_service handles subprocess exceptions"""
         manager = RedisManager()
 
@@ -390,7 +418,10 @@ class TestRedisManagerErrorHandling:
             with pytest.raises(TimeoutError):
                 manager.wait_for_service(max_retries=1)
 
-    def test_docker_exec_missing_container(self):
+        assert mock_run.call_count == 1
+        assert _patch_readiness_sleep.call_count == 1
+
+    def test_docker_exec_missing_container(self, _patch_readiness_sleep):
         """Test handling when container doesn't exist"""
         manager = RedisManager()
 
@@ -405,5 +436,7 @@ class TestRedisManagerErrorHandling:
             with pytest.raises(TimeoutError):
                 manager.wait_for_service(max_retries=1)
 
+        assert mock_run.call_count == 1
+        assert _patch_readiness_sleep.call_count == 1
 
 

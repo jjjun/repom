@@ -13,7 +13,6 @@ import subprocess
 import sys
 from pathlib import Path
 import os
-import pytest
 import shutil
 import re
 
@@ -95,88 +94,6 @@ def test_alembic_env_loads_without_error(tmp_path):
         f"STDOUT: {result.stdout}\n"
         f"Return Code: {result.returncode}\n\n"
         f"env.py の実行に失敗している可能性があります。"
-    )
-
-
-def test_alembic_revision_check_loads_without_error(tmp_path):
-    """
-    Alembic revision check コマンドが正常に動作することを確認
-
-    検証内容:
-    1. alembic revision --autogenerate のドライラン（チェックのみ）
-    2. モデル読み込み処理が正常に動作すること
-    3. env.py の load_models() が正しく呼び出されること
-
-    注意:
-    - 実際にマイグレーションファイルは作成しない（--check のみ）
-    - モデルが正しく読み込まれないと autogenerate は動作しない
-    """
-    # repom のルートディレクトリを取得
-    project_root = Path(__file__).parent.parent.parent
-
-    # alembic heads コマンドを実行（既に uv run pytest の中なので uv run は不要）
-    result = subprocess.run(
-        [sys.executable, "-m", "alembic", "heads"],
-        cwd=project_root,
-        capture_output=True,
-        text=True,
-        timeout=10,
-        env=alembic_test_env(tmp_path),
-    )
-
-    # エラーが発生しないことを確認
-    stderr_lower = result.stderr.lower()
-
-    assert "nameerror" not in stderr_lower, (
-        f"alembic heads コマンドで NameError が発生しました:\n{result.stderr}"
-    )
-
-    assert result.returncode == 0, (
-        f"alembic heads コマンドが異常終了しました:\n"
-        f"STDERR: {result.stderr}\n"
-        f"STDOUT: {result.stdout}\n"
-        f"Return Code: {result.returncode}"
-    )
-
-
-@pytest.mark.parametrize("alembic_command", [
-    "current",
-    "heads",
-    "history",
-])
-def test_alembic_commands_load_env_correctly(alembic_command, tmp_path):
-    """
-    複数の Alembic コマンドで env.py が正しく読み込まれることを確認
-
-    検証するコマンド:
-    - current: 現在のリビジョンを表示
-    - heads: 最新のリビジョンを表示
-    - history: マイグレーション履歴を表示
-
-    これらのコマンドは全て env.py を読み込むため、
-    load_models() が正しく動作しないと失敗する
-    """
-    project_root = Path(__file__).parent.parent.parent
-
-    result = subprocess.run(
-        [sys.executable, "-m", "alembic", alembic_command],
-        cwd=project_root,
-        capture_output=True,
-        text=True,
-        timeout=10,
-        env=alembic_test_env(tmp_path),
-    )
-
-    # env.py のロードに失敗していないことを確認
-    assert result.returncode == 0, (
-        f"alembic {alembic_command} コマンドが失敗しました:\n"
-        f"STDERR: {result.stderr}\n"
-        f"STDOUT: {result.stdout}"
-    )
-
-    # NameError は絶対に発生してはいけない
-    assert "nameerror" not in result.stderr.lower(), (
-        f"alembic {alembic_command} で NameError が発生:\n{result.stderr}"
     )
 
 

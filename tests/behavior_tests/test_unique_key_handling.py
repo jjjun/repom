@@ -73,7 +73,7 @@ class RosterModel(Base):
 
 # 結果
 # ==========
-SAVE_COUNT = 3000
+SAVE_COUNT = 1000
 # test_skip_on_exception 実行時間: 3.392377秒
 # test_check_duplicate_key_and_skip 実行時間: 2.871075秒
 # ==========

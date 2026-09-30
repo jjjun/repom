@@ -2,9 +2,8 @@ import os
 import logging
 import time
 import unicodedata
+from functools import lru_cache
 from typing import List, NamedTuple, Optional, Tuple
-
-import inflect
 
 # Import generic discovery helpers from basekit.
 from basekit.discovery import (
@@ -57,12 +56,19 @@ def get_plural_tablename(file_path: str) -> str:
     file_name = os.path.splitext(os.path.basename(file_path))[0]
 
     # Initialize the inflect engine.
-    p = inflect.engine()
+    p = _get_inflect_engine()
 
     # Pluralize the file name.
     table_name = p.plural(file_name)
 
     return table_name
+
+
+@lru_cache(maxsize=1)
+def _get_inflect_engine():
+    import inflect
+
+    return inflect.engine()
 
 
 def normalize_text(s: str) -> str:

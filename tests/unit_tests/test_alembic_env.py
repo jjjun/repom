@@ -9,6 +9,7 @@ from alembic import context
 from alembic.config import Config
 import pytest
 import sqlalchemy
+from basekit.config_hook import ConfigHookLoadError
 
 import repom.config
 import repom.utility
@@ -310,6 +311,71 @@ def test_pre_migration_hook_rejects_module_outside_allowed_prefixes(monkeypatch)
 
     with pytest.raises(ValueError):
         _run_env_with_pre_migration_hook(monkeypatch, "evil_module:run")
+
+
+@pytest.mark.parametrize(
+    ("hook_path", "expected_message", "expected_error"),
+    [
+        (
+            "alembic_test_hooks_ghost:validate",
+            "Failed to import config hook module",
+            ConfigHookLoadError,
+        ),
+        (
+            "alembic_test_hooks:missing",
+            "Config hook function",
+            ConfigHookLoadError,
+        ),
+        (
+            "alembic_test_hooks:not_callable",
+            "Config hook target",
+            ConfigHookLoadError,
+        ),
+        (
+            "alembic_test_hooks",
+            "must use 'module:function_name' format",
+            ConfigHookLoadError,
+        ),
+        (
+            "totally_unrelated_module:validate",
+            "not in allowed list",
+            ValueError,
+        ),
+    ],
+    ids=[
+        "missing-module",
+        "missing-function",
+        "non-callable",
+        "implicit-callable",
+        "disallowed-prefix",
+    ],
+)
+def test_invalid_pre_migration_hook_reports_its_alembic_option(
+    monkeypatch,
+    hook_path,
+    expected_message,
+    expected_error,
+):
+    hook_module = ModuleType("alembic_test_hooks")
+    hook_module.not_callable = "invalid"
+    monkeypatch.setitem(sys.modules, "alembic_test_hooks", hook_module)
+
+    monkeypatch.setattr(
+        repom.config.config,
+        "allowed_package_prefixes",
+        {"alembic_test_hooks", "repom."},
+    )
+
+    if expected_error is ValueError:
+        monkeypatch.setattr(
+            repom.config.config, "allowed_package_prefixes", {"repom."}
+        )
+
+    with pytest.raises(expected_error) as exc_info:
+        _run_env_with_pre_migration_hook(monkeypatch, hook_path)
+
+    assert expected_message in str(exc_info.value)
+    assert f"pre_migration_hook='{hook_path}'" in str(exc_info.value)
 
 
 def test_pre_migration_hook_runs_when_module_is_within_allowed_prefixes(
