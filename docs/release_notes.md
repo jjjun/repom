@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Repository queries now order by all primary-key attributes by default. String
+  `order_by` values use remaining primary-key attributes as same-direction
+  tie-breakers, making paginated results deterministic; explicit SQLAlchemy
+  expressions define the full ordering. `get_by(..., single=True)` returns the
+  matching row with the lowest primary key, independent of `default_order_by`.
 - BREAKING: `find()` now ANDs conditions from both `params` and `filters`. The
   default `_build_filters()` raises `ValueError` when a non-None FilterParams
   field has no non-None `field_to_column` mapping.

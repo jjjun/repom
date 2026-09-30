@@ -75,7 +75,7 @@ with get_reusable_sync_transaction() as session:
 
 `find()` の `filters=` はキーワードで指定してください。位置引数は `params` として解釈されます。
 
-`get_by(..., single=True)` と `get_by_id()` は `ORDER BY` を適用しません。`get_by(..., single=True)` で複数行が一致する場合、返される行は決定的ではありません。`get_all()` は全件を取得し、`max_limit` の制限も適用しません。
+`get_by(..., single=True)` は主キー属性すべての昇順で並べ、最小の主キーを返します（`default_order_by` は適用しません）。`get_by_id()` は主キーの等価条件で最大 1 行に一致するため、`ORDER BY` を追加しません。`get_all()` は全件を取得し、`max_limit` の制限も適用しません。
 
 ---
 

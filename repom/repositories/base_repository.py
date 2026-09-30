@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 from repom.database import get_db_session
 from repom.nul_bytes import validate_values_no_nul_bytes
-from repom.repositories._core import FilterParams
+from repom.repositories._core import FilterParams, _primary_key_order
 from repom.repositories._repository_base import RepositoryBase
 from repom.repositories._soft_delete import SoftDeleteRepositoryMixin
 from repom.repositories._query_builder import QueryBuilderMixin
@@ -150,7 +150,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             include_deleted=include_deleted,
             options=options,
             limit=1 if single else None,
-            apply_order_by=not single,
+            order_by=_primary_key_order(self.model) if single else None,
         )
         if single:
             return results[0] if results else None

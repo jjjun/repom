@@ -6,7 +6,7 @@
 from collections.abc import Iterable, Sequence
 from typing import Optional, List, Mapping, Any
 from enum import Enum
-from sqlalchemy import ColumnElement, UnaryExpression, asc, desc
+from sqlalchemy import ColumnElement, UnaryExpression, asc, desc, inspect as sqlalchemy_inspect
 from pydantic import BaseModel
 from repom.repositories._order_by import normalize_order_by_value, VirtualColumnError
 
@@ -210,6 +210,21 @@ def parse_order_by(
     return desc(column) if direction == 'desc' else asc(column)
 
 
+def _primary_key_order(model, direction: str = "asc", exclude_keys=()) -> list:
+    """Build ordering expressions for the model's primary key attributes."""
+    mapper = sqlalchemy_inspect(model)
+    ordering = desc if direction == "desc" else asc
+    excluded_keys = set(exclude_keys)
+    expressions = []
+
+    for column in mapper.primary_key:
+        attribute_key = mapper.get_property_by_column(column).key
+        if attribute_key not in excluded_keys:
+            expressions.append(ordering(getattr(model, attribute_key)))
+
+    return expressions
+
+
 def set_find_option(
     query,
     model,
@@ -224,9 +239,10 @@ def set_find_option(
     クエリにオプションを設定するメソッド。
 
     このメソッドは、クエリに対して offset、limit、order_by、および options を設定します。
-    デフォルトでは、order_by はモデルの id フィールドの昇順に設定されます。
-    リポジトリの default_order_by（クラス/インスタンス属性）を指定すると、
-    order_by 引数が渡されていない場合にその設定が優先されます。
+    デフォルトでは、すべての主キー属性の昇順で並びます。文字列の order_by
+    （default_order_by を含む）を指定すると、ソート列以外の主キー属性が同じ方向の
+    タイブレーカーとして追加されます。リポジトリの default_order_by
+    （クラス/インスタンス属性）は、order_by 引数が渡されていない場合に適用されます。
 
     desc(降順): 値が大きいものから小さいもの順に並べる
     asc(昇順): 値が小さいものから大きいもの順に並べる
@@ -249,7 +265,10 @@ def set_find_option(
               bool は真偽値であり件数として無効なため拒否します。未指定の場合は
               上限なしで全件を取得します（find() は limit 省略時に
               RuntimeWarning を送出します。呼び出し側が明示的に制限してください）。
-            - order_by (Callable | str): 結果を並べ替えるための呼び出し可能オブジェクト。デフォルトはモデルの id フィールドの昇順。
+            - order_by: ソート指定。未指定時は default_order_by があれば適用し、なければ
+              すべての主キー属性の昇順で並びます。文字列の場合、ソート列以外の主キー属性が
+              同じ方向のタイブレーカーとして追加されます。SQLAlchemy の式、または式を含む
+              list / tuple を指定すると、その式で完全な並び順を定義します。
             - options (list | tuple | Load): SQLAlchemy の load options (joinedload, selectinload など)。
               None の場合は default_options を使用。空リスト [] を渡すと eager loading なし。
 
@@ -284,7 +303,9 @@ def set_find_option(
     apply_order_by = kwargs.get('apply_order_by', True)
     # order_by の処理: None または空文字の場合は default_order_by を適用
     order_by = kwargs.get('order_by')
-    if order_by is None or order_by == "":
+    if not apply_order_by:
+        order_by = None
+    elif order_by is None or (isinstance(order_by, str) and order_by == ""):
         order_by = default_order_by
 
     # options の処理: None の場合のみ default_options を使用
@@ -300,22 +321,29 @@ def set_find_option(
 
     # order_by の型に応じて処理を分岐
     if isinstance(order_by, str):
-        # 文字列の場合は変換
+        column_name, direction = normalize_order_by_value(order_by)
         order_by = parse_order_by(
             model,
             order_by,
             allowed_order_columns,
             virtual_order_columns,
         )
+        mapper = sqlalchemy_inspect(model)
+        sort_property = mapper.attrs.get(column_name)
+        sort_key = sort_property.key if sort_property is not None else column_name
+        order_by = [
+            order_by,
+            *_primary_key_order(model, direction, exclude_keys={sort_key}),
+        ]
     elif isinstance(order_by, (UnaryExpression, ColumnElement)):
         # SQLAlchemy のカラムオブジェクトの場合はそのまま使用
         pass
-    elif order_by is None:
-        # 指定がない場合はデフォルト（id の昇順）。id カラムを持たないモデル
-        # （use_id=False）では、フォールバック先が無いため order_by は None のまま
-        # とし、ORDER BY を付与しない。
-        if hasattr(model, 'id'):
-            order_by = model.id.asc()
+    elif isinstance(order_by, (list, tuple)):
+        # Expressions supplied as a sequence define the complete ordering.
+        pass
+    elif order_by is None and apply_order_by:
+        # A primary-key order also covers models that do not have an ``id`` attribute.
+        order_by = _primary_key_order(model)
 
     if offset is not None:
         if isinstance(offset, bool) or not isinstance(offset, int):
@@ -332,6 +360,9 @@ def set_find_option(
             raise ValueError(f"limit must not exceed max_limit ({max_limit})")
         query = query.limit(limit)
     if apply_order_by and order_by is not None:
-        query = query.order_by(order_by)
+        if isinstance(order_by, (list, tuple)):
+            query = query.order_by(*order_by)
+        else:
+            query = query.order_by(order_by)
 
     return query
