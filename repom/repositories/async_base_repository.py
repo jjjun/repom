@@ -27,8 +27,9 @@ from collections.abc import Sequence
 from typing import Any, Callable, TypeVar, Generic, Optional, List, Dict, Union
 from sqlalchemy import ColumnElement, and_, delete, select, true, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_scoped_session
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from repom.database import get_async_db_session
+from repom.exceptions import is_unique_violation
 from repom.nul_bytes import validate_values_no_nul_bytes
 from repom.repositories._core import FilterParams, _primary_key_order
 from repom.repositories._repository_base import RepositoryBase
@@ -318,6 +319,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
         values: Sequence[dict],
         *,
         filter_by: dict | None = None,
+        filters: Sequence[ColumnElement] | None = None,
         allow_unfiltered: bool = False,
         include_deleted: bool = False,
     ) -> int:
@@ -328,29 +330,32 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
         ``filter_by`` に空の dict を渡すと全件が対象になるため、
         ``allow_unfiltered=True`` を明示しない限り ``ValueError`` を送出します。
         ``include_deleted=True`` を指定すると、論理削除済みの行も更新対象にします。
+
+        ``filters`` と ``filter_by`` は AND で結合されます。``filter_by`` を指定せずに
+        ``filters`` を指定した場合、各 values 辞書の更新内容は条件に一致する行に適用されます。
         """
         if not values:
             return 0
 
-        if filter_by is None:
+        if filter_by is None and not filters:
             for row in values:
                 if "id" not in row:
                     raise ValueError("bulk_update() requires each values dict to include 'id' when filter_by is not provided.")
-        elif not filter_by and not allow_unfiltered:
+        elif not filter_by and not filters and not allow_unfiltered:
             raise ValueError(
-                "bulk_update() requires a non-empty filter_by, or allow_unfiltered=True "
-                "to update every row matched by filter_by."
+                "bulk_update() requires a non-empty filter_by or filters, or allow_unfiltered=True "
+                "to update every matching row."
             )
 
         async with self._session_scope() as session:
             rowcount = 0
-            filters = self._bulk_filters(filter_by)
-            self._append_soft_delete_filter(filters, include_deleted)
+            query_filters = [*(filters or []), *self._bulk_filters(filter_by)]
+            self._append_soft_delete_filter(query_filters, include_deleted)
             async with self._commit_or_flush(session):
                 for row in values:
                     update_values = dict(row)
-                    row_filters = list(filters)
-                    if filter_by is None:
+                    row_filters = list(query_filters)
+                    if filter_by is None and "id" in update_values:
                         row_filters.append(self.model.id == update_values.pop("id"))
                     if not update_values:
                         continue
@@ -373,6 +378,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
         *,
         filter_by: dict | None = None,
         ids: Sequence[Any] | None = None,
+        filters: Sequence[ColumnElement] | None = None,
         allow_unfiltered: bool = False,
     ) -> int:
         """条件に一致するレコードを一括削除し、影響行数を返す。
@@ -380,34 +386,75 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
         SoftDeletableMixin 対応モデルでは ``deleted_at`` を更新し、非対応モデルでは
         物理削除します。``filter_by`` と ``ids`` を両方省略すると絞り込みが無くなる
         ため、``allow_unfiltered=True`` を明示しない限り ``ValueError`` を送出します。
+
+        ``filters`` は ``filter_by`` および ``ids`` と AND で結合されます。
         """
-        filters = self._bulk_filters(filter_by)
+        return await self._bulk_delete(
+            filter_by=filter_by,
+            ids=ids,
+            filters=filters,
+            allow_unfiltered=allow_unfiltered,
+            permanent=False,
+        )
+
+    async def bulk_permanent_delete(
+        self,
+        *,
+        filter_by: dict | None = None,
+        ids: Sequence[Any] | None = None,
+        filters: Sequence[ColumnElement] | None = None,
+        allow_unfiltered: bool = False,
+    ) -> int:
+        """条件に一致するレコードを物理削除し、影響行数を返す。
+
+        ``filters`` と ``filter_by`` / ``ids`` は AND で結合します。全て省略すると
+        絞り込みが無くなるため、``allow_unfiltered=True`` を明示しない限り
+        ``ValueError`` を送出します。
+        """
+        return await self._bulk_delete(
+            filter_by=filter_by,
+            ids=ids,
+            filters=filters,
+            allow_unfiltered=allow_unfiltered,
+            permanent=True,
+        )
+
+    async def _bulk_delete(
+        self,
+        *,
+        filter_by: dict | None,
+        ids: Sequence[Any] | None,
+        filters: Sequence[ColumnElement] | None,
+        allow_unfiltered: bool,
+        permanent: bool,
+    ) -> int:
+        query_filters = [*(filters or []), *self._bulk_filters(filter_by)]
         if ids is not None:
             if not ids:
                 return 0
-            filters.append(self._resolve_ids_filter(ids))
+            query_filters.append(self._resolve_ids_filter(ids))
 
-        if not filters and not allow_unfiltered:
+        if not query_filters and not allow_unfiltered:
             raise ValueError(
-                "bulk_delete() requires filter_by or ids, or allow_unfiltered=True "
+                "bulk_delete() requires filters, filter_by, or ids, or allow_unfiltered=True "
                 "to delete every row."
             )
 
         async with self._session_scope() as session:
             rowcount = 0
             async with self._commit_or_flush(session):
-                if self._has_soft_delete():
-                    self._append_soft_delete_filter(filters)
+                if self._has_soft_delete() and not permanent:
+                    self._append_soft_delete_filter(query_filters)
                     statement = (
                         update(self.model)
-                        .where(and_(*filters) if filters else true())
+                        .where(and_(*query_filters) if query_filters else true())
                         .values(deleted_at=datetime.now(timezone.utc))
                         .execution_options(synchronize_session="fetch")
                     )
                 else:
                     statement = (
                         delete(self.model)
-                        .where(and_(*filters) if filters else true())
+                        .where(and_(*query_filters) if query_filters else true())
                         .execution_options(synchronize_session="fetch")
                     )
                 result = await session.execute(statement)
@@ -415,6 +462,52 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             # 同期版と異なり expire_all() は呼ばない: AsyncSession では expire された
             # 属性への遅延ロードが同期的な I/O を要求して失敗するため。
         return rowcount
+
+    async def get_or_create(self, lookup: dict, defaults: dict | None = None) -> tuple[T, bool]:
+        """``lookup`` に一致する行を返し、存在しない場合は作成します。
+
+        挿入は SAVEPOINT 内で実行されます。一意制約への同時挿入で別の処理が先行した場合は、
+        既存の行を検索して返します。
+        """
+        if not lookup:
+            raise ValueError("get_or_create() requires a non-empty lookup.")
+
+        async with self._session_scope() as session:
+            async with self._commit_or_flush(session):
+                existing = await self._get_by_lookup_in_session(session, lookup)
+                if existing is not None:
+                    return existing, False
+
+                instance = self.model(**(dict(defaults or {}) | lookup))
+                await self._ensure_savepoint_transaction(session)
+                try:
+                    async with session.begin_nested():
+                        session.add(instance)
+                        await session.flush()
+                except IntegrityError as exc:
+                    if not is_unique_violation(exc):
+                        raise
+                    existing = await self._get_by_lookup_in_session(session, lookup)
+                    if existing is None:
+                        raise
+                    return existing, False
+
+                return instance, True
+
+    @staticmethod
+    async def _ensure_savepoint_transaction(session: AsyncSession) -> None:
+        connection = await session.connection()
+        if connection.dialect.name == "sqlite":
+            # Legacy SQLite transaction control does not begin a database
+            # transaction for SELECT; a root SAVEPOINT would commit on release.
+            driver_connection = connection.sync_connection.connection.driver_connection
+            if not driver_connection.in_transaction:
+                await connection.exec_driver_sql("BEGIN")
+
+    async def _get_by_lookup_in_session(self, session: AsyncSession, lookup: dict) -> Optional[T]:
+        query = select(self.model).filter_by(**lookup).limit(1)
+        result = await session.execute(query)
+        return result.scalars().first()
 
     async def remove(self, instance: T) -> None:
         """インスタンスを削除
@@ -519,12 +612,18 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
         results = await self._find_with_filters(filters, include_deleted=include_deleted, **kwargs)
         return results[0] if results else None
 
-    async def count(self, filters: Optional[List[Callable]] = None, include_deleted: bool = False) -> int:
+    async def count(
+        self,
+        filters: Optional[List[Callable]] = None,
+        include_deleted: bool = False,
+        params: Optional[FilterParams] = None,
+    ) -> int:
         """指定したフィルタ条件に一致するレコード数を返す
 
         Args:
             filters (Optional[List[Callable]]): フィルタ条件のリスト
             include_deleted (bool): 削除済みレコードも含めるか（デフォルト: False）
+            params (Optional[FilterParams]): フィルタ条件に AND で追加する検索パラメータ
 
         Returns:
             int: 一致するレコード数
@@ -532,7 +631,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
         from sqlalchemy import func
 
         query = select(func.count()).select_from(self.model)
-        all_filters = list(filters) if filters else []
+        all_filters = [*(filters or []), *self._build_filters(params)]
         self._append_soft_delete_filter(all_filters, include_deleted)
 
         if all_filters:
@@ -551,8 +650,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
         Returns:
             int: 一致するレコード数
         """
-        filters = self._build_filters(params)
-        return await self.count(filters=filters, include_deleted=include_deleted)
+        return await self.count(params=params, include_deleted=include_deleted)
 
     async def find_by_ids(
         self,

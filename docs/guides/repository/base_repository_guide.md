@@ -71,7 +71,16 @@ with get_reusable_sync_transaction() as session:
 | `bulk_insert(objects)` | 一括作成 | `list[T]` |
 | `bulk_update(values, filter_by=None, allow_unfiltered=False, include_deleted=False)` | 一括更新 | `int` |
 | `bulk_delete(filter_by=None, ids=None, allow_unfiltered=False)` | 一括削除 | `int` |
+| `bulk_permanent_delete(filter_by=None, ids=None, filters=None, allow_unfiltered=False)` | 物理一括削除 | `int` |
+| `get_or_create(lookup, defaults=None)` | 一意キーで取得または作成 | `tuple[T, bool]` |
 | `remove(instance)` | 削除 | `None` |
+
+`bulk_update()` と `bulk_delete()` は `filters=` を通じて SQLAlchemy 式も受け取ります。
+これらの式は、該当する `filter_by=` および `ids=` の条件と AND で結合されます。
+空でない `filters` シーケンスは、絞り込み条件を必須とする安全チェックを満たします。
+`bulk_permanent_delete()` は、論理削除対応モデルも含め、常に物理削除を実行します。
+`get_or_create(lookup, defaults=None)` は `(instance, created)` を返し、同時挿入で別の処理が
+一意キーの行を先に作成した場合は、その行を再検索して返します。
 
 `find()` の `filters=` はキーワードで指定してください。位置引数は `params` として解釈されます。
 

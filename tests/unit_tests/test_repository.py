@@ -2,6 +2,7 @@ import inspect
 import warnings
 
 from sqlalchemy import ForeignKey, Integer, String, desc, event, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship, sessionmaker
 import pytest
@@ -122,6 +123,43 @@ class SoftDeleteCountModel(BaseModel, SoftDeletableMixin):
     __tablename__ = 'soft_delete_count_items'
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class SoftDeleteCountFilterParams(FilterParams):
+    name: Optional[str] = None
+
+
+class SoftDeleteCountRepository(BaseRepository[SoftDeleteCountModel]):
+    field_to_column = {"name": SoftDeleteCountModel.name}
+
+    def __init__(self, session):
+        super().__init__(SoftDeleteCountModel, session)
+
+
+class UniqueLookupModel(BaseModel):
+    __tablename__ = 'unique_lookup_model'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class UniqueLookupRepository(BaseRepository[UniqueLookupModel]):
+    def __init__(self, session):
+        super().__init__(UniqueLookupModel, session)
+
+
+class RacingUniqueLookupRepository(UniqueLookupRepository):
+    def __init__(self, session):
+        super().__init__(session)
+        self._inserted_race_row = False
+
+    def _get_by_lookup_in_session(self, session, lookup):
+        if not self._inserted_race_row:
+            self._inserted_race_row = True
+            session.add(UniqueLookupModel(key=lookup["key"], label="racing insert"))
+            session.flush()
+            return None
+        return super()._get_by_lookup_in_session(session, lookup)
 
 
 class RefreshingSoftDeleteModel(BaseModel, SoftDeletableMixin):
@@ -523,6 +561,27 @@ def test_bulk_update_uses_filter_by_when_provided(db_test):
     assert repo.count(filters=[SimpleModel.value == 9]) == 2
 
 
+def test_bulk_update_applies_sql_filters_without_filter_by(db_test):
+    repo = SimpleRepository(session=db_test)
+    repo.bulk_insert([SimpleModel(value=1), SimpleModel(value=2)])
+
+    assert repo.bulk_update([{"value": 9}], filters=[SimpleModel.value < 2]) == 1
+    assert sorted(item.value for item in repo.find(limit=10)) == [2, 9]
+
+
+def test_bulk_update_ands_sql_filters_with_filter_by(db_test):
+    repo = SimpleRepository(session=db_test)
+    first, second = repo.bulk_insert([SimpleModel(value=1), SimpleModel(value=1)])
+
+    assert repo.bulk_update(
+        [{"value": 9}],
+        filter_by={"value": 1},
+        filters=[SimpleModel.id == first.id],
+    ) == 1
+    assert repo.get_by_id(first.id).value == 9
+    assert repo.get_by_id(second.id).value == 1
+
+
 @pytest.mark.parametrize("filter_by", [{}, None])
 def test_bulk_update_rejects_empty_filter_by(db_test, filter_by):
     repo = SimpleRepository(session=db_test)
@@ -727,6 +786,48 @@ def test_bulk_delete_applies_filter_by_through_public_api(db_test):
     assert [item.value for item in repo.find(limit=10)] == [2]
 
 
+def test_bulk_delete_accepts_sql_filters_without_filter_by(db_test):
+    repo = SimpleRepository(session=db_test)
+    repo.bulk_insert([SimpleModel(value=1), SimpleModel(value=2), SimpleModel(value=3)])
+
+    assert repo.bulk_delete(filters=[SimpleModel.value < 3]) == 2
+    assert [item.value for item in repo.find(limit=10)] == [3]
+
+
+def test_bulk_delete_ands_sql_filters_with_filter_by_and_ids(db_test):
+    repo = SimpleRepository(session=db_test)
+    first, second = repo.bulk_insert([SimpleModel(value=1), SimpleModel(value=1)])
+
+    assert repo.bulk_delete(
+        filter_by={"value": 1},
+        ids=[first.id, second.id],
+        filters=[SimpleModel.id == second.id],
+    ) == 1
+    assert repo.get_by_id(first.id) is not None
+    assert repo.get_by_id(second.id) is None
+
+
+def test_bulk_permanent_delete_physically_deletes_soft_deletable_rows(db_test):
+    repo = SoftDeleteCountRepository(session=db_test)
+    first, second = repo.bulk_insert([
+        SoftDeleteCountModel(name="purge"),
+        SoftDeleteCountModel(name="keep"),
+    ])
+    first_id = first.id
+    repo.bulk_delete(ids=[first_id])
+
+    assert repo.bulk_permanent_delete(filters=[SoftDeleteCountModel.name == "purge"]) == 1
+    assert repo.get_by_id(first_id, include_deleted=True) is None
+    assert repo.get_by_id(second.id) is not None
+
+
+def test_bulk_permanent_delete_keeps_unfiltered_guard(db_test):
+    repo = SimpleRepository(session=db_test)
+
+    with pytest.raises(ValueError):
+        repo.bulk_permanent_delete()
+
+
 def test_find_with_offset(db_test):
     """
     offsetによる取得テスト
@@ -893,6 +994,65 @@ def test_count(db_test):
     # 存在しない値
     filters = [SimpleModel.value == 999]
     assert repo.count(filters) == 0
+
+
+def test_count_combines_filter_params_and_sql_filters(db_test):
+    repo = AutoFilterRepository(session=db_test)
+    repo.bulk_insert([
+        AutoFilterModel(number=1, name="match"),
+        AutoFilterModel(number=1, name="other"),
+        AutoFilterModel(number=2, name="match"),
+    ])
+
+    assert repo.count(
+        filters=[AutoFilterModel.name == "match"],
+        params=AutoFilterParams(number=1),
+    ) == 1
+
+
+def test_find_deleted_accepts_filter_params(db_test):
+    repo = SoftDeleteCountRepository(session=db_test)
+    deleted, other = repo.bulk_insert([
+        SoftDeleteCountModel(name="deleted"),
+        SoftDeleteCountModel(name="other"),
+    ])
+    repo.bulk_delete(ids=[deleted.id, other.id])
+
+    results = repo.find_deleted(
+        params=SoftDeleteCountFilterParams(name="deleted"),
+        filters=[SoftDeleteCountModel.id == deleted.id],
+    )
+
+    assert [item.id for item in results] == [deleted.id]
+
+
+def test_get_or_create_creates_and_reuses_unique_lookup(db_test):
+    repo = UniqueLookupRepository(session=db_test)
+
+    created, was_created = repo.get_or_create({"key": "same"}, {"label": "first"})
+    existing, was_created_again = repo.get_or_create({"key": "same"}, {"label": "ignored"})
+
+    assert was_created is True
+    assert was_created_again is False
+    assert existing.id == created.id
+    assert existing.label == "first"
+
+
+def test_get_or_create_recovers_when_unique_row_is_inserted_after_select(db_test):
+    repo = RacingUniqueLookupRepository(session=db_test)
+
+    item, was_created = repo.get_or_create({"key": "race"}, {"label": "losing insert"})
+
+    assert was_created is False
+    assert item.label == "racing insert"
+    assert repo.count() == 1
+
+
+def test_get_or_create_reraises_non_unique_integrity_errors(db_test):
+    repo = UniqueLookupRepository(session=db_test)
+
+    with pytest.raises(IntegrityError):
+        repo.get_or_create({"key": "missing label"})
 
 
 def test_count_by_params(db_test):

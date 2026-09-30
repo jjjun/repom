@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Callable, Generic, List, Optional, TypeVar
 
 from sqlalchemy import and_
+from repom.repositories._core import FilterParams
 
 import logging
 
@@ -156,7 +157,12 @@ class SoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
         query = self._get_by_id_query(id, include_deleted=include_deleted)
         return session.execute(query).scalars().first()
 
-    def find_deleted(self, filters: Optional[List[Callable]] = None, **kwargs) -> List[T]:
+    def find_deleted(
+        self,
+        filters: Optional[List[Callable]] = None,
+        params: Optional[FilterParams] = None,
+        **kwargs,
+    ) -> List[T]:
         """削除済みレコードのみ取得
 
         deleted_at が設定されているレコードのみを検索します。
@@ -164,6 +170,7 @@ class SoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
 
         Args:
             filters (Optional[List[Callable]]): 追加のフィルタ条件
+            params (Optional[FilterParams]): フィルタ条件に AND で追加する検索パラメータ
             **kwargs: offset, limit, order_by などのオプション
 
         Returns:
@@ -176,7 +183,8 @@ class SoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
         if not self._has_soft_delete():
             return []
 
-        query = self._find_deleted_query(filters, **kwargs)
+        all_filters = [*(filters or []), *self._build_filters(params)]
+        query = self._find_deleted_query(all_filters, **kwargs)
         return self._execute_scalars_unique(query)
 
     def find_deleted_before(self, before_date: datetime, **kwargs) -> List[T]:
@@ -320,7 +328,12 @@ class AsyncSoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
         result = await session.execute(query)
         return result.scalars().first()
 
-    async def find_deleted(self, filters: Optional[List[Callable]] = None, **kwargs) -> List[T]:
+    async def find_deleted(
+        self,
+        filters: Optional[List[Callable]] = None,
+        params: Optional[FilterParams] = None,
+        **kwargs,
+    ) -> List[T]:
         """削除済みレコードのみ取得
 
         deleted_at が設定されているレコードのみを検索します。
@@ -328,6 +341,7 @@ class AsyncSoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
 
         Args:
             filters (Optional[List[Callable]]): 追加のフィルタ条件
+            params (Optional[FilterParams]): フィルタ条件に AND で追加する検索パラメータ
             **kwargs: offset, limit, order_by などのオプション
 
         Returns:
@@ -340,7 +354,8 @@ class AsyncSoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
         if not self._has_soft_delete():
             return []
 
-        query = self._find_deleted_query(filters, **kwargs)
+        all_filters = [*(filters or []), *self._build_filters(params)]
+        query = self._find_deleted_query(all_filters, **kwargs)
         return await self._execute_scalars_unique(query)
 
     async def find_deleted_before(self, before_date: datetime, **kwargs) -> List[T]:

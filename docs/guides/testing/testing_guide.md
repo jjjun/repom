@@ -34,6 +34,11 @@ db_engine, db_test = create_test_fixtures()
 
 `db_test` は rollback 対象の外部 `scoped_session` です。Repository に明示して使います。
 
+セッションスコープのフィクスチャが有効な間、`DatabaseManager` をフィクスチャのエンジンに
+結び付けるには、`bind_global_manager=True` を指定します。これにより、
+`get_reusable_sync_transaction()` を使うアプリケーションコードはフィクスチャのスキーマを使用し、
+フィクスチャの終了時にマネージャーの以前のエンジンとセッションファクトリーが復元されます。
+
 ```python
 from repom import BaseRepository
 
@@ -56,6 +61,10 @@ from repom.testing import create_async_test_fixtures
 
 async_db_engine, async_db_test = create_async_test_fixtures()
 ```
+
+非同期用ファクトリーにも同じ `bind_global_manager=True` を指定できます。
+アプリケーション側で独自の非同期セッションを開くコードに対し、マネージャーの非同期エンジンが
+一時的に設定されます。
 
 ```python
 import pytest

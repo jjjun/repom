@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Repository bulk update and delete methods accept arbitrary SQLAlchemy filters,
+  and `bulk_permanent_delete()` physically deletes matching rows even for
+  soft-deletable models. `count()` and `find_deleted()` can combine explicit
+  filters with `FilterParams`; `field_to_column` supports `>=`, `>`, `<=`, and
+  `<` range helpers. Sync and async repositories add SAVEPOINT-backed
+  `get_or_create()`. Test fixture factories can bind and restore the global
+  database manager with `bind_global_manager=True`.
 - Added shared config override and public environment parsing helpers, plus
   Redis client keyword arguments and credential-safe URL helpers on
   `RedisConfig`.

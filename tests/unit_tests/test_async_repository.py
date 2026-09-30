@@ -5,6 +5,7 @@ test_repository.py の全テストケースを非同期版に変換したもの�
 """
 import inspect
 from sqlalchemy import ForeignKey, Integer, desc, event, String, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import pytest
@@ -122,6 +123,43 @@ class AsyncSoftDeleteBulkModel(BaseModel, SoftDeletableMixin):
     __tablename__ = 'async_soft_delete_bulk_items'
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class AsyncSoftDeleteFilterParams(FilterParams):
+    name: Optional[str] = None
+
+
+class AsyncSoftDeleteRepository(AsyncBaseRepository[AsyncSoftDeleteBulkModel]):
+    field_to_column = {"name": AsyncSoftDeleteBulkModel.name}
+
+    def __init__(self, session):
+        super().__init__(AsyncSoftDeleteBulkModel, session)
+
+
+class AsyncUniqueLookupModel(BaseModel):
+    __tablename__ = 'async_unique_lookup_model'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class AsyncUniqueLookupRepository(AsyncBaseRepository[AsyncUniqueLookupModel]):
+    def __init__(self, session):
+        super().__init__(AsyncUniqueLookupModel, session)
+
+
+class RacingAsyncUniqueLookupRepository(AsyncUniqueLookupRepository):
+    def __init__(self, session):
+        super().__init__(session)
+        self._inserted_race_row = False
+
+    async def _get_by_lookup_in_session(self, session, lookup):
+        if not self._inserted_race_row:
+            self._inserted_race_row = True
+            session.add(AsyncUniqueLookupModel(key=lookup["key"], label="racing insert"))
+            await session.flush()
+            return None
+        return await super()._get_by_lookup_in_session(session, lookup)
 
 
 class RefreshingAsyncSoftDeleteRepository(AsyncBaseRepository[AsyncSoftDeleteBulkModel]):
@@ -479,6 +517,29 @@ async def test_bulk_update_uses_filter_by_when_provided(async_db_test):
 
 
 @pytest.mark.asyncio
+async def test_bulk_update_applies_sql_filters_without_filter_by(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
+
+    assert await repo.bulk_update([{"value": 9}], filters=[AsyncSimpleModel.value < 2]) == 1
+    assert sorted(item.value for item in await repo.find(limit=10)) == [2, 9]
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_ands_sql_filters_with_filter_by(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    first, second = await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=1)])
+
+    assert await repo.bulk_update(
+        [{"value": 9}],
+        filter_by={"value": 1},
+        filters=[AsyncSimpleModel.id == first.id],
+    ) == 1
+    assert (await repo.get_by_id(first.id)).value == 9
+    assert (await repo.get_by_id(second.id)).value == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("filter_by", [{}, None])
 async def test_bulk_update_rejects_empty_filter_by(async_db_test, filter_by):
     repo = AsyncSimpleRepository(session=async_db_test)
@@ -609,6 +670,52 @@ async def test_bulk_delete_applies_filter_by_through_public_api(async_db_test):
 
     assert await repo.bulk_delete(filter_by={"value": 1}) == 1
     assert [item.value for item in await repo.find(limit=10)] == [2]
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_accepts_sql_filters_without_filter_by(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2), AsyncSimpleModel(value=3)])
+
+    assert await repo.bulk_delete(filters=[AsyncSimpleModel.value < 3]) == 2
+    assert [item.value for item in await repo.find(limit=10)] == [3]
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_ands_sql_filters_with_filter_by_and_ids(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+    first, second = await repo.bulk_insert([AsyncSimpleModel(value=1), AsyncSimpleModel(value=1)])
+
+    assert await repo.bulk_delete(
+        filter_by={"value": 1},
+        ids=[first.id, second.id],
+        filters=[AsyncSimpleModel.id == second.id],
+    ) == 1
+    assert await repo.get_by_id(first.id) is not None
+    assert await repo.get_by_id(second.id) is None
+
+
+@pytest.mark.asyncio
+async def test_bulk_permanent_delete_physically_deletes_soft_deletable_rows(async_db_test):
+    repo = AsyncSoftDeleteRepository(session=async_db_test)
+    first, second = await repo.bulk_insert([
+        AsyncSoftDeleteBulkModel(name="purge"),
+        AsyncSoftDeleteBulkModel(name="keep"),
+    ])
+    first_id = first.id
+    await repo.bulk_delete(ids=[first_id])
+
+    assert await repo.bulk_permanent_delete(filters=[AsyncSoftDeleteBulkModel.name == "purge"]) == 1
+    assert await repo.get_by_id(first_id, include_deleted=True) is None
+    assert await repo.get_by_id(second.id) is not None
+
+
+@pytest.mark.asyncio
+async def test_bulk_permanent_delete_keeps_unfiltered_guard(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+
+    with pytest.raises(ValueError):
+        await repo.bulk_permanent_delete()
 
 
 @pytest.mark.asyncio
@@ -792,6 +899,70 @@ async def test_count(async_db_test):
     # 存在しない値
     filters = [AsyncSimpleModel.value == 999]
     assert await repo.count(filters) == 0
+
+
+@pytest.mark.asyncio
+async def test_count_combines_filter_params_and_sql_filters(async_db_test):
+    repo = AsyncAutoFilterRepository(session=async_db_test)
+    await repo.bulk_insert([
+        AsyncAutoFilterModel(number=1, name="match"),
+        AsyncAutoFilterModel(number=1, name="other"),
+        AsyncAutoFilterModel(number=2, name="match"),
+    ])
+
+    assert await repo.count(
+        filters=[AsyncAutoFilterModel.name == "match"],
+        params=AsyncAutoFilterParams(number=1),
+    ) == 1
+
+
+@pytest.mark.asyncio
+async def test_find_deleted_accepts_filter_params(async_db_test):
+    repo = AsyncSoftDeleteRepository(session=async_db_test)
+    deleted, other = await repo.bulk_insert([
+        AsyncSoftDeleteBulkModel(name="deleted"),
+        AsyncSoftDeleteBulkModel(name="other"),
+    ])
+    await repo.bulk_delete(ids=[deleted.id, other.id])
+
+    results = await repo.find_deleted(
+        params=AsyncSoftDeleteFilterParams(name="deleted"),
+        filters=[AsyncSoftDeleteBulkModel.id == deleted.id],
+    )
+
+    assert [item.id for item in results] == [deleted.id]
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_creates_and_reuses_unique_lookup(async_db_test):
+    repo = AsyncUniqueLookupRepository(session=async_db_test)
+
+    created, was_created = await repo.get_or_create({"key": "same"}, {"label": "first"})
+    existing, was_created_again = await repo.get_or_create({"key": "same"}, {"label": "ignored"})
+
+    assert was_created is True
+    assert was_created_again is False
+    assert existing.id == created.id
+    assert existing.label == "first"
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_recovers_when_unique_row_is_inserted_after_select(async_db_test):
+    repo = RacingAsyncUniqueLookupRepository(session=async_db_test)
+
+    item, was_created = await repo.get_or_create({"key": "race"}, {"label": "losing insert"})
+
+    assert was_created is False
+    assert item.label == "racing insert"
+    assert await repo.count() == 1
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_reraises_non_unique_integrity_errors(async_db_test):
+    repo = AsyncUniqueLookupRepository(session=async_db_test)
+
+    with pytest.raises(IntegrityError):
+        await repo.get_or_create({"key": "missing label"})
 
 
 @pytest.mark.asyncio

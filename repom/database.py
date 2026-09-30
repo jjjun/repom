@@ -217,6 +217,36 @@ class DatabaseManager:
         self._async_session_factory: Optional[async_sessionmaker] = None
         self._lock = threading.Lock()
 
+    @contextmanager
+    def bind_engine_for_tests(self, engine: Engine | AsyncEngine):
+        """Temporarily bind a test engine and restore the previous manager state."""
+        if isinstance(engine, AsyncEngine):
+            with self._lock:
+                previous_engine = self._async_engine
+                previous_factory = self._async_session_factory
+                self._async_engine = engine
+                self._async_session_factory = None
+            try:
+                yield engine
+            finally:
+                with self._lock:
+                    self._async_engine = previous_engine
+                    self._async_session_factory = previous_factory
+        elif isinstance(engine, Engine):
+            with self._lock:
+                previous_engine = self._sync_engine
+                previous_factory = self._sync_session_factory
+                self._sync_engine = engine
+                self._sync_session_factory = None
+            try:
+                yield engine
+            finally:
+                with self._lock:
+                    self._sync_engine = previous_engine
+                    self._sync_session_factory = previous_factory
+        else:
+            raise TypeError("engine must be a SQLAlchemy Engine or AsyncEngine")
+
     # ========================================
     # Sync Engine/Session Management
     # ========================================

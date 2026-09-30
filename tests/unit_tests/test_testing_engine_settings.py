@@ -7,13 +7,18 @@ create_engine / create_async_engine をパッチし、実際の PostgreSQL 接�
 """
 
 import pytest
+from sqlalchemy import Integer, create_engine, select
 from sqlalchemy.engine.url import make_url
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.pool import StaticPool
 import sqlalchemy.ext.asyncio as sa_asyncio
+from sqlalchemy.ext.asyncio import create_async_engine
 
+import repom.database as database_module
 import repom.testing as testing_module
 from repom.config import config
-from repom.database import convert_to_async_uri as database_convert_to_async_uri
+from repom.database import DatabaseManager, convert_to_async_uri as database_convert_to_async_uri
+from repom.models.base_model import BaseModel
 from repom.testing import create_async_test_fixtures, create_test_fixtures
 
 
@@ -23,6 +28,11 @@ class _StopAfterCapture(Exception):
     フィクスチャの実行を打ち切るためだけの例外。実際の DB 接続や
     Base.metadata.create_all を発生させずに、渡された URL/kwargs だけを検証する。
     """
+
+
+class GlobalManagerFixtureModel(BaseModel):
+    __tablename__ = 'global_manager_fixture_model'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
 
 class TestCreateAsyncTestFixturesPostgresSettings:
@@ -138,3 +148,59 @@ def test_db_engine_passes_sqlite_memory_kwargs(monkeypatch):
     assert captured["url"] == "sqlite:///:memory:"
     assert captured["kwargs"]["connect_args"] == {"check_same_thread": False}
     assert captured["kwargs"]["poolclass"] is StaticPool
+
+
+def test_sync_test_fixture_binds_global_manager_for_reusable_transactions(monkeypatch):
+    manager = DatabaseManager()
+    previous_engine = create_engine("sqlite:///:memory:")
+    monkeypatch.setattr(database_module, "_db_manager", manager)
+    monkeypatch.setattr(testing_module, "_db_manager", manager)
+    db_engine_fixture, _ = create_test_fixtures(
+        db_url="sqlite:///:memory:",
+        model_loader=lambda: None,
+        bind_global_manager=True,
+    )
+
+    with manager.bind_engine_for_tests(previous_engine):
+        generator = db_engine_fixture.__wrapped__()
+        fixture_engine = next(generator)
+        try:
+            assert database_module.get_sync_engine() is fixture_engine
+            with database_module.get_reusable_sync_transaction() as session:
+                assert session.execute(select(GlobalManagerFixtureModel)).all() == []
+        finally:
+            with pytest.raises(StopIteration):
+                next(generator)
+
+        assert database_module.get_sync_engine() is previous_engine
+
+    previous_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_async_test_fixture_binds_global_manager_for_reusable_transactions(monkeypatch):
+    manager = DatabaseManager()
+    previous_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    monkeypatch.setattr(database_module, "_db_manager", manager)
+    monkeypatch.setattr(testing_module, "_db_manager", manager)
+    async_db_engine_fixture, _ = create_async_test_fixtures(
+        db_url="sqlite:///:memory:",
+        model_loader=lambda: None,
+        bind_global_manager=True,
+    )
+
+    with manager.bind_engine_for_tests(previous_engine):
+        generator = async_db_engine_fixture.__wrapped__()
+        fixture_engine = await anext(generator)
+        try:
+            assert await database_module.get_async_engine() is fixture_engine
+            async with database_module.get_reusable_async_transaction() as session:
+                result = await session.execute(select(GlobalManagerFixtureModel))
+                assert result.all() == []
+        finally:
+            with pytest.raises(StopAsyncIteration):
+                await anext(generator)
+
+        assert await database_module.get_async_engine() is previous_engine
+
+    await previous_engine.dispose()
