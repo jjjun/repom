@@ -275,6 +275,8 @@ uv run ruff check .
 uv run pytest -vv -s
 ```
 
+- PostgreSQL integration: start `docker run -d --rm -e POSTGRES_DB=repom_test -e POSTGRES_USER=repom -e POSTGRES_PASSWORD=repom-local-password -p 5433:5432 postgres:16-alpine`, then run `CONFIG_HOOK=repom.config_hook:hook_config EXEC_ENV=test DB_TYPE=postgres POSTGRES_PASSWORD=repom-local-password uv run pytest tests/integration_tests/test_postgres_integration.py`.
+
 The repository's `.env.example` enables `repom.config_hook:hook_config`, which
 selects PostgreSQL for `dev` / `prod` and in-memory SQLite for `test`. Pytest's
 configured `addopts` include `-x` (stop after the first failure) and
