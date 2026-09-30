@@ -36,8 +36,9 @@ reintroduce them through `CONFIG_HOOK`; configure the path in `alembic.ini`.
 
 The portable consumer fixture is under
 [`tests/integration_tests/mock_external_project`](../../tests/integration_tests/mock_external_project).
-Its diagnostic script resolves both paths and checks them against the current
-checkout.
+The unit test at
+[`tests/unit_tests/test_external_project_alembic.py`](../../tests/unit_tests/test_external_project_alembic.py)
+resolves both paths and checks them against the current checkout.
 
 Useful upstream references:
 

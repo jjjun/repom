@@ -4,7 +4,6 @@ set_find_option() の offset / limit バリデーションのテスト
 負値、bool、max_limit を超える値を拒否すること、および limit 未指定時の
 挙動（全件取得 + RuntimeWarning）を確認します。
 """
-from tests._init import *
 from unittest.mock import patch
 import sys
 import warnings

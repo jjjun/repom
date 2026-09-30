@@ -5,7 +5,6 @@ these tests only cover the script's confirmation guard and alembic.ini
 resolution (repom#160).
 """
 
-from tests._init import *
 
 import sys
 from io import BytesIO, StringIO, TextIOWrapper

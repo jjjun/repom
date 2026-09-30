@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
+import yaml
 
 class TestGenerateDockerComposePostgresOnly:
     """generate_docker_compose() - PostgreSQL のみ（pgAdmin 無効）"""
@@ -307,19 +308,18 @@ class TestDockerComposeFileGeneration:
         generator = generate_docker_compose()
         yaml_content = generator.generate()
 
-        # YAML の基本構造を確認
-        assert "version: '3.8'" in yaml_content
-        assert "services:" in yaml_content
-        assert "volumes:" in yaml_content
-        assert "  postgres:" in yaml_content
-        assert "  repom_postgres_data:" in yaml_content
+        compose = yaml.safe_load(yaml_content)
 
-        # 重要な設定確認
-        assert '      POSTGRES_USER: "repom"' in yaml_content
-        assert '      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"' in yaml_content
+        assert compose["services"]["postgres"]["image"] == "postgres:16-alpine"
+        assert compose["services"]["postgres"]["container_name"] == "repom_postgres"
+        assert compose["services"]["postgres"]["environment"]["POSTGRES_USER"] == "repom"
+        assert (
+            compose["services"]["postgres"]["environment"]["POSTGRES_PASSWORD"]
+            == "${POSTGRES_PASSWORD}"
+        )
         assert "repom_dev" not in yaml_content
-        # Note: POSTGRES_DB は省略される（環境別DBは init スクリプトで作成）
-        assert "POSTGRES_DB" not in yaml_content
+        assert "POSTGRES_DB" not in compose["services"]["postgres"]["environment"]
+        assert "repom_postgres_data" in compose["volumes"]
 
     @patch('repom.postgres.manage.config')
     @patch('repom.postgres.manage.PostgresManager.get_init_dir')

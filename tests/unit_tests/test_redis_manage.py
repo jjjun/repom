@@ -79,38 +79,29 @@ class TestGenerateDockerCompose:
         """docker-compose が config.redis.port を使用"""
         generator = generate_docker_compose()
 
-        # The generator should have created a Redis service
-        assert generator is not None
-        # The service details are embedded in the generator
-        # We verify by checking the config values are used
-        assert config.redis.port == config.redis.port  # Basic sanity check
+        service = generator.services[0]
+        assert service.ports == [f"127.0.0.1:{config.redis.published_port}:6379"]
 
     def test_compose_uses_config_container_name(self):
         """docker-compose が config.redis.container.get_container_name() を使用"""
         expected_name = config.redis.container.get_container_name()
         generator = generate_docker_compose()
 
-        # The generator should reflect the configured container name
-        assert generator is not None
-        assert expected_name.startswith("repom_redis")
+        assert generator.services[0].container_name == expected_name
 
     def test_compose_uses_config_volume_name(self):
         """docker-compose が config.redis.container.get_volume_name() を使用"""
         expected_volume = config.redis.container.get_volume_name()
         generator = generate_docker_compose()
 
-        # The generator should have the configured volume name
-        assert generator is not None
-        assert expected_volume.startswith("repom_redis")
+        assert generator.services[0].volumes[0] == f"{expected_volume}:/data"
 
     def test_compose_uses_config_image(self):
         """docker-compose が config.redis.container.image を使用"""
         expected_image = config.redis.container.image
         generator = generate_docker_compose()
 
-        # The generator should use the configured image
-        assert generator is not None
-        assert expected_image == "redis:7-alpine"  # Default value
+        assert generator.services[0].image == expected_image
 
     def test_compose_ports_bind_loopback_by_default(self):
         """Published ports bind to 127.0.0.1 unless expose_to_lan is set."""

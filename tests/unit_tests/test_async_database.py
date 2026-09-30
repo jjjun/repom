@@ -387,38 +387,6 @@ class TestGetAsyncEngineEchoKwarg:
             await manager.dispose_async()
 
 
-class TestGetAsyncDbSession:
-    """DEPRECATED: These tests relied on 'async with' statement which no longer works.
-
-    After removing @asynccontextmanager decorator to fix FastAPI Depends compatibility,
-    get_async_db_session() returns an async generator, not a context manager.
-    For context manager usage, use DatabaseManager methods directly.
-    """
-
-    def test_deprecated_context_manager_usage(self):
-        """Skip old tests that used 'async with' statement"""
-        pytest.skip(
-            "get_async_db_session() no longer supports 'async with' statement. "
-            "Use DatabaseManager().get_async_session() for context manager usage."
-        )
-
-
-class TestGetAsyncDbTransaction:
-    """DEPRECATED: These tests relied on 'async with' statement which no longer works.
-
-    After removing @asynccontextmanager decorator to fix FastAPI Depends compatibility,
-    get_async_db_transaction() returns an async generator, not a context manager.
-    For context manager usage, use DatabaseManager methods directly.
-    """
-
-    def test_deprecated_context_manager_usage(self):
-        """Skip old tests that used 'async with' statement"""
-        pytest.skip(
-            "get_async_db_transaction() no longer supports 'async with' statement. "
-            "Use DatabaseManager().get_async_transaction() for context manager usage."
-        )
-
-
 class TestDatabaseManager:
     """DatabaseManager クラスの非同期機能テスト"""
 
@@ -575,7 +543,7 @@ class TestAsyncTransactionIntegration:
         """Each test should have isolated transaction"""
         result = await async_db_test.execute(select(SampleModel))
         samples = result.scalars().all()
-        assert isinstance(samples, list)
+        assert samples == []
 
     @pytest.mark.asyncio
     async def test_update_record(self, async_db_test):
@@ -614,24 +582,6 @@ class TestAsyncTransactionIntegration:
         )
         deleted = result.scalar_one_or_none()
         assert deleted is None
-
-
-@pytest.mark.skip(reason="get_async_db_session is an async generator for FastAPI Depends")
-class TestFastAPIDependsContextManagerCompatibility:
-    """FastAPI Depends パターンのテスト"""
-
-    @pytest.mark.asyncio
-    async def test_get_async_db_session_yields_session(self):
-        """get_async_db_session() should yield AsyncSession for FastAPI Depends"""
-        # asynccontextmanager デコレータにより、context manager として動作
-        async with get_async_db_session() as session:
-            # AsyncSession であることを確認
-            assert isinstance(session, AsyncSession)
-
-            # session.execute() が動作することを確認
-            result = await session.execute(select(SampleModel))
-            samples = result.scalars().all()
-            assert isinstance(samples, list)
 
 
 class TestFastAPIDependsPattern:
@@ -681,21 +631,6 @@ class TestFastAPIDependsPattern:
                 await gen.__anext__()
             except StopAsyncIteration:
                 pass  # Expected
-
-    @pytest.mark.asyncio
-    async def test_get_async_db_session_context_manager_compatibility(self):
-        """get_async_db_session() should also work with 'async with' for backward compatibility"""
-        # This tests the old behavior (async with statement)
-        # If @asynccontextmanager is removed, this test should be updated or removed
-        try:
-            async with get_async_db_session() as session:
-                assert isinstance(session, AsyncSession)
-                result = await session.execute(select(SampleModel))
-                items = result.scalars().all()
-                assert isinstance(items, list)
-        except (AttributeError, TypeError) as e:
-            # If @asynccontextmanager is removed, async generator doesn't support 'async with'
-            pytest.skip(f"Async context manager protocol not supported: {e}")
 
     @pytest.mark.asyncio
     async def test_get_async_db_transaction_is_async_generator_function(self):

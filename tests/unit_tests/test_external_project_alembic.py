@@ -1,4 +1,4 @@
-"""Integration test: Alembic with external project (simulates mine-py scenario)
+"""Unit tests: Alembic configuration for an external project.
 
 This test simulates the scenario where an external project relies on its own
 alembic.ini configuration (script_location/version_locations) and no longer
@@ -34,7 +34,7 @@ def test_alembic_versions_path_isolation():
         alembic_ini.write_text(
             "\n".join([
                 "[alembic]",
-                f"script_location = {Path(__file__).parent.parent.parent.parent / 'alembic'}",
+                f"script_location = {Path(__file__).resolve().parents[2] / 'alembic'}",
                 f"version_locations = {external_versions_path}",
                 "",
                 "[loggers]",
@@ -74,7 +74,7 @@ def test_alembic_versions_path_isolation():
 
 def test_repom_has_no_migration_files():
     """Verify that repom/alembic/versions/ is empty (library should not have migrations)"""
-    repom_root = Path(__file__).parent.parent.parent.parent
+    repom_root = Path(__file__).resolve().parents[2]
     repom_versions_dir = repom_root / 'alembic' / 'versions'
 
     # repom should not have migration files
@@ -100,7 +100,7 @@ def test_env_py_uses_version_locations_in_context():
     """Verify that env.py defers version_locations control to alembic.ini"""
 
     # Read env.py to check implementation
-    repom_root = Path(__file__).parent.parent.parent.parent
+    repom_root = Path(__file__).resolve().parents[2]
     env_py_path = repom_root / 'alembic' / 'env.py'
 
     env_py_content = env_py_path.read_text()
@@ -109,6 +109,18 @@ def test_env_py_uses_version_locations_in_context():
     assert 'version_locations=' not in env_py_content, (
         "env.py should not hardcode version_locations; alembic.ini controls it."
     )
+
+
+def test_mock_external_project_migration_paths_resolve_from_alembic_ini():
+    repository_root = Path(__file__).resolve().parents[2]
+    fixture_root = repository_root / "tests" / "integration_tests" / "mock_external_project"
+    alembic_config = Config(str(fixture_root / "alembic.ini"))
+
+    script_location = Path(alembic_config.get_main_option("script_location")).resolve()
+    version_locations = Path(alembic_config.get_main_option("version_locations")).resolve()
+
+    assert script_location == repository_root / "alembic"
+    assert version_locations == fixture_root / "alembic" / "versions"
 
 
 if __name__ == '__main__':

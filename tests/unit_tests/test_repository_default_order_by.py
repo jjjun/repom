@@ -4,7 +4,6 @@ BaseRepository の default_order_by のテスト
 order_by=None および空文字が渡された場合に default_order_by が
 正しく適用されることをテストします。
 """
-from tests._init import *
 from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest

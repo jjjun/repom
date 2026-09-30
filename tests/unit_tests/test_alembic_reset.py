@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.dialects import postgresql
 
 from repom.alembic import AlembicReset
+import repom.alembic.reset as reset_module
 
 
 def test_drop_alembic_version_table_uses_default_name(tmp_path):
@@ -135,7 +136,7 @@ def test_drop_alembic_version_table_names_absent_table(tmp_path, capsys):
     )
 
 
-def test_drop_alembic_version_table_disposes_engine(tmp_path):
+def test_drop_alembic_version_table_disposes_engine(monkeypatch, tmp_path):
     """repom#160: an undisposed engine keeps a pooled connection open, which
     leaves a file-based SQLite database locked on Windows until GC'd.
     """
@@ -149,9 +150,12 @@ def test_drop_alembic_version_table_disposes_engine(tmp_path):
     engine.dispose()
 
     reset = AlembicReset(db_url, tmp_path)
+    dispose = MagicMock(wraps=engine.dispose)
+    monkeypatch.setattr(reset_module, "create_engine", lambda _: engine)
+    monkeypatch.setattr(engine, "dispose", dispose)
     reset.drop_alembic_version_table()
 
-    db_path.unlink()
+    dispose.assert_called_once_with()
 
 
 def test_delete_migration_files_defaults_to_versions_dir(tmp_path):

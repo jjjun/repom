@@ -1,4 +1,4 @@
-from tests._init import *
+import pytest
 from sqlalchemy import Integer
 from sqlalchemy.orm import Mapped, mapped_column
 from repom.custom_types.AutoDateTime import AutoDateTime

@@ -1,4 +1,3 @@
-from tests._init import *
 
 from sqlalchemy import Integer, String, desc
 from sqlalchemy.orm import Mapped, mapped_column

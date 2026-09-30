@@ -1,6 +1,5 @@
 """Strict model-import guard tests for the db_create console script (repom#138)."""
 
-from tests._init import *
 
 from unittest.mock import MagicMock
 

@@ -1,6 +1,5 @@
 """Tests for annotation inheritance and BaseModel subclass behavior."""
 
-from tests._init import *
 
 from datetime import datetime
 from typing import get_type_hints

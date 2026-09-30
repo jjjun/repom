@@ -12,16 +12,10 @@ import ast
 from pathlib import Path
 
 import repom
+from tests.source_policy import REPOM_ROOT, iter_repom_sources
 
-REPOM_ROOT = Path(repom.__file__).parent
-
-
-def _iter_repom_source_files():
-    return sorted(REPOM_ROOT.rglob("*.py"))
-
-
-def _fastapi_import_lines(source_path: Path) -> list[int]:
-    tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+def _fastapi_import_lines(source_path: Path, source: str) -> list[int]:
+    tree = ast.parse(source, filename=str(source_path))
     offending_lines = []
 
     for node in ast.walk(tree):
@@ -38,8 +32,8 @@ def _fastapi_import_lines(source_path: Path) -> list[int]:
 def test_repom_package_never_imports_fastapi():
     violations = {}
 
-    for source_path in _iter_repom_source_files():
-        offending_lines = _fastapi_import_lines(source_path)
+    for source_path, source in iter_repom_sources():
+        offending_lines = _fastapi_import_lines(source_path, source)
         if offending_lines:
             violations[str(source_path.relative_to(REPOM_ROOT))] = offending_lines
 

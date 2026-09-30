@@ -13,39 +13,37 @@ caught just as reliably as a module-level one.
 """
 
 import ast
-import re
 from pathlib import Path
 
-import repom
+import pytest
 
-REPOM_ROOT = Path(repom.__file__).parent
+from tests.source_policy import REPOM_ROOT, iter_repom_sources
 
 # Common names used for a raw connection string/DSN in this codebase.
 FORBIDDEN_NAMES = ("url", "dsn", "sync_url", "async_url", "db_url")
 
-# Matches a bare f-string interpolation of one of the forbidden names, e.g.
-# "{url}", "{ url }", "{dsn!r}", "{sync_url:>10}" - but not
-# "{safe_db_url(sync_url)}", since something other than the bare name
-# immediately follows the opening brace there.
-_BARE_INTERPOLATION_RE = re.compile(
-    r"\{\s*(?:" + "|".join(FORBIDDEN_NAMES) + r")\s*[!:}]"
-)
+def _contains_raw_dsn(node: ast.AST) -> bool:
+    if isinstance(node, ast.Name):
+        return node.id in FORBIDDEN_NAMES
+    if isinstance(node, ast.Attribute):
+        return node.attr in FORBIDDEN_NAMES or _contains_raw_dsn(node.value)
+    if isinstance(node, ast.Call):
+        function_name = (
+            node.func.id if isinstance(node.func, ast.Name)
+            else node.func.attr if isinstance(node.func, ast.Attribute)
+            else None
+        )
+        if function_name == "safe_db_url":
+            return False
+    return any(_contains_raw_dsn(child) for child in ast.iter_child_nodes(node))
 
 
-def _iter_repom_source_files():
-    return sorted(REPOM_ROOT.rglob("*.py"))
-
-
-def _raw_dsn_raise_lines(source_path: Path) -> list[int]:
-    source = source_path.read_text(encoding="utf-8")
+def _raw_dsn_raise_lines(source_path: Path, source: str) -> list[int]:
     tree = ast.parse(source, filename=str(source_path))
     offending_lines = []
 
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Raise):
-            continue
-        segment = ast.get_source_segment(source, node)
-        if segment and _BARE_INTERPOLATION_RE.search(segment):
+        if isinstance(node, ast.Raise) and node.exc is not None and _contains_raw_dsn(node.exc):
             offending_lines.append(node.lineno)
 
     return offending_lines
@@ -54,8 +52,8 @@ def _raw_dsn_raise_lines(source_path: Path) -> list[int]:
 def test_repom_never_interpolates_a_raw_dsn_into_raise_messages():
     violations = {}
 
-    for source_path in _iter_repom_source_files():
-        offending_lines = _raw_dsn_raise_lines(source_path)
+    for source_path, source in iter_repom_sources():
+        offending_lines = _raw_dsn_raise_lines(source_path, source)
         if offending_lines:
             violations[str(source_path.relative_to(REPOM_ROOT))] = offending_lines
 
@@ -63,3 +61,25 @@ def test_repom_never_interpolates_a_raw_dsn_into_raise_messages():
         "raise statements must not interpolate a raw url/dsn variable "
         f"directly; wrap it in safe_db_url() first: {violations}"
     )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'raise ValueError(f"could not connect to {db_url}")',
+        'raise ValueError("could not connect to {}".format(config.db_url))',
+        'raise ValueError("could not connect to " + config.db_url)',
+        'raise ValueError(config.db_url)',
+    ],
+)
+def test_raw_dsn_guard_detects_raise_message_forms(tmp_path, source):
+    source_path = tmp_path / "raise_message.py"
+
+    assert _raw_dsn_raise_lines(source_path, source) == [1]
+
+
+def test_raw_dsn_guard_allows_safe_db_url_masking(tmp_path):
+    source_path = tmp_path / "raise_message.py"
+    source = 'raise ValueError(f"could not connect to {safe_db_url(config.db_url)}")'
+
+    assert _raw_dsn_raise_lines(source_path, source) == []

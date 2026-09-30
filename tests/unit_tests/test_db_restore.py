@@ -1,4 +1,3 @@
-from tests._init import *
 
 import gzip
 import sqlite3
@@ -571,14 +570,19 @@ def test_main_raises_restore_error_when_no_backups_found(monkeypatch, tmp_path):
 
 
 def test_main_returns_normally_on_successful_restore(monkeypatch, tmp_path):
-    _make_backup_file(tmp_path)
+    backup_file = _make_backup_file(tmp_path)
     config = _mock_postgres_config_for_main(tmp_path)
     monkeypatch.setattr(db_restore, "config", config)
     monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
     _use_fake_psql(monkeypatch)
+    psql_stdin = tmp_path / "psql.stdin"
+    monkeypatch.setenv("FAKE_CHILD_STDIN_SINK", str(psql_stdin))
     monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "y"]))
 
     db_restore.main()
+
+    with gzip.open(backup_file, "rb") as backup:
+        assert psql_stdin.read_bytes() == backup.read()
 
 
 def test_main_returns_normally_when_restore_cancelled_at_selection(monkeypatch, tmp_path):
@@ -594,9 +598,13 @@ def test_main_returns_normally_when_restore_cancelled_at_confirmation(monkeypatc
     _make_backup_file(tmp_path)
     config = _mock_postgres_config_for_main(tmp_path)
     monkeypatch.setattr(db_restore, "config", config)
+    psql_command = MagicMock()
+    monkeypatch.setattr(db_restore, "_psql_command", psql_command)
     monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "n"]))
 
     db_restore.main()
+
+    psql_command.assert_not_called()
 
 
 def test_main_cancels_cross_database_restore_when_target_name_not_typed(monkeypatch, tmp_path):
@@ -616,14 +624,19 @@ def test_main_cancels_cross_database_restore_when_target_name_not_typed(monkeypa
 
 
 def test_main_proceeds_with_cross_database_restore_when_target_name_typed(monkeypatch, tmp_path):
-    _make_backup_file(tmp_path, name="otherdb_20260101_000000.sql.gz")
+    backup_file = _make_backup_file(tmp_path, name="otherdb_20260101_000000.sql.gz")
     config = _mock_postgres_config_for_main(tmp_path)
     monkeypatch.setattr(db_restore, "config", config)
     monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
     _use_fake_psql(monkeypatch)
+    psql_stdin = tmp_path / "psql.stdin"
+    monkeypatch.setenv("FAKE_CHILD_STDIN_SINK", str(psql_stdin))
     monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "repom_test"]))
 
     db_restore.main()
+
+    with gzip.open(backup_file, "rb") as backup:
+        assert psql_stdin.read_bytes() == backup.read()
 
 
 def test_main_cancels_legacy_backup_restore_when_target_name_not_typed(monkeypatch, tmp_path):

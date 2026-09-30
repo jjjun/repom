@@ -1,6 +1,5 @@
 """Confirmation-guard tests for the db_delete console script (repom#135)."""
 
-from tests._init import *
 
 import sys
 from io import StringIO

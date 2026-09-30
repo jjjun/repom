@@ -6,7 +6,6 @@ refuses to target a non-test, non-in-memory database unless the caller opts
 in explicitly.
 """
 
-from tests._init import *
 
 import pytest
 

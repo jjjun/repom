@@ -48,7 +48,6 @@ repom/
 │   ├── behavior_tests/       # Behavioural notes & examples
 │   ├── integration_tests/    # External-project and database integration tests
 │   ├── conftest.py           # Pytest configuration
-│   └── db_test_fixtures.py   # Backward-compatibility note; fixtures live in conftest.py
 ├── alembic/                  # Shared migration environment referenced via script_location; versions/ holds repom's own migrations
 ├── data/                     # SQLite databases for each environment
 ├── data_master/              # Master data files

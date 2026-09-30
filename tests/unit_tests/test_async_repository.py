@@ -3,7 +3,6 @@ AsyncBaseRepository の非同期版テスト
 
 test_repository.py の全テストケースを非同期版に変換したもの。
 """
-from tests._init import *
 import inspect
 from sqlalchemy import ForeignKey, Integer, desc, event, String, select
 from sqlalchemy.ext.hybrid import hybrid_property

@@ -174,54 +174,6 @@ class TestMultithreadMemoryDbAccess:
         finally:
             session.close()
 
-    @pytest.mark.skip(reason="SQLite InterfaceError with concurrent writes - expected behavior")
-    def test_concurrent_mixed_operations(self, memory_engine, seed_data):
-        """
-        読み取りと書き込みを混在させた同時アクセス
-
-        実際の API では GET/POST/PUT が混在して実行されるため、
-        より現実的なシナリオをテスト。
-        """
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=memory_engine)
-        operations_count = {"read": 0, "write": 0}
-        lock = threading.Lock()
-
-        def mixed_operation(op_num: int):
-            """読み取りまたは書き込み"""
-            # スレッド並列実行を確保するための遅延
-            time.sleep(0.01 * (op_num % 3))
-
-            session = SessionLocal()
-            try:
-                if op_num % 2 == 0:
-                    # 読み取り
-                    stmt = select(MultithreadTestModel).limit(1)
-                    item = session.execute(stmt).scalar_one()
-                    with lock:
-                        operations_count["read"] += 1
-                    return {"type": "read", "name": item.name}
-                else:
-                    # 書き込み
-                    new_item = MultithreadTestModel(name=f"mixed_{op_num}")
-                    session.add(new_item)
-                    session.commit()
-                    with lock:
-                        operations_count["write"] += 1
-                    return {"type": "write", "id": new_item.id}
-            finally:
-                session.close()
-
-        # 10 回の混在操作を実行
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = [executor.submit(mixed_operation, i) for i in range(10)]
-            results = [f.result() for f in as_completed(futures)]
-
-        # 検証
-        assert len(results) == 10
-        assert operations_count["read"] == 5
-        assert operations_count["write"] == 5
-
-
 class TestMemoryDbConfiguration:
     """
     :memory: DB の設定テスト

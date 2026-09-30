@@ -13,7 +13,7 @@ This test suite verifies:
 import logging
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import ANY, patch, MagicMock
 from basekit.discovery import (
     import_package_directory,
     import_from_packages
@@ -262,42 +262,33 @@ class TestLoadModelsIntegration:
         assert len(detail_records) == 1
         assert detail_records[0].getMessage().startswith('Loaded models:')
 
-    def test_load_models_uses_model_locations(self):
+    def test_load_models_uses_model_locations(self, monkeypatch):
         """model_locations が設定されている場合、auto_import_models_from_list を呼び出す"""
-        # 一時的に config を変更
-        original_locations = config.model_locations
-        original_excluded = config.model_excluded_dirs
-        original_prefixes = config.allowed_package_prefixes
+        with patch('repom.utility.import_from_packages', return_value=[]) as import_models:
+            monkeypatch.setattr(config, 'model_locations', ['repom.examples.models'])
+            monkeypatch.setattr(config, 'model_excluded_dirs', {'tests'})
+            monkeypatch.setattr(config, 'allowed_package_prefixes', {'repom.'})
 
-        try:
-            config.model_locations = ['repom.examples.models']  # 実際に存在するパッケージ
-            config.model_excluded_dirs = {'tests'}
-            config.allowed_package_prefixes = {'repom.'}
+            failures = load_models()
 
-            # load_models() を呼び出してエラーが出ないことを確認
-            load_models()
+        assert failures == []
+        import_models.assert_called_once_with(
+            package_names=['repom.examples.models'],
+            excluded_dirs={'tests'},
+            allowed_prefixes={'repom.'},
+            fail_on_error=False,
+            post_import_hook=ANY,
+        )
 
-            # 正常に実行できれば成功（モデルがインポートされた）
-        finally:
-            # 元に戻す
-            config.model_locations = original_locations
-            config.model_excluded_dirs = original_excluded
-            config.allowed_package_prefixes = original_prefixes
+    def test_load_models_skips_import_when_model_locations_are_unset(self, monkeypatch):
+        """Unset model locations must not trigger the removed default import."""
+        with patch('repom.utility.import_from_packages') as import_models:
+            monkeypatch.setattr(config, 'model_locations', None)
 
-    def test_load_models_backward_compatibility(self):
-        """model_locations が None の場合、従来の動作（repom.examples.models インポート）"""
-        # 一時的に config を変更
-        original_locations = config.model_locations
+            failures = load_models()
 
-        try:
-            config.model_locations = None
-
-            # load_models() を呼び出してエラーが出ないことを確認
-            load_models()
-
-            # repom.examples.models がインポートされれば成功
-        finally:
-            config.model_locations = original_locations
+        assert failures == []
+        import_models.assert_not_called()
 
     def test_load_models_uses_model_import_strict(self):
         """model_import_strict が True の場合、エラーで停止する"""
@@ -330,9 +321,10 @@ class TestLoadModelsIntegration:
             config.allowed_package_prefixes = {'nonexistent.'}
             config.model_import_strict = False  # 明示的なオプトアウト
 
-            # エラーが出ないことを確認（失敗リストは内部で処理される）
-            load_models()
-            # 成功（例外が発生しない）
+            failures = load_models()
+
+            assert len(failures) == 1
+            assert failures[0].target == 'nonexistent.models'
         finally:
             config.model_locations = original_locations
             config.model_import_strict = original_strict
@@ -483,10 +475,13 @@ class TestRealWorldScenarios:
         else:
             test_config.model_locations = ['myapp.models']
 
-        # 設定が適用されることを確認
-        assert test_config.model_locations is not None
+        expected_locations = (
+            ['myapp.models', 'myapp.test_models']
+            if os.getenv('EXEC_ENV') == 'test'
+            else ['myapp.models']
+        )
+        assert test_config.model_locations == expected_locations
 
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
-

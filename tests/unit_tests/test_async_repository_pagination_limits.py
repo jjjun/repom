@@ -3,7 +3,6 @@ set_find_option() の offset / limit バリデーションの非同期版テス�
 
 test_repository_pagination_limits.py の全テストケースを非同期版に変換したもの。
 """
-from tests._init import *
 from unittest.mock import patch
 import sys
 import warnings

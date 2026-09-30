@@ -1,4 +1,3 @@
-from tests._init import *
 import inspect
 import warnings
 

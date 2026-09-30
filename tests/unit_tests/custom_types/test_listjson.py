@@ -1,4 +1,4 @@
-from tests._init import *
+import pytest
 import warnings
 from sqlalchemy import Integer, select
 from sqlalchemy.dialects import postgresql, sqlite

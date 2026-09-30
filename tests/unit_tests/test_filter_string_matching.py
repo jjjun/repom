@@ -8,7 +8,7 @@ _value_to_filter() はかつて autoescape なしの contains() を既定で使�
 DoS を起こせる欠陥があった。field_to_column の既定値も完全一致（==）に変更し、
 部分一致・前方一致は contains_column() / prefix_column() で明示する。
 """
-from tests._init import *
+import pytest
 from typing import List, Optional
 
 from sqlalchemy import Integer, String
