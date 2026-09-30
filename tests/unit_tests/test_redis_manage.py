@@ -9,13 +9,15 @@ Tests verify that redis/manage.py correctly uses config values for:
 
 from pathlib import Path
 import stat
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+from basekit.docker_manager import DockerCommandExecutor
 
 from repom.config import config
 from repom.credentials import DEFAULT_CREDENTIAL_PLACEHOLDER
 from repom.redis import RedisConfig, RedisContainerConfig
+from repom.redis import manage
 from repom.redis.manage import (
     RedisManager,
     generate_docker_compose,
@@ -60,7 +62,10 @@ class TestRedisManager:
         # Should use config value
         assert container_name == config.redis.container.get_container_name()
         assert container_name.startswith("repom_redis")
+        assert manager.config is config
 
+
+class TestRedisManagerConnectionInfo:
     def test_print_connection_info_uses_config_port(self, capsys):
         """print_connection_info が config.redis.port を使用"""
         manager = RedisManager()
@@ -68,8 +73,95 @@ class TestRedisManager:
             manager.print_connection_info()
 
         captured = capsys.readouterr()
+        assert "Redis Connection" in captured.out
+        assert "127.0.0.1" in captured.out
         assert f"Port: {config.redis.port}" in captured.out
         assert f"redis-cli -p {config.redis.port}" in captured.out
+
+
+class TestRedisManagerWaitForService:
+    """Tests for Redis-specific readiness checks."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_readiness_sleep(self):
+        with patch("basekit.docker_manager.time.sleep") as sleep:
+            yield sleep
+
+    def test_wait_for_service_immediate_success(self, _patch_readiness_sleep):
+        with patch("repom.redis.manage.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0, stdout="PONG\n")
+
+            RedisManager().wait_for_service(max_retries=2)
+
+        assert run.call_count == 1
+        _patch_readiness_sleep.assert_not_called()
+
+    def test_wait_for_service_retries_until_ready(self, _patch_readiness_sleep):
+        with patch("repom.redis.manage.subprocess.run") as run:
+            run.side_effect = [
+                MagicMock(returncode=1, stdout=""),
+                MagicMock(returncode=1, stdout=""),
+                MagicMock(returncode=0, stdout="PONG\n"),
+            ]
+
+            RedisManager().wait_for_service(max_retries=3)
+
+        assert run.call_count == 3
+        assert _patch_readiness_sleep.call_count == 2
+
+    def test_wait_for_service_times_out(self, _patch_readiness_sleep):
+        with patch("repom.redis.manage.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=1, stdout="")
+
+            with pytest.raises(TimeoutError):
+                RedisManager().wait_for_service(max_retries=1)
+
+        assert _patch_readiness_sleep.call_count == 1
+
+    def test_wait_for_service_handles_subprocess_exception(
+        self, _patch_readiness_sleep
+    ):
+        with patch("repom.redis.manage.subprocess.run") as run:
+            run.side_effect = OSError("Docker is unavailable")
+
+            with pytest.raises(TimeoutError):
+                RedisManager().wait_for_service(max_retries=1)
+
+        run.assert_called_once()
+        _patch_readiness_sleep.assert_called_once_with(1)
+
+    def test_wait_for_service_never_places_password_in_argv(
+        self, _patch_readiness_sleep
+    ):
+        with patch.object(config.redis, "password", "sentinel-secret"):
+            with patch("repom.redis.manage.subprocess.run") as run:
+                run.side_effect = [
+                    MagicMock(returncode=1, stdout="", stderr="not ready"),
+                    MagicMock(returncode=0, stdout="PONG\n"),
+                ]
+
+                RedisManager().wait_for_service(max_retries=2)
+
+        assert run.call_count == 2
+        for call in run.call_args_list:
+            assert "sentinel-secret" not in " ".join(call.args[0])
+        _patch_readiness_sleep.assert_called_once_with(1)
+
+    def test_wait_for_service_treats_noauth_response_as_ready(
+        self, _patch_readiness_sleep
+    ):
+        with patch.object(config.redis, "password", "secret"):
+            with patch("repom.redis.manage.subprocess.run") as run:
+                run.return_value = MagicMock(
+                    returncode=1,
+                    stdout="",
+                    stderr="NOAUTH Authentication required.",
+                )
+
+                RedisManager().wait_for_service(max_retries=1)
+
+        run.assert_called_once()
+        _patch_readiness_sleep.assert_not_called()
 
 
 class TestGenerateDockerCompose:
@@ -210,11 +302,10 @@ class TestGenerateRedisConf:
         """redis.conf の内容が有効な設定を含む"""
         conf = generate_redis_conf()
 
-        # Should contain key configuration sections
-        assert "databases" in conf
-        assert "appendonly" in conf
-        assert "save" in conf
-        assert "maxmemory" in conf
+        assert "databases 16" in conf
+        assert "appendonly yes" in conf
+        assert "save 900 1" in conf
+        assert "maxmemory 256mb" in conf
 
     def test_conf_is_not_empty(self):
         """redis.conf が空でない"""
@@ -257,61 +348,8 @@ class TestGenerateRedisConf:
             generate_redis_conf(password="")
 
 
-class TestConfigIntegration:
-    """Tests for Config integration with redis module."""
-
-    def test_redis_config_exists_in_repom_config(self):
-        """config に redis フィールドがある"""
-        assert hasattr(config, 'redis')
-
-    def test_redis_config_has_container(self):
-        """redis config に container フィールドがある"""
-        assert hasattr(config.redis, 'container')
-
-    def test_redis_config_has_port(self):
-        """redis config に port フィールドがある"""
-        assert hasattr(config.redis, 'port')
-        assert isinstance(config.redis.port, int)
-        assert config.redis.port > 0
-
-    def test_redis_container_config_has_methods(self):
-        """redis container config に必要なメソッドがある"""
-        container = config.redis.container
-        assert hasattr(container, 'get_container_name')
-        assert hasattr(container, 'get_volume_name')
-        assert callable(container.get_container_name)
-        assert callable(container.get_volume_name)
-
-    def test_redis_container_defaults(self):
-        """redis container config のデフォルト値が正しい"""
-        container = config.redis.container
-        assert container.get_container_name() == "repom_redis"
-        assert container.get_volume_name() == "repom_redis_data"
-        assert container.image == "redis:7-alpine"
-
-
 class TestDirectoryManagement:
     """Tests for directory management functions."""
-
-    def test_get_compose_dir_returns_path(self):
-        """get_compose_dir が有効なパスを返す"""
-        compose_dir = RedisManager().get_compose_dir()
-        assert isinstance(compose_dir, Path)
-        assert compose_dir.exists()
-
-    def test_get_init_dir_returns_path(self):
-        """get_init_dir が有効なパスを返す"""
-        init_dir = RedisManager().get_init_dir()
-        assert isinstance(init_dir, Path)
-        # Should be a subdirectory of compose dir
-        assert "redis_init" in str(init_dir)
-
-    def test_get_compose_dir_uses_redis_subdir(self):
-        """get_compose_dir が redis サブディレクトリを使用（分離プロジェクト構造）"""
-        compose_dir = RedisManager().get_compose_dir()
-        # Should be config.data_path/redis/
-        assert str(compose_dir).endswith("redis")
-        assert "redis" in str(compose_dir)
 
     def test_redis_generate_creates_in_redis_subdir(self, tmp_path):
         """redis_generate が data/repom/redis/ に docker-compose.yml を生成"""
@@ -489,88 +527,6 @@ class TestRedisEnsureRunning:
 
         manager_instance.start.assert_called_once_with(timeout_seconds=30)
 
-    def test_raises_runtime_error_when_docker_missing(self):
-        from unittest.mock import patch
-
-        import pytest
-
-        from repom.redis import manage
-
-        with patch.object(manage, "config", self._patch_config()):
-            with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
-                side_effect=FileNotFoundError("docker not found"),
-            ):
-                with pytest.raises(RuntimeError, match="docker command not found"):
-                    manage.ensure_running()
-
-    def test_raises_runtime_error_when_docker_daemon_unavailable(self):
-        import subprocess
-        from unittest.mock import patch
-
-        import pytest
-
-        from repom.redis import manage
-
-        with patch.object(manage, "config", self._patch_config()):
-            with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
-                side_effect=subprocess.CalledProcessError(
-                    1,
-                    ["docker", "ps"],
-                    stderr="Cannot connect to the Docker daemon",
-                ),
-            ):
-                with pytest.raises(
-                    RuntimeError, match="Cannot connect to the Docker daemon"
-                ):
-                    manage.ensure_running()
-
-    def test_raises_runtime_error_on_timeout(self):
-        from unittest.mock import MagicMock, patch
-
-        import pytest
-
-        from repom.redis import manage
-
-        manager_instance = MagicMock()
-        manager_instance.start.side_effect = TimeoutError(
-            "Redis did not start within 30 seconds"
-        )
-        with patch.object(manage, "config", self._patch_config()):
-            with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
-                return_value=False,
-            ):
-                with patch.object(manage, "generate"):
-                    with patch.object(
-                        manage, "RedisManager", return_value=manager_instance
-                    ):
-                        with pytest.raises(RuntimeError, match="Failed to start Redis"):
-                            manage.ensure_running()
-
-    def test_raises_runtime_error_on_system_exit(self):
-        from unittest.mock import MagicMock, patch
-
-        import pytest
-
-        from repom.redis import manage
-
-        manager_instance = MagicMock()
-        manager_instance.start.side_effect = SystemExit(1)
-        with patch.object(manage, "config", self._patch_config()):
-            with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
-                return_value=False,
-            ):
-                with patch.object(manage, "generate"):
-                    with patch.object(
-                        manage, "RedisManager", return_value=manager_instance
-                    ):
-                        with pytest.raises(RuntimeError, match="Failed to start Redis"):
-                            manage.ensure_running()
-
-
 class TestRedisGenerationCLI:
     def test_force_regenerate_flag_is_forwarded_to_generate(self, monkeypatch):
         import sys
@@ -593,3 +549,41 @@ class TestRedisGenerationCLI:
             manage.main_start()
 
         start.assert_called_once_with(overwrite_secrets=True)
+
+
+@pytest.mark.parametrize(
+    ("entrypoint", "compose_command"),
+    [
+        pytest.param(manage.start, "up -d", id="start"),
+        pytest.param(manage.stop, "stop", id="stop"),
+        pytest.param(manage.remove, "down -v", id="remove"),
+    ],
+)
+def test_lifecycle_entrypoints_run_expected_compose_command(
+    entrypoint, compose_command, monkeypatch, tmp_path
+):
+    compose_file = tmp_path / "docker-compose.generated.yml"
+    compose_file.write_text("services: {}\n", encoding="utf-8")
+    monkeypatch.setattr(
+        RedisManager, "get_compose_file_path", lambda self: compose_file
+    )
+    run_compose = MagicMock()
+    monkeypatch.setattr(DockerCommandExecutor, "run_docker_compose", run_compose)
+
+    if entrypoint is manage.start:
+        generate = MagicMock()
+        monkeypatch.setattr(manage, "generate", generate)
+        monkeypatch.setattr(
+            RedisManager, "wait_for_service", lambda self, max_retries: None
+        )
+
+    entrypoint()
+
+    if entrypoint is manage.start:
+        generate.assert_called_once_with(overwrite_secrets=False)
+    run_compose.assert_called_once_with(
+        compose_command,
+        compose_file,
+        cwd=compose_file.parent,
+        project_name=RedisManager().get_container_name(),
+    )

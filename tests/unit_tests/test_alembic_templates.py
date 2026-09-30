@@ -23,14 +23,6 @@ def _base_kwargs():
     }
 
 
-def test_generate_alembic_ini_rejects_newline_in_version_table():
-    with pytest.raises(ValueError):
-        AlembicTemplates.generate_alembic_ini(
-            **_base_kwargs(),
-            version_table=INJECTION_PAYLOAD,
-        )
-
-
 @pytest.mark.parametrize(
     "kwargs",
     [

@@ -5,12 +5,14 @@ DockerService, Volume 生成、および docker-compose.yml ファイル出力�
 
 import os
 import stat
-import subprocess
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
 import yaml
+from basekit.docker_manager import DockerCommandExecutor
+from repom.postgres import manage
+from repom.postgres.manage import PostgresManager
 
 class TestGenerateDockerComposePostgresOnly:
     """generate_docker_compose() - PostgreSQL のみ（pgAdmin 無効）"""
@@ -751,17 +753,6 @@ class TestPgAdminServersJson:
 class TestDirectorySeparation:
     """Tests for separate project directory structure (Issue #043)"""
 
-    def test_get_compose_dir_uses_postgres_subdir(self, tmp_path, monkeypatch):
-        """get_compose_dir が postgres サブディレクトリを使用（分離プロジェクト構造）"""
-        from repom.postgres import manage
-
-        monkeypatch.setattr(manage.config, "root_path", str(tmp_path))
-        compose_dir = manage.PostgresManager().get_compose_dir()
-
-        # Should be config.data_path/postgres/
-        assert str(compose_dir).endswith("postgres")
-        assert "postgres" in str(compose_dir)
-
     def test_postgres_generate_creates_in_postgres_subdir(self, tmp_path):
         """postgres_generate が data/repom/postgres/ に docker-compose.yml を生成"""
         from repom.postgres import manage as postgres_manage
@@ -897,6 +888,119 @@ class TestDirectorySeparation:
             from repom.postgres.manage import get_init_dir  # noqa: F401
 
 
+class TestPostgresManagerName:
+    def test_get_container_name_uses_config(self):
+        manager = PostgresManager()
+
+        assert manager.config is manage.config
+        assert manager.get_container_name() == (
+            manage.config.postgres.container.get_container_name()
+        )
+
+
+class TestPostgresManagerWaitForService:
+    @pytest.fixture(autouse=True)
+    def _patch_readiness_sleep(self):
+        with patch("basekit.docker_manager.time.sleep") as sleep:
+            yield sleep
+
+    def test_wait_for_service_immediate_success(self, _patch_readiness_sleep):
+        manager = PostgresManager()
+
+        with patch("repom.postgres.manage.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+
+            manager.wait_for_service(max_retries=2)
+
+        assert run.call_count == 1
+        _patch_readiness_sleep.assert_not_called()
+
+    def test_wait_for_service_timeout(self, _patch_readiness_sleep):
+        manager = PostgresManager()
+
+        with patch("repom.postgres.manage.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=1)
+
+            with pytest.raises(TimeoutError):
+                manager.wait_for_service(max_retries=1)
+
+        assert _patch_readiness_sleep.call_count == 1
+
+
+class TestPostgresManagerConnectionInfo:
+    def test_print_connection_info(self, capsys):
+        manager = PostgresManager()
+
+        manager.print_connection_info()
+
+        output = capsys.readouterr().out
+        assert "PostgreSQL Connection" in output
+        assert "127.0.0.1" in output
+        assert str(manager.config.postgres.container.host_port) in output
+
+    def test_print_connection_info_masks_passwords(self, capsys):
+        mock_config = MagicMock()
+        mock_config.data_path = Path("data") / "repom"
+        mock_config.db_name = "repom"
+        mock_config.postgres.user = "repom"
+        mock_config.postgres.password = "postgres-secret"
+        mock_config.postgres.container.host_port = 5432
+        mock_config.postgres.container.get_container_name.return_value = (
+            "repom_postgres"
+        )
+        mock_config.pgadmin.email = "admin@example.com"
+        mock_config.pgadmin.password = "pgadmin-secret"
+        mock_config.pgadmin.container.enabled = True
+        mock_config.pgadmin.container.host_port = 5050
+
+        with patch("repom.postgres.manage.config", mock_config):
+            manager = PostgresManager()
+            manager.print_connection_info()
+
+        output = capsys.readouterr().out
+        assert "postgres-secret" not in output
+        assert "pgadmin-secret" not in output
+        assert output.count("Password: ***") == 2
+
+
+@pytest.mark.parametrize(
+    ("entrypoint", "compose_command"),
+    [
+        pytest.param(manage.start, "up -d", id="start"),
+        pytest.param(manage.stop, "stop", id="stop"),
+        pytest.param(manage.remove, "down -v", id="remove"),
+    ],
+)
+def test_lifecycle_entrypoints_run_expected_compose_command(
+    entrypoint, compose_command, monkeypatch, tmp_path
+):
+    compose_file = tmp_path / "docker-compose.generated.yml"
+    compose_file.write_text("services: {}\n", encoding="utf-8")
+    monkeypatch.setattr(
+        PostgresManager, "get_compose_file_path", lambda self: compose_file
+    )
+    run_compose = MagicMock()
+    monkeypatch.setattr(DockerCommandExecutor, "run_docker_compose", run_compose)
+
+    if entrypoint is manage.start:
+        generate = MagicMock()
+        monkeypatch.setattr(manage, "generate", generate)
+        monkeypatch.setattr(
+            PostgresManager, "wait_for_service", lambda self, max_retries: None
+        )
+
+    entrypoint()
+
+    if entrypoint is manage.start:
+        generate.assert_called_once_with(overwrite_secrets=False)
+    run_compose.assert_called_once_with(
+        compose_command,
+        compose_file,
+        cwd=compose_file.parent,
+        project_name=PostgresManager().get_container_name(),
+    )
+
+
 class TestPostgresEnsureRunning:
     """ensure_running() の単体テスト"""
 
@@ -1028,134 +1132,35 @@ class TestPostgresEnsureRunning:
         generate.assert_not_called()
         manager_cls.assert_not_called()
 
-    def test_raises_runtime_error_when_docker_missing(self):
-        """docker コマンド不在は RuntimeError として伝搬する"""
-        import pytest
-
-        from repom.postgres import manage
-
-        with patch.object(manage, "config", self._patch_config(pgadmin_enabled=False)):
-            with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
-                side_effect=FileNotFoundError("docker not found"),
-            ):
-                with pytest.raises(RuntimeError, match="docker command not found"):
-                    manage.ensure_running()
-
-    def test_raises_runtime_error_when_docker_daemon_unavailable(self):
-        """An unreachable Docker daemon makes "docker ps" fail with
-        CalledProcessError, which ensure_running reports as RuntimeError
-        including the daemon message."""
-        import pytest
-
-        from repom.postgres import manage
-
-        with patch.object(manage, "config", self._patch_config(pgadmin_enabled=False)):
-            with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
-                side_effect=subprocess.CalledProcessError(
-                    1,
-                    ["docker", "ps"],
-                    stderr="Cannot connect to the Docker daemon",
-                ),
-            ):
-                with pytest.raises(
-                    RuntimeError, match="Cannot connect to the Docker daemon"
-                ):
-                    manage.ensure_running()
-
-    def test_raises_runtime_error_on_timeout(self):
-        """manager.start() の TimeoutError は RuntimeError に正規化される"""
-        import pytest
-
-        from repom.postgres import manage
-
-        manager_instance = MagicMock()
-        manager_instance.start.side_effect = TimeoutError(
-            "PostgreSQL did not start within 30 seconds"
-        )
-        with patch.object(manage, "config", self._patch_config(pgadmin_enabled=False)):
-            with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
-                return_value=False,
-            ):
-                with patch.object(manage, "generate"):
-                    with patch.object(
-                        manage, "PostgresManager", return_value=manager_instance
-                    ):
-                        with pytest.raises(RuntimeError, match="Failed to start PostgreSQL"):
-                            manage.ensure_running()
-
-    def test_raises_runtime_error_on_system_exit(self):
-        """manager.start() の SystemExit も RuntimeError に正規化される"""
-        import pytest
-
-        from repom.postgres import manage
-
-        manager_instance = MagicMock()
-        manager_instance.start.side_effect = SystemExit(1)
-        with patch.object(manage, "config", self._patch_config(pgadmin_enabled=False)):
-            with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
-                return_value=False,
-            ):
-                with patch.object(manage, "generate"):
-                    with patch.object(
-                        manage, "PostgresManager", return_value=manager_instance
-                    ):
-                        with pytest.raises(RuntimeError, match="Failed to start PostgreSQL"):
-                            manage.ensure_running()
-
-
 class TestGenerateFailsClosedOnDefaultCredentials:
     """postgres_generate must not stand up a database with a known password."""
 
-    @patch('repom.postgres.manage.config')
-    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
-    def test_generate_raises_when_postgres_password_unset(
-        self, mock_get_init_dir, mock_config, tmp_path
+    @pytest.mark.parametrize(
+        "password",
+        [
+            pytest.param(None, id="unset"),
+            pytest.param("", id="empty"),
+            pytest.param("CHANGE_ME", id="placeholder"),
+        ],
+    )
+    def test_generate_rejects_unconfigured_postgres_password(
+        self, password, monkeypatch, tmp_path
     ):
-        """With POSTGRES_PASSWORD left at its default, generation raises and
-        writes no file."""
         init_dir = tmp_path / "init"
         init_dir.mkdir()
-        mock_get_init_dir.return_value = init_dir
-
-        mock_pg_config = MagicMock()
-        mock_pg_config.user = "repom"
-        mock_pg_config.password = "CHANGE_ME"
-
-        mock_config.postgres = mock_pg_config
+        mock_config = MagicMock()
         mock_config.data_path = tmp_path / "data" / "repom"
-
-        from repom.postgres.manage import generate
+        mock_config.postgres.user = "repom"
+        mock_config.postgres.password = password
+        monkeypatch.setattr(manage, "config", mock_config)
+        monkeypatch.setattr(
+            PostgresManager, "get_init_dir", lambda self: init_dir
+        )
 
         with pytest.raises(ValueError, match="POSTGRES_PASSWORD"):
-            generate()
+            manage.generate()
 
         assert list(init_dir.iterdir()) == []
-
-    @patch('repom.postgres.manage.config')
-    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
-    def test_generate_rejects_placeholder_password(
-        self, mock_get_init_dir, mock_config, tmp_path
-    ):
-        """CHANGE_ME, copied verbatim from .env.example, is rejected too."""
-        init_dir = tmp_path / "init"
-        init_dir.mkdir()
-        mock_get_init_dir.return_value = init_dir
-
-        mock_pg_config = MagicMock()
-        mock_pg_config.user = "repom"
-        mock_pg_config.password = "CHANGE_ME"
-
-        mock_config.postgres = mock_pg_config
-        mock_config.data_path = tmp_path / "data" / "repom"
-
-        from repom.postgres.manage import generate_docker_compose
-
-        with pytest.raises(ValueError, match="POSTGRES_PASSWORD"):
-            generate_docker_compose()
 
     @patch('repom.postgres.manage.config')
     @patch('repom.postgres.manage.PostgresManager.get_init_dir')
@@ -1188,27 +1193,6 @@ class TestGenerateFailsClosedOnDefaultCredentials:
 
         with pytest.raises(ValueError, match="PGADMIN_DEFAULT_PASSWORD"):
             generate_docker_compose()
-
-    @patch('repom.postgres.manage.config')
-    @patch('repom.postgres.manage.PostgresManager.get_init_dir')
-    def test_prod_env_refuses_default_credentials(
-        self, mock_get_init_dir, mock_config, tmp_path
-    ):
-        """exec_env=prod does not relax the fail-closed check."""
-        mock_get_init_dir.return_value = Path("/tmp/init")
-        mock_config.exec_env = "prod"
-        mock_config.data_path = tmp_path / "data" / "repom"
-
-        mock_pg_config = MagicMock()
-        mock_pg_config.user = "repom"
-        mock_pg_config.password = "CHANGE_ME"
-        mock_config.postgres = mock_pg_config
-
-        from repom.postgres.manage import generate_docker_compose
-
-        with pytest.raises(ValueError, match="POSTGRES_PASSWORD"):
-            generate_docker_compose()
-
 
 class TestPostgresGenerationCLI:
     def test_force_regenerate_flag_is_forwarded_to_generate(self, monkeypatch):

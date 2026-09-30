@@ -175,17 +175,6 @@ class TestCreateAlembicIni:
             ini_path = Path(tmpdir) / 'alembic.ini'
             assert ini_path.exists()
 
-    def test_create_version_directory_success(self):
-        """create_version_directory creates directory with __init__.py"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            setup = AlembicSetup(tmpdir, 'sqlite:///test.db')
-            setup.create_version_directory()
-
-            versions_dir = Path(tmpdir) / 'alembic' / 'versions'
-            assert versions_dir.exists()
-            assert versions_dir.is_dir()
-            assert (versions_dir / '__init__.py').exists()
-
     def test_create_alembic_ini_content(self):
         """Generated alembic.ini contains correct configuration"""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -354,6 +343,17 @@ class TestCreateAlembicIni:
 
 class TestCreateVersionDirectory:
     """Tests for create_version_directory method"""
+
+    def test_create_version_directory_success(self):
+        """create_version_directory creates directory with __init__.py"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            setup = AlembicSetup(tmpdir, 'sqlite:///test.db')
+            setup.create_version_directory()
+
+            versions_dir = Path(tmpdir) / 'alembic' / 'versions'
+            assert versions_dir.exists()
+            assert versions_dir.is_dir()
+            assert (versions_dir / '__init__.py').exists()
 
     def test_create_version_directory_idempotent(self):
         """create_version_directory is safe to call multiple times"""

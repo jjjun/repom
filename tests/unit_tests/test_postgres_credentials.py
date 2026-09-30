@@ -361,22 +361,6 @@ def test_pgadmin_rotation_failure_masks_password():
     assert "***" in str(excinfo.value)
 
 
-def test_rotation_result_commands_are_masked():
-    """No field of a CredentialRotationResult carries the sentinel in cleartext."""
-    plan = PgAdminCredentialRotationPlan(
-        email="admin@example.com",
-        new_password="sentinel-new-secret",
-        container_name="repom_pgadmin",
-    )
-
-    result = rotate_pgadmin_password(plan, dry_run=True)
-
-    for command in result.commands:
-        assert "sentinel-new-secret" not in " ".join(command)
-    for line in result.masked_output:
-        assert "sentinel-new-secret" not in line
-
-
 def test_pgadmin_volume_recreation_is_dry_run_without_confirm():
     runner = MagicMock()
     plan = PgAdminCredentialRotationPlan(

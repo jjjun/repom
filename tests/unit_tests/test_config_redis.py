@@ -155,6 +155,8 @@ class TestRedisConfigIntegration:
         config = RepomConfig()
         assert hasattr(config, 'redis')
         assert config.redis.host == '127.0.0.1'
+        assert isinstance(config.redis.port, int)
+        assert config.redis.port > 0
         assert config.redis.port == 6379
 
     def test_redis_container_in_redis_config(self):
