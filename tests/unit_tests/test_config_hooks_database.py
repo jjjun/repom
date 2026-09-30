@@ -44,7 +44,7 @@ def test_apply_database_env_overrides_applies_database_url(monkeypatch):
 
     apply_database_env_overrides(config)
 
-    assert config.db_url == "postgresql://user:pass@host/db"
+    assert config.db_url == "postgresql://user:pass@host/db?sslmode=prefer"
 
 
 def test_apply_database_env_overrides_prefers_repom_database_url(monkeypatch):
@@ -54,7 +54,7 @@ def test_apply_database_env_overrides_prefers_repom_database_url(monkeypatch):
 
     apply_database_env_overrides(config)
 
-    assert config.db_url == "postgresql://repom-specific"
+    assert config.db_url == "postgresql://repom-specific?sslmode=prefer"
 
 
 def test_apply_database_env_overrides_applies_db_type(monkeypatch):

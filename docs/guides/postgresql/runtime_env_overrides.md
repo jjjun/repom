@@ -52,7 +52,15 @@ host on the local network.
 
 Use `REPOM_DATABASE_URL` / `DATABASE_URL` only when you want a full URL override
 for every environment. Those variables set `config.db_url` directly and bypass
-the normal `db_type` URL construction.
+the normal `db_type` URL construction. PostgreSQL overrides still receive the
+same TLS policy as generated URLs: if the URL omits `sslmode`, repom uses
+`config.postgres.sslmode` when set, or defaults to `prefer` outside prod and for
+local or hostless URLs, and `require` for remote prod hosts. A configured
+`config.postgres.sslrootcert` is added when repom supplies the missing
+`sslmode`, unless the URL already has `sslrootcert`. An explicit URL `sslmode`
+is preserved and validated; `disable`, `allow`, and `prefer` raise `ValueError`
+for remote prod hosts. Set the URL's `sslmode` to `require` or stronger to fix
+that error. Non-PostgreSQL overrides are returned unchanged.
 
 These env variables affect repom's runtime config and generated compose files
 when the helpers are called before `postgres_generate` / `postgres_start`.

@@ -109,16 +109,28 @@ def _warn_if_prod_sslmode_not_enforced() -> None:
     requires 'require' or stronger in prod for any other host - but operators
     should still be able to see that TLS is not enforced for that connection.
     """
-    sslmode = config.postgres_sslmode
+    db_url = config.db_url
+    if db_url is None:
+        return
+
+    try:
+        url = make_url(db_url)
+    except Exception:
+        return
+    if url.get_backend_name() not in {"postgres", "postgresql"}:
+        return
+
+    sslmode = url.query.get("sslmode", "prefer")
+    if isinstance(sslmode, tuple):
+        sslmode = sslmode[-1] if sslmode else "prefer"
     if (
-        config.db_type == "postgres"
-        and is_prod_exec_env(config.exec_env)
+        is_prod_exec_env(config.exec_env)
         and sslmode != "require"
         and not sslmode.startswith("verify")
     ):
         logger.warning(
             f"PostgreSQL sslmode={sslmode!r} in prod for host "
-            f"{config.postgres.host!r}; TLS is not enforced for this connection."
+            f"{url.host!r}; TLS is not enforced for this connection."
         )
 
 

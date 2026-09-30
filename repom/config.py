@@ -214,13 +214,41 @@ class RepomConfig(Config):
         require 未満（disable/allow/prefer）の値は db_url 生成時に拒否
         されます。
         """
-        if self.postgres.sslmode is not None:
-            return self.postgres.sslmode
-        if normalize_exec_env(self.exec_env) != "prod":
-            return "prefer"
-        if self.postgres.host in _POSTGRES_LOCAL_HOSTS:
-            return "prefer"
-        return "require"
+        return self._resolve_postgres_tls(self.postgres.host).sslmode
+
+    def _resolve_postgres_tls(
+        self, host: Optional[str], sslmode: Optional[str] = None
+    ) -> PostgresTlsSettings:
+        """Resolve and validate PostgreSQL TLS settings for *host*."""
+        if sslmode is None:
+            sslmode = self.postgres.sslmode
+        if sslmode is None:
+            if (
+                not is_prod_exec_env(self.exec_env)
+                or host is None
+                or host in _POSTGRES_LOCAL_HOSTS
+            ):
+                sslmode = "prefer"
+            else:
+                sslmode = "require"
+
+        if (
+            is_prod_exec_env(self.exec_env)
+            and host is not None
+            and host not in _POSTGRES_LOCAL_HOSTS
+            and sslmode in _POSTGRES_WEAK_SSLMODES
+        ):
+            raise ValueError(
+                f"PostgreSQL sslmode {sslmode!r} is not allowed in prod for "
+                f"a non-local host ({host!r}); set sslmode to 'require' or "
+                "stronger (config.postgres.sslmode for generated URLs, or "
+                "the URL query for URL overrides)."
+            )
+
+        return PostgresTlsSettings(
+            sslmode=sslmode,
+            sslrootcert=self.postgres.sslrootcert,
+        )
 
     def postgres_tls_settings(self) -> PostgresTlsSettings:
         """PostgreSQL の TLS 設定を解決・検証する
@@ -236,18 +264,7 @@ class RepomConfig(Config):
             ValueError: prod でリモートホストへ接続し、sslmode が require
                 未満（disable/allow/prefer）の場合。
         """
-        sslmode = self.postgres_sslmode
-        if (
-            is_prod_exec_env(self.exec_env)
-            and self.postgres.host not in _POSTGRES_LOCAL_HOSTS
-            and sslmode in _POSTGRES_WEAK_SSLMODES
-        ):
-            raise ValueError(
-                f"PostgreSQL sslmode {sslmode!r} is not allowed in prod for "
-                f"a non-local host ({self.postgres.host!r}); set "
-                "config.postgres.sslmode to 'require' or stronger."
-            )
-        return PostgresTlsSettings(sslmode=sslmode, sslrootcert=self.postgres.sslrootcert)
+        return self._resolve_postgres_tls(self.postgres.host)
 
     @property
     def db_url(self) -> Optional[str]:
@@ -291,7 +308,21 @@ class RepomConfig(Config):
             # 何も設定しない場合は自動的に SQLite
         """
         if self._db_url is not None:
-            return self._db_url
+            url = make_url(self._db_url)
+            if url.get_backend_name() not in {"postgres", "postgresql"}:
+                return self._db_url
+
+            query = dict(url.query)
+            if "sslmode" in query:
+                self._resolve_postgres_tls(url.host, sslmode=query["sslmode"])
+            else:
+                tls = self._resolve_postgres_tls(url.host)
+                query["sslmode"] = tls.sslmode
+                if tls.sslrootcert and "sslrootcert" not in query:
+                    query["sslrootcert"] = tls.sslrootcert
+                url = url.set(query=query)
+
+            return url.render_as_string(hide_password=False)
 
         # PostgreSQL
         if self.db_type == "postgres":

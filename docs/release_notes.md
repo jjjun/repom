@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- BREAKING: PostgreSQL URL overrides now receive the host-aware TLS policy used
+  by generated URLs. A remote prod URL without `sslmode` defaults to `require`,
+  and explicit `disable`, `allow`, or `prefer` modes raise `ValueError`; set the
+  URL's `sslmode` to `require` or stronger. Local/hostless URLs and non-prod
+  environments keep the `prefer` default, and non-PostgreSQL overrides are
+  unchanged.
 - PostgreSQL plain-SQL restores now disable user `psqlrc` settings, stop on the
   first SQL error, and run in a single transaction; custom-format restores also
   use a single transaction so failed restores roll back instead of leaving a
