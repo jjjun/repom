@@ -15,6 +15,10 @@ def _mock_config(root_path, db_url="sqlite:///data/repom_dev.sqlite3"):
     config = MagicMock()
     config.root_path = root_path
     config.db_url = db_url
+    config.alembic_script_location = "alembic"
+    config.alembic_version_locations = None
+    config.alembic_version_table = None
+    config.alembic_version_table_schema = None
     return config
 
 
@@ -45,3 +49,21 @@ def test_alembic_init_uses_existing_ini_version_locations(monkeypatch, tmp_path)
     versions_dir = tmp_path / "migrations_ns2"
     assert (versions_dir / "__init__.py").exists()
     assert not (tmp_path / "alembic" / "versions").exists()
+
+
+def test_alembic_init_uses_configured_ini_options(monkeypatch, tmp_path):
+    config = _mock_config(str(tmp_path))
+    config.alembic_script_location = "submod/repom/alembic"
+    config.alembic_version_locations = "%(here)s/migrations"
+    config.alembic_version_table = "alembic_version_mine"
+    config.alembic_version_table_schema = "migration"
+    monkeypatch.setattr(alembic_init, "config", config)
+
+    alembic_init.main()
+
+    ini_content = (tmp_path / "alembic.ini").read_text()
+    assert "script_location = submod/repom/alembic" in ini_content
+    assert "version_locations = %(here)s/migrations" in ini_content
+    assert "version_table = alembic_version_mine" in ini_content
+    assert "version_table_schema = migration" in ini_content
+    assert (tmp_path / "migrations" / "__init__.py").exists()

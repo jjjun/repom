@@ -1,11 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from repom.config_hooks.database import apply_database_env_overrides
-from repom.config_hooks.pgadmin import apply_pgadmin_env_overrides
-from repom.config_hooks.postgres import apply_postgres_env_overrides
-from repom.config_hooks.redis import apply_redis_env_overrides
-from repom.config_hooks.sqlite import apply_sqlite_env_overrides
+from repom.config_hooks import apply_repom_env_overrides
 from repom.exec_env import normalize_exec_env
 
 
@@ -58,10 +54,6 @@ def hook_config(config: dataclass) -> dataclass:
         config.redis.port = 6380
         # config.redis.password = 'your_redis_password'  # 必要に応じて
 
-        apply_database_env_overrides(config)
-        apply_postgres_env_overrides(config)
-        apply_pgadmin_env_overrides(config)
-        apply_redis_env_overrides(config)
-        apply_sqlite_env_overrides(config)
+        apply_repom_env_overrides(config)
 
     return config

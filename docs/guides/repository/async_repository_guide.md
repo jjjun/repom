@@ -98,6 +98,18 @@ updated = await repo.bulk_update([{"id": 1, "status": "done"}])
 deleted = await repo.bulk_delete(ids=[1, 2])
 ```
 
+`bulk_update()` と `bulk_delete()` は `filters=` を通じて SQLAlchemy 式も受け取ります。
+これらの式は、該当する `filter_by=` および `ids=` の条件と AND で結合されます。
+`bulk_permanent_delete()` は、論理削除対応モデルも含め、常に一致する行を物理削除します。
+`get_or_create(lookup, defaults=None)` は `(instance, created)` を返し、一意キーへの同時挿入で
+別の処理が先行した場合は、その行を再検索して返します。
+
+```python
+updated = await repo.bulk_update([{"status": "expired"}], filters=[Task.created_at < cutoff])
+purged = await repo.bulk_permanent_delete(filters=[Task.deleted_at < cutoff])
+task, created = await repo.get_or_create({"external_id": external_id}, {"status": "new"})
+```
+
 `options` と `default_options` には `selectinload()` や `joinedload()` を指定できます。
 非同期 ORM では暗黙の lazy load を避け、必要な relationship を明示的に
 eager load してください。コレクション関連への `joinedload()` も指定でき、

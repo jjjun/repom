@@ -8,15 +8,24 @@ _value_to_filter() はかつて autoescape なしの contains() を既定で使�
 DoS を起こせる欠陥があった。field_to_column の既定値も完全一致（==）に変更し、
 部分一致・前方一致は contains_column() / prefix_column() で明示する。
 """
-import pytest
+from datetime import date
 from typing import Optional
 
-from sqlalchemy import Integer, String
+import pytest
+
+from sqlalchemy import Date, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from repom.models.base_model import BaseModel
-from repom import BaseRepository, FilterParams
-from repom.repositories import contains_column, prefix_column
+from repom import AsyncBaseRepository, BaseRepository, FilterParams
+from repom.repositories import (
+    contains_column,
+    gte_column,
+    gt_column,
+    lte_column,
+    lt_column,
+    prefix_column,
+)
 
 
 class FilterMatchModel(BaseModel):
@@ -48,6 +57,46 @@ class PrefixFilterRepository(BaseRepository[FilterMatchModel]):
 
     def __init__(self, session):
         super().__init__(FilterMatchModel, session)
+
+
+class FilterRangeModel(BaseModel):
+    __tablename__ = 'filter_range_model'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    number: Mapped[int] = mapped_column(Integer)
+    created_on: Mapped[date] = mapped_column(Date)
+    name: Mapped[str] = mapped_column(String(400))
+
+
+class FilterRangeParams(FilterParams):
+    number_gte: Optional[int] = None
+    number_gt: Optional[int] = None
+    number_lte: Optional[int] = None
+    number_lt: Optional[int] = None
+    created_on_gte: Optional[date] = None
+    created_on_lt: Optional[date] = None
+    name_gte: Optional[str] = None
+
+
+class FilterRangeRepository(BaseRepository[FilterRangeModel]):
+    field_to_column = {
+        "number_gte": gte_column(FilterRangeModel.number),
+        "number_gt": gt_column(FilterRangeModel.number),
+        "number_lte": lte_column(FilterRangeModel.number),
+        "number_lt": lt_column(FilterRangeModel.number),
+        "created_on_gte": gte_column(FilterRangeModel.created_on),
+        "created_on_lt": lt_column(FilterRangeModel.created_on),
+        "name_gte": gte_column(FilterRangeModel.name),
+    }
+
+    def __init__(self, session):
+        super().__init__(FilterRangeModel, session)
+
+
+class AsyncFilterRangeRepository(AsyncBaseRepository[FilterRangeModel]):
+    field_to_column = FilterRangeRepository.field_to_column
+
+    def __init__(self, session):
+        super().__init__(FilterRangeModel, session)
 
 
 def test_field_to_column_defaults_to_exact_match(db_test):
@@ -113,6 +162,64 @@ def test_prefix_column_matches_prefix_only(db_test):
     results = repo.find(params=FilterMatchParams(name="alpha"))
 
     assert {item.name for item in results} == {"alpha"}
+
+
+def test_range_match_modes_handle_integer_and_date_fields(db_test):
+    repo = FilterRangeRepository(session=db_test)
+    repo.bulk_insert([
+        FilterRangeModel(number=1, created_on=date(2025, 1, 1), name="one"),
+        FilterRangeModel(number=2, created_on=date(2025, 1, 2), name="two"),
+        FilterRangeModel(number=3, created_on=date(2025, 1, 3), name="three"),
+    ])
+
+    assert [item.number for item in repo.find(params=FilterRangeParams(number_gte=2), limit=10)] == [2, 3]
+    assert [item.number for item in repo.find(params=FilterRangeParams(number_gt=2), limit=10)] == [3]
+    assert [item.number for item in repo.find(params=FilterRangeParams(number_lte=2), limit=10)] == [1, 2]
+    assert [item.number for item in repo.find(params=FilterRangeParams(number_lt=2), limit=10)] == [1]
+    assert [item.number for item in repo.find(
+        params=FilterRangeParams(created_on_gte=date(2025, 1, 2), created_on_lt=date(2025, 1, 3)),
+        limit=10,
+    )] == [2]
+
+
+def test_range_match_modes_do_not_apply_like_string_length_limit(db_test):
+    repo = FilterRangeRepository(session=db_test)
+    long_name = "a" * 300
+    repo.save(FilterRangeModel(number=1, created_on=date(2025, 1, 1), name=long_name))
+
+    results = repo.find(params=FilterRangeParams(name_gte=long_name), limit=10)
+
+    assert [item.name for item in results] == [long_name]
+
+
+@pytest.mark.asyncio
+async def test_async_range_match_modes_handle_integer_and_date_fields(async_db_test):
+    repo = AsyncFilterRangeRepository(session=async_db_test)
+    await repo.bulk_insert([
+        FilterRangeModel(number=1, created_on=date(2025, 1, 1), name="one"),
+        FilterRangeModel(number=2, created_on=date(2025, 1, 2), name="two"),
+        FilterRangeModel(number=3, created_on=date(2025, 1, 3), name="three"),
+    ])
+
+    assert [item.number for item in await repo.find(params=FilterRangeParams(number_gte=2), limit=10)] == [2, 3]
+    assert [item.number for item in await repo.find(params=FilterRangeParams(number_gt=2), limit=10)] == [3]
+    assert [item.number for item in await repo.find(params=FilterRangeParams(number_lte=2), limit=10)] == [1, 2]
+    assert [item.number for item in await repo.find(params=FilterRangeParams(number_lt=2), limit=10)] == [1]
+    assert [item.number for item in await repo.find(
+        params=FilterRangeParams(created_on_gte=date(2025, 1, 2), created_on_lt=date(2025, 1, 3)),
+        limit=10,
+    )] == [2]
+
+
+@pytest.mark.asyncio
+async def test_async_range_match_modes_do_not_apply_like_string_length_limit(async_db_test):
+    repo = AsyncFilterRangeRepository(session=async_db_test)
+    long_name = "a" * 300
+    await repo.save(FilterRangeModel(number=1, created_on=date(2025, 1, 1), name=long_name))
+
+    results = await repo.find(params=FilterRangeParams(name_gte=long_name), limit=10)
+
+    assert [item.name for item in results] == [long_name]
 
 
 def test_contains_filter_rejects_value_over_max_length(db_test):

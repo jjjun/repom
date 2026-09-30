@@ -1,8 +1,9 @@
-from sqlalchemy.types import TypeDecorator, DateTime
 from datetime import datetime, timezone
 
+from repom.custom_types.UTCDateTime import UTCDateTime
 
-class AutoDateTime(TypeDecorator):
+
+class AutoDateTime(UTCDateTime):
     """
     Custom SQLAlchemy type to automatically set datetime values on insert.
 
@@ -16,8 +17,7 @@ class AutoDateTime(TypeDecorator):
       変えずに保存するため）
     - naive な値は UTC とみなし、`replace(tzinfo=timezone.utc)` で tzinfo を
       付与するだけで、値（wall time）は変更しない
-    - 読み込み時（process_result_value）は naive な値のみ UTC としてラベル付けし、
-      tzinfo 付きの値はそのまま返す
+    - 読み込み時（process_result_value）は UTC に正規化して返す
 
     使用例:
         from sqlalchemy.orm import Mapped, mapped_column
@@ -30,19 +30,9 @@ class AutoDateTime(TypeDecorator):
         （BaseModel の @event.listens_for を参照）
     """
 
-    impl = DateTime(timezone=True)
     cache_ok = True  # SQLAlchemy 2.0+ でキャッシュを有効化
 
     def process_bind_param(self, value, dialect):
         if value is None:
             value = datetime.now(timezone.utc)
-        if isinstance(value, datetime) and value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        elif isinstance(value, datetime):
-            value = value.astimezone(timezone.utc)
-        return value
-
-    def process_result_value(self, value, dialect):
-        if value is not None and value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value
+        return super().process_bind_param(value, dialect)

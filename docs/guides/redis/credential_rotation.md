@@ -34,6 +34,11 @@ REDISCLI_AUTH="new-password" redis-cli -p 6379
 
 ## Existing Running Instance
 
+`main_rotate_password(argv)` accepts an explicit argument list. A task runner
+that parses its own options can call `rotate_redis_password_cli(...)` with
+keyword arguments to use the same password prompts, stdin handling, and
+execute safeguards as the console command.
+
 Dry-run the runtime password change:
 
 ```bash

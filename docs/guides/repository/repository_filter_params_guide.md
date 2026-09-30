@@ -110,6 +110,31 @@ tasks = repo.find(params=TaskFilterParams(status="active", title="task"), limit=
 
 `find(params=..., filters=...)` では、`params` から生成した条件と `filters` の条件を AND で組み合わせるため、両方を渡すと結果がさらに絞り込まれます。デフォルトの `_build_filters()` は、`FilterParams` の値が `None` でないフィールドに対して値が `None` でない `field_to_column` の対応エントリがない場合、リポジトリ名とフィールド名を含む `ValueError` を送出します。該当するフィールドを `field_to_column` に追加するか、`_build_filters()` をオーバーライドしてください。マッピング済みフィールドの処理を `super()._build_filters()` に委ねるオーバーライドでは、残りのフィールドはそのオーバーライドが処理するため、このエラーは発生しません。`count_by_params()` も同じルールに従います。
 
+`count(params=..., filters=...)` と `find_deleted(params=..., filters=...)` は、
+`FilterParams` から生成したマッピング済み条件と明示的な SQL 式を AND で結合します。
+`count_by_params()` は `count(params=...)` を呼び出すための簡便なラッパーです。
+
+`field_to_column` では `gte_column()`、`gt_column()`、`lte_column()`、`lt_column()` を使って
+範囲比較を指定できます。これらのヘルパーは、整数、日付、その他の比較可能な値に対して
+`>=`、`>`、`<=`、`<` の比較を行います。LIKE 検索に適用される文字列長の上限は、
+これらの比較には適用されません。
+
+```python
+from datetime import datetime
+
+from repom.repositories import gte_column, lt_column
+
+class TaskFilterParams(FilterParams):
+    created_at_from: datetime | None = None
+    created_at_before: datetime | None = None
+
+class TaskRepository(BaseRepository[Task]):
+    field_to_column = {
+        "created_at_from": gte_column(Task.created_at),
+        "created_at_before": lt_column(Task.created_at),
+    }
+```
+
 部分一致・前方一致が必要な場合は `contains_column()` / `prefix_column()` で
 明示してください。これらは SQL の `LIKE` を使いますが、値に含まれる `%` / `_`
 はワイルドカードではなくリテラル文字として自動的にエスケープされます

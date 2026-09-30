@@ -10,6 +10,7 @@ from repom.database import (
     get_async_engine,
     get_async_db_session,
     get_async_db_transaction,
+    get_reusable_async_session,
     get_reusable_async_transaction,
     get_standalone_async_transaction,
     get_lifespan_manager,
@@ -24,6 +25,7 @@ import inspect
 import ssl
 import threading
 import time
+from unittest.mock import AsyncMock
 import asyncpg
 import pytest
 from sqlalchemy import select, text
@@ -1033,6 +1035,86 @@ class TestReusableAsyncTransaction:
             assert result.scalar() == 1
 
         await manager.dispose_async()
+
+
+class TestReusableAsyncSession:
+    """Tests for the non-committing reusable async session API."""
+
+    @staticmethod
+    async def _make_manager(tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            config, "db_url", f"sqlite:///{tmp_path / 'reusable_async_session.sqlite3'}"
+        )
+        manager = DatabaseManager()
+        engine = await manager.get_async_engine()
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        session_factory = await manager.get_async_session_factory()
+        session = session_factory()
+        session.commit = AsyncMock(wraps=session.commit)
+        session.rollback = AsyncMock(wraps=session.rollback)
+        session.close = AsyncMock(wraps=session.close)
+        monkeypatch.setattr(
+            manager,
+            "get_async_session_factory",
+            AsyncMock(return_value=lambda: session),
+        )
+        monkeypatch.setattr(database_module, "_db_manager", manager)
+        return manager, engine, session, session_factory
+
+    @pytest.mark.asyncio
+    async def test_returns_async_context_manager(self):
+        result = get_reusable_async_session()
+        assert hasattr(result, "__aenter__")
+        assert hasattr(result, "__aexit__")
+        assert not hasattr(result, "__anext__")
+
+    @pytest.mark.asyncio
+    async def test_rolls_back_pending_change_without_committing_or_disposing(
+        self, tmp_path, monkeypatch
+    ):
+        manager, engine, session, session_factory = await self._make_manager(
+            tmp_path, monkeypatch
+        )
+
+        try:
+            async with get_reusable_async_session() as yielded_session:
+                assert yielded_session is session
+                session.add(SampleModel(value="reusable_async_session_rollback"))
+                await session.flush()
+
+            session.commit.assert_not_awaited()
+            session.rollback.assert_awaited_once_with()
+            session.close.assert_awaited_once_with()
+            assert manager._async_engine is engine
+
+            async with session_factory() as verify_session:
+                result = await verify_session.execute(
+                    select(SampleModel).where(
+                        SampleModel.value == "reusable_async_session_rollback"
+                    )
+                )
+                assert result.scalar_one_or_none() is None
+        finally:
+            await manager.dispose_async()
+
+    @pytest.mark.asyncio
+    async def test_propagates_exception_after_rollback(self, tmp_path, monkeypatch):
+        manager, _, session, _ = await self._make_manager(tmp_path, monkeypatch)
+
+        try:
+            with pytest.raises(ValueError, match="force rollback"):
+                async with get_reusable_async_session() as yielded_session:
+                    assert yielded_session is session
+                    session.add(SampleModel(value="reusable_async_session_exception"))
+                    await session.flush()
+                    raise ValueError("force rollback")
+
+            session.commit.assert_not_awaited()
+            session.rollback.assert_awaited_once_with()
+            session.close.assert_awaited_once_with()
+        finally:
+            await manager.dispose_async()
 
 
 if __name__ == "__main__":

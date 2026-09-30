@@ -19,11 +19,13 @@ Testing utilities for repom-based projects.
     ```
 """
 
+from contextlib import nullcontext
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 from typing import Callable, Optional
-from repom.database import Base, DatabaseManager, safe_db_url
+from repom.database import Base, DatabaseManager, _db_manager, safe_db_url
 from repom.database import convert_to_async_uri  # noqa: F401 - re-exported, see below
 from repom.config import config
 from repom.exec_env import normalize_exec_env
@@ -60,7 +62,8 @@ def _require_test_database(db_url: str, allow_destructive: bool) -> None:
 def create_test_fixtures(
     db_url: Optional[str] = None,
     model_loader: Optional[Callable[[], None]] = None,
-    allow_destructive: bool = False
+    allow_destructive: bool = False,
+    bind_global_manager: bool = False,
 ):
     """
     Transaction Rollback パターンを使用したテストフィクスチャを作成
@@ -80,6 +83,8 @@ def create_test_fixtures(
         許可する。既定は False で、その場合は RuntimeError を送出する
         （リアルな dev/prod データベースを誤って drop_all しないための安全策、
         repom#135）
+    bind_global_manager : bool, optional
+        フィクスチャの有効期間中、グローバルの DatabaseManager をこのフィクスチャのエンジンに結び付ける。
 
     Returns
     -------
@@ -144,10 +149,16 @@ def create_test_fixtures(
 
         engine = create_engine(_db_url, **kwargs)
 
+        manager_binding = (
+            _db_manager.bind_engine_for_tests(engine)
+            if bind_global_manager
+            else nullcontext()
+        )
         # テーブル作成（1回のみ）
         Base.metadata.create_all(bind=engine)
 
-        yield engine
+        with manager_binding:
+            yield engine
 
         # クリーンアップ
         Base.metadata.drop_all(bind=engine)
@@ -202,7 +213,8 @@ def create_test_fixtures(
 def create_async_test_fixtures(
     db_url: Optional[str] = None,
     model_loader: Optional[Callable[[], None]] = None,
-    allow_destructive: bool = False
+    allow_destructive: bool = False,
+    bind_global_manager: bool = False,
 ):
     """
     async Transaction Rollback パターンを使用したテストフィクスチャを作成
@@ -218,6 +230,8 @@ def create_async_test_fixtures(
         モデルロード関数。指定しない場合は load_models を使用
     allow_destructive : bool, optional
         create_test_fixtures と同じ安全策（repom#135）。既定は False
+    bind_global_manager : bool, optional
+        フィクスチャの有効期間中、グローバルの DatabaseManager をこのフィクスチャのエンジンに結び付ける。
 
     Returns
     -------
@@ -308,11 +322,17 @@ def create_async_test_fixtures(
 
         engine = create_async_engine(async_url, **kwargs)
 
+        manager_binding = (
+            _db_manager.bind_engine_for_tests(engine)
+            if bind_global_manager
+            else nullcontext()
+        )
         # テーブル作成（async での create_all）
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
-        yield engine
+        with manager_binding:
+            yield engine
 
         # クリーンアップ
         async with engine.begin() as conn:

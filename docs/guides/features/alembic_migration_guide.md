@@ -85,6 +85,29 @@ uv run alembic_init
 - alembic/versions/ ディレクトリを作成
 - 既存の `alembic.ini` があればその設定を読み込み、`[OK] alembic.ini already exists` を表示して ini は上書きせず、その ini に記載された `version_locations` のディレクトリを作成
 
+外部プロジェクトでは `CONFIG_HOOK` から初期化先を設定できます。
+`alembic.ini` がまだない場合に限り、次の設定を使って ini を生成します。
+
+```python
+def get_repom_config(config):
+    config.alembic_script_location = "submod/repom/alembic"
+    config.alembic_version_locations = "%(here)s/alembic/versions"
+    config.alembic_version_table = "alembic_version_mine_py"
+    config.alembic_version_table_schema = "migration"
+    return config
+```
+
+`alembic_version_locations`、`alembic_version_table`、
+`alembic_version_table_schema` は省略できます。これらの値は
+`alembic.ini` に書き込まれ、Alembic の実行設定として信頼されます。
+プロジェクト名や CI 変数など、信頼できない値を設定しないでください。
+
+`alembic_reset` は `main(argv)` で明示的な引数を受け取り、タスクランナーなど
+からは `reset_alembic_migrations(config_path=..., yes=...)` を呼び出せます。
+実行前の対象表示には `describe_alembic_reset(config_path=...)` を使います。
+この説明文字列は CLI の確認表示と同じデータベース、version table、
+version directories を示します。
+
 ### マイグレーションのリセット
 
 開発中にマイグレーション履歴をリセットしたい場合：

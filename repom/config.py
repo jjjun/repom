@@ -58,6 +58,12 @@ class RepomConfig(Config):
     )
     model_import_strict: bool = field(default=True, init=False, repr=False)
 
+    # These settings are written to alembic.ini and must come from trusted configuration.
+    alembic_script_location: str = "alembic"
+    alembic_version_locations: Optional[str] = None
+    alembic_version_table: Optional[str] = None
+    alembic_version_table_schema: Optional[str] = None
+
     # データベース設定 (機能別に分離)
     postgres: _PostgresConfig = field(default_factory=_PostgresConfig)
     pgadmin: _PgAdminConfig = field(default_factory=_PgAdminConfig)

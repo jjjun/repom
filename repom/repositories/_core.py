@@ -35,11 +35,16 @@ class MatchMode(str, Enum):
         EXACT: 完全一致（``==``）。field_to_column の既定値。
         PREFIX: 前方一致（``LIKE 'value%'``。ワイルドカードはエスケープされる）。
         CONTAINS: 部分一致（``LIKE '%value%'``。ワイルドカードはエスケープされる）。
+        GTE / GT / LTE / LT: 比較演算子による範囲検索。
     """
 
     EXACT = "exact"
     PREFIX = "prefix"
     CONTAINS = "contains"
+    GTE = "gte"
+    GT = "gt"
+    LTE = "lte"
+    LT = "lt"
 
 
 # PREFIX / CONTAINS で LIKE に渡す文字列の既定の長さ上限。
@@ -53,6 +58,7 @@ class MatchColumn:
 
     素のカラムを渡した場合は MatchMode.EXACT（完全一致）として扱われる。
     部分一致・前方一致が必要な場合は contains_column() / prefix_column() を使うこと。
+    範囲比較には gte_column()、gt_column()、lte_column()、または lt_column() を使う。
 
     Args:
         column: マッピング先の SQLAlchemy カラム
@@ -81,6 +87,26 @@ def contains_column(column: Any, max_length: int = DEFAULT_FILTER_STRING_MAX_LEN
 def prefix_column(column: Any, max_length: int = DEFAULT_FILTER_STRING_MAX_LENGTH) -> MatchColumn:
     """field_to_column で前方一致（LIKE、ワイルドカードはエスケープ）を使うことを明示する"""
     return MatchColumn(column, MatchMode.PREFIX, max_length)
+
+
+def gte_column(column: Any) -> MatchColumn:
+    """field_to_column で以上（``>=``）の比較を使うことを明示する"""
+    return MatchColumn(column, MatchMode.GTE)
+
+
+def gt_column(column: Any) -> MatchColumn:
+    """field_to_column でより大きい（``>``）比較を使うことを明示する"""
+    return MatchColumn(column, MatchMode.GT)
+
+
+def lte_column(column: Any) -> MatchColumn:
+    """field_to_column で以下（``<=``）の比較を使うことを明示する"""
+    return MatchColumn(column, MatchMode.LTE)
+
+
+def lt_column(column: Any) -> MatchColumn:
+    """field_to_column でより小さい（``<``）比較を使うことを明示する"""
+    return MatchColumn(column, MatchMode.LT)
 
 
 def has_soft_delete(model_class) -> bool:
@@ -112,10 +138,19 @@ def _value_to_filter(
       wildcard patterns.
     - Other values fall back to ``==``
     """
+    if mode is MatchMode.GTE:
+        return column >= value
+    if mode is MatchMode.GT:
+        return column > value
+    if mode is MatchMode.LTE:
+        return column <= value
+    if mode is MatchMode.LT:
+        return column < value
+
     if isinstance(value, Iterable) and not isinstance(value, (str, bytes)):
         return column.in_(list(value))
 
-    if isinstance(value, str) and mode is not MatchMode.EXACT and hasattr(column, 'contains'):
+    if isinstance(value, str) and mode in (MatchMode.PREFIX, MatchMode.CONTAINS) and hasattr(column, 'contains'):
         if len(value) > max_length:
             raise ValueError(
                 f"Filter value exceeds the maximum length of {max_length} characters allowed for LIKE matching."

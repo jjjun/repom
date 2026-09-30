@@ -458,10 +458,12 @@ class TestFindDeleted:
 
         # 30日以上前に削除されたものを検索
         threshold = datetime.now(timezone.utc) - timedelta(days=30)
+        db_test.expire_all()
         old_deleted = repo.find_deleted_before(threshold)
 
         assert len(old_deleted) == 1
         assert old_deleted[0].id == old_item.id
+        assert old_deleted[0].deleted_at.tzinfo == timezone.utc
 
     def test_find_deleted_before_returns_empty_for_normal_model(self, db_test):
         """論理削除非対応モデルは空リスト"""
@@ -581,6 +583,7 @@ class TestAsyncFindDeletedWithJoinedloadCollection:
 
         parent.deleted_at = datetime.now(timezone.utc) - timedelta(days=31)
         await async_db_test.commit()
+        await async_db_test.refresh(parent)
 
         threshold = datetime.now(timezone.utc) - timedelta(days=30)
         results = await repo.find_deleted_before(
@@ -590,6 +593,7 @@ class TestAsyncFindDeletedWithJoinedloadCollection:
 
         assert len(results) == 1
         assert len(results[0].children) == 2
+        assert results[0].deleted_at.tzinfo == timezone.utc
 
     @pytest.mark.asyncio
     async def test_find_deleted_with_joinedload_collection_empty_result(self, async_db_test):

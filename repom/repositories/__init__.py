@@ -9,6 +9,7 @@ Available Classes:
 - FilterParams: 検索パラメータの基底クラス
 - MatchMode / MatchColumn / contains_column / prefix_column: field_to_column
   で文字列の照合方法（完全一致・前方一致・部分一致）を明示するためのヘルパー
+- gte_column / gt_column / lte_column / lt_column: range comparison helpers
 """
 
 from repom.repositories._core import (
@@ -17,6 +18,10 @@ from repom.repositories._core import (
     MatchColumn,
     contains_column,
     prefix_column,
+    gte_column,
+    gt_column,
+    lte_column,
+    lt_column,
 )
 from repom.repositories._introspection import (
     create_repository_instance,
@@ -41,6 +46,10 @@ __all__ = [
     'MatchColumn',
     'contains_column',
     'prefix_column',
+    'gte_column',
+    'gt_column',
+    'lte_column',
+    'lt_column',
     'get_order_by_columns',
     'get_order_by_default_value',
     'get_order_by_values',

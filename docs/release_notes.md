@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- `RepomConfig` can configure the Alembic script location, version locations,
+  version table, and version table schema when `alembic_init` creates a new ini.
+  The Alembic reset, credential rotation, and query debugging entry points now
+  accept explicit arguments and expose reusable functions for task runners.
+- Repository bulk update and delete methods accept arbitrary SQLAlchemy filters,
+  and `bulk_permanent_delete()` physically deletes matching rows even for
+  soft-deletable models. `count()` and `find_deleted()` can combine explicit
+  filters with `FilterParams`; `field_to_column` supports `>=`, `>`, `<=`, and
+  `<` range helpers. Sync and async repositories add SAVEPOINT-backed
+  `get_or_create()`. Test fixture factories can bind and restore the global
+  database manager with `bind_global_manager=True`.
+- Added shared config override and public environment parsing helpers, plus
+  Redis client keyword arguments and credential-safe URL helpers on
+  `RedisConfig`.
+- `AutoDateTime` now converts timezone-aware values to UTC on read; previously
+  they were returned unchanged. Naive values are still labeled UTC.
+- BREAKING: `SoftDeletableMixin.deleted_at` now reads back as a timezone-aware
+  UTC datetime on SQLite. Consumers comparing it with naive datetimes should
+  use timezone-aware UTC values.
+- Added `get_reusable_sync_session()` and `get_reusable_async_session()` for
+  caller-managed session lifetimes. They do not commit, roll back any open
+  transaction, and close the session without disposing the reusable engine.
+  The async helper does not change the commit-on-success behavior of the
+  FastAPI dependency `get_async_db_session()`.
 - Database URL overrides now determine `db_type` and the target used by
   `db_backup`, `db_restore`, `db_create`, `db_delete`, and `db_sync_master`.
   PostgreSQL backup and restore tools use URL credentials and TLS settings from

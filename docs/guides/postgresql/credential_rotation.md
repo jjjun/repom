@@ -7,6 +7,12 @@ self-managed environment without deleting PostgreSQL data.
 
 ## PostgreSQL
 
+The console entry point also accepts an explicit argument list through
+`main_postgres(argv)`. Task runners that already parse options can call
+`rotate_postgres_credentials_cli(...)` with keyword arguments; it keeps the
+same password prompts, stdin handling, dry-run default, and execution path as
+the console command.
+
 Dry-run the SQL plan first:
 
 ```bash
@@ -64,6 +70,11 @@ old role. On success, the configured PostgreSQL user and password are both
 updated before the compose secrets are regenerated.
 
 ## pgAdmin
+
+`main_pgadmin(argv)` accepts an explicit argument list. Task runners can call
+`rotate_pgadmin_credentials_cli(...)` with keyword arguments to use the same
+password resolution and volume recreation behavior without parsing process
+arguments.
 
 repom uses pgAdmin's supported `setup.py update-user --password` path inside the
 container. The pgAdmin user-management documentation describes password updates

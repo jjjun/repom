@@ -18,7 +18,15 @@ def main():
     else:
         setup = AlembicSetup(
             project_root=config.root_path,
-            db_url=config.db_url
+            db_url=config.db_url,
+            script_location=config.alembic_script_location,
+            version_locations=(
+                config.alembic_version_locations
+                if config.alembic_version_locations is not None
+                else "%(here)s/alembic/versions"
+            ),
+            version_table=config.alembic_version_table,
+            version_table_schema=config.alembic_version_table_schema,
         )
 
     print("Initializing Alembic...")

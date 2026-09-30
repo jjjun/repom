@@ -409,7 +409,50 @@ def _print_result(result: CredentialRotationResult) -> None:
         print(line)
 
 
-def main_postgres() -> None:
+def rotate_postgres_credentials_cli(
+    *,
+    new_password: str | None = None,
+    new_password_stdin: bool = False,
+    allow_config_password: bool = False,
+    current_user: str | None = None,
+    current_password: str | None = None,
+    current_password_stdin: bool = False,
+    new_user: str | None = None,
+    databases: Sequence[str] | None = None,
+    schemas: Sequence[str] | None = None,
+    execute: bool = False,
+) -> None:
+    """Resolve PostgreSQL rotation inputs and print or execute the plan."""
+    resolved_new_password = resolve_password(
+        password=new_password,
+        read_stdin=new_password_stdin,
+        allow_config_password=allow_config_password,
+        config_password=config.postgres.password,
+        prompt="New PostgreSQL password: ",
+        option_name="--new-password",
+    )
+    resolved_current_password = resolve_password(
+        password=current_password,
+        read_stdin=current_password_stdin,
+        allow_config_password=True,
+        config_password=config.postgres.password,
+        prompt="Current PostgreSQL password: ",
+        option_name="--current-password",
+    )
+
+    plan = PostgresCredentialRotationPlan.from_config(
+        current_user=current_user,
+        current_password=resolved_current_password,
+        new_password=resolved_new_password,
+        new_user=new_user,
+        databases=databases,
+        schemas=tuple(schemas or ("public",)),
+    )
+    result = rotate_postgres_credentials(plan, dry_run=not execute)
+    _print_result(result)
+
+
+def main_postgres(argv: list[str] | None = None) -> None:
     """Console entry point for PostgreSQL credential rotation."""
 
     parser = argparse.ArgumentParser(
@@ -462,38 +505,55 @@ def main_postgres() -> None:
         action="store_true",
         help="Execute the rotation. Without this flag, only a dry-run is printed.",
     )
-    args = parser.parse_args()
-
-    new_password = resolve_password(
-        password=args.new_password,
-        read_stdin=args.new_password_stdin,
+    args = parser.parse_args(argv)
+    rotate_postgres_credentials_cli(
+        new_password=args.new_password,
+        new_password_stdin=args.new_password_stdin,
         allow_config_password=args.allow_config_password,
-        config_password=config.postgres.password,
-        prompt="New PostgreSQL password: ",
-        option_name="--new-password",
-    )
-    current_password = resolve_password(
-        password=args.current_password,
-        read_stdin=args.current_password_stdin,
-        allow_config_password=True,
-        config_password=config.postgres.password,
-        prompt="Current PostgreSQL password: ",
-        option_name="--current-password",
-    )
-
-    plan = PostgresCredentialRotationPlan.from_config(
         current_user=args.current_user,
-        current_password=current_password,
-        new_password=new_password,
+        current_password=args.current_password,
+        current_password_stdin=args.current_password_stdin,
         new_user=args.new_user,
         databases=args.databases,
-        schemas=tuple(args.schemas or ("public",)),
+        schemas=args.schemas,
+        execute=args.execute,
     )
-    result = rotate_postgres_credentials(plan, dry_run=not args.execute)
+
+
+def rotate_pgadmin_credentials_cli(
+    *,
+    new_password: str | None = None,
+    new_password_stdin: bool = False,
+    allow_config_password: bool = False,
+    execute: bool = False,
+    recreate_volume: bool = False,
+    confirm_recreate_volume: bool = False,
+) -> None:
+    """Resolve pgAdmin rotation inputs and print or execute the plan."""
+    resolved_new_password = ""
+    if not recreate_volume:
+        resolved_new_password = resolve_password(
+            password=new_password,
+            read_stdin=new_password_stdin,
+            allow_config_password=allow_config_password,
+            config_password=config.pgadmin.password,
+            prompt="New pgAdmin password: ",
+            option_name="--new-password",
+        )
+    plan = PgAdminCredentialRotationPlan.from_config(
+        new_password=resolved_new_password
+    )
+    if recreate_volume:
+        result = recreate_pgadmin_volume(
+            plan,
+            confirm=execute and confirm_recreate_volume,
+        )
+    else:
+        result = rotate_pgadmin_password(plan, dry_run=not execute)
     _print_result(result)
 
 
-def main_pgadmin() -> None:
+def main_pgadmin(argv: list[str] | None = None) -> None:
     """Console entry point for pgAdmin password rotation."""
 
     parser = argparse.ArgumentParser(
@@ -535,24 +595,12 @@ def main_pgadmin() -> None:
         action="store_true",
         help="Required with --recreate-volume to actually delete pgAdmin state.",
     )
-    args = parser.parse_args()
-
-    new_password = ""
-    if not args.recreate_volume:
-        new_password = resolve_password(
-            password=args.new_password,
-            read_stdin=args.new_password_stdin,
-            allow_config_password=args.allow_config_password,
-            config_password=config.pgadmin.password,
-            prompt="New pgAdmin password: ",
-            option_name="--new-password",
-        )
-    plan = PgAdminCredentialRotationPlan.from_config(new_password=new_password)
-    if args.recreate_volume:
-        result = recreate_pgadmin_volume(
-            plan,
-            confirm=args.execute and args.confirm_recreate_volume,
-        )
-    else:
-        result = rotate_pgadmin_password(plan, dry_run=not args.execute)
-    _print_result(result)
+    args = parser.parse_args(argv)
+    rotate_pgadmin_credentials_cli(
+        new_password=args.new_password,
+        new_password_stdin=args.new_password_stdin,
+        allow_config_password=args.allow_config_password,
+        execute=args.execute,
+        recreate_volume=args.recreate_volume,
+        confirm_recreate_volume=args.confirm_recreate_volume,
+    )

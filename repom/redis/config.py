@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional
+from urllib.parse import quote
 
 
 @dataclass
@@ -45,6 +46,27 @@ class RedisConfig:
         if self.container.host_port is not None:
             return self.container.host_port
         return self.port
+
+    def connection_kwargs(self) -> dict[str, str | int | None]:
+        """Return connection arguments for redis-py clients."""
+        return {
+            "host": self.host,
+            "port": self.port,
+            "db": self.database,
+            "password": self.password or None,
+        }
+
+    def url(self, include_password: bool = False) -> str:
+        """Return a Redis URL, including the password only when requested."""
+        credentials = ""
+        if include_password and self.password:
+            credentials = f":{quote(self.password, safe='')}@"
+        return f"redis://{credentials}{self.host}:{self.port}/{self.database}"
+
+    def safe_url(self) -> str:
+        """Return a Redis URL with any configured password masked."""
+        credentials = ":***@" if self.password else ""
+        return f"redis://{credentials}{self.host}:{self.port}/{self.database}"
 
     def __repr__(self) -> str:
         password_display = "***" if self.password else "None"

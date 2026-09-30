@@ -22,3 +22,19 @@ bound to `127.0.0.1` by default; set `REDIS_EXPOSE_TO_LAN=true` to bind
 `REDIS_PASSWORD` is required by `redis_generate`, which writes it to a `.env`
 file (mode 0600) next to the compose file instead of inlining it in
 `docker-compose.generated.yml`.
+
+## Client connection settings
+
+`RedisConfig.connection_kwargs()` returns the host, connection port, database,
+and optional password as redis-py keyword arguments. Use `url()` to build a
+Redis URL without credentials by default, or pass `include_password=True` when
+a client needs a password-bearing URL. Passwords in URLs are percent-encoded;
+use `safe_url()` for logging because it masks any configured password.
+
+```python
+from repom.config import RepomConfig
+
+redis_config = RepomConfig().redis
+connection_kwargs = redis_config.connection_kwargs()
+safe_url = redis_config.safe_url()
+```

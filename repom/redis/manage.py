@@ -331,7 +331,56 @@ def rotate_password(
     return result
 
 
-def main_rotate_password():
+def rotate_redis_password_cli(
+    *,
+    new_password: str | None = None,
+    new_password_stdin: bool = False,
+    allow_config_password: bool = False,
+    old_password: str | None = None,
+    old_password_stdin: bool = False,
+    execute: bool = False,
+):
+    """Resolve Redis rotation inputs and print or execute the plan."""
+    resolved_new_password = resolve_password(
+        password=new_password,
+        read_stdin=new_password_stdin,
+        allow_config_password=allow_config_password,
+        config_password=config.redis.password,
+        prompt="New Redis password: ",
+        option_name="--new-password",
+    )
+    resolved_old_password = old_password
+    if old_password_stdin:
+        resolved_old_password = resolve_password(
+            password=None,
+            read_stdin=True,
+            prompt="Current Redis password: ",
+            option_name="--old-password",
+            allow_empty=True,
+        )
+    elif resolved_old_password is None:
+        if execute and not sys.stdin.isatty():
+            raise ValueError(
+                "--execute without a TTY requires --old-password or "
+                "--old-password-stdin"
+            )
+        if sys.stdin.isatty():
+            resolved_old_password = resolve_password(
+                password=None,
+                read_stdin=False,
+                prompt="Current Redis password (leave blank if unset): ",
+                option_name="--old-password",
+                allow_empty=True,
+            )
+
+    return rotate_password(
+        new_password=resolved_new_password,
+        old_password=resolved_old_password or None,
+        dry_run=not execute,
+    )
+
+
+def main_rotate_password(argv: list[str] | None = None):
     """Console entry point for Redis password rotation."""
 
     import argparse
@@ -382,41 +431,12 @@ def main_rotate_password():
         action="store_true",
         help="Execute the rotation. Without this flag, only a dry-run is printed.",
     )
-    args = parser.parse_args()
-    new_password = resolve_password(
-        password=args.new_password,
-        read_stdin=args.new_password_stdin,
+    args = parser.parse_args(argv)
+    rotate_redis_password_cli(
+        new_password=args.new_password,
+        new_password_stdin=args.new_password_stdin,
         allow_config_password=args.allow_config_password,
-        config_password=config.redis.password,
-        prompt="New Redis password: ",
-        option_name="--new-password",
-    )
-    old_password = args.old_password
-    if args.old_password_stdin:
-        old_password = resolve_password(
-            password=None,
-            read_stdin=True,
-            prompt="Current Redis password: ",
-            option_name="--old-password",
-            allow_empty=True,
-        )
-    elif old_password is None:
-        if args.execute and not sys.stdin.isatty():
-            raise ValueError(
-                "--execute without a TTY requires --old-password or "
-                "--old-password-stdin"
-            )
-        if sys.stdin.isatty():
-            old_password = resolve_password(
-                password=None,
-                read_stdin=False,
-                prompt="Current Redis password (leave blank if unset): ",
-                option_name="--old-password",
-                allow_empty=True,
-            )
-
-    rotate_password(
-        new_password=new_password,
-        old_password=old_password or None,
-        dry_run=not args.execute,
+        old_password=args.old_password,
+        old_password_stdin=args.old_password_stdin,
+        execute=args.execute,
     )

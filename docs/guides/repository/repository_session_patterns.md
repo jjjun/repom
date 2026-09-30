@@ -16,6 +16,23 @@ succeed or fail together.
 
 ## Synchronous application code
 
+Use `get_reusable_sync_session()` for reads or when the caller owns commit
+boundaries:
+
+```python
+from repom.database import get_reusable_sync_session
+
+
+with get_reusable_sync_session() as session:
+    task_repo = TaskRepository(session=session)
+    task = task_repo.get_by_id(1)
+    session.commit()  # Optional; the context manager never commits for you.
+```
+
+The session is rolled back if a transaction remains open and then closed on
+exit. Use `get_reusable_sync_transaction()` when a group of operations should
+commit together or roll back together.
+
 `get_reusable_sync_transaction()` is the usual context manager for workers,
 commands, and other long-running processes:
 
@@ -87,6 +104,25 @@ Do not write `with get_db_session()`: it is a generator intended for
 dependency injection.
 
 ## Asynchronous application code
+
+Use `get_reusable_async_session()` for reads or when the caller owns commit
+boundaries:
+
+```python
+from repom.database import get_reusable_async_session
+
+
+async with get_reusable_async_session() as session:
+    task_repo = TaskRepository(session=session)
+    task = await task_repo.get_by_id(1)
+    await session.commit()  # Optional; the context manager never commits for you.
+```
+
+It rolls back any open transaction and closes the session on exit. This
+context manager does not commit, unlike the FastAPI dependency
+`get_async_db_session()`, which commits on success. Use
+`get_reusable_async_transaction()` when a group of operations should commit
+together or roll back together.
 
 Use the async dependency providers with FastAPI and configure repom's lifespan
 manager so engines are disposed during shutdown:

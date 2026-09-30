@@ -100,7 +100,20 @@ value is treated as already UTC and only gets `tzinfo` attached. This keeps
 the stored instant correct even on backends that cannot retain a UTC offset
 (SQLite stores the wall-clock component only). On read, a naive value coming
 back from such a backend is labelled `timezone.utc`; a value that already
-carries tzinfo (for example PostgreSQL `timestamptz`) is returned unchanged.
+carries tzinfo (for example PostgreSQL `timestamptz`) is converted to UTC.
+
+`UTCDateTime` uses the same bind and result normalization while preserving
+`None`, so it is suitable for nullable datetime columns that should always
+read back as UTC-aware values:
+
+```python
+from datetime import datetime
+from sqlalchemy.orm import Mapped, mapped_column
+
+from repom.custom_types import UTCDateTime
+
+started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+```
 
 `ISO8601DateTime` (`impl = DateTime`) stores a `datetime` using the dialect's
 native `DateTime` column type; it does not emit an ISO 8601 string. Binding

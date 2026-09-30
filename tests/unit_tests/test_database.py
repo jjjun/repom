@@ -7,6 +7,7 @@ DatabaseManager の同期セッション管理機能を検証します。
 from repom.database import (
     get_db_session,
     get_db_transaction,
+    get_reusable_sync_session,
     get_reusable_sync_transaction,
     get_standalone_sync_transaction,
     get_sync_engine,
@@ -21,7 +22,7 @@ from contextlib import contextmanager
 import threading
 import time
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 import pytest
 from sqlalchemy import Column, String, Engine
 from sqlalchemy.orm import Session
@@ -159,6 +160,69 @@ class TestReusableSyncTransaction:
             assert session == "session"
 
         assert events == ["enter"]
+
+
+class TestReusableSyncSession:
+    """Tests for the non-committing reusable sync session API."""
+
+    def _make_manager(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            config, "db_url", f"sqlite:///{tmp_path / 'reusable_session.sqlite3'}"
+        )
+        manager = DatabaseManager()
+        engine = manager.get_sync_engine()
+        BaseModel.metadata.create_all(engine)
+        session_factory = manager.get_sync_session_factory()
+        session = session_factory()
+        session.commit = Mock(wraps=session.commit)
+        session.rollback = Mock(wraps=session.rollback)
+        session.close = Mock(wraps=session.close)
+        monkeypatch.setattr(
+            manager,
+            "get_sync_session_factory",
+            lambda: lambda: session,
+        )
+        monkeypatch.setattr(database_module, "_db_manager", manager)
+        return manager, engine, session, session_factory
+
+    def test_rolls_back_pending_change_without_committing_or_disposing(self, tmp_path, monkeypatch):
+        manager, engine, session, session_factory = self._make_manager(tmp_path, monkeypatch)
+
+        try:
+            with get_reusable_sync_session() as yielded_session:
+                assert yielded_session is session
+                session.add(DatabaseTestModel(name="reusable_session_rollback"))
+                session.flush()
+
+            session.commit.assert_not_called()
+            session.rollback.assert_called_once_with()
+            session.close.assert_called_once_with()
+            assert manager._sync_engine is engine
+
+            with session_factory() as verify_session:
+                found = verify_session.query(DatabaseTestModel).filter_by(
+                    name="reusable_session_rollback"
+                ).one_or_none()
+                assert found is None
+        finally:
+            manager.dispose_sync()
+
+    def test_propagates_exception_after_rollback(self, tmp_path, monkeypatch):
+        manager, _, session, _ = self._make_manager(tmp_path, monkeypatch)
+
+        try:
+            with pytest.raises(ValueError, match="force rollback"):
+                with get_reusable_sync_session() as yielded_session:
+                    assert yielded_session is session
+                    session.add(DatabaseTestModel(name="reusable_session_exception"))
+                    session.flush()
+                    raise ValueError("force rollback")
+
+            session.commit.assert_not_called()
+            session.rollback.assert_called_once_with()
+            session.close.assert_called_once_with()
+        finally:
+            manager.dispose_sync()
 
 
 @pytest.mark.asyncio
