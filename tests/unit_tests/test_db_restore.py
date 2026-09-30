@@ -46,6 +46,27 @@ def _read_echoed_env(env_sink):
     )
 
 
+def test_psql_command_uses_atomic_restore_args_for_host_and_docker(monkeypatch, tmp_path):
+    config = _mock_postgres_config(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+
+    host_command = db_restore._psql_command(None)
+    docker_command = db_restore._psql_command("managed-postgres")
+    expected_args = [
+        "--no-psqlrc",
+        "--single-transaction",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-f",
+        "-",
+    ]
+
+    assert host_command[-len(expected_args) :] == expected_args
+    assert host_command[0] == "psql"
+    assert docker_command[-len(expected_args) :] == expected_args
+    assert docker_command[:4] == ["docker", "exec", "-i", "managed-postgres"]
+
+
 def test_restore_raises_when_psql_fails(monkeypatch, tmp_path):
     backup_file = _make_backup_file(tmp_path)
     config = _mock_postgres_config(tmp_path)

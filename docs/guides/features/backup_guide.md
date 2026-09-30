@@ -107,6 +107,15 @@ SQLite のリストアでは、既存の DB ファイルがある場合に
 通常のバックアップローテーションの対象外で、自動削除されません。PostgreSQL の
 リストアには自動 safety copy はありません。
 
+PostgreSQL のリストアは
+`psql --no-psqlrc --single-transaction -v ON_ERROR_STOP=1 -f -` または
+`pg_restore --single-transaction` で実行されます。通常の SQL や custom-format の復元で
+ステートメントが失敗すると、そのリストアの変更はロールバックされ、リストア前の状態が
+保たれます。プレーン SQL ダンプに large object データが含まれる場合、large object の
+処理を囲む `BEGIN` / `COMMIT` が psql の外側のトランザクションを途中で終了させることが
+あります。repom のモデルは large object を使用せず、`bytea` 列には影響しません。
+custom-format の復元は `pg_restore --single-transaction` を使うため、この制限の対象外です。
+
 ## 失敗時の挙動
 
 `db_backup.main()` と `db_restore.main()` は、失敗時にエラーメッセージを

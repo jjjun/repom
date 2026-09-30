@@ -169,7 +169,15 @@ def _psql_command(container_name: str | None) -> list[str]:
         port=config.postgres.port,
         user=config.postgres.user,
         database=config.postgres_db,
-        extra_args=["-v", "ON_ERROR_STOP=1"],  # stop on error
+        # -f - makes psql apply --single-transaction to the streamed SQL input.
+        extra_args=[
+            "--no-psqlrc",
+            "--single-transaction",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-f",
+            "-",
+        ],
         container_name=container_name,
         stdin=True,
     )

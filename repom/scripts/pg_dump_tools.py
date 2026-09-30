@@ -196,7 +196,7 @@ def _pg_restore_custom_via_docker(params: PgConnParams, dump_path: Path) -> PgTo
         port=params.port,
         user=params.user,
         database=params.database,
-        extra_args=["--clean", "--if-exists", "--no-owner", "--no-acl"],
+        extra_args=["--clean", "--if-exists", "--no-owner", "--no-acl", "--single-transaction"],
         container_name=container_name,
         stdin=True,
     )
@@ -228,7 +228,14 @@ def _pg_restore_custom_via_host(params: PgConnParams, dump_path: Path) -> PgTool
         port=params.port,
         user=params.user,
         database=params.database,
-        extra_args=["--clean", "--if-exists", "--no-owner", "--no-acl", str(dump_path)],
+        extra_args=[
+            "--clean",
+            "--if-exists",
+            "--no-owner",
+            "--no-acl",
+            "--single-transaction",
+            str(dump_path),
+        ],
     )
     completed = _run_host_command(command, params)
     return PgToolResult(

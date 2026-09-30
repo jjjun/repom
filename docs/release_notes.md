@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- PostgreSQL plain-SQL restores now disable user `psqlrc` settings, stop on the
+  first SQL error, and run in a single transaction; custom-format restores also
+  use a single transaction so failed restores roll back instead of leaving a
+  partially restored database. The backup guide documents the plain-dump large
+  object transaction limitation.
 - PostgreSQL credential rotation now applies database and schema grants before
   changing the current role's password, and successful replacement-user
   rotations update both the configured user and password before regenerating

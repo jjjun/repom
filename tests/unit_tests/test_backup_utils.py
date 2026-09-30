@@ -500,6 +500,35 @@ def test_build_pg_client_command_builds_docker_argv_without_host_flags():
     ]
 
 
+@pytest.mark.parametrize("container_name", [None, "repom-postgres"])
+def test_build_pg_client_command_preserves_atomic_psql_restore_args(container_name):
+    extra_args = [
+        "--no-psqlrc",
+        "--single-transaction",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-f",
+        "-",
+    ]
+
+    command = build_pg_client_command(
+        "psql",
+        host="localhost",
+        port=5432,
+        user="postgres",
+        database="repom_test",
+        extra_args=extra_args,
+        container_name=container_name,
+        stdin=True,
+    )
+
+    assert command[-len(extra_args) :] == extra_args
+    if container_name:
+        assert command[:4] == ["docker", "exec", "-i", container_name]
+    else:
+        assert command[0] == "psql"
+
+
 def test_build_pg_client_command_docker_stdin_adds_interactive_flag():
     command = build_pg_client_command(
         "psql",

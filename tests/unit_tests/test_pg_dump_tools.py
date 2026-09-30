@@ -159,7 +159,13 @@ def test_pg_restore_custom_streams_dump_bytes_to_docker(monkeypatch, tmp_path: P
     tool, kwargs = build_calls[-1]
     assert tool == "pg_restore"
     assert kwargs["container_name"] == "managed-postgres"
-    assert kwargs["extra_args"] == ["--clean", "--if-exists", "--no-owner", "--no-acl"]
+    assert kwargs["extra_args"] == [
+        "--clean",
+        "--if-exists",
+        "--no-owner",
+        "--no-acl",
+        "--single-transaction",
+    ]
     assert kwargs["stdin"] is True
     assert str(dump_path) not in repr(kwargs)
 
@@ -376,6 +382,7 @@ def test_pg_restore_custom_falls_back_to_host_when_docker_daemon_unavailable(
 ):
     dump_path = tmp_path / "db.dump"
     dump_path.write_bytes(b"CUSTOM-DUMP")
+    commands = []
 
     monkeypatch.setattr(
         pg_dump_tools.DockerCommandExecutor,
@@ -390,6 +397,7 @@ def test_pg_restore_custom_falls_back_to_host_when_docker_daemon_unavailable(
     )
 
     def fake_run(command, **kwargs):
+        commands.append(command)
         if command == ["pg_restore", "--version"]:
             return subprocess.CompletedProcess(command, 0, "pg_restore (PostgreSQL) 16.3\n", "")
         return subprocess.CompletedProcess(command, 0, "", "")
@@ -400,6 +408,14 @@ def test_pg_restore_custom_falls_back_to_host_when_docker_daemon_unavailable(
 
     assert result.returncode == 0
     assert result.used_docker is False
+    assert commands[-1][-6:] == [
+        "--clean",
+        "--if-exists",
+        "--no-owner",
+        "--no-acl",
+        "--single-transaction",
+        str(dump_path),
+    ]
 
 
 def test_pg_tool_result_redacts_password_and_adds_version_mismatch_hint(

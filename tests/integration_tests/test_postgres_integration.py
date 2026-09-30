@@ -1,4 +1,5 @@
 """PostgreSQL integration tests - requires running PostgreSQL Docker container"""
+import gzip
 from repom.config import config
 import pytest
 import os
@@ -57,6 +58,43 @@ class TestPostgreSQLIntegration:
             # config の postgres_db と一致するか確認
             assert db_name == config.postgres_db
             print(f"\nConnected to database: {db_name}")
+
+    def test_plain_sql_restore_failure_rolls_back_dropped_table(self, tmp_path):
+        from repom.database import get_sync_engine
+        from repom.scripts._backup_utils import RestoreError
+        from repom.scripts.db_restore import restore_postgresql_via_host
+
+        engine = get_sync_engine()
+        table_name = f"restore_atomic_{uuid4().hex}"
+        missing_function = f"repom_missing_restore_function_{uuid4().hex}"
+        backup_file = tmp_path / "failed_restore.sql.gz"
+
+        try:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        f"CREATE TABLE {table_name} "
+                        "(id integer PRIMARY KEY, value text NOT NULL)"
+                    )
+                )
+                connection.execute(
+                    text(f"INSERT INTO {table_name} (id, value) VALUES (1, 'original')")
+                )
+
+            with gzip.open(backup_file, "wt", encoding="utf-8") as backup:
+                backup.write(f"DROP TABLE {table_name};\nSELECT {missing_function}();\n")
+
+            with pytest.raises(RestoreError, match=missing_function):
+                restore_postgresql_via_host(backup_file)
+
+            with engine.connect() as connection:
+                rows = connection.execute(
+                    text(f"SELECT id, value FROM {table_name} ORDER BY id")
+                ).all()
+            assert rows == [(1, "original")]
+        finally:
+            with engine.begin() as connection:
+                connection.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
 
     def test_create_table(self):
         """テーブル作成・挿入・検索のテスト"""
