@@ -26,6 +26,7 @@ from typing import Callable, Optional
 from repom.database import Base, DatabaseManager, safe_db_url
 from repom.database import convert_to_async_uri  # noqa: F401 - re-exported, see below
 from repom.config import config
+from repom.exec_env import normalize_exec_env
 from repom.utility import load_models
 
 
@@ -42,7 +43,11 @@ def _require_test_database(db_url: str, allow_destructive: bool) -> None:
     left at its dev default would create tables in - and then drop - its real
     dev/prod database (repom#135).
     """
-    if config.exec_env == "test" or _is_in_memory_sqlite_url(db_url) or allow_destructive:
+    if (
+        normalize_exec_env(config.exec_env) == "test"
+        or _is_in_memory_sqlite_url(db_url)
+        or allow_destructive
+    ):
         return
     raise RuntimeError(
         f"Refusing to create test fixtures against {safe_db_url(db_url)}: "

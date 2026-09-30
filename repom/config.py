@@ -316,7 +316,7 @@ class RepomConfig(Config):
         # ファイルベースが必要な場合は config.sqlite.use_in_memory_for_tests
         # または repom.config_hooks.sqlite の env override helper で切り替える。
         if (
-            self.exec_env == "test"
+            normalize_exec_env(self.exec_env) == "test"
             and self.sqlite.use_in_memory_for_tests
         ):
             return "sqlite:///:memory:"
@@ -388,8 +388,10 @@ class RepomConfig(Config):
 
         使用例（CONFIG_HOOK で有効化）:
             # mine-py/config.py
+            from repom.exec_env import normalize_exec_env
+
             def hook_config(config):
-                if config.exec_env == 'dev':
+                if normalize_exec_env(config.exec_env) == 'dev':
                     config.enable_sqlalchemy_echo = True
                 return config
 

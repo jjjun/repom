@@ -82,6 +82,14 @@ def test_db_url_returns_in_memory_for_test_env(config_factory):
     assert config.db_url == "sqlite:///:memory:"
 
 
+@pytest.mark.parametrize("exec_env", ["TEST", " test ", "Test"])
+def test_db_url_returns_in_memory_for_normalized_test_env(config_factory, exec_env):
+    config = config_factory(exec_env=exec_env)
+
+    assert config.exec_env == exec_env
+    assert config.db_url == "sqlite:///:memory:"
+
+
 def test_db_url_returns_file_based_when_in_memory_disabled(config_factory):
     """``db_url`` returns file-based URL when use_in_memory_db_for_tests=False."""
     config = config_factory(exec_env="test")
@@ -208,6 +216,7 @@ def test_unknown_exec_env_uses_dev_database_defaults_and_warns_once(
     with caplog.at_level(logging.WARNING, logger="repom.exec_env"):
         assert config.postgres_db == "myapp_dev"
         assert config.sqlite.get_default_db_file(exec_env) == "myapp_dev.sqlite3"
+        assert config.db_url == f"sqlite:///{config.sqlite.db_path}/myapp_dev.sqlite3"
         assert config.postgres_db == "myapp_dev"
 
     warnings = [record for record in caplog.records if record.levelno == logging.WARNING]

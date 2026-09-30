@@ -13,6 +13,23 @@ from repom.config import config
 from repom.testing import create_async_test_fixtures, create_test_fixtures
 
 
+@pytest.mark.parametrize("exec_env", ["TEST", " test ", "Test"])
+@pytest.mark.parametrize(
+    "create_fixtures", [create_test_fixtures, create_async_test_fixtures]
+)
+def test_fixture_factories_accept_normalized_test_exec_env(
+    tmp_path, monkeypatch, exec_env, create_fixtures
+):
+    monkeypatch.setattr(config, "exec_env", exec_env)
+    db_path = tmp_path / "repom_test.sqlite3"
+
+    db_engine, db_test = create_fixtures(db_url=f"sqlite:///{db_path}")
+
+    assert callable(db_engine)
+    assert callable(db_test)
+    assert not db_path.exists()
+
+
 def test_create_async_test_fixtures_refuses_non_test_database(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "exec_env", "dev")
     db_path = tmp_path / "repom_dev.sqlite3"

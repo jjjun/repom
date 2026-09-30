@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Test environment checks now normalize `EXEC_ENV` consistently, so mixed case
+  and surrounding whitespace select in-memory SQLite, the SQLite default hook,
+  and the test fixture safety guard as expected.
 - `EXEC_ENV=production` now receives the same production PostgreSQL database name,
   TLS defaults, TLS enforcement, and destructive-operation guard as `prod`, with
   surrounding whitespace and case ignored. Unknown environment values now warn and
