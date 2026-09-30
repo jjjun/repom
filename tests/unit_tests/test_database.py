@@ -18,7 +18,6 @@ import repom.database as database_module
 from repom.config import config
 from repom.models.base_model import BaseModel
 from contextlib import contextmanager
-import os
 import threading
 import time
 from types import SimpleNamespace
@@ -27,10 +26,6 @@ import pytest
 from sqlalchemy import Column, String, Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.engine import Inspector
-
-# CRITICAL: Set EXEC_ENV before importing repom modules
-os.environ['EXEC_ENV'] = 'test'
-
 
 # テスト用モデル
 class DatabaseTestModel(BaseModel):
@@ -64,7 +59,7 @@ class TestGetInspector:
         inspector = get_inspector()
         assert isinstance(inspector, Inspector)
 
-    def test_can_list_tables(self, db_test):
+    def test_can_list_tables(self):
         """Inspector でテーブル一覧が取得できることを確認"""
         inspector = get_inspector()
         tables = inspector.get_table_names()
@@ -199,12 +194,12 @@ class TestDatabaseManager:
         assert factory.kw["autoflush"] is True
         manager.dispose_sync()
 
-    def test_sync_session_context_manager(self, db_test):
+    def test_sync_session_context_manager(self):
         """Sync Session の context manager 動作確認"""
         with get_reusable_sync_transaction() as session:
             assert isinstance(session, Session)
 
-    def test_sync_transaction_auto_commit(self, db_test):
+    def test_sync_transaction_auto_commit(self):
         """トランザクションの自動コミット確認"""
         from sqlalchemy import select
 

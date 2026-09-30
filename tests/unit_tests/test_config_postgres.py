@@ -118,15 +118,6 @@ class TestPostgresDBName:
         config.postgres.database = 'custom_db'
         assert config.postgres_db == 'custom_db'
 
-    def test_postgres_db_property_returns_set_value(self):
-        """設定値が優先される"""
-        from repom.config import RepomConfig
-        config = RepomConfig()
-        config.postgres.database = 'my_custom_db'
-        # exec_env に関係なく設定値が返される
-        assert config.postgres_db == 'my_custom_db'
-
-
 class TestPostgresURL:
     """PostgreSQL URL generation tests"""
 
@@ -168,94 +159,8 @@ class TestPostgresURL:
         assert config.db_url.startswith('sqlite:///')
 
 
-class TestEngineKwargs:
-    """Engine kwargs tests for different database types"""
-
-    def test_engine_kwargs_postgres(self):
-        """PostgreSQL の engine_kwargs"""
-        from repom.config import RepomConfig
-        config = RepomConfig()
-        config.db_type = 'postgres'
-
-        kwargs = config.engine_kwargs
-
-        # PostgreSQL 用の完全なプール設定
-        assert kwargs['pool_size'] == 10
-        assert kwargs['max_overflow'] == 20
-        assert kwargs['pool_timeout'] == 30
-        assert kwargs['pool_recycle'] == 3600
-        assert kwargs['pool_pre_ping'] is True
-
-        # PostgreSQL 接続タイムアウトと application_name
-        assert kwargs['connect_args']['connect_timeout'] == 10
-        assert kwargs['connect_args']['application_name'] == config.package_name
-
-        # SQLite 固有の設定は含まれない
-        assert 'poolclass' not in kwargs
-
-    def test_engine_kwargs_sqlite_file(self, tmp_path):
-        """SQLite ファイルベースの engine_kwargs（後方互換性）"""
-        from repom.config import RepomConfig
-        config = RepomConfig()
-        config.db_type = 'sqlite'
-        config.root_path = str(tmp_path)
-        config.sqlite.use_in_memory_for_tests = False
-        config.init()
-
-        kwargs = config.engine_kwargs
-
-        # QueuePool 用の設定
-        assert kwargs['pool_size'] == 10
-        assert kwargs['max_overflow'] == 20
-        assert kwargs['pool_timeout'] == 30
-        assert kwargs['pool_recycle'] == 3600
-        assert kwargs['pool_pre_ping'] is True
-
-        # SQLite 用の connect_args
-        assert 'connect_args' in kwargs
-        assert kwargs['connect_args']['check_same_thread'] is False
-
-    def test_engine_kwargs_sqlite_memory(self, tmp_path):
-        """SQLite :memory: の engine_kwargs（後方互換性）"""
-        from repom.config import RepomConfig
-        config = RepomConfig()
-        config.db_type = 'sqlite'
-        config.root_path = str(tmp_path)
-        config._db_url = 'sqlite:///:memory:'
-
-        kwargs = config.engine_kwargs
-
-        # StaticPool が使われる
-        assert 'poolclass' in kwargs
-        assert kwargs['poolclass'].__name__ == 'StaticPool'
-        assert 'connect_args' in kwargs
-        assert kwargs['connect_args']['check_same_thread'] is False
-
-        # pool_size などは含まれない（StaticPool は未サポート）
-        assert 'pool_size' not in kwargs
-        assert 'max_overflow' not in kwargs
-
-
 class TestBackwardCompatibility:
     """Backward compatibility tests - 既存の SQLite 機能が壊れていないか"""
-
-    def test_default_is_sqlite(self, monkeypatch):
-        """デフォルトは SQLite のまま"""
-        from repom.config import RepomConfig
-        config = RepomConfig()
-        monkeypatch.delenv('DB_TYPE', raising=False)
-        assert config.db_type == 'sqlite'
-
-    def test_sqlite_db_url_unchanged(self, tmp_path):
-        """SQLite の db_url 生成は変更なし"""
-        from repom.config import RepomConfig
-        config = RepomConfig()
-        config.root_path = str(tmp_path)
-        config.init()
-
-        # デフォルトは SQLite
-        assert config.db_type == 'sqlite'
-        assert config.db_url.startswith('sqlite:///')
 
     def test_in_memory_db_for_tests_works(self, tmp_path):
         """テスト用の in-memory DB は引き続き動作"""

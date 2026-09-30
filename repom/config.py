@@ -731,14 +731,17 @@ class RepomConfig(Config):
         return kwargs
 
 
-config = RepomConfig()
+def _load_config(config_instance: Optional[RepomConfig] = None) -> RepomConfig:
+    if config_instance is None:
+        config_instance = RepomConfig()
+        config_instance.root_path = str(Path(__file__).parent.parent)
 
-config.root_path = str(Path(__file__).parent.parent)
+    config_instance = get_config_from_hook(config_instance)
+    config_instance.init()
+    return config_instance
 
-# hook
-config = get_config_from_hook(config)
 
-config.init()
+config = _load_config()
 
 
 __all__ = [

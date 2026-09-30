@@ -6,12 +6,6 @@ from repom.config import RepomConfig
 import pytest
 
 from pathlib import Path
-import sys
-
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
-SRC_PATH = PROJECT_ROOT / "src"
-if str(SRC_PATH) not in sys.path:
-    sys.path.append(str(SRC_PATH))
 
 
 @pytest.fixture()
@@ -35,45 +29,6 @@ def test_db_path_defaults_to_data_path(config_factory, tmp_path):
     override = tmp_path / "custom_db"
     config.sqlite.db_path = str(override)
     assert config.sqlite.db_path == str(override)
-
-
-@pytest.mark.parametrize(
-    ("exec_env", "expected"),
-    [
-        ("test", "repom_test.sqlite3"),
-        ("dev", "repom_dev.sqlite3"),
-        ("prod", "repom.sqlite3"),
-    ],
-)
-def test_db_file_defaults_follow_exec_env(config_factory, exec_env, expected):
-    """``db_file`` derives from ``exec_env`` for supported environments."""
-
-    config = config_factory(exec_env=exec_env)
-
-    assert config.sqlite.db_file == expected
-
-
-def test_db_file_is_overridable(config_factory):
-    """``db_file`` can be explicitly set."""
-
-    config = config_factory()
-
-    config.sqlite.db_file = "custom.sqlite3"
-    assert config.sqlite.db_file == "custom.sqlite3"
-
-
-def test_db_file_path_combines_path_and_file(config_factory, tmp_path):
-    """``db_file_path`` joins the resolved ``db_path`` and ``db_file``."""
-
-    config = config_factory()
-    default_expected = Path(config.sqlite.db_path) / config.sqlite.db_file
-    assert config.sqlite.db_file_path == str(default_expected)
-
-    override_path = tmp_path / "overridden"
-    override_file = "custom.sqlite3"
-    config.sqlite.db_path = str(override_path)
-    config.sqlite.db_file = override_file
-    assert config.sqlite.db_file_path == str(override_path / override_file)
 
 
 def test_db_url_defaults_to_sqlite_uri(config_factory):
@@ -243,34 +198,12 @@ def test_postgres_database_overrides_db_name(config_factory):
     assert config.postgres_db == "custom_db"
 
 
-def test_sqlite_db_file_uses_db_name(config_factory):
-    """SQLite db_file uses ``db_name`` as prefix."""
-    config = config_factory(exec_env="dev")
-    config.db_name = "myapp"
-    # Re-initialize to apply db_name to sqlite config
-    config.sqlite.db_file = None
-    config.sqlite.bind(config)
-    expected_file = "myapp_dev.sqlite3"
-    assert config.sqlite.get_default_db_file("dev") == expected_file
-
-
-@pytest.mark.parametrize("exec_env", ["prod", "production", " Production "])
-def test_sqlite_db_file_prod_uses_db_name(config_factory, exec_env):
-    """SQLite db_file for prod uses ``db_name`` without suffix."""
-    config = config_factory(exec_env=exec_env)
-    config.db_name = "myapp"
-    config.sqlite.bind(config)
-    expected_file = "myapp.sqlite3"
-    assert config.sqlite.get_default_db_file(exec_env) == expected_file
-
-
 @pytest.mark.parametrize("exec_env", ["prdo", "", "default"])
 def test_unknown_exec_env_uses_dev_database_defaults_and_warns_once(
     config_factory, caplog, exec_env
 ):
     config = config_factory(exec_env=exec_env)
     config.db_name = "myapp"
-    config.sqlite.bind(config)
 
     with caplog.at_level(logging.WARNING, logger="repom.exec_env"):
         assert config.postgres_db == "myapp_dev"

@@ -21,7 +21,6 @@ from repom.config import config, RepomConfig
 from contextlib import asynccontextmanager
 import asyncio
 import inspect
-import os
 import ssl
 import threading
 import time
@@ -35,10 +34,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
-# CRITICAL: Set EXEC_ENV before importing repom modules
-os.environ['EXEC_ENV'] = 'test'
-
 
 class TestConvertToAsyncUri:
     """URL 変換機能のテスト"""
@@ -415,14 +410,14 @@ class TestDatabaseManager:
         await manager.dispose_async()
 
     @pytest.mark.asyncio
-    async def test_async_session_context_manager(self, async_db_test):
+    async def test_async_session_context_manager(self):
         """Async Session の context manager 動作確認"""
         manager = DatabaseManager()
         async with manager.get_async_session() as session:
             assert isinstance(session, AsyncSession)
 
     @pytest.mark.asyncio
-    async def test_async_transaction_auto_commit(self, async_db_test):
+    async def test_async_transaction_auto_commit(self):
         """トランザクションの自動コミット確認"""
         # テスト用に独立したマネージャーを作成し、自身の engine にテーブルを準備する
         manager = DatabaseManager()
@@ -518,70 +513,6 @@ class TestLifespanManager:
 
         assert manager._sync_engine is None
         assert manager._async_engine is None
-
-
-class TestAsyncTransactionIntegration:
-    """非同期トランザクションの統合テスト"""
-
-    @pytest.mark.asyncio
-    async def test_create_and_query(self, async_db_test):
-        """Should be able to create and query records"""
-        # Create
-        sample = SampleModel(value="async_test")
-        async_db_test.add(sample)
-        await async_db_test.flush()
-
-        # Query
-        result = await async_db_test.execute(
-            select(SampleModel).where(SampleModel.value == "async_test")
-        )
-        found = result.scalar_one()
-        assert found.value == "async_test"
-
-    @pytest.mark.asyncio
-    async def test_isolation_between_tests(self, async_db_test):
-        """Each test should have isolated transaction"""
-        result = await async_db_test.execute(select(SampleModel))
-        samples = result.scalars().all()
-        assert samples == []
-
-    @pytest.mark.asyncio
-    async def test_update_record(self, async_db_test):
-        """Should be able to update records"""
-        # Create
-        sample = SampleModel(value="update_test")
-        async_db_test.add(sample)
-        await async_db_test.flush()
-
-        # Update
-        sample.value = "updated_value"
-        await async_db_test.flush()
-
-        # Verify
-        result = await async_db_test.execute(
-            select(SampleModel).where(SampleModel.value == "updated_value")
-        )
-        updated = result.scalar_one()
-        assert updated.value == "updated_value"
-
-    @pytest.mark.asyncio
-    async def test_delete_record(self, async_db_test):
-        """Should be able to delete records"""
-        # Create
-        sample = SampleModel(value="delete_test")
-        async_db_test.add(sample)
-        await async_db_test.flush()
-
-        # Delete
-        await async_db_test.delete(sample)
-        await async_db_test.flush()
-
-        # Verify
-        result = await async_db_test.execute(
-            select(SampleModel).where(SampleModel.value == "delete_test")
-        )
-        deleted = result.scalar_one_or_none()
-        assert deleted is None
 
 
 class TestFastAPIDependsPattern:

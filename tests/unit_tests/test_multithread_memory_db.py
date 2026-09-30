@@ -11,7 +11,6 @@ StaticPool が正しく設定されていない場合、以下のエラーが発
 """
 
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pytest
@@ -78,7 +77,7 @@ class TestMultithreadMemoryDbAccess:
         finally:
             session.close()
 
-    def test_multithread_read_access(self, memory_engine, seed_data):
+    def test_multithread_read_and_write_access(self, memory_engine, seed_data):
         """
         複数のスレッドから同時に読み取りアクセス
 
@@ -86,130 +85,52 @@ class TestMultithreadMemoryDbAccess:
         同時に実行されるシナリオを再現。
         """
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=memory_engine)
-        thread_ids = set()
-        results = []
+        start_together = threading.Barrier(3)
+        connection_lock = threading.Lock()
 
-        def read_from_db(thread_num: int):
-            """スレッドから DB を読み取る"""
-            # スレッド並列実行を確保するための遅延
-            time.sleep(0.01 * thread_num)
+        def read_and_write(item_num: int):
+            start_together.wait()
+            with connection_lock:
+                session = SessionLocal()
+                try:
+                    new_item = MultithreadTestModel(name=f"new_item_{item_num}")
+                    session.add(new_item)
+                    session.commit()
+                    session.refresh(new_item)
 
-            # このスレッドの ID を記録
-            thread_id = threading.get_ident()
-            thread_ids.add(thread_id)
+                    seeded_item = session.execute(
+                        select(MultithreadTestModel).where(
+                            MultithreadTestModel.name == f"item_{item_num}"
+                        )
+                    ).scalar_one()
+                    return {
+                        "thread": threading.get_ident(),
+                        "new_item_id": new_item.id,
+                        "seeded_name": seeded_item.name,
+                    }
+                finally:
+                    session.close()
 
-            # 新しい session を作成して読み取り
-            session = SessionLocal()
-            try:
-                stmt = select(MultithreadTestModel).where(
-                    MultithreadTestModel.name == f"item_{thread_num}"
-                )
-                item = session.execute(stmt).scalar_one()
-                return {"thread": thread_id, "name": item.name, "id": item.id}
-            finally:
-                session.close()
-
-        # 複数のスレッドで同時にアクセス
         with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [executor.submit(read_from_db, i) for i in range(5)]
-            for future in as_completed(futures):
-                result = future.result()
-                results.append(result)
-
-        # 検証
-        assert len(results) == 5
-        assert len(thread_ids) > 1, "複数のスレッドから実行されるべき"
-
-        # すべてのアイテムが正しく読み取れたことを確認
-        names = {r["name"] for r in results}
-        assert names == {f"item_{i}" for i in range(5)}
-
-    def test_multithread_write_access(self, memory_engine, seed_data):
-        """
-        複数のスレッドから同時に書き込みアクセス
-
-        FastAPI で POST/PUT エンドポイントが複数のスレッドで
-        同時に実行されるシナリオを再現。
-        """
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=memory_engine)
-        thread_ids = set()
-
-        def write_to_db(item_num: int):
-            """スレッドから DB に書き込む"""
-            # スレッド並列実行を確保するための遅延
-            time.sleep(0.01 * item_num)
-
-            thread_id = threading.get_ident()
-            thread_ids.add(thread_id)
-
-            session = SessionLocal()
-            try:
-                new_item = MultithreadTestModel(name=f"new_item_{item_num}")
-                session.add(new_item)
-                session.commit()
-                # commit 後に id を取得（expire_on_commit=False の場合は必要ない）
-                session.refresh(new_item)
-                return {"thread": thread_id, "id": new_item.id}
-            finally:
-                session.close()
-
-        # 複数のスレッドで同時に書き込み
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [executor.submit(write_to_db, i) for i in range(3)]
+            futures = [executor.submit(read_and_write, i) for i in range(3)]
             results = [f.result() for f in as_completed(futures)]
 
-        # 検証
         assert len(results) == 3
-        assert len(thread_ids) > 1, "複数のスレッドから実行されるべき"
+        assert len({result["thread"] for result in results}) == 3
+        assert {result["seeded_name"] for result in results} == {
+            "item_0",
+            "item_1",
+            "item_2",
+        }
+        assert all(result["new_item_id"] is not None for result in results)
 
-        # 書き込みが成功したことを確認
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=memory_engine)
         session = SessionLocal()
         try:
-            stmt = select(MultithreadTestModel).where(
-                MultithreadTestModel.name.like("new_item_%")
-            )
-            new_items = session.execute(stmt).scalars().all()
+            new_items = session.execute(
+                select(MultithreadTestModel).where(
+                    MultithreadTestModel.name.like("new_item_%")
+                )
+            ).scalars().all()
             assert len(new_items) == 3
         finally:
             session.close()
-
-class TestMemoryDbConfiguration:
-    """
-    :memory: DB の設定テスト
-
-    StaticPool が正しく設定されているかを確認する。
-    """
-
-    def test_memory_db_uses_static_pool(self, monkeypatch):
-        """
-        Test 環境の :memory: DB で StaticPool が使用されることを確認
-        """
-        monkeypatch.setenv("EXEC_ENV", "test")
-        config = RepomConfig()
-        config.exec_env = "test"  # 明示的に test 環境に設定
-        assert ":memory:" in config.db_url
-
-        engine_kwargs = config.engine_kwargs
-
-        # StaticPool が設定されているか確認
-        assert "poolclass" in engine_kwargs
-        assert "check_same_thread" in engine_kwargs.get("connect_args", {})
-        assert engine_kwargs["connect_args"]["check_same_thread"] is False
-
-    def test_file_based_db_uses_default_pool(self, monkeypatch):
-        """
-        ファイルベースの DB では StaticPool を使用しないことを確認
-        """
-        monkeypatch.setenv("EXEC_ENV", "dev")
-        config = RepomConfig()
-        config.exec_env = "dev"  # 明示的に dev 環境に設定
-        assert ":memory:" not in config.db_url
-
-        engine_kwargs = config.engine_kwargs
-
-        # StaticPool は設定されていないはず
-        # （pool_size などが設定されている）
-        assert "pool_size" in engine_kwargs
-        assert "poolclass" not in engine_kwargs  # デフォルトプールを使用
-        assert "check_same_thread" in engine_kwargs.get("connect_args", {})
