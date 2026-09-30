@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- BREAKING: `find()` now ANDs conditions from both `params` and `filters`. The
+  default `_build_filters()` raises `ValueError` when a non-None FilterParams
+  field has no non-None `field_to_column` mapping.
 - Repository defaults now follow normal Python attribute lookup, so instance
   values for `default_options`, `default_order_by`, `max_limit`, and
   `field_to_column` override class values. Repositories without configured

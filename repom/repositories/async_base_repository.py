@@ -477,7 +477,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
                 stacklevel=2,
             )
 
-        base_filters = filters if filters is not None else self._build_filters(params)
+        base_filters = [*(filters or []), *self._build_filters(params)]
         return await self._find_with_filters(base_filters, include_deleted=include_deleted, **kwargs)
 
     async def _find_with_filters(

@@ -79,6 +79,10 @@ class QueryBuilderMixin(Generic[T]):
             self.virtual_order_columns,
         )
 
+    def _uses_default_filter_builder(self) -> bool:
+        # Overrides may handle additional fields after delegating mapped fields to super().
+        return type(self)._build_filters is QueryBuilderMixin._build_filters
+
     def _build_filters(self, params: Optional[FilterParams]) -> list:
         """FilterParams からフィルタ条件を構築
 
@@ -91,9 +95,19 @@ class QueryBuilderMixin(Generic[T]):
         if all(value is None for value in params.model_dump().values()):
             return []
 
+        mapping = self.field_to_column or {}
+        unhandled_fields = set(params.model_dump(exclude_none=True)) - {
+            field_name for field_name, column in mapping.items() if column is not None
+        }
+        if unhandled_fields and self._uses_default_filter_builder():
+            fields = ", ".join(sorted(unhandled_fields))
+            raise ValueError(
+                f"{type(self).__name__} has unmapped FilterParams fields: {fields}. "
+                "Add a field_to_column mapping or override _build_filters()."
+            )
+
         filters = []
 
-        mapping = self.field_to_column
         if mapping:
             filters.extend(build_filters_from_mapping(params, mapping))
 

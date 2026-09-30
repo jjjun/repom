@@ -108,7 +108,7 @@ repo = TaskRepository()
 tasks = repo.find(params=TaskFilterParams(status="active", title="task"), limit=100)
 ```
 
-`find(params=..., filters=...)` の両方を指定した場合は、`filters` が使われ、`params` は無視されます。
+`find(params=..., filters=...)` では、`params` から生成した条件と `filters` の条件を AND で組み合わせるため、両方を渡すと結果がさらに絞り込まれます。デフォルトの `_build_filters()` は、`FilterParams` の値が `None` でないフィールドに対して値が `None` でない `field_to_column` の対応エントリがない場合、リポジトリ名とフィールド名を含む `ValueError` を送出します。該当するフィールドを `field_to_column` に追加するか、`_build_filters()` をオーバーライドしてください。マッピング済みフィールドの処理を `super()._build_filters()` に委ねるオーバーライドでは、残りのフィールドはそのオーバーライドが処理するため、このエラーは発生しません。`count_by_params()` も同じルールに従います。
 
 部分一致・前方一致が必要な場合は `contains_column()` / `prefix_column()` で
 明示してください。これらは SQL の `LIKE` を使いますが、値に含まれる `%` / `_`

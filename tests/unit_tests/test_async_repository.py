@@ -70,6 +70,24 @@ class AsyncAutoFilterRepository(AsyncBaseRepository[AsyncAutoFilterModel]):
         super().__init__(AsyncAutoFilterModel, session)
 
 
+class AsyncPartiallyMappedSimpleRepository(AsyncSimpleRepository):
+    field_to_column = {"value": AsyncSimpleModel.value}
+
+
+class AsyncNoneMappedSimpleRepository(AsyncSimpleRepository):
+    field_to_column = {"value": None}
+
+
+class AsyncExtendedFilterableRepository(AsyncSimpleRepository):
+    field_to_column = {"value": AsyncSimpleModel.value}
+
+    def _build_filters(self, params: Optional[FilterParams]) -> list:
+        filters = super()._build_filters(params)
+        if params is not None and params.other is not None:
+            filters.append(AsyncSimpleModel.id == params.other)
+        return filters
+
+
 class AsyncColumnGuardParentModel(BaseModel):
     __tablename__ = 'async_column_guard_parent_model'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -680,13 +698,64 @@ async def test_async_find_uses_params_when_filters_not_provided(async_db_test):
 
 
 @pytest.mark.asyncio
-async def test_async_find_prefers_explicit_filters_over_params(async_db_test):
+async def test_async_find_combines_explicit_filters_with_params(async_db_test):
     repo = AsyncFilterableRepository(session=async_db_test)
     await repo.saves([AsyncSimpleModel(value=1), AsyncSimpleModel(value=2)])
 
     results = await repo.find(params=AsyncSimpleFilterParams(value=1), filters=[AsyncSimpleModel.value == 2])
 
-    assert {item.value for item in results} == {2}
+    assert results == []
+
+
+@pytest.mark.asyncio
+async def test_async_build_filters_raises_for_unmapped_non_none_fields(async_db_test):
+    repo = AsyncPartiallyMappedSimpleRepository(session=async_db_test)
+
+    with pytest.raises(ValueError, match="other") as exc_info:
+        repo._build_filters(AsyncSimpleFilterParams(other=1))
+
+    assert "AsyncPartiallyMappedSimpleRepository" in str(exc_info.value)
+    assert "field_to_column" in str(exc_info.value)
+    assert "override _build_filters()" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_async_build_filters_raises_for_fields_mapped_to_none(async_db_test):
+    repo = AsyncNoneMappedSimpleRepository(session=async_db_test)
+
+    with pytest.raises(ValueError, match="value"):
+        repo._build_filters(AsyncSimpleFilterParams(value=1))
+
+
+@pytest.mark.asyncio
+async def test_async_build_filters_raises_without_field_mapping(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+
+    with pytest.raises(ValueError, match="value"):
+        repo._build_filters(AsyncSimpleFilterParams(value=1))
+
+
+@pytest.mark.asyncio
+async def test_async_build_filters_ignores_none_fields_when_other_fields_are_mapped(async_db_test):
+    repo = AsyncPartiallyMappedSimpleRepository(session=async_db_test)
+
+    assert repo._build_filters(AsyncSimpleFilterParams()) == []
+    assert len(repo._build_filters(AsyncSimpleFilterParams(value=1, other=None))) == 1
+
+
+@pytest.mark.asyncio
+async def test_async_build_filters_override_handles_extra_fields_after_super(async_db_test):
+    repo = AsyncExtendedFilterableRepository(session=async_db_test)
+    items = [AsyncSimpleModel(value=1), AsyncSimpleModel(value=1)]
+    await repo.saves(items)
+    second = items[1]
+
+    results = await repo.find(
+        params=AsyncSimpleFilterParams(value=1, other=second.id),
+        limit=10,
+    )
+
+    assert [item.id for item in results] == [second.id]
 
 
 @pytest.mark.asyncio
@@ -703,6 +772,7 @@ async def test_async_build_filters_from_mapping_applies_ops(async_db_test):
 
     assert {item.number for item in results} == {2}
     assert {item.name for item in results} == {"alphabet"}
+    assert await repo.count_by_params(params) == 1
 
 
 @pytest.mark.asyncio
@@ -735,6 +805,14 @@ async def test_count_by_params(async_db_test):
 
     assert await repo.count_by_params(AsyncSimpleFilterParams(value=2)) == 2
     assert await repo.count_by_params(AsyncSimpleFilterParams(value=999)) == 0
+
+
+@pytest.mark.asyncio
+async def test_async_count_by_params_raises_for_unmapped_fields(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+
+    with pytest.raises(ValueError, match="value"):
+        await repo.count_by_params(AsyncSimpleFilterParams(value=1))
 
 
 @pytest.mark.asyncio

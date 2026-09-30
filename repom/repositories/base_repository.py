@@ -443,7 +443,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
                 stacklevel=2,
             )
 
-        base_filters = filters if filters is not None else self._build_filters(params)
+        base_filters = [*(filters or []), *self._build_filters(params)]
         return self._find_with_filters(base_filters, include_deleted=include_deleted, **kwargs)
 
     def _find_with_filters(
