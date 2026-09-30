@@ -281,13 +281,21 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
                     session.refresh(instance)
         return instances
 
-    def bulk_update(self, values: Sequence[dict], *, filter_by: dict | None = None, allow_unfiltered: bool = False) -> int:
+    def bulk_update(
+        self,
+        values: Sequence[dict],
+        *,
+        filter_by: dict | None = None,
+        allow_unfiltered: bool = False,
+        include_deleted: bool = False,
+    ) -> int:
         """複数レコードを一括更新し、影響行数を返す。
 
         ``filter_by`` 未指定時は各 dict の ``id`` を条件として使います。
         ``filter_by`` 指定時は渡された条件に対して各 dict の値を適用します。
         ``filter_by`` に空の dict を渡すと全件が対象になるため、
         ``allow_unfiltered=True`` を明示しない限り ``ValueError`` を送出します。
+        ``include_deleted=True`` を指定すると、論理削除済みの行も更新対象にします。
         """
         if not values:
             return 0
@@ -304,12 +312,14 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
 
         with self._session_scope() as session:
             rowcount = 0
+            filters = self._bulk_filters(filter_by)
+            self._append_soft_delete_filter(filters, include_deleted)
             with self._commit_or_flush(session):
                 for row in values:
                     update_values = dict(row)
-                    filters = self._bulk_filters(filter_by)
+                    row_filters = list(filters)
                     if filter_by is None:
-                        filters.append(self.model.id == update_values.pop("id"))
+                        row_filters.append(self.model.id == update_values.pop("id"))
                     if not update_values:
                         continue
 
@@ -317,7 +327,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
 
                     result = session.execute(
                         update(self.model)
-                        .where(and_(*filters) if filters else true())
+                        .where(and_(*row_filters) if row_filters else true())
                         .values(**update_values)
                         .execution_options(synchronize_session="fetch")
                     )

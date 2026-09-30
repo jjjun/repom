@@ -263,6 +263,9 @@
   keep returning rows in unspecified order) instead of always returning rows
   in unspecified order. Consuming projects that relied on `get_all()`
   returning soft-deleted rows must pass `include_deleted=True` explicitly.
+- BREAKING: `bulk_update()` now excludes soft-deleted rows by default on models
+  with `SoftDeletableMixin`. Callers that need to update or restore deleted
+  rows must pass `include_deleted=True`.
 - BREAKING: `bulk_update()` and `bulk_delete()` now raise `ValueError` when the
   resolved filter list is empty (`bulk_delete()` with neither `filter_by` nor
   `ids`, or `bulk_update(..., filter_by={})`). Pass `allow_unfiltered=True` to

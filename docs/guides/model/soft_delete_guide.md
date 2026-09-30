@@ -100,6 +100,8 @@ article = repo.get_by_id(1, include_deleted=True)
 `remove(instance)` は `SoftDeletableMixin` を持つモデルに対しても物理削除します。
 `bulk_delete()` は Mixin を持つモデルの該当行を論理削除し、Mixin を持たないモデルの
 該当行を物理削除します。
+`bulk_update()` は既定で論理削除済みの行を除外します。削除済みの行を復元するなど、
+更新対象に含める場合は `include_deleted=True` を指定してください。
 
 ---
 
