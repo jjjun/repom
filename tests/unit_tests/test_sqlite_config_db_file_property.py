@@ -4,6 +4,7 @@ This test validates Option 1 implementation: db_file as a property that
 automatically recalculates based on db_name without explicit reset.
 """
 from repom.config import RepomConfig
+from repom.sqlite.config import SqliteConfig
 
 
 class TestSqliteConfigDbFileProperty:
@@ -110,3 +111,10 @@ class TestSqliteConfigDbFileProperty:
 
         # db_file_path は db_file の自動計算を使用する
         assert 'myapp_dev.sqlite3' in config.sqlite.db_file_path
+
+
+def test_unbound_sqlite_config_has_no_derived_paths():
+    config = SqliteConfig()
+
+    assert config.db_file is None
+    assert config.db_file_path is None

@@ -10,7 +10,7 @@ in explicitly.
 import pytest
 
 from repom.config import config
-from repom.testing import create_test_fixtures
+from repom.testing import create_async_test_fixtures, create_test_fixtures
 
 
 def test_create_test_fixtures_refuses_non_test_database(tmp_path, monkeypatch):
@@ -20,6 +20,17 @@ def test_create_test_fixtures_refuses_non_test_database(tmp_path, monkeypatch):
 
     with pytest.raises(RuntimeError):
         create_test_fixtures(db_url=db_url)
+
+    assert not db_path.exists()
+
+
+def test_create_async_test_fixtures_refuses_non_test_database(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "exec_env", "dev")
+    db_path = tmp_path / "repom_dev.sqlite3"
+    db_url = f"sqlite:///{db_path}"
+
+    with pytest.raises(RuntimeError, match="Refusing to create test fixtures"):
+        create_async_test_fixtures(db_url=db_url)
 
     assert not db_path.exists()
 

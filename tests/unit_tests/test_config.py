@@ -184,6 +184,33 @@ def test_db_name_is_settable(config_factory):
     assert config.db_name == "myapp"
 
 
+def test_db_connect_timeout_must_be_positive(config_factory):
+    config = config_factory()
+    config.db_connect_timeout = 5
+
+    assert config.db_connect_timeout == 5
+
+    with pytest.raises(ValueError, match="Must be greater than 0"):
+        config.db_connect_timeout = 0
+    with pytest.raises(ValueError, match="Must be greater than 0"):
+        config.db_connect_timeout = -1
+
+
+def test_db_application_name_can_be_overridden(config_factory):
+    config = config_factory()
+    config.db_application_name = "worker-service"
+
+    assert config.db_application_name == "worker-service"
+
+
+def test_master_data_path_can_be_overridden(config_factory, tmp_path):
+    config = config_factory()
+    master_data_path = tmp_path / "fixtures"
+    config.master_data_path = str(master_data_path)
+
+    assert config.master_data_path == str(master_data_path)
+
+
 def test_postgres_db_uses_db_name(config_factory):
     """``postgres_db`` uses ``db_name`` as base."""
     config = config_factory(exec_env="dev")

@@ -35,3 +35,14 @@ def test_custom_json_none_saved_as_null(db_test):
 
     assert record.payload is None
     assert raw_value is None
+
+
+def test_custom_json_round_trips_non_none_value(db_test):
+    payload = {"enabled": True, "items": [1, "two", None]}
+    record = CustomJsonModel(payload=payload)
+
+    db_test.add(record)
+    db_test.flush()
+    db_test.expire(record, ["payload"])
+
+    assert record.payload == payload

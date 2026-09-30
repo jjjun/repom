@@ -498,6 +498,13 @@ async def test_bulk_update_allows_unfiltered_when_opted_in(async_db_test):
 
 
 @pytest.mark.asyncio
+async def test_bulk_update_empty_values_returns_zero(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+
+    assert await repo.bulk_update([]) == 0
+
+
+@pytest.mark.asyncio
 async def test_bulk_delete_physically_deletes_by_ids(async_db_test):
     repo = AsyncSimpleRepository(session=async_db_test)
     first, second, third = await repo.bulk_insert([
@@ -717,6 +724,13 @@ async def test_async_build_filters_from_mapping_applies_ops(async_db_test):
 
 
 @pytest.mark.asyncio
+async def test_find_by_ids_with_empty_list_returns_empty(async_db_test):
+    repo = AsyncSimpleRepository(session=async_db_test)
+
+    assert await repo.find_by_ids([]) == []
+
+
+@pytest.mark.asyncio
 async def test_count(async_db_test):
     """
     AsyncBaseRepository.countの基本動作テスト
@@ -733,6 +747,19 @@ async def test_count(async_db_test):
     # 存在しない値
     filters = [AsyncSimpleModel.value == 999]
     assert await repo.count(filters) == 0
+
+
+@pytest.mark.asyncio
+async def test_count_by_params(async_db_test):
+    repo = AsyncFilterableRepository(session=async_db_test)
+    await repo.saves([
+        AsyncSimpleModel(value=1),
+        AsyncSimpleModel(value=2),
+        AsyncSimpleModel(value=2),
+    ])
+
+    assert await repo.count_by_params(AsyncSimpleFilterParams(value=2)) == 2
+    assert await repo.count_by_params(AsyncSimpleFilterParams(value=999)) == 0
 
 
 @pytest.mark.asyncio

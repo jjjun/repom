@@ -1,6 +1,7 @@
 
 from sqlalchemy import Integer, String, desc
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm.exc import UnmappedClassError
 import pytest
 
 from repom import (
@@ -12,6 +13,8 @@ from repom import (
     VirtualColumnError,
 )
 from repom.models.base_model import BaseModel
+from repom.repositories._order_by import normalize_order_by_value
+import repom.repositories._order_by as order_by_module
 
 
 class OrderByOpenAPIModel(BaseModel):
@@ -68,6 +71,15 @@ class InvalidVirtualOrderByRepository(BaseRepository[OrderByOpenAPIModel]):
 
     def __init__(self, session):
         super().__init__(OrderByOpenAPIModel, session)
+
+
+class InvalidDefaultOrderRepository(BaseRepository[OrderByOpenAPIModel]):
+    allowed_order_columns = ["id", "name", "priority"]
+    default_order_by = "created_at:desc"
+
+
+class UnmappedOrderByRepository(BaseRepository):
+    pass
 
 
 def test_get_order_by_columns_filters_to_real_model_columns():
@@ -171,6 +183,42 @@ def test_default_order_by_rejects_bare_column_default_at_runtime(db_test):
         match="canonical format 'column:asc' or 'column:desc'",
     ):
         repo.find()
+
+
+@pytest.mark.parametrize("order_by", [1, None, ["priority:desc"]])
+def test_normalize_order_by_rejects_non_string_values(order_by):
+    with pytest.raises(TypeError, match="must be a string"):
+        normalize_order_by_value(order_by)
+
+
+def test_normalize_order_by_rejects_missing_direction():
+    with pytest.raises(ValueError, match="canonical format"):
+        normalize_order_by_value("priority")
+
+
+def test_normalize_order_by_rejects_unknown_direction():
+    with pytest.raises(ValueError, match="Direction must be 'asc' or 'desc'"):
+        normalize_order_by_value("priority:sideways")
+
+
+def test_get_order_by_default_value_rejects_column_outside_allowlist():
+    with pytest.raises(ValueError, match="is not valid"):
+        get_order_by_default_value(InvalidDefaultOrderRepository)
+
+
+def test_get_order_by_columns_rejects_unmapped_model():
+    with pytest.raises(TypeError, match="Could not extract model"):
+        get_order_by_columns(UnmappedOrderByRepository)
+
+
+def test_get_order_by_columns_translates_unmapped_class_error(monkeypatch):
+    def inspect_unmapped(_model_class):
+        raise UnmappedClassError(BaseModel)
+
+    monkeypatch.setattr(order_by_module, "sa_inspect", inspect_unmapped)
+
+    with pytest.raises(TypeError, match="is not a mapped class"):
+        get_order_by_columns(OrderByRepository)
 
 pytestmark = pytest.mark.filterwarnings(
     r"ignore:find\(\) was called without a limit:RuntimeWarning"

@@ -8,6 +8,7 @@ from repom.database import (
     get_db_session,
     get_db_transaction,
     get_reusable_sync_transaction,
+    get_standalone_sync_transaction,
     get_sync_engine,
     get_inspector,
     DatabaseManager,
@@ -21,6 +22,7 @@ import os
 import threading
 import time
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import Column, String, Engine
 from sqlalchemy.orm import Session
@@ -147,6 +149,31 @@ class TestReusableSyncTransaction:
             assert isinstance(session, Session)
 
         assert manager._sync_engine is None
+
+    def test_public_standalone_transaction_delegates_to_manager(self, monkeypatch):
+        events = []
+
+        @contextmanager
+        def transaction():
+            events.append("enter")
+            yield "session"
+
+        monkeypatch.setattr(_db_manager, "get_standalone_sync_transaction", transaction)
+
+        with get_standalone_sync_transaction() as session:
+            assert session == "session"
+
+        assert events == ["enter"]
+
+
+@pytest.mark.asyncio
+async def test_dispose_engines_delegates_to_manager(monkeypatch):
+    dispose_all = AsyncMock()
+    monkeypatch.setattr(_db_manager, "dispose_all", dispose_all)
+
+    await database_module.dispose_engines()
+
+    dispose_all.assert_awaited_once_with()
 
 
 class TestDatabaseManager:

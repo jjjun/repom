@@ -92,6 +92,26 @@ class TestRefreshBehaviorSync:
         assert saved.updated_at is not None
         assert isinstance(saved.updated_at, datetime)
 
+    def test_internal_bulk_insert_and_saves_refresh_server_fields(self):
+        repo = BaseRepository(RefreshTestModel)
+        bulk_items = [
+            RefreshTestModel(name="internal_bulk_refresh_1"),
+            RefreshTestModel(name="internal_bulk_refresh_2"),
+        ]
+        saved_items = [RefreshTestModel(name="internal_saves_refresh")]
+
+        try:
+            returned_items = repo.bulk_insert(bulk_items)
+            repo.saves(saved_items)
+
+            assert returned_items == bulk_items
+            assert all(item.created_at is not None for item in bulk_items + saved_items)
+            assert all(item.updated_at is not None for item in bulk_items + saved_items)
+        finally:
+            for item in bulk_items + saved_items:
+                if item.id is not None:
+                    repo.permanent_delete(item.id)
+
 
 @pytest.mark.asyncio
 class TestRefreshBehaviorAsync:
@@ -150,3 +170,23 @@ class TestRefreshBehaviorAsync:
         assert isinstance(saved.created_at, datetime)
         assert saved.updated_at is not None
         assert isinstance(saved.updated_at, datetime)
+
+    async def test_internal_bulk_insert_and_saves_refresh_server_fields(self):
+        repo = AsyncBaseRepository(RefreshTestModel)
+        bulk_items = [
+            RefreshTestModel(name="async_internal_bulk_refresh_1"),
+            RefreshTestModel(name="async_internal_bulk_refresh_2"),
+        ]
+        saved_items = [RefreshTestModel(name="async_internal_saves_refresh")]
+
+        try:
+            returned_items = await repo.bulk_insert(bulk_items)
+            await repo.saves(saved_items)
+
+            assert returned_items == bulk_items
+            assert all(item.created_at is not None for item in bulk_items + saved_items)
+            assert all(item.updated_at is not None for item in bulk_items + saved_items)
+        finally:
+            for item in bulk_items + saved_items:
+                if item.id is not None:
+                    await repo.permanent_delete(item.id)

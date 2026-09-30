@@ -504,6 +504,12 @@ def test_bulk_update_allows_unfiltered_when_opted_in(db_test):
     assert repo.count(filters=[SimpleModel.value == 9]) == 2
 
 
+def test_bulk_update_empty_values_returns_zero(db_test):
+    repo = SimpleRepository(session=db_test)
+
+    assert repo.bulk_update([]) == 0
+
+
 def test_bulk_delete_physically_deletes_by_ids(db_test):
     repo = SimpleRepository(session=db_test)
     first, second, third = repo.bulk_insert([
@@ -722,6 +728,14 @@ def test_count(db_test):
     # 存在しない値
     filters = [SimpleModel.value == 999]
     assert repo.count(filters) == 0
+
+
+def test_count_by_params(db_test):
+    repo = FilterableRepository(session=db_test)
+    repo.saves([SimpleModel(value=1), SimpleModel(value=2), SimpleModel(value=2)])
+
+    assert repo.count_by_params(SimpleFilterParams(value=2)) == 2
+    assert repo.count_by_params(SimpleFilterParams(value=999)) == 0
 
 
 def test_count_respects_soft_delete_flag_on_soft_deletable_model(db_test):

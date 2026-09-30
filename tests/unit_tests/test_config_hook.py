@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from basekit.config_hook import (
@@ -5,6 +7,30 @@ from basekit.config_hook import (
     ConfigHookLoadError,
     get_config_from_hook,
 )
+from repom.config import RepomConfig
+from repom.config_hook import hook_config
+
+
+def test_hook_config_configures_repom_package(monkeypatch):
+    monkeypatch.setenv("EXEC_ENV", "test")
+    config = RepomConfig()
+    config.package_name = "repom"
+
+    result = hook_config(config)
+
+    assert result is config
+    assert config.model_locations == ["repom.examples.models"]
+    assert config.db_type == "sqlite"
+
+
+def test_hook_config_only_sets_root_path_for_external_package():
+    config = SimpleNamespace(package_name="external_app", root_path=None)
+
+    result = hook_config(config)
+
+    assert result is config
+    assert config.root_path
+    assert not hasattr(config, "model_locations")
 
 
 def test_get_config_from_hook_returns_config_when_hook_missing(monkeypatch):

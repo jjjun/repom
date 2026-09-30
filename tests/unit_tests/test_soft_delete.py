@@ -402,6 +402,16 @@ class TestAsyncRepositoryInternalSessionSoftDelete:
         assert await verify_repo.get_by_id(item_id, include_deleted=True) is None
 
 
+@pytest.mark.asyncio
+async def test_async_soft_delete_methods_reject_unsupported_model():
+    repo = AsyncBaseRepository(NormalTestModel)
+
+    with pytest.raises(ValueError, match="does not support soft delete"):
+        await repo.soft_delete(1)
+    with pytest.raises(ValueError, match="does not support soft delete"):
+        await repo.restore(1)
+
+
 class TestFindDeleted:
     """find_deleted() と find_deleted_before() のテスト"""
 

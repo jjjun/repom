@@ -8,8 +8,12 @@ db_sync_master のテスト
 - エラーハンドリング
 """
 
+from contextlib import contextmanager
+from types import SimpleNamespace
+
 import pytest
 from sqlalchemy import event
+from repom.scripts import db_sync_master as db_sync_master_script
 from repom.scripts.db_sync_master import load_master_data_files, sync_master_data
 from repom.examples.models.sample import SampleModel
 from repom.repositories import BaseRepository
@@ -273,3 +277,111 @@ class TestSyncMasterData:
         # （ただし db_test フィクスチャ自体が各テストでロールバックする）
         record400 = repo.get_by_id(400)
         assert record400 is None
+
+
+def test_main_exits_when_master_data_path_is_missing(monkeypatch, capsys):
+    monkeypatch.setattr(
+        db_sync_master_script,
+        "config",
+        SimpleNamespace(master_data_path=None, db_type="sqlite"),
+    )
+    monkeypatch.setattr(db_sync_master_script, "load_models", lambda: None)
+
+    with pytest.raises(SystemExit) as exc_info:
+        db_sync_master_script.main()
+
+    assert exc_info.value.code == 1
+    assert "master_data_path が設定されていません" in capsys.readouterr().out
+
+
+def test_main_starts_postgres_and_reports_empty_directory(monkeypatch, tmp_path, capsys):
+    events = []
+    monkeypatch.setattr(
+        db_sync_master_script,
+        "config",
+        SimpleNamespace(master_data_path=str(tmp_path), db_type="postgres"),
+    )
+    monkeypatch.setattr(db_sync_master_script, "load_models", lambda: None)
+
+    from repom.postgres import manage as postgres_manage
+
+    monkeypatch.setattr(postgres_manage, "ensure_running", lambda: events.append("postgres"))
+
+    @contextmanager
+    def transaction():
+        events.append("transaction")
+        yield object()
+
+    monkeypatch.setattr(db_sync_master_script, "get_standalone_sync_transaction", transaction)
+
+    db_sync_master_script.main()
+
+    output = capsys.readouterr().out
+    assert events == ["postgres", "transaction"]
+    assert "マスターデータファイルが見つかりません" in output
+    assert "同期完了: 0 ファイル、0 レコード" in output
+
+
+@pytest.mark.parametrize(
+    ("error_type", "message"),
+    [
+        (FileNotFoundError, "missing directory"),
+        (ValueError, "invalid master data"),
+        (RuntimeError, "unexpected failure"),
+    ],
+)
+def test_main_reports_master_data_errors_and_exits(
+    monkeypatch, tmp_path, capsys, error_type, message
+):
+    monkeypatch.setattr(
+        db_sync_master_script,
+        "config",
+        SimpleNamespace(master_data_path=str(tmp_path), db_type="sqlite"),
+    )
+    monkeypatch.setattr(db_sync_master_script, "load_models", lambda: None)
+
+    @contextmanager
+    def transaction():
+        yield object()
+
+    monkeypatch.setattr(db_sync_master_script, "get_standalone_sync_transaction", transaction)
+
+    def load_files(_directory):
+        raise error_type(message)
+        yield
+
+    monkeypatch.setattr(db_sync_master_script, "load_master_data_files", load_files)
+
+    with pytest.raises(SystemExit) as exc_info:
+        db_sync_master_script.main()
+
+    output = capsys.readouterr().out
+    assert exc_info.value.code == 1
+    assert message in output
+
+
+def test_main_reports_successful_sync_summary(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(
+        db_sync_master_script,
+        "config",
+        SimpleNamespace(master_data_path=str(tmp_path), db_type="sqlite"),
+    )
+    monkeypatch.setattr(db_sync_master_script, "load_models", lambda: None)
+
+    @contextmanager
+    def transaction():
+        yield object()
+
+    monkeypatch.setattr(db_sync_master_script, "get_standalone_sync_transaction", transaction)
+    monkeypatch.setattr(
+        db_sync_master_script,
+        "load_master_data_files",
+        lambda _directory: iter([(SampleModel, [{"id": 1}])]),
+    )
+    monkeypatch.setattr(db_sync_master_script, "sync_master_data", lambda *_args: 1)
+
+    db_sync_master_script.main()
+
+    output = capsys.readouterr().out
+    assert "SampleModel: 1 件" in output
+    assert "同期完了: 1 ファイル、1 レコード" in output
