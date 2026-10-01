@@ -204,7 +204,7 @@ All Captured Queries:
 
 ---
 
-## repository query のデバッグスクリプト
+## repository のクエリを調べるスクリプト
 
 `python -m repom.scripts.debug_repository_queries [module:Class]` は、指定した repository
 の `find()` と `to_dict()` が発行するクエリを分析します。たとえば次のように実行します。
@@ -214,6 +214,10 @@ python -m repom.scripts.debug_repository_queries myapp.repositories:UserReposito
 ```
 
 引数を省略すると、同梱の `SampleRepository` を調査します。
+
+Python からは `main(argv=None)` に引数リストを渡して実行できます。
+`debug_repository_queries_cli(*, target=...)` は `module:ClassName` 形式の repository を
+読み込みます。target を省略した場合は同梱の `SampleRepository` を使います。
 
 ## ヘルパー関数
 
@@ -270,27 +274,21 @@ for model in models:
 
 ### QueryAnalyzer クラス
 
-```python
-class QueryAnalyzer:
-    def __init__(self, engine: Optional[Engine] = None)
-```
+`QueryAnalyzer` の constructor は `QueryAnalyzer(engine: Optional[Engine] = None)` です。
 
 **パラメータ:**
 - `engine` (Optional[Engine]): 監視する SQLAlchemy エンジン。省略時はデフォルトエンジンを使用
 
 **主要メソッド:**
 
-#### capture()
+#### `capture()`
 
-```python
-@contextmanager
-def capture(self, model: Optional[Union[str, Type]] = None)
-```
+`capture(self, model: Optional[Union[str, Type]] = None)`
 
 クエリをキャプチャするコンテキストマネージャー。
 
 **パラメータ:**
-- `model` (Optional): ターゲットモデル（文字列またはクラス）を指定可能（将来の拡張用）
+- `model` (Optional): 対象モデルを文字列またはクラスで指定できます。
 
 **使用例:**
 ```python
@@ -298,76 +296,51 @@ def capture(self, model: Optional[Union[str, Type]] = None)
 with analyzer.capture():
     users = session.query(User).all()
 
-# モデルを指定してキャプチャ（将来の機能拡張用）
+# モデルを指定してキャプチャ
 with analyzer.capture(model='User'):
     users = session.query(User).all()
 ```
 
-#### print_report()
+#### `print_report()`
 
-```python
-def print_report(self, verbose: bool = False) -> None
-```
+`print_report(self, verbose: bool = False) -> None`
 
 分析結果をコンソールに表示します。
 
 **パラメータ:**
 - `verbose` (bool): True の場合、全クエリの内容を表示
 
-#### analyze_n_plus_1()
+#### `analyze_n_plus_1()`
 
-```python
-def analyze_n_plus_1(self) -> dict
-```
+`analyze_n_plus_1(self) -> dict`
 
 N+1 問題を分析して結果を辞書で返します。
 
 **戻り値:**
-```python
-{
-    'total_queries': int,        # 総クエリ数
-    'select_queries': int,       # SELECT クエリ数
-    'potential_n_plus_1': bool,  # N+1 問題の可能性
-    'repeated_queries': dict,    # 繰り返されたクエリパターン
-    'query_stats': dict          # クエリタイプごとの統計
-}
-```
+戻り値には `total_queries`、`select_queries`、`potential_n_plus_1`、
+`repeated_queries`、`query_stats` が含まれます。
 
-#### get_queries()
+#### `get_queries()`
 
-```python
-def get_queries(self) -> List[dict]
-```
+`get_queries(self) -> List[dict]`
 
 キャプチャした全クエリを取得します。
 
 **戻り値:**
-```python
-[
-    {
-        'statement': str,   # SQL 文
-        'type': str,        # クエリタイプ（SELECT, INSERT, など）
-        'parameters': Any   # クエリパラメータ
-    },
-    ...
-]
-```
+各 query の dictionary には `statement`、`type`、`parameters` が含まれます。
 
-#### get_stats()
+#### `get_stats()`
 
-```python
-def get_stats(self) -> dict
-```
+`get_stats(self) -> dict`
 
 クエリ統計を取得します。
 
 **戻り値:**
 ```python
 {
-    'SELECT': 10,
-    'INSERT': 2,
-    'UPDATE': 1,
-    ...
+    "SELECT": 10,
+    "INSERT": 2,
+    "UPDATE": 1,
 }
 ```
 
@@ -564,10 +537,6 @@ analyzer = QueryAnalyzer()
 
 ## 関連ドキュメント
 
-- **[BaseRepository Guide](../repository/base_repository_guide.md)**: リポジトリの基本的な使い方
-- **[Repository Advanced Guide](../repository/repository_advanced_guide.md)**: Eager Loading の詳細
-- **[Testing Guide](../testing/testing_guide.md)**: テストでの使用方法
-
----
-
-**最終更新**: 2026-01-31
+- **[BaseRepository ガイド](../repository/base_repository_guide.md)**: リポジトリの基本的な使い方
+- **[Repository 応用ガイド](../repository/repository_advanced_guide.md)**: Eager Loading の詳細
+- **[テストガイド](../testing/testing_guide.md)**: テストでの使用方法

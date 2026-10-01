@@ -158,10 +158,11 @@ uv run repom_info
 
 | 変数 | 用途 |
 | --- | --- |
-| `EXEC_ENV` | `dev` / `test` / `prod`。既定は `dev` |
+| `EXEC_ENV` | `dev` / `test` / `prod` (`production` は `prod` の別名)。既定は `dev`。未知の値では警告を出し、DB 名と SQLite ファイル名に `dev` の既定値を使います |
 | `CONFIG_HOOK` | `module:callable` 形式の設定フック |
-| `DB_TYPE` | `sqlite` または `postgres` |
-| `REPOM_DATABASE_URL` | DB URL の最優先 override |
+| `DB_TYPE` | `sqlite` または `postgres`。DB URL が設定されている場合は URL の backend が優先され、異なる値なら警告します |
+| `REPOM_DATABASE_URL` | 最優先の DB URL override。`DB_TYPE` より URL の backend が優先され、`db_*` CLI と PostgreSQL の prod TLS 検証にもこの URL が使われます |
+| `DATABASE_URL` | `REPOM_DATABASE_URL` が空の場合に使う fallback DB URL |
 | `REPOM_POSTGRES_DB` | PostgreSQL DB 名の固定 |
 | `POSTGRES_*` | PostgreSQL 接続・ホストポート設定 |
 | `PGADMIN_*` | pgAdmin 設定 |
@@ -174,30 +175,22 @@ SQLite の自動ファイル名は `db_name` と `EXEC_ENV` から生成され�
 `db_name=repom` では `repom_dev.sqlite3`、`repom_test.sqlite3`、
 `repom.sqlite3` です。実際の有効値は `uv run repom_info` で確認してください。
 
-`EXEC_ENV=production` is treated like `prod` (case-insensitively and after trimming
-surrounding whitespace). Unknown values produce a warning and use the dev database
-name/file for both PostgreSQL and SQLite.
+`EXEC_ENV=production` は大文字小文字と前後の空白を無視して `prod` として扱われ、未知の値では警告を出して開発用の既定値を使います。DB URL が明示されているかは `config.db_url_overridden` で確認できます。詳しくは [CONFIG_HOOK ガイド](docs/guides/features/config_hook_guide.md)を参照してください。
 
 設定フックでは、プロジェクト既定値を設定した後に必要な環境変数 helper を
 適用します。
 
 ```python
-from repom.config_hooks.database import apply_database_env_overrides
-from repom.config_hooks.postgres import apply_postgres_env_overrides
-from repom.config_hooks.sqlite import apply_sqlite_env_overrides
+from repom.config_hooks import apply_repom_env_overrides
 
 
 def hook_config(config):
     config.db_name = "myapp"
-    apply_database_env_overrides(config)
-    apply_postgres_env_overrides(config)
-    apply_sqlite_env_overrides(config)
+    apply_repom_env_overrides(config)
     return config
 ```
 
-詳細は [CONFIG_HOOK ガイド](docs/guides/features/config_hook_guide.md)と
-[runtime override 一覧](docs/guides/postgresql/runtime_env_overrides.md)を
-参照してください。
+設定フックの詳細は [CONFIG_HOOK ガイド](docs/guides/features/config_hook_guide.md)を参照してください。
 
 ## コマンド
 
@@ -222,8 +215,20 @@ def hook_config(config):
 
 | 分野 | 名前 | ガイド |
 | --- | --- | --- |
+| リポジトリ | `BaseRepository`, `AsyncBaseRepository` | 一括操作と `get_or_create()` は [BaseRepository ガイド](docs/guides/repository/base_repository_guide.md)を参照してください |
 | 検索パラメータ | `FilterParams`, `MatchMode`, `MatchColumn`, `contains_column`, `prefix_column` | [検索パラメータガイド](docs/guides/repository/repository_filter_params_guide.md) |
+| 範囲検索 | `gte_column`, `gt_column`, `lte_column`, `lt_column` | [検索パラメータガイド](docs/guides/repository/repository_filter_params_guide.md) |
 | 並び順 | `get_order_by_columns`, `get_order_by_default_value`, `get_order_by_values`, `VirtualColumnError` | [並び順ガイド](docs/guides/repository/order_by_guide.md) |
+| モデル | `ManyToManyMixin` | [多対多リレーションシップガイド](docs/guides/model/many_to_many_guide.md) |
+| カスタム型 | `UTCDateTime` | [システムカラムとカスタム型ガイド](docs/guides/model/system_columns_and_custom_types.md) |
+| 一意制約 | `repom.exceptions.is_unique_violation`, `unique_violation_constraint_name` | [システムカラムとカスタム型ガイド](docs/guides/model/system_columns_and_custom_types.md#一意制約違反の判定) |
+| セッション | `get_db_session`, `get_db_transaction`, `get_reusable_sync_session`, `get_reusable_async_session`, `get_reusable_*_transaction`, `get_standalone_*_transaction`, `get_lifespan_manager`, `dispose_engines`, `safe_db_url` | [セッション管理ガイド](docs/guides/repository/repository_session_patterns.md) |
+| 設定 hook | `repom.config_hooks.apply_repom_env_overrides`, `repom.config_hooks.parsing` | [CONFIG_HOOK ガイド](docs/guides/features/config_hook_guide.md)、[実行時環境変数ガイド](docs/guides/postgresql/runtime_env_overrides.md) |
+| Redis 設定 | `RedisConfig.connection_kwargs()`, `url()`, `safe_url()` | [Redis 設定ガイド](docs/guides/redis/redis_manager_guide.md) |
+| Alembic | `AlembicSetup`, `AlembicReset`, `AlembicTemplates` | [Alembic ガイド](docs/guides/features/alembic_migration_guide.md) |
+| テスト | `create_test_fixtures`, `create_async_test_fixtures` (`bind_global_manager`) | [テストガイド](docs/guides/testing/testing_guide.md) |
+| 宣言的基底クラス | `repom.database.Base` | [システムカラムとカスタム型ガイド](docs/guides/model/system_columns_and_custom_types.md) |
+| Repository 拡張 | `QueryBuilderMixin`, `create_repository_instance`, `get_model_from_repository_class` | [検索とフィルタガイド](docs/guides/repository/repository_advanced_guide.md) |
 | バリデーション | `NulByteError` | [NUL byte validation ガイド](docs/guides/features/nul_byte_validation.md) |
 | 診断 | `QueryAnalyzer` | [QueryAnalyzer ガイド](docs/guides/features/query_analyzer_guide.md) |
 | ロギング | `make_timed_rotating_handler`, `DateNamedDailyFileHandler` | [ロギングガイド](docs/guides/features/logging_guide.md) |
@@ -253,6 +258,8 @@ db_engine, db_test = create_test_fixtures()
 
 revision の作成先と実行元は、どちらも `alembic.ini` の
 `version_locations` で決まります。
+`alembic_init` は `alembic.ini` がない場合に `RepomConfig.alembic_*` の値を使って生成しますが、
+実行時に読み込まれる設定は `alembic.ini` のみです。
 
 ```bash
 uv run alembic revision --autogenerate -m "description"

@@ -229,17 +229,15 @@ def setup_users(db_test):
 ### scope='session'
 
 ```python
-@pytest.fixture(scope='session')
-def db_engine():
-    """テストセッション全体で1回だけ作成"""
-    # 全テスト実行時に1回だけ呼ばれる
-    return create_engine()
+from repom.testing import create_test_fixtures
+
+db_engine, db_test = create_test_fixtures()
 ```
 
 **特徴:**
-- 全テスト実行時に1回だけ実行
-- データベースエンジンなど、不変リソースに使う
-- repom の `db_engine` フィクスチャがこれを使用
+- `db_engine` は session scope、`db_test` は function scope の fixture
+- schema 作成と test ごとの transaction rollback は factory が管理
+- factory の実装と引数は [`repom/testing.py`](../../../repom/testing.py) を参照
 
 ---
 
@@ -292,17 +290,9 @@ def test_find_users(setup_users):
 
 ### 3. フィクスチャは共通資産として扱う
 
-```python
-# tests/conftest.py に共通フィクスチャを定義
-from repom.testing import create_test_fixtures
-
-db_engine, db_test = create_test_fixtures()
-```
-
-`db_engine` は session scope、`db_test` は function scope の `scoped_session` です。
-非同期テストには `create_async_test_fixtures()` を使います。どちらの factory も、
-`EXEC_ENV` が `test` でなく、in-memory SQLite でもない DB を指定する場合は
-`allow_destructive=True` が必要です。
+共通 fixture の `tests/conftest.py` 用スニペットと DB の破壊的操作ガードは
+[テストガイド](testing_guide.md)を参照してください。実装は
+[`repom/testing.py`](../../../repom/testing.py)にあります。
 
 ### 4. docstring でフィクスチャの目的を明記
 
@@ -373,11 +363,9 @@ def setup_users(db_test):  # scope指定なし = function
     """各テストで新しいデータを作成"""
     # ...
 
-# または repom.testing の Transaction Rollback fixture factory を使う
-from repom.testing import create_test_fixtures
-
-db_engine, db_test = create_test_fixtures()
 ```
+
+fixture factory と破壊的操作ガードの正本は[テストガイド](testing_guide.md)です。
 
 ### 問題3: フィクスチャが複雑になりすぎる
 
@@ -431,4 +419,4 @@ repom のテストで実際に使用しているフィクスチャパターン�
 
 - [tests/conftest.py](../../../tests/conftest.py) - 共通フィクスチャ定義
 - [tests/unit_tests/test_repository_default_order_by.py](../../../tests/unit_tests/test_repository_default_order_by.py) - 同期フィクスチャの使用例
-- [tests/unit_tests/test_async_repository_default_order_by.py](../../../tests/unit_tests/test_async_repository_default_order_by.py) - 非同期フィクスチャの使用例
+- [tests/unit_tests/test_async_fixtures.py](../../../tests/unit_tests/test_async_fixtures.py) - 非同期フィクスチャの使用例

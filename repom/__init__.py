@@ -2,14 +2,10 @@
 
 このパッケージは、SQLAlchemy を使ったデータアクセス層の基盤を提供します。
 
-Available Classes:
-- BaseModel: SQLAlchemy モデルの基底クラス
-- BaseRepository: 同期版リポジトリ
-- AsyncBaseRepository: 非同期版リポジトリ
-- FilterParams: 検索パラメータの基底クラス
-- SoftDeletableMixin: 論理削除機能を追加する Mixin
+公開名の一覧は `__all__` を参照してください。用途別の説明は
+[README の公開 API 表](../README.md#公開-api)にまとめています。
 
-Recommended Import Style (推奨):
+推奨 import 例:
     from repom import BaseRepository, AsyncBaseRepository
     from repom import FilterParams, SoftDeletableMixin
     from repom import BaseModel

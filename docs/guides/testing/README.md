@@ -1,12 +1,16 @@
-# Testing guides
+# テストガイド一覧
 
-- [Testing strategy and reusable fixtures](testing_guide.md)
-- [Fixture details and examples](fixture_guide.md)
+- [テスト方針と共通 fixture](testing_guide.md)
+- [fixture の詳細と例](fixture_guide.md)
 
-The shared fixtures use transaction rollback for isolation. Prefer the models
-under [`tests/fixtures/models`](../../../tests/fixtures/models) for ordinary
-repository tests, and keep application-specific test models in the consuming
-project.
+共通 fixture は transaction rollback でテストを分離します。通常の repository test では
+[`tests/fixtures/models`](../../../tests/fixtures/models) の model を使い、アプリケーション固有の
+test model は利用側プロジェクトに定義してください。
+
+PostgreSQL 統合テストを実行するには、`CONFIG_HOOK=repom.config_hook:hook_config`、
+`EXEC_ENV=test`、`DB_TYPE=postgres`、`POSTGRES_PASSWORD` を設定し、
+`127.0.0.1:5433` で PostgreSQL を起動してください。条件を満たさない場合、この統合テストは
+skip されます。
 
 ```bash
 uv run pytest

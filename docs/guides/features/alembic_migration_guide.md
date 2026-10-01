@@ -80,7 +80,9 @@ uv run alembic_init
 ```
 
 **動作**:
-- `config.root_path` と `config.db_url` を使用
+- `config.root_path`、`config.db_url` と `config.alembic_script_location`、
+  `config.alembic_version_locations`、`config.alembic_version_table`、
+  `config.alembic_version_table_schema` を使用
 - alembic.ini を自動生成
 - alembic/versions/ ディレクトリを作成
 - 既存の `alembic.ini` があればその設定を読み込み、`[OK] alembic.ini already exists` を表示して ini は上書きせず、その ini に記載された `version_locations` のディレクトリを作成
@@ -106,7 +108,9 @@ def get_repom_config(config):
 からは `reset_alembic_migrations(config_path=..., yes=...)` を呼び出せます。
 実行前の対象表示には `describe_alembic_reset(config_path=...)` を使います。
 この説明文字列は CLI の確認表示と同じデータベース、version table、
-version directories を示します。
+version directories を示します。`reset_alembic_migrations()` と
+`describe_alembic_reset()` は ini が見つからない場合に `FileNotFoundError` を送出します。
+CLI の `main()` だけがこの例外を表示して終了コード 1 に変換します。
 
 ### マイグレーションのリセット
 
@@ -138,7 +142,8 @@ setup.reset_migrations(drop_table=True, delete_files=False)
 setup.reset_migrations(drop_table=False, delete_files=True)
 ```
 
-`EXEC_ENV=prod` では `--yes` の有無に関わらず実行を拒否します。TTY では
+`is_prod_exec_env(config.exec_env)` が真になる環境（`prod` / `production`。大文字小文字と
+前後の空白は正規化）では `--yes` の有無に関わらず実行を拒否します。TTY では
 `--yes` を指定しても確認プロンプトが表示され、`y` の入力が必要です。非 TTY
 では `--yes` / `-y` が必要です。
 
@@ -199,7 +204,7 @@ in-memory SQLite を使用するため、通常はファイルを作成しませ
 
 外部プロジェクト（例: mine-py）で repom を使用する場合の設定方法です。
 
-### Step 1: alembic.ini を作成（必須）
+### 手順 1: alembic.ini を作成（必須）
 
 **重要**: マイグレーションファイルの保存場所を制御するには `alembic.ini` が**必須**です。
 
@@ -240,14 +245,14 @@ autogenerate は実行中の名前空間のバージョンテーブルだけを�
 `alembic check` がスキーマ差分を検出できなくなり、安全性が低下します。一般的な
 差分抑制には使用せず、生成された migration も必ず確認してください。
 
-### Step 2: ディレクトリを作成
+### 手順 2: ディレクトリを作成
 
 ```bash
 # mine-py/ で実行
 mkdir -p alembic/versions
 ```
 
-### Step 3: CONFIG_HOOK を設定（必須）
+### 手順 3: CONFIG_HOOK を設定（必須）
 
 外部プロジェクトで Alembic を使う場合は、利用側の `CONFIG_HOOK` を設定してください。
 `model_locations` の既定値は空なので、hook で利用側モデルを読み込まないと
@@ -273,7 +278,7 @@ def get_repom_config(config):
 CONFIG_HOOK=mine_py.config:get_repom_config
 ```
 
-### Step 4: マイグレーションの実行
+### 手順 4: マイグレーションの実行
 
 ```bash
 # mine-py/ ディレクトリで実行
@@ -448,17 +453,8 @@ def downgrade() -> None:
 
 ### マイグレーションファイルが repom に作成される
 
-**過去の症状**: 外部プロジェクトの revision が共有 repom checkout の
-`alembic/versions/` に作成される
-
-**解決方法**: プロジェクトのルートに `alembic.ini` を作成し、`version_locations` を設定
-
-```ini
-# alembic.ini（必須）
-[alembic]
-script_location = submod/repom/alembic
-version_locations = %(here)s/alembic/versions
-```
+`version_locations` が利用側プロジェクトの `alembic/versions` を指していることを、
+前述の手順 1 で作成する `alembic.ini` で確認してください。
 
 詳細: [docs/technical/alembic_version_locations_limitation.md](../../technical/alembic_version_locations_limitation.md)
 
@@ -517,9 +513,3 @@ cat alembic.ini | grep version_locations
 - **Alembic 公式**: https://alembic.sqlalchemy.org/
 - **技術的な制約**: [alembic_version_locations_limitation.md](../../technical/alembic_version_locations_limitation.md)
 - **CONFIG_HOOK ガイド**: [config_hook_guide.md](config_hook_guide.md)
-
----
-
-**作成日**: 2026-02-03  
-**最終更新**: 2026-02-04  
-**更新内容**: AlembicSetup、alembic_init、alembic_reset コマンドの追加

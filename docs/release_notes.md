@@ -2,422 +2,195 @@
 
 ## Unreleased
 
-- The basekit source follows branch `main` again, with `uv.lock` as the
-  effective pin.
-- Logging defaults now normalize `EXEC_ENV`, so `production`, mixed case, and
-  surrounding whitespace select the expected log level and file.
-- `RepomConfig` can configure the Alembic script location, version locations,
-  version table, and version table schema when `alembic_init` creates a new ini.
-  The Alembic reset, credential rotation, and query debugging entry points now
-  accept explicit arguments and expose reusable functions for task runners.
-- Repository bulk update and delete methods accept arbitrary SQLAlchemy filters,
-  and `bulk_permanent_delete()` physically deletes matching rows even for
-  soft-deletable models. `count()` and `find_deleted()` can combine explicit
-  filters with `FilterParams`; `field_to_column` supports `>=`, `>`, `<=`, and
-  `<` range helpers. Sync and async repositories add SAVEPOINT-backed
-  `get_or_create()`. Test fixture factories can bind and restore the global
-  database manager with `bind_global_manager=True`.
-- Added shared config override and public environment parsing helpers, plus
-  Redis client keyword arguments and credential-safe URL helpers on
-  `RedisConfig`.
-- `AutoDateTime` now converts timezone-aware values to UTC on read; previously
-  they were returned unchanged. Naive values are still labeled UTC.
-- BREAKING: `SoftDeletableMixin.deleted_at` now reads back as a timezone-aware
-  UTC datetime on SQLite. Consumers comparing it with naive datetimes should
-  use timezone-aware UTC values.
-- Added `get_reusable_sync_session()` and `get_reusable_async_session()` for
-  caller-managed session lifetimes. They do not commit, roll back any open
-  transaction, and close the session without disposing the reusable engine.
-  The async helper does not change the commit-on-success behavior of the
-  FastAPI dependency `get_async_db_session()`.
-- Database URL overrides now determine `db_type` and the target used by
-  `db_backup`, `db_restore`, `db_create`, `db_delete`, and `db_sync_master`.
-  PostgreSQL backup and restore tools use URL credentials and TLS settings from
-  the host without probing the managed container; file-based SQLite overrides
-  use the URL path, and in-memory SQLite backup/restore is rejected.
-- BREAKING: PostgreSQL URL overrides now receive the host-aware TLS policy used
-  by generated URLs. A remote prod URL without `sslmode` defaults to `require`,
-  and explicit `disable`, `allow`, or `prefer` modes raise `ValueError`; set the
-  URL's `sslmode` to `require` or stronger. Local/hostless URLs and non-prod
-  environments keep the `prefer` default, and non-PostgreSQL overrides are
-  unchanged.
-- PostgreSQL plain-SQL restores now disable user `psqlrc` settings, stop on the
-  first SQL error, and run in a single transaction; custom-format restores also
-  use a single transaction so failed restores roll back instead of leaving a
-  partially restored database. The backup guide documents the plain-dump large
-  object transaction limitation.
-- PostgreSQL credential rotation now applies database and schema grants before
-  changing the current role's password, and successful replacement-user
-  rotations update both the configured user and password before regenerating
-  compose secrets.
-- Repository queries now order by all primary-key attributes by default. String
-  `order_by` values use remaining primary-key attributes as same-direction
-  tie-breakers, making paginated results deterministic; explicit SQLAlchemy
-  expressions define the full ordering. `get_by(..., single=True)` returns the
-  matching row with the lowest primary key, independent of `default_order_by`.
-- BREAKING: `find()` now ANDs conditions from both `params` and `filters`. The
-  default `_build_filters()` raises `ValueError` when a non-None FilterParams
-  field has no non-None `field_to_column` mapping.
-- Repository defaults now follow normal Python attribute lookup, so instance
-  values for `default_options`, `default_order_by`, `max_limit`, and
-  `field_to_column` override class values. Repositories without configured
-  eager-loading defaults expose `default_options == ()` instead of `[]`, and
-  tuple load options are accepted alongside lists.
-- Test environment checks now normalize `EXEC_ENV` consistently, so mixed case
-  and surrounding whitespace select in-memory SQLite, the SQLite default hook,
-  and the test fixture safety guard as expected.
-- `EXEC_ENV=production` now receives the same production PostgreSQL database name,
-  TLS defaults, TLS enforcement, and destructive-operation guard as `prod`, with
-  surrounding whitespace and case ignored. Unknown environment values now warn and
-  use the dev database name/file for both PostgreSQL and SQLite; previously SQLite
-  used the production file for unknown values while PostgreSQL used its dev name.
-- The shared Alembic environment now preserves existing application and Repom
-  loggers when it configures Alembic logging for in-process migrations.
-- Docker service auto-start now reuses existing compose files and `.env` when
-  containers are stopped, instead of regenerating credentials from the current
-  process environment. Explicit PostgreSQL and Redis generation/start commands
-  refuse to replace a differing `.env` unless `--force-regenerate` is passed;
-  replacements keep the previous `.env` as `.env.bak` with mode `0600` when
-  its content changes.
-  The library rotation functions `rotate_postgres_credentials`,
-  `rotate_pgadmin_password`, `recreate_pgadmin_volume`, and
-  `repom.redis.manage.rotate_password` persist credentials to the compose-dir
-  `.env` themselves, so CLI and downstream wrappers need no extra persistence
-  call.
-- Removed the PostgreSQL backup/restore duplication between the host and
-  Docker paths and across `db_backup`, `db_restore`, and `pg_dump_tools`, and
-  fixed the memory, deadlock, and Windows-portability problems that
-  duplication was hiding. `repom.scripts._backup_utils` gains a shared
-  `build_pg_client_command()` (host argv, or `docker exec [-i] <container>`
-  argv, for `pg_dump`/`psql`/`pg_restore`), a shared `run_streaming_command()`
-  (a small Popen-based helper that streams stdin/stdout through file objects
-  via `shutil.copyfileobj` and drains stderr on a background thread into a
-  spooled temp file), `publish_backup()` (the empty-check / replace /
-  `write_checksum` / rotate / print sequence), and `warn_if_checksum_missing()`
-  (the missing-checksum warning). Backups now stream `pg_dump`'s stdout
-  through gzip into the 0600 partial file for both the host and Docker paths,
-  and restores stream `gzip.open(backup)` directly into `psql`'s stdin for
-  both paths - `restore_postgresql_via_host` no longer shells out to an
-  external `gunzip`, which was never available on a default Windows host (its
-  `'gunzip' in str(e)` missing-binary hint also never printed there, since
-  Windows's `FileNotFoundError` text doesn't name the program). Docker
-  custom-format dump/restore in `pg_dump_tools` now stream to and from the
-  dump file instead of buffering the whole dump through
-  `basekit.docker_manager.DockerCommandExecutor.exec_command`, which only
-  accepts `bytes`. Fixed a latent deadlock in `backup_postgresql_via_host`:
-  it read `pg_dump`'s stdout to EOF while stderr was a pipe nobody read, so a
-  `pg_dump` that wrote more than the OS pipe buffer to stderr hung forever;
-  `run_streaming_command`'s background stderr-draining thread makes this
-  impossible structurally. A plain-SQL restore now fully decompresses the
-  backup into a temporary 0600 file (verifying it end to end) before `psql`
-  starts, so a truncated archive fails before any statement reaches the
-  database, instead of the host path partially applying a truncated dump
-  (after its `DROP` statements) before gzip reported the error.
-  `pg_dump_custom`, `pg_restore_custom`, `pg_tools_available`,
-  `PgConnParams`, and `PgToolResult` keep their existing signatures and
-  semantics, and the backup/restore file formats are unchanged.
-- Fixed `get_lifespan_manager()` so `FastAPI(lifespan=get_lifespan_manager())`
-  actually works. It previously returned an already-created
-  `_db_manager.lifespan_context()` context manager instance; FastAPI/Starlette
-  call the `lifespan` value with the app and use the result as an async
-  context manager, and calling that instance (itself also a decorator)
-  returned a wrapper function instead, so startup raised `TypeError: 'function'
-  object does not support the asynchronous context manager protocol`.
-  `get_lifespan_manager()` now returns a lifespan callable - the bound
-  `_db_manager.lifespan_context` method, whose `app` parameter is now optional
-  so `async with _db_manager.lifespan_context():` keeps working too.
-- BREAKING: PostgreSQL backups are now named `<postgres_db>_<YYYYmmdd_HHMMSS>.sql.gz`
-  (the effective database name from `config.postgres_db`) instead of the fixed
-  `db_<YYYYmmdd_HHMMSS>.sql.gz`, in both the host `pg_dump` and Docker exec
-  paths. Previously every environment wrote the same `db_` prefix into the
-  shared `data_path/backups/postgres` directory (`RepomConfig.db_backup_path`
-  does not vary by `exec_env`), so rotation's `db_*.sql.gz` glob, and
-  `cleanup_incomplete_backups`'s stale/zero-byte cleanup, could not tell a dev
-  backup from a prod one and deleted across environments. SQLite backup
-  rotation had the same problem in the other direction: one database name can
-  be a prefix of another (e.g. `repom` vs. `repom_dev`), so a plain
-  `f"{name}_*{ext}"` glob for `repom` also matched `repom_dev`'s files.
-  `rotate_backups()` and `cleanup_incomplete_backups()` in
-  `repom.scripts._backup_utils` now take an optional `name_pattern` (built by
-  the new `backup_name_pattern(stem, suffix)`) that anchors matches to
-  `<stem>_<8 digits>_<6 digits><suffix>` via `re.fullmatch`, and `db_backup`
-  passes it for both PostgreSQL and SQLite so retention and incomplete-file
-  cleanup are scoped to exactly the database being backed up; existing
-  callers that omit `name_pattern` keep the previous glob-only behavior.
-  Pre-existing `db_*.sql.gz` files from before this change are left alone —
-  never rotated or deleted automatically — since they no longer match the new
-  per-database pattern, but `get_backups()` still lists them (`db_restore`
-  marks them "legacy/unknown source database"). `db_restore` now lists the
-  target database's own backups first, then others; parses each backup's
-  source database from its file name via the new
-  `parse_backup_source_database(name, suffix)`; and prints the source and
-  target database before confirming. A backup whose source is unknown or
-  differs from the target database (`config.postgres_db`, or the SQLite file
-  name) can no longer be confirmed by typing "y" - the user must type the
-  target database name instead, so a dev dump can't be restored into the prod
-  database with a single keystroke.
-- BREAKING: `repom.scripts.db_backup.main()` and
-  `repom.scripts.db_restore.main()` now raise on failure instead of printing
-  an error and returning normally. Previously, most backup and restore
-  failures (a missing `pg_dump`/`psql`/`gunzip` binary, `pg_dump` or `psql`
-  exiting non-zero, an empty dump, a Docker daemon error, a checksum
-  mismatch, a missing backup directory, or no backups found) were caught,
-  printed to the console, and swallowed, so the console scripts exited 0 and
-  a caller invoking `main()` directly (for example from a scheduled task)
-  could not tell the operation had failed. Every backup/restore path
-  function now raises `BackupError` / `RestoreError` (both `RuntimeError`
-  subclasses, defined in `repom.scripts._backup_utils`) for these failures,
-  after removing any partial file it created, with the original exception
-  chained via `from` and never including the configured database password;
-  `main()` lets these propagate instead of catching them. User cancellation
-  in `db_restore` (answering `q` or anything other than `y`) still returns
-  normally. The empty-dump check for PostgreSQL backups now counts the
-  uncompressed bytes read from `pg_dump` (or `len(result.stdout)` for the
-  Docker path) instead of the gzip file size, which always has a non-zero
-  header and could never detect an empty dump. Two now-unreachable branches
-  are removed: the "unsupported db_type" branch in `db_backup.main()`
-  (`RepomConfig.db_type` only ever accepts `sqlite`/`postgres`) and the
-  "Backup file type mismatch" branch in `db_restore.main()` (`get_backups()`
-  already filters backups by `db_type`, so the file it returns always
-  matches).
-- Fixed `get_async_db_session()` and `get_async_db_transaction()` losing the
-  caller's exception during cleanup. Both `Depends` dependencies drove their
-  underlying async context manager through a private adapter class with
-  `async for`; when the consumer raised inside the dependency's scope (as
-  FastAPI does at the `yield` when an endpoint raises), the exception was
-  never forwarded into the adapter's inner async generator. The adapter's
-  `async with` block then only exited later, when the event loop's
-  async-generator finalizer ran `aclose()` in a background task, so the
-  session was rolled back with `GeneratorExit` instead of the endpoint's
-  exception, after the response had already been sent. Both dependencies are
-  now plain async generators that wrap the context manager directly
-  (`async with ...: yield ...`), so a thrown exception enters the
-  `async with` block immediately and rollback runs, with the original
-  exception, before it reaches the caller. `get_db_session()` and
-  `get_db_transaction()` did not have this bug - they used `yield from` over
-  the adapter, which already forwarded thrown exceptions into the delegated
-  generator - but are simplified to the same `with ...: yield ...` shape with
-  no behavior change. The now-unused private adapter classes
-  `_ContextManagerIterable` and `_AsyncContextManagerIterable` are removed.
-  Commit-on-success and rollback-on-error semantics are unchanged.
-- Added `get_reusable_async_transaction()`, the async counterpart of
-  `get_reusable_sync_transaction()`. It returns
-  `DatabaseManager.get_async_transaction()` directly (an async context
-  manager that commits on success and rolls back on error) without disposing
-  the engine on exit, for worker/task code that runs multiple transactions
-  in the same process. The async repository guide now recommends
-  `async with get_reusable_async_transaction() as session:` for that case
-  instead of iterating `get_async_db_transaction()` with `async for`, which
-  had the same delayed-cleanup problem as the dependency bug above whenever
-  the loop body raised.
-- Fixed `AutoDateTime` silently shifting timezone-aware values with a non-UTC
-  offset. `process_bind_param` only attached `timezone.utc` to naive values
-  and passed aware values through unchanged; on a backend that cannot retain
-  an offset (SQLite stores only the wall-clock component of `DateTime`), an
-  input such as `2026-01-01T12:00:00+09:00` came back as
-  `2026-01-01T12:00:00+00:00` — the same wall time relabelled as UTC, nine
-  hours off the original instant. This also affected comparison filters (for
-  example `Model.created_at >= <aware value>`) on SQLite, since the bound
-  value went through the same unconverted path as stored values. Aware values
-  are now normalized with `value.astimezone(timezone.utc)` before binding, so
-  the instant is preserved regardless of the input offset. Naive and `None`
-  inputs, and all `process_result_value` behavior, are unchanged. Rows written
-  before this fix keep their already-shifted wall time; there is no data
-  migration for existing rows.
-- `PostgresConfig.host` and `RedisConfig.host` now default to `127.0.0.1`
-  instead of `localhost`. `postgres_generate` / `redis_generate` already
-  publish container ports on `127.0.0.1` only, but a client default of
-  `localhost` still resolves through the OS, and on hosts where `localhost`
-  resolves to `::1` before `127.0.0.1` (Windows, and many Linux setups with
-  `::1` in `/etc/hosts`) every connection first tries `::1`, is refused, and
-  only then falls back to `127.0.0.1`. That round trip alone can exceed a
-  short client-side connect timeout (arq's `RedisSettings.conn_timeout`
-  defaults to 1s) and made a freshly generated container look unreachable.
-  `POSTGRES_HOST` / `REDIS_HOST` environment overrides and config hooks keep
-  working unchanged; a project that pins `config.postgres.host` or
-  `config.redis.host` back to `localhost` explicitly should set it to
-  `127.0.0.1` instead (or otherwise account for the IPv6-first delay).
-  `_POSTGRES_LOCAL_HOSTS` still treats `localhost`, `127.0.0.1`, and `::1` as
-  equivalent for the prod `sslmode` exemption.
-- Fixed `listjson_filter()` on PostgreSQL. It built its per-value filter with
-  `func.json_each(model_column).table_valued(...)`, but PostgreSQL's
-  `json_each()`/`json_each_text()` only accept JSON objects and raise
-  `cannot deconstruct an array as an object` against a `ListJSON` column's
-  JSON array, and `json_each()`'s `value` column is typed `json`, which has
-  no equality operator against a bound string
-  (`operator does not exist: json = character varying`). The empty-list
-  branch (`model_column == []`) hit the same missing `json` equality
-  operator. `listjson_filter()` now compiles to `json_array_elements_text()`
-  for the element match and `json_array_length(...) == 0` for the empty-list
-  match on PostgreSQL, resolved at SQL-compile time so callers do not need to
-  branch on dialect; SQLite is unaffected and keeps using `json_each()`.
-- Fixed `listjson_filter()` duplicating model rows. It added one table-valued
-  `json_each`/`json_array_elements_text()` expansion per requested value
-  directly to the outer query, so a repeated array element or several
-  requested values multiplied the outer row for each match instead of
-  filtering it. This inflated `count()` and could push a matching row past a
-  `limit`/`offset` page. Each distinct requested value now compiles to a
-  correlated `EXISTS` against the expansion instead, so the outer query's
-  `FROM` still lists only the model table and matches are never duplicated.
-- `postgres_sslmode` now picks its prod default per host. When `postgres.host`
-  is `localhost`, `127.0.0.1` or `::1` the default is `prefer` even in prod;
-  any other host still defaults to `require`. The PostgreSQL container that
-  `postgres_generate` produces (`postgres:16-alpine`) does not enable SSL, so a
-  host-independent `require` default made a prod deployment that talks to that
-  container fail on its next restart with `server does not support SSL, but
-  SSL was required`. An explicit `config.postgres.sslmode` is unaffected. Engine
-  creation logs a warning when a prod connection resolves to a non-require
-  sslmode.
-- BREAKING: `config.model_import_strict` now defaults to `True` instead of
-  `False`. `load_models()` discarded the failure list `import_from_packages()`
-  returned, so a model module that failed to import was silently absent from
-  `Base.metadata` — `alembic revision --autogenerate` would then propose
-  `op.drop_table` for that model's table, and `db_create` would skip creating
-  it, with no error either way. `load_models()` now returns the
-  `DiscoveryFailure` list and logs every failure at ERROR with the module
-  name and exception. `alembic/env.py` and `db_create` now call
-  `load_models(strict=True)`, so they raise on any import failure regardless
-  of `config.model_import_strict`; `alembic/env.py` also refuses to run when
-  `model_locations` is configured but discovery finds zero models. Projects
-  that rely on best-effort model loading in other entry points can still set
-  `config.model_import_strict = False` explicitly. `repom_info` now lists any
-  import failures under a new "Model Import Failures" section instead of
-  swallowing them.
-- BREAKING: `create_test_fixtures()` / `create_async_test_fixtures()` now
-  default `db_url` to in-memory SQLite (`sqlite:///:memory:`) instead of
-  `config.db_url`, and raise `RuntimeError` when the resolved database is
-  neither in-memory SQLite nor `EXEC_ENV=test`. A consuming project's test
-  suite running with `EXEC_ENV` unset or left at its `dev` default previously
-  created tables in - and then dropped - its real dev/prod database at
-  session teardown. Pass `allow_destructive=True` to explicitly opt into
-  targeting a real database. `db_delete` and `alembic_reset` now also refuse
-  to run when `EXEC_ENV=prod`, and require an interactive `y` confirmation
-  (or `--yes` when stdin is not a TTY) before dropping tables or resetting
-  migrations; both print the masked target database URL first.
-- BREAKING: `alembic/env.py` now validates the `pre_migration_hook` module
-  against `allowed_package_prefixes` before importing it; a hook that lives
-  outside those prefixes raises `ValueError` at migration time. Add the
-  hook's package prefix to `config.allowed_package_prefixes` in your config
-  hook. `AlembicTemplates.generate_alembic_ini` also rejects control
-  characters and non-identifier values in the options it writes.
-- BREAKING: `BaseModel.update_from_dict()` now requires an explicit
-  allowlist. Pass `allowed_fields`, or set the class attribute
-  `updatable_fields`, or the call raises `ValueError`. Previously every
-  mapped column except `id`, `created_at`, and `updated_at` was writable,
-  which made the method a mass-assignment sink for any column a consuming
-  project added (`is_admin`, `tenant_id`, `deleted_at`, and so on).
-  Primary-key columns are now resolved from the mapper instead of the
-  literal name `id`, so a primary key declared under any other name is also
-  excluded unconditionally, along with `created_at`, `updated_at`, and
-  `deleted_at` (when the model has it) — even if listed in
-  `updatable_fields` or `allowed_fields`. `BaseModel.to_dict()` still
-  returns every column by default; set the new `sensitive_fields` class
-  attribute to exclude specific columns (such as password hashes) from the
-  output, and optionally `serializable_fields` to return only an explicit
-  subset.
-- BREAKING: `get_all()` now excludes soft-deleted rows by default, matching
-  every other read method on the repository, and accepts
-  `include_deleted: bool = False` to opt back into the previous behaviour.
-  `get_all()` also now applies the repository's default ordering
-  (`default_order_by` when set, otherwise `id` asc for models that have an
-  `id` column; models declared with `use_id=False` and no `default_order_by`
-  keep returning rows in unspecified order) instead of always returning rows
-  in unspecified order. Consuming projects that relied on `get_all()`
-  returning soft-deleted rows must pass `include_deleted=True` explicitly.
-- BREAKING: `bulk_update()` now excludes soft-deleted rows by default on models
-  with `SoftDeletableMixin`. Callers that need to update or restore deleted
-  rows must pass `include_deleted=True`.
-- BREAKING: `bulk_update()` and `bulk_delete()` now raise `ValueError` when the
-  resolved filter list is empty (`bulk_delete()` with neither `filter_by` nor
-  `ids`, or `bulk_update(..., filter_by={})`). Pass `allow_unfiltered=True` to
-  keep the previous whole-table behaviour. Filter keys and the `ids` sequence
-  are now resolved through the SQLAlchemy mapper, so relationship names, dunder
-  attributes and SQL expressions are rejected instead of compiling to `WHERE true`.
+### Breaking
+
+- BREAKING: `AutoDateTime` subclasses `UTCDateTime` and normalizes datetime values to
+  UTC on bind and result. Timezone-aware values are converted to UTC before storage,
+  preserving the represented instant on SQLite and in comparison filters, and read back
+  as timezone-aware UTC values; naive values are labeled UTC.
+  `SoftDeletableMixin.deleted_at` therefore reads as a timezone-aware UTC datetime on
+  SQLite, so consumers comparing it should use timezone-aware UTC values.
+- BREAKING: `create_test_fixtures()` and `create_async_test_fixtures()` default to
+  in-memory SQLite instead of `config.db_url`, and reject a non-memory database unless
+  normalized `EXEC_ENV` is `test`. Pass `allow_destructive=True` to target another
+  database intentionally. `db_delete` and `alembic_reset` also reject production
+  environments and require confirmation before destructive work.
+- BREAKING: `repom.scripts.db_backup.main()` and `repom.scripts.db_restore.main()` now
+  raise on failure instead of printing an error and returning normally. Backup and
+  restore path failures raise `BackupError` or `RestoreError` after removing any partial
+  output; user cancellation in `db_restore` still returns normally.
+- BREAKING: NUL bytes in `String`, `Text`, `JSON`, `CustomJSON`, `ListJSON`,
+  `ARRAY(String)`, and `TypeDecorator` columns backed by a String type raise
+  `NulByteError`, including nested JSON keys and values. Consumers with existing SQLite
+  string data must reject or sanitize NUL bytes before persistence. To find existing
+  PostgreSQL `json` values, use `strpos(payload::text, chr(92) || 'u0000') > 0` as a
+  candidate filter and confirm by casting to `jsonb`; for JSON stored in TEXT, parse
+  candidate rows with `json.loads` and recursively check for an actual NUL byte. Both
+  filters can match ordinary prose containing the escape sequence. The consumer must
+  inspect, repair, or remove existing affected rows before upgrading.
+- BREAKING: `PostgresConfig.host` and `RedisConfig.host` default to `127.0.0.1` instead
+  of `localhost`. Explicit `POSTGRES_HOST` / `REDIS_HOST` overrides remain available.
+- BREAKING: Repositories without eager-loading defaults expose `default_options == ()`
+  instead of `[]`; tuple load options are accepted alongside lists.
+- BREAKING: `config.model_import_strict` defaults to `True`. `load_models()` returns
+  discovery failures and logs each one; Alembic and `db_create` load strictly, and
+  Alembic refuses an empty discovery result when `model_locations` is configured.
+  `repom_info` lists import failures. Set `config.model_import_strict = False` only for
+  entry points that intentionally allow best-effort loading.
+- BREAKING: Alembic validates a configured `pre_migration_hook` module against
+  `allowed_package_prefixes` before importing it. Add the consumer hook's package prefix
+  to that setting. `AlembicTemplates.generate_alembic_ini` rejects control characters
+  and invalid identifiers in values written to the ini.
+- BREAKING: `BaseModel.update_from_dict()` requires an explicit field allowlist through
+  `allowed_fields` or `updatable_fields`. Primary keys, `created_at`, `updated_at`, and
+  `deleted_at` remain excluded. `BaseModel.to_dict()` still returns all columns by
+  default and supports `sensitive_fields` and `serializable_fields` to limit serialized
+  values.
+- BREAKING: `get_all()` excludes soft-deleted rows by default and applies repository
+  default ordering; pass `include_deleted=True` to include deleted rows. `bulk_update()`
+  also excludes soft-deleted rows by default. `bulk_update()` and `bulk_delete()` reject
+  an empty resolved filter unless `allow_unfiltered=True`; filter keys and IDs are
+  resolved through the model mapper.
+- BREAKING: `find()` combines `params` and `filters` with AND. The default
+  `_build_filters()` raises `ValueError` when a non-None `FilterParams` field has no
+  non-None `field_to_column` mapping.
 - BREAKING: Removed `JSONEncoded` and `StrEncodedArray`. Use `CustomJSON` for
-  object-like JSON values and `ListJSON` for list values. If a historical
-  migration imports either removed type solely for a `TEXT` column in
-  `op.create_table`, replace it with `sa.TEXT()`; this emits identical DDL and
-  lets fresh database bootstraps proceed.
-- NUL bytes in `String` and `Text` columns now raise `NulByteError` on every
-  supported dialect, including SQLite. SQLite-backed consumers that previously
-  stored NUL bytes must reject or sanitize those values before persistence.
-- NUL bytes in `JSON`, `CustomJSON`, `ListJSON`, and `ARRAY(String)` values now
-  raise `NulByteError`, including nested document keys and values. To find
-  existing poisoned PostgreSQL `json` rows, use
-  `strpos(payload::text, chr(92) || 'u0000') > 0` only as a cheap
-  superset pre-filter, then confirm each candidate by casting the stored value
-  to `jsonb`; the cast is authoritative, while the pre-filter can match ordinary
-  prose containing the escape sequence.
-- NUL bytes in `TypeDecorator` columns that resolve to a `String` family type,
-  including `JSONEncoded`, now raise `NulByteError` with document key paths.
-  For existing JSON-over-TEXT values, use
-  `strpos(payload, chr(92) || 'u0000') > 0` as a candidate pre-filter, then
-  parse each candidate with `json.loads` and recursively check for a real NUL
-  byte. The pre-filter also matches ordinary prose containing the escape
-  sequence, so parsing is required to confirm a poisoned value.
-- BREAKING: `field_to_column` string fields now match exactly (`==`) instead
-  of an unescaped `LIKE` substring match. Consumers that relied on the
-  implicit substring search must wrap the column with `contains_column()` or
-  `prefix_column()`; both escape `%` and `_` and reject values longer than
-  `max_length` (default 256).
-- BREAKING: `ListJSON` now stores a real JSON array instead of a
-  double-encoded JSON string. Reads remain compatible with both formats, but
-  `listjson_filter()` and the empty-list filter (`column == []`) only match
-  rows written in the new format, so rows written by earlier versions will
-  not be found until they are rewritten. To rewrite existing rows:
-  - SQLite: `UPDATE t SET col = json(json_extract(col, '$')) WHERE json_type(col) = 'text'`
-  - PostgreSQL `json`: `UPDATE t SET col = (col #>> '{}')::json WHERE json_typeof(col) = 'string'`
-- BREAKING: `postgres_generate` and `redis_generate` now publish container
-  ports on `127.0.0.1` by default instead of `0.0.0.0`; set
-  `POSTGRES_EXPOSE_TO_LAN` / `PGADMIN_EXPOSE_TO_LAN` / `REDIS_EXPOSE_TO_LAN`
-  to restore LAN-wide access for projects that need it. `POSTGRES_PASSWORD`,
-  `PGADMIN_DEFAULT_PASSWORD`, and `REDIS_PASSWORD` are no longer written into
-  the generated `docker-compose.generated.yml`; they are written to a
-  generated `.env` file (mode 0600) that Compose loads from the same
-  directory. The generated `redis.conf` no longer contains `requirepass`;
-  when a Redis password is configured, the container's `command` reads it
-  from the service environment (`--requirepass "$$REDIS_PASSWORD"`) instead.
-- BREAKING: `postgres_generate` and `redis_generate` refuse to run when the
-  configured password is unset or still the literal `CHANGE_ME` placeholder,
-  raising a `ValueError` that names the environment variable to set.
-  `PostgresConfig.password` and `PgAdminConfig.password` now default to
-  `CHANGE_ME`, a non-functional placeholder, instead of the working literals
-  `repom_dev` and `admin`. Generated Redis services now always require a
+  object-like JSON and `ListJSON` for list values. Historical migrations that used
+  either type only for a TEXT column can use `sa.TEXT()` instead.
+- BREAKING: `field_to_column` string fields now use exact `==` matching instead of
+  unescaped substring matching. Use `contains_column()` or `prefix_column()` for
+  substring or prefix search; both escape `%` and `_` and enforce `max_length` (default
+  256).
+- BREAKING: `ListJSON` stores JSON arrays instead of double-encoded JSON strings. Reads
+  remain compatible with both formats, but `listjson_filter()` and `column == []` only
+  match the new format. Rewrite existing rows before relying on those filters: SQLite
+  can use `UPDATE t SET col = json(json_extract(col, '$')) WHERE json_type(col) =
+  'text'`; PostgreSQL `json` can use `UPDATE t SET col = (col #>> '{}')::json WHERE
+  json_typeof(col) = 'string'`.
+- BREAKING: `postgres_generate` and `redis_generate` bind published ports to `127.0.0.1`
+  by default. Set `POSTGRES_EXPOSE_TO_LAN`, `PGADMIN_EXPOSE_TO_LAN`, or
+  `REDIS_EXPOSE_TO_LAN` to enable LAN access. Generated compose files no longer contain
+  `POSTGRES_PASSWORD`, `PGADMIN_DEFAULT_PASSWORD`, or `REDIS_PASSWORD`; these secrets
+  are written to a mode `0600` `.env` file. Redis `requirepass` is supplied through the
+  service environment, not `redis.conf`.
+- BREAKING: `postgres_generate` and `redis_generate` reject unset or literal `CHANGE_ME`
+  passwords. `PostgresConfig.password` and `PgAdminConfig.password` default to that
+  non-functional placeholder, and generated Redis services always require a real
   password.
-- Fixed `updated_at` being bumped on a flush with no net column change.
-  `BaseModel`'s `before_update` listener used to set `updated_at` to the
-  current time for every instance in `session.dirty`, but SQLAlchemy adds an
-  instance to `session.dirty` whenever an attribute is assigned, even when
-  the assigned value equals the current one, and even for relationship-only
-  changes. Running `sync_master_data` twice with identical data, or
-  re-assigning a column its current value, therefore bumped `updated_at` on
-  every row and broke "changed since" queries. The listener now only sets
-  `updated_at` when `session.is_modified(target, include_collections=False)`
-  is `True`, and it no longer overwrites `updated_at` when the application
-  explicitly assigned that column a value itself.
-- `alembic_reset` now takes a `-c`/`--config` option (default:
-  `<root_path>/alembic.ini`) and reads the target `alembic.ini` itself
-  (`version_table`, `version_table_schema`, `version_locations`,
-  `script_location`) via the new `AlembicSetup.from_ini`, instead of always
-  resetting the default `alembic_version` table and `alembic/versions`
-  directory regardless of which namespace the ini actually configures. The
-  destructive confirmation prompt now shows the resolved version table and
-  version directories. `alembic_init` reuses an existing `alembic.ini` the
-  same way when creating version directories. Raised the minimum supported
-  Alembic version to `1.16.0`, which added
-  `Config.get_version_locations_list()`.
-- BREAKING: `repom.logging.get_logger(name)` no longer adds a second
-  `"repom."` prefix when `name` already equals `"repom"` or starts with
-  `"repom."`. Every internal caller passes `__name__`, which already starts
-  with `"repom."`, so loggers were actually named `"repom.repom.database"`,
-  `"repom.repom.utility"`, and so on; module-level configuration such as
-  `logging.getLogger("repom.database").setLevel(...)` had no effect on them.
-  Those loggers are now named `"repom.<module>"` as documented. Callers that
-  pass a short name unrelated to `"repom"` keep the existing `"repom.<name>"`
-  behavior. Also fixed `config.enable_sqlalchemy_echo` /
-  `config.sqlalchemy_echo_level` not taking effect when set after
-  `repom.database` has already been imported: the setters now call the new
-  `repom.logging.apply_sqlalchemy_echo_state()` to (re)configure the
-  `"sqlalchemy.engine.Engine"` logger immediately, and set its level back to
-  `WARNING` when echo is turned off. Removed the private
-  `_setup_sqlalchemy_logging` from `repom.logging.__all__`.
+- BREAKING: `repom.logging.get_logger(name)` no longer adds another `repom.` prefix when
+  `name` is `repom` or already starts with `repom.`. Internal logger names now match
+  their module paths.
+
+### Added
+
+- The basekit source follows branch `main`; `uv.lock` is the effective dependency pin.
+- `RepomConfig` can configure Alembic `script_location`, `version_locations`,
+  `version_table`, and `version_table_schema` when `alembic_init` creates an ini file.
+- Alembic reset and credential rotation entry points accept explicit arguments for task
+  runners. `main_postgres(argv=None)`, `main_pgadmin(argv=None)`, and
+  `main_rotate_password(argv=None)` accept argv lists;
+  `rotate_postgres_credentials_cli`, `rotate_pgadmin_credentials_cli`, and
+  `rotate_redis_password_cli` expose keyword-callable functions.
+  `reset_alembic_migrations`, `describe_alembic_reset`, and
+  `debug_repository_queries_cli` are also available as reusable functions.
+- Test fixture factories can bind and restore the global database manager with
+  `DatabaseManager.bind_engine_for_tests()` through `bind_global_manager=True`. This
+  behavior is separate from the factory's transaction rollback fixtures.
+- Shared environment override helpers include `apply_repom_env_overrides()` and the
+  public parsers in `repom.config_hooks.parsing` (also available through the `_parsing`
+  alias). `RedisConfig` provides `connection_kwargs()`, `url()`, and `safe_url()` for
+  client settings and credential-safe logging.
+- Repositories add arbitrary SQLAlchemy filters to bulk update and delete methods,
+  `bulk_permanent_delete()` for physical deletion of matching rows, `FilterParams`
+  support in `count()` and `find_deleted()`, range operators for `field_to_column`, and
+  SAVEPOINT-backed `get_or_create()` in sync and async variants.
+- `get_reusable_sync_session()` and `get_reusable_async_session()` support
+  caller-managed session lifetimes. They never commit; they roll back an open
+  transaction on exit and close the session without disposing the reusable engine. The
+  async session helper does not change the commit-on-success behavior of the FastAPI
+  dependency `get_async_db_session()`.
+- Repository defaults follow normal Python attribute lookup, so instance values for
+  `default_options`, `default_order_by`, `max_limit`, and `field_to_column` override
+  class values.
+- CI runs `test.yml` on pushes and pull requests, with a dedicated
+  `postgres-integration` job. GitHub Actions are pinned to commit SHAs, with Dependabot
+  configured to update them.
+
+### Changed
+
+- `EXEC_ENV` comparisons now use normalized values, including log-level and log-file
+  defaults. `test` (including surrounding whitespace and mixed case) selects the test
+  configuration and fixture guard; `production` is an alias for `prod` for PostgreSQL
+  database names, TLS defaults and enforcement, and destructive-operation guards.
+  Unknown values warn and use the dev database name/file for PostgreSQL and SQLite.
+- A non-empty `REPOM_DATABASE_URL` takes precedence over `DATABASE_URL`; an empty value
+  falls through to `DATABASE_URL`. A URL override determines `db_type`, sets
+  `config.db_url_overridden`, and selects the target for `db_backup`, `db_restore`,
+  `db_create`, `db_delete`, and `db_sync_master`. A mismatching `DB_TYPE` produces one
+  warning and the URL backend wins. File-based SQLite overrides use the URL path, and
+  in-memory SQLite backup/restore is rejected. PostgreSQL TLS defaults are `require` for
+  remote production hosts and `prefer` otherwise, including hostless URLs; `sslrootcert`
+  is added when configured, the URL omits `sslmode`, and the URL lacks `sslrootcert`.
+  Weak modes (`disable`, `allow`, `prefer`) raise for remote production hosts. Engine
+  creation warns when the effective URL in production does not enforce TLS. PostgreSQL
+  backup and restore details are in the backup guide; `db_sync_master` skips managed
+  containers as documented in the master data sync guide.
+- PostgreSQL and Redis credential rotation apply changes to existing services and
+  persist successful new secrets into the compose directory `.env`. PostgreSQL grants
+  are applied before changing the current role password; replacement-user rotation
+  updates both configured username and password. pgAdmin rotation can recreate its own
+  volume without removing PostgreSQL data. Docker service auto-start reuses existing
+  compose files and `.env` when available. Explicit generation/start commands refuse to
+  replace a differing `.env` unless `--force-regenerate` is supplied; changed content
+  keeps the old file as `.env.bak` with mode `0600`.
+- PostgreSQL backup and restore share host and Docker command construction and stream
+  data between files and database tools instead of buffering full archives in memory.
+  Backups stream `pg_dump` output through gzip to a mode `0600` partial file; restores
+  stream decompressed input to `psql`, fully validate plain SQL archives before starting
+  `psql`, and no longer depend on external `gunzip`. Stderr draining avoids a `pg_dump`
+  pipe deadlock. PostgreSQL plain-SQL restores disable user `psqlrc` settings, stop at
+  the first SQL error, and run in one transaction; custom-format restores also use one
+  transaction. The backup guide documents the plain-dump large-object transaction
+  limitation. PostgreSQL backups use `<database>_<YYYYmmdd_HHMMSS>.sql.gz` names (the
+  connected database, which is the URL database when the URL is overridden);
+  SQLite and PostgreSQL rotation and incomplete-file cleanup match the exact database
+  name and timestamp. `db_restore` lists the target database's backups first, reports
+  source and target, and requires typing the target name to confirm a backup with an
+  unknown or different source; legacy `db_*.sql.gz` files remain listed but are not
+  automatically rotated or deleted. Backup and restore use effective URL credentials and
+  TLS settings and avoid probing the managed container when host tools apply. The file
+  formats are unchanged.
+- Repository queries order by all primary-key attributes by default. String `order_by`
+  values use remaining primary-key attributes as same-direction tie-breakers; explicit
+  SQLAlchemy expressions define the complete ordering. `get_by(..., single=True)`
+  returns the matching row with the lowest primary key, independent of
+  `default_order_by`.
+- Alembic reset reads `version_table`, `version_table_schema`, `version_locations`, and
+  `script_location` from the selected ini through `AlembicSetup.from_ini`. Its
+  confirmation shows the resolved table and version directories. `alembic_init` uses an
+  existing ini when creating version directories; the minimum Alembic version is now
+  `1.16.0`.
+- The shared Alembic environment preserves existing application and Repom loggers when
+  configuring Alembic logging in-process. SQLAlchemy echo setters immediately
+  reconfigure the `sqlalchemy.engine.Engine` logger and return it to `WARNING` when echo
+  is disabled; `_setup_sqlalchemy_logging` is no longer public.
+- Running `sync_master_data` twice with identical data, assigning a column its current
+  value, or changing only a relationship no longer bumps `updated_at`. Explicitly
+  assigned `updated_at` values are preserved.
+- The default test-environment hook selects SQLite only when normalized `EXEC_ENV` is
+  `test`; other environments use PostgreSQL. Tests normalize `EXEC_ENV` consistently
+  before deciding whether in-memory SQLite and the destructive fixture guard apply.
+
+### Fixed
+
+- Fixed FastAPI lifespan integration: `get_lifespan_manager()` returns a callable
+  lifespan handler, so `FastAPI(lifespan=get_lifespan_manager())` works; the manager's
+  `app` argument remains optional for direct context use.
+- Fixed sync and async database dependencies so exceptions from a yielded endpoint reach
+  the context manager immediately and trigger rollback before the exception returns to
+  the caller. Added `get_reusable_async_transaction()` for worker code that needs
+  commit-on-success and rollback-on-error transactions without disposing the engine.
+- Fixed `listjson_filter()` on PostgreSQL to use `json_array_elements_text()` for
+  element matching and `json_array_length()` for empty arrays. Matching now uses
+  correlated `EXISTS` expressions, so repeated values do not duplicate model rows or
+  inflate counts and pages.

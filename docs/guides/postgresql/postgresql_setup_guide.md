@@ -15,28 +15,11 @@ uv sync --extra postgres
 ```
 
 リポジトリ自身の開発設定は `.env.example` の
-`CONFIG_HOOK=repom.config_hook:hook_config` を使います。この hook は `dev` /
-`prod` で PostgreSQL を選び、repom 用の container 設定を適用します。
+`CONFIG_HOOK=repom.config_hook:hook_config` を使います。この hook は正規化した
+`EXEC_ENV` が `test` の場合だけ SQLite を選び、それ以外では PostgreSQL を選択します。
 
-利用側プロジェクトでは自身の hook で設定してください。
-
-```python
-from repom.config_hooks.database import apply_database_env_overrides
-from repom.config_hooks.pgadmin import apply_pgadmin_env_overrides
-from repom.config_hooks.postgres import apply_postgres_env_overrides
-
-
-def hook_config(config):
-    config.db_type = "postgres"
-    config.db_name = "myapp"
-    config.postgres.container.host_port = 5432
-    config.pgadmin.container.enabled = False
-
-    apply_database_env_overrides(config)
-    apply_postgres_env_overrides(config)
-    apply_pgadmin_env_overrides(config)
-    return config
-```
+利用側プロジェクトの hook 作成方法は[CONFIG_HOOK ガイド](../features/config_hook_guide.md)を
+参照してください。
 
 ## 環境変数
 
@@ -95,12 +78,9 @@ uv run repom_info
 は `${POSTGRES_PASSWORD}` のような変数参照でこれを読み込みます。生成物は
 runtime artifact です。設定の正本は `CONFIG_HOOK` と環境変数です。
 
-When both generated files exist, application `ensure_running()` starts the
-existing compose project without regenerating it. `postgres_generate` and
-`postgres_start` refuse to replace a `.env` with different credentials.
-Use the credential rotation commands for an existing volume, or pass
-`--force-regenerate` for an intentional replacement; regeneration keeps the
-previous `.env` as `.env.bak` with mode `0600` when its content changes.
+compose file と `.env` がそろっている場合、application の `ensure_running()` は再生成せずに
+既存の compose project を起動します。詳細は
+[Docker manager ガイド](../features/docker_manager_guide.md)を参照してください。
 
 ## 停止と削除
 
@@ -112,7 +92,7 @@ uv run postgres_remove
 `postgres_remove` は container と volume を削除するため、保存データが不要なことを
 確認してから実行してください。
 
-## credential rotation
+## 認証情報のローテーション
 
 rotation command は既定で dry-run です。計画を確認してから実行モードへ進みます。
 引数と rollback の注意点は [credential rotation](credential_rotation.md) を
@@ -134,16 +114,9 @@ REPOM_DATABASE_URL=postgresql+psycopg://user:password@db.example:5432/myapp
 
 接続先や password を含む URL を log、commit、資料へ残さないでください。
 
-`config.postgres` 経由で `db_url` を組み立てる場合、sslmode は
-`config.postgres.sslmode`（未設定時は exec_env と host 別の既定値: dev/test は
-`prefer`、prod はリモートホストなら `require`、`localhost` / `127.0.0.1` /
-`::1` などローカルホストなら `prefer`）から補われます。`postgres_generate` が
-生成する PostgreSQL コンテナは SSL を有効化していないため、prod でも
-ローカルコンテナへ接続する場合は `require` を既定にしません。
-`config.postgres.sslrootcert` を設定すると `sslrootcert` クエリパラメータも
-付与され、`verify-full` の検証に使えます。`EXEC_ENV=prod` でリモートホストへ
-接続する場合、`require` 未満の sslmode は `db_url` アクセス時に `ValueError`
-になります。
+PostgreSQL URL の TLS 既定値と `sslrootcert`、正規化後の production 判定については
+[実行時環境変数ガイドの DB URL と TLS の節](runtime_env_overrides.md#db-url-override-と-tls-policy)を
+参照してください。
 
 ## トラブルシューティング
 

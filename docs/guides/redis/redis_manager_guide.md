@@ -1,4 +1,4 @@
-# Redis Manager ガイド
+# Redis 管理ガイド
 
 repom は Redis の設定、Compose 生成、起動・停止、password rotation を提供します。
 Python client を利用する場合は optional dependency を追加します。
@@ -29,7 +29,8 @@ REDIS_DB=0
 `REDIS_PORT` は接続先と生成 Compose の公開 port です。利用側 hook では、
 プロジェクト既定値の後に environment override を適用します。
 `REDIS_HOST_PORT` を指定した場合は公開 host port にその値を使い、未指定の場合は
-`REDIS_PORT` を公開 host port の fallback として使います。
+`REDIS_PORT` を公開 host port の fallback として使います。`CHANGE_ME` は未設定と同じ
+placeholder のため、実際に Redis を生成する前に `REDIS_PASSWORD` を実値に変更してください。
 
 ```python
 from repom.config_hooks.redis import apply_redis_env_overrides
@@ -40,6 +41,21 @@ def hook_config(config):
     config.redis.container.container_name = "myapp_redis"
     apply_redis_env_overrides(config)
     return config
+```
+
+### クライアント接続設定
+
+`RedisConfig.connection_kwargs()` は host、接続 port、DB 番号、任意の password を redis-py の
+keyword 引数として返します。`url()` は既定で credential を含まない Redis URL を生成します。
+password を含める場合は `include_password=True` を指定します。URL 内の password は percent-encode
+されます。log には password を mask する `safe_url()` を使ってください。
+
+```python
+from repom.config import RepomConfig
+
+redis_config = RepomConfig().redis
+connection_kwargs = redis_config.connection_kwargs()
+safe_url = redis_config.safe_url()
 ```
 
 ## 生成と起動
@@ -63,13 +79,9 @@ uv run repom_info
 設定の正本は `CONFIG_HOOK` と環境変数です。生成物を手編集しても、次の
 `redis_generate` で上書きされます。
 
-Application `ensure_running()` uses the existing compose files when the
-compose file and `.env` are present. Explicit `redis_generate` and `redis_start`
-regenerate the files, but refuse to replace a `.env` whose secret differs
-from the active config. Rotate a running Redis instance with
-`redis_rotate_password`, or pass `--force-regenerate` for an intentional
-replacement; changed content keeps the previous `.env` as `.env.bak` with mode
-`0600`.
+compose file と `.env` がそろっている場合、application の `ensure_running()` は既存の file を使います。
+再生成時の secret 保護と `--force-regenerate` は
+[Docker manager ガイド](../features/docker_manager_guide.md)を参照してください。
 
 ## 停止と削除
 
@@ -93,7 +105,7 @@ ensure_running(timeout_seconds=30)
 
 Docker CLI がない場合や readiness timeout は `RuntimeError` になります。
 
-## password rotation
+## 認証情報のローテーション
 
 ```bash
 uv run redis_rotate_password --help

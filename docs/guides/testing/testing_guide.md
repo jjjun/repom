@@ -1,4 +1,4 @@
-# Testing Guide
+# テストガイド
 
 repom は pytest 用の同期・非同期 fixture factory を提供します。DB schema は
 test session ごとに作成し、各 test は独立した transaction を rollback するため、
@@ -14,10 +14,15 @@ uv run pytest tests/integration_tests
 uv run pytest -vv -s
 ```
 
+PostgreSQL 統合テストは、`CONFIG_HOOK=repom.config_hook:hook_config`、
+`EXEC_ENV=test`、`DB_TYPE=postgres`、`POSTGRES_PASSWORD` が設定され、
+`127.0.0.1:5433` で PostgreSQL に接続できる場合に実行されます。CI workflow と
+`AGENTS.md` に記載されたコマンドは PostgreSQL 統合テスト用にこれらを設定します。
+
 既定の pytest 設定は `pyproject.toml` の `[tool.pytest.ini_options]` にあります。
 通常実行は成功時の出力を抑え、`-vv -s` の明示時だけ詳細な stdout と DEBUG log を
-有効にします。既定の `addopts` には、最初の失敗で停止する `-x` と benchmark を
-skip する `--benchmark-skip` も含まれます。
+有効にします。既定の `addopts` は `-q` と `--benchmark-skip` です。`-q` が通常出力を
+抑えるため、詳細を確認するときは `-vv` を指定します。
 
 ## 同期 fixture
 
@@ -35,20 +40,30 @@ db_engine, db_test = create_test_fixtures()
 `db_test` は rollback 対象の外部 `scoped_session` です。Repository に明示して使います。
 
 セッションスコープのフィクスチャが有効な間、`DatabaseManager` をフィクスチャのエンジンに
-結び付けるには、`bind_global_manager=True` を指定します。これにより、
-`get_reusable_sync_transaction()` を使うアプリケーションコードはフィクスチャのスキーマを使用し、
-フィクスチャの終了時にマネージャーの以前のエンジンとセッションファクトリーが復元されます。
+結び付けるには、`bind_global_manager=True` を指定します。これは
+`DatabaseManager.bind_engine_for_tests()` を使い、`get_db_session()`、
+`get_db_transaction()`、`get_reusable_sync_session()`、
+`get_reusable_sync_transaction()`、`get_standalone_sync_transaction()`、
+`get_sync_engine()`、`get_inspector()`、
+`get_async_db_session()`、`get_async_db_transaction()`、`get_async_engine()`、
+`get_reusable_async_session()`、`get_reusable_async_transaction()`、
+`get_standalone_async_transaction()` といった global
+`DatabaseManager` を使う API を、session-scoped engine fixture が有効な間だけ
+そのエンジンへ bind します。fixture 終了時に以前の engine と session factory が復元されます。
+session 管理パターンは[セッション管理ガイド](../repository/repository_session_patterns.md)を
+参照してください。
 
 ```python
+from tests.fixtures.models import User
 from repom import BaseRepository
 
 
-def test_save_task(db_test):
-    repo = BaseRepository(Task, session=db_test)
-    task = repo.save(Task(title="test"))
+def test_save_user(db_test):
+    repo = BaseRepository(User, session=db_test)
+    user = repo.save(User(name="Test", email="test@example.com"))
 
-    assert task.id is not None
-    assert repo.get_by_id(task.id) is task
+    assert user.id is not None
+    assert repo.get_by_id(user.id) is user
 ```
 
 テスト中に `db_test.commit()` を呼ぶ必要はありません。fixture の transaction
@@ -70,14 +85,15 @@ async_db_engine, async_db_test = create_async_test_fixtures()
 import pytest
 
 from repom import AsyncBaseRepository
+from tests.fixtures.models import User
 
 
 @pytest.mark.asyncio
 async def test_async_save(async_db_test):
-    repo = AsyncBaseRepository(Task, session=async_db_test)
-    task = await repo.save(Task(title="async test"))
+    repo = AsyncBaseRepository(User, session=async_db_test)
+    user = await repo.save(User(name="Async test", email="async@example.com"))
 
-    assert await repo.get_by_id(task.id) is task
+    assert await repo.get_by_id(user.id) is user
 ```
 
 SQLite async テストには `aiosqlite`、pytest には `pytest-asyncio` が必要です。
@@ -90,13 +106,15 @@ SQLite async テストには `aiosqlite`、pytest には `pytest-asyncio` が必
 factory の引数は同期・非同期で共通です。
 
 ```python
+from tests.fixtures.models import User
+from repom.testing import create_test_fixtures
+
 db_engine, db_test = create_test_fixtures(
     db_url="sqlite:///:memory:",
-    model_loader=load_test_models,
 )
 ```
 
-- `db_url` 未指定時は in-memory SQLite（`sqlite:///:memory:`）を使う。EXEC_ENV が
+- `db_url` 未指定時は in-memory SQLite（`sqlite:///:memory:`）を使う。正規化後の `EXEC_ENV` が
   `test` でなく、かつ in-memory SQLite でもない `db_url` を渡すと、テスト終了時の
   `drop_all` が実データベースを壊さないよう `RuntimeError` を送出する。実際にその
   データベースへ向けたい場合は `allow_destructive=True` を明示する。
@@ -104,7 +122,7 @@ db_engine, db_test = create_test_fixtures(
 - `load_models()` は `config.model_locations` を読み、全 import 後に mapper を構成する。
 
 テスト設定は repom module の import 前に確定させてください。このリポジトリの
-`tests/conftest.py` は先頭で `EXEC_ENV=test` を設定しています。外部プロジェクトで
+`tests/conftest.py` は repom を import する前に `EXEC_ENV=test` を設定しています。外部プロジェクトで
 環境設定の import 順に依存したくない場合は、fixture factory に `db_url` と
 `model_loader` を明示します。
 

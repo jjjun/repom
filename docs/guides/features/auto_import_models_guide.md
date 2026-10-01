@@ -51,6 +51,11 @@ from repom.utility import load_models
 load_models(context="manual_check")
 ```
 
+`load_models()` は `config.model_locations` を `basekit.discovery.import_from_packages()`
+へ渡して、対象の package を読み込みます。
+汎用 discovery helper を使う場合は `basekit.discovery` から import してください。
+repom が互換性のために再 export している helper は、新しいコードで使う API の正本ではありません。
+
 読み込み後の table は次のコマンドで確認できます。
 
 ```bash
@@ -102,7 +107,6 @@ db_engine, db_test = create_test_fixtures(
 
 関連資料:
 
-- [Discovery の責務境界](discovery_guide.md)
 - [CONFIG_HOOK ガイド](config_hook_guide.md)
-- [Testing Guide](../testing/testing_guide.md)
+- [テストガイド](../testing/testing_guide.md)
 - [`repom/utility.py`](../../../repom/utility.py)
