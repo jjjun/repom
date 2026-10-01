@@ -98,10 +98,13 @@ article = repo.get_by_id(1, include_deleted=True)
 持たないモデルでは、`find_deleted()` と `find_deleted_before()` は空リストを返します。
 
 `remove(instance)` は `SoftDeletableMixin` を持つモデルに対しても物理削除します。
-`bulk_delete()` は Mixin を持つモデルの該当行を論理削除し、Mixin を持たないモデルの
-該当行を物理削除します。
+`bulk_delete()` は Mixin を持つモデルの未削除の該当行だけを論理削除します。
+Mixin を持たないモデルでは該当行を物理削除します。
 `bulk_update()` は既定で論理削除済みの行を除外します。削除済みの行を復元するなど、
 更新対象に含める場合は `include_deleted=True` を指定してください。
+`bulk_permanent_delete()` は Mixin を持つモデルでも該当行を物理削除します。
+`bulk_update()`、`bulk_delete()`、`bulk_permanent_delete()` は `filters=` に SQLAlchemy 式を
+受け取り、`filter_by=` や `ids=` と AND で結合します。
 
 ---
 
@@ -171,7 +174,11 @@ if article.is_deleted:
 - `params`: `FilterParams` インスタンス（任意）
 - `filters`: SQLAlchemy フィルタ条件のリスト
 - `include_deleted`: 削除済みも含めるか（デフォルト: False）
-- `**kwargs`: `offset`, `limit`, `order_by` などのオプション
+- `**kwargs`: `offset`, `limit`, `order_by`, `options` などのオプション
+
+`params` の各フィールドは `field_to_column` に対応付けるか、`_build_filters()` で処理して
+ください。未マッピングフィールドは `ValueError` になります。詳細は
+[FilterParams ガイドの未マッピングフィールド](../repository/repository_filter_params_guide.md#未マッピングフィールド)を参照してください。
 
 ```python
 # 削除済みを除外
@@ -187,13 +194,14 @@ published = repo.find(filters=[Article.status == 'published'], limit=100)
 `include_deleted` は `count()`、`get_all()`、`find_one()`、`find_by_ids()`、
 `get_by()`、`get_by_id()` でも利用できます。既定値は `False` です。
 
-#### get_by_id(id, include_deleted=False) -> Optional[T]
+#### get_by_id(id, include_deleted=False, options=None) -> Optional[T]
 
 ID でレコードを取得します。
 
 **パラメータ**:
 - `id`: レコードの ID
 - `include_deleted`: 削除済みも含めるか（デフォルト: False）
+- `options`: SQLAlchemy の load options（eager loading など）
 
 ```python
 # 削除済みを除外
@@ -262,9 +270,13 @@ if repo.permanent_delete(1):
     print("物理削除完了")
 ```
 
-#### find_deleted(filters=None, **kwargs) -> List[T]
+#### find_deleted(filters=None, params=None, **kwargs) -> List[T]
 
 削除済みレコードのみを取得します。
+
+`filters` には SQLAlchemy 式、`params` には `FilterParams` を渡せます。両方の条件は AND で
+結合されます。`params` の未マッピングフィールドは `ValueError` になるため、
+[FilterParams ガイド](../repository/repository_filter_params_guide.md#未マッピングフィールド)を参照してください。
 
 ```python
 deleted_articles = repo.find_deleted(limit=100)
@@ -473,9 +485,15 @@ uv run alembic revision --autogenerate -m "add soft delete to articles"
 生成されるマイグレーション例：
 
 ```python
+from repom.custom_types.UTCDateTime import UTCDateTime
+
 def upgrade():
     op.add_column('articles', 
-        sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True)
+        sa.Column(
+            'deleted_at',
+            UTCDateTime(timezone=True),
+            nullable=True,
+        )
     )
     op.create_index('ix_articles_deleted_at', 'articles', ['deleted_at'])
 
@@ -483,6 +501,8 @@ def downgrade():
     op.drop_index('ix_articles_deleted_at', 'articles')
     op.drop_column('articles', 'deleted_at')
 ```
+
+手動でマイグレーションを記述する場合は、`sa.DateTime(timezone=True)` を使っても構いません。
 
 適用：
 
@@ -610,7 +630,7 @@ ValueError: MyModel does not support soft delete. Add SoftDeletableMixin to the 
 
 ```python
 class MyModel(BaseModel, SoftDeletableMixin):
-    # ...
+    __tablename__ = "my_models"
 ```
 
 ### Q: find() で削除済みが取得されてしまう
@@ -690,8 +710,6 @@ def upgrade():
 - [BaseRepository ガイド](../repository/base_repository_guide.md) - Repository パターンの詳細
 - [Testing ガイド](../testing/testing_guide.md) - テスト戦略
 
-FastAPI 向けの Pydantic スキーマ自動生成は、利用側フレームワーク（fast-domain）に移管されました。
+FastAPI 向けの Pydantic schema 自動生成は、利用側フレームワーク（fast-domain）が提供します。
 
 ---
-
-最終更新: 2025-12-10

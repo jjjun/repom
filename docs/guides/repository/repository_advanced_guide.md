@@ -85,18 +85,18 @@ tasks = await repo.find_by_ids([1, 2, 3])  # include_deleted=False
 from sqlalchemy import and_, or_
 
 # 基本的な検索
-tasks = await repo.find()  # 全件
+tasks = await repo.find(limit=100)
 
 # フィルタ条件付き
 filters = [Task.status == 'active']
-tasks = await repo.find(filters=filters)
+tasks = await repo.find(filters=filters, limit=100)
 
 # 複数条件（AND）
 filters = [
     Task.status == 'active',
     Task.priority == 'high'
 ]
-tasks = await repo.find(filters=filters)
+tasks = await repo.find(filters=filters, limit=100)
 
 # OR 条件
 filters = [
@@ -105,7 +105,7 @@ filters = [
         Task.status == 'pending'
     )
 ]
-tasks = await repo.find(filters=filters)
+tasks = await repo.find(filters=filters, limit=100)
 ```
 
 ### ページネーション
@@ -136,11 +136,13 @@ class TaskRepository(AsyncBaseRepository[Task]):
   から繰り返し呼んでもログが埋まりません）。外部入力をそのまま `find()` に
   渡す API では、`limit` を必ず明示してください。`get_by()` や `find_by_ids()`
   など他の取得メソッドはこの警告を出しません。
+- ページングには一意な並び順を指定してください。非一意な式で並べると、同じ値を持つ行が
+  ページ間で重複または欠落する可能性があります。
 
 ### ソート
 
 ```python
-# デフォルト: id 昇順
+# デフォルト: すべての主キー属性の昇順
 tasks = await repo.find(limit=100)
 
 # 降順・昇順指定（canonical form）
@@ -149,28 +151,25 @@ tasks = await repo.find(order_by='title:asc', limit=100)
 
 # SQLAlchemy 式
 from sqlalchemy import desc
-tasks = await repo.find(order_by=desc(Task.created_at), limit=100)
-
-# 複数ソート（カスタムリポジトリで実装）
-from sqlalchemy import desc
-from repom import AsyncBaseRepository
-
-class TaskRepository(AsyncBaseRepository[Task]):
-    async def find_sorted(self):
-        query = self._base_select().order_by(
-            desc(Task.priority),
-            Task.created_at
-        )
-        filters = []
-        self._append_soft_delete_filter(filters)
-        if filters:
-            query = query.where(*filters)
-        query = self.set_find_option(query, limit=100)
-        result = await self.session.execute(query)
-        return result.scalars().unique().all()
+tasks = await repo.find(order_by=desc(Task.id), limit=100)
 ```
 
-この `find_sorted()` も `TaskRepository(session=session)` のように外部セッションを明示して使ってください。`_base_select()` と `set_find_option()` を使い、soft-delete filter と `max_limit` を適用します。
+複数の SQLAlchemy 式で並べ替える場合は、`find(order_by=[...])` に式のリストまたは
+タプルを渡します。
+
+```python
+tasks = await repo.find(
+    order_by=[Task.priority.desc(), Task.created_at.asc(), Task.id.asc()],
+    limit=100,
+)
+```
+
+`order_by` と `default_order_by` を省略した場合は、`id` だけでなくすべての主キー属性を
+昇順にして並べます。
+
+文字列の `order_by` には未指定の主キー属性が同じ方向の tie-breaker として追加されますが、
+SQLAlchemy 式や式のリスト / タプルには追加されません。ページングに使う式には一意な列を
+含めてください。規則の詳細は [order_by ガイド](order_by_guide.md)を参照してください。
 
 **注意**:
 
@@ -179,10 +178,10 @@ class TaskRepository(AsyncBaseRepository[Task]):
 
 ```python
 # ❌ 非対応
-tasks = await repo.find(order_by='created_at')
+tasks = await repo.find(order_by='created_at', limit=100)
 
 # ✅ 対応
-tasks = await repo.find(order_by='created_at:asc')
+tasks = await repo.find(order_by='created_at:asc', limit=100)
 ```
 
 ### ソート可能なカラムの制限
@@ -214,7 +213,7 @@ class TaskRepository(AsyncBaseRepository[Task]):
 
 ```python
 # ❌ 許可されていないカラムでソート
-tasks = await repo.find(order_by='custom_field:desc')
+tasks = await repo.find(order_by='custom_field:desc', limit=100)
 # → ValueError: Column 'custom_field' is not allowed for sorting
 
 # ✅ allowed_order_columns を拡張
@@ -247,7 +246,7 @@ get_order_by_default_value(TaskRepository)
 ### get_by() / bulk_update() / bulk_delete() の検索カラムの制限
 
 `get_by(column_name, value)` と `bulk_update(..., filter_by=...)` /
-`bulk_delete(filter_by=...)` の `column_name` はマップされたカラムのみを
+`bulk_delete(filter_by=...)` / `bulk_permanent_delete(filter_by=...)` の `column_name` はマップされたカラムのみを
 受け付けます（SQLAlchemy マッパー経由で解決し、relationship・hybrid
 property・メソッド・dunder 属性は拒否されます）。ただし `column_name` は
 信頼できる識別子であることが前提であり、リクエストのフィールド名を
@@ -265,21 +264,49 @@ class TaskRepository(AsyncBaseRepository[Task]):
 await repo.get_by('internal_note', value)
 ```
 
-`bulk_update(..., filter_by=...)` と `bulk_delete(filter_by=..., ids=...)` は、
-絞り込み条件が結果的に空になる呼び出し（`filter_by` 省略や `{}`、かつ
-`bulk_delete` では `ids` も省略）を `ValueError` で拒否します。テーブル全体を
-対象にする操作は意図的な選択であるべきなので、`allow_unfiltered=True` を
+`bulk_update()`、`bulk_delete()`、`bulk_permanent_delete()` は、
+`filters=` も含めて絞り込み条件が空になる呼び出しを `ValueError` で拒否します。
+`bulk_update()` の空の `filter_by` は `filters=` も空の場合にエラーになります。
+削除 bulk API は `filter_by`、`ids`、`filters` がすべて空の場合にエラーになります。
+`bulk_update()` で `filter_by` を省略し、`filters=` も空の場合は、各更新辞書に `id` が必要です。
+空でない `filters=` を指定すると、各更新辞書の値が条件に一致する行へ適用されます。
+テーブル全体を対象にする操作は意図的な選択であるべきなので、`allow_unfiltered=True` を
 明示的に渡してください。
 
 ### 件数カウント
 
 ```python
+from repom import AsyncBaseRepository, FilterParams
+
+
+class TaskParams(FilterParams):
+    status: str | None = None
+
+
+class TaskRepository(AsyncBaseRepository[Task]):
+    field_to_column = {"status": Task.status}
+
+
+repo = TaskRepository()
+
 # 全件数
-total = await repo.count()
+total = await repo.count(include_deleted=True)
 
 # 条件付きカウント
 filters = [Task.status == 'active']
-active_count = await repo.count(filters=filters)
+active_count = await repo.count(filters=filters, include_deleted=False)
+
+# FilterParams 条件と SQL 式を AND で組み合わせる
+active_high_count = await repo.count(
+    params=TaskParams(status="active"),
+    filters=[Task.priority == "high"],
+)
+
+# FilterParams のみでカウント
+active_count = await repo.count_by_params(
+    TaskParams(status="active"),
+    include_deleted=True,
+)
 ```
 
 ---
@@ -306,7 +333,8 @@ from sqlalchemy.orm import joinedload, selectinload
 # find() で使用
 tasks = await repo.find(
     filters=[Task.status == 'active'],
-    options=[joinedload(Task.user)]
+    options=[joinedload(Task.user)],
+    limit=100,
 )
 
 # get_by_id() で使用
@@ -340,7 +368,8 @@ from sqlalchemy.orm import joinedload
 # 基本的な使い方
 tasks = await repo.find(
     filters=[Task.status == 'active'],
-    options=[joinedload(Task.user)]  # user を JOIN で取得
+    options=[joinedload(Task.user)],  # user を JOIN で取得
+    limit=100,
 )
 
 # N+1 なしでアクセス可能
@@ -363,7 +392,8 @@ from sqlalchemy.orm import selectinload
 
 # コレクション（1対多）を効率的に取得
 users = await user_repo.find(
-    options=[selectinload(User.tasks)]  # 関連するタスクを取得
+    options=[selectinload(User.tasks)],  # 関連するタスクを取得
+    limit=100,
 )
 
 # N+1 なしでアクセス可能
@@ -389,7 +419,8 @@ tasks = await repo.find(
         joinedload(Task.user),        # 1対1
         selectinload(Task.tags),      # 1対多
         selectinload(Task.comments)   # 1対多
-    ]
+    ],
+    limit=100,
 )
 ```
 
@@ -400,7 +431,8 @@ tasks = await repo.find(
 tasks = await repo.find(
     options=[
         joinedload(Task.user).joinedload(User.department)
-    ]
+    ],
+    limit=100,
 )
 
 for task in tasks:
@@ -419,7 +451,8 @@ from sqlalchemy.orm import joinedload
 
 # コレクションを JOIN で一括取得
 users = await user_repo.find(
-    options=[joinedload(User.tasks)]
+    options=[joinedload(User.tasks)],
+    limit=100,
 )
 
 for user in users:  # 各 user は1回だけ
@@ -432,9 +465,18 @@ scalar joinedload / selectinload の挙動には影響しません。副作用�
 `_base_select()` を override して一対多の関連を eager load せずに JOIN
 した場合に生じる重複行も、同じ仕組みで排除されます。
 
-### デフォルト Eager Loading（default_options）
+### Repository のデフォルト属性
 
-**NEW in v1.x**: コンストラクタで `default_options` を設定することで、リポジトリのすべての取得メソッドで自動的に eager loading を適用できます。
+`default_options` を設定すると、Repository の取得メソッドに eager loading を自動適用できます。
+未設定時の値は空タプル `()` で、リストまたはタプルを指定できます。`default_options`、
+`default_order_by`、`max_limit`、`field_to_column` は通常の Python 属性検索順序で解決され、
+インスタンス属性がクラス属性の値を上書きします。
+
+`default_order_by` は canonical form の文字列、SQLAlchemy 式、式のリストまたはタプルを
+受け付けます。文字列は `allowed_order_columns` による検証を通りますが、式を渡すと
+ホワイトリスト検証は行われず、その式が完全な並び順になります。
+`max_limit` の既定値は `1000` で、`None` にすると上限チェックを無効にします。
+並び順と tie-breaker の詳細は [order_by ガイド](order_by_guide.md)を参照してください。
 
 #### 基本的な使い方
 
@@ -456,7 +498,7 @@ class TaskRepository(AsyncBaseRepository[Task]):
 repo = TaskRepository(session=async_session)
 
 # options を指定しなくても自動的に eager loading される
-tasks = await repo.find()  # user と comments がロード済み
+tasks = await repo.find(limit=100)  # user と comments がロード済み
 task = await repo.get_by_id(1)  # 同じく自動適用
 ```
 
@@ -479,15 +521,15 @@ task = await repo.get_by_id(1)  # 同じく自動適用
 
 ```python
 # 1. options=None（デフォルト）: default_options を使用
-tasks = await repo.find()  # default_options が適用される
+tasks = await repo.find(limit=100)  # default_options が適用される
 
 # 2. options=[]（空リスト）: eager loading なし
-tasks = await repo.find(options=[])  # default_options をスキップ
+tasks = await repo.find(options=[], limit=100)  # default_options をスキップ
 
 # 3. options=[...]（明示指定）: 指定した options を使用
 tasks = await repo.find(options=[
     selectinload(Task.tags)  # default_options は無視される
-])
+], limit=100)
 ```
 
 #### パフォーマンスへの影響
@@ -496,17 +538,24 @@ tasks = await repo.find(options=[
 
 ```python
 # Without default_options
+from repom import BaseRepository
+
+repo = BaseRepository(Task)
 tasks = repo.find(limit=100)  # 1回のクエリ
 for task in tasks:
     print(task.user.name)  # N回のクエリ（N+1 問題）
 # 合計: 1 + N = 101回のクエリ（N=100の場合）
 
 # With default_options
+from sqlalchemy.orm import Session, joinedload
+from repom import BaseRepository
+
 class TaskRepository(BaseRepository[Task]):
     def __init__(self, session: Session = None):
         super().__init__(Task, session)
         self.default_options = [joinedload(Task.user)]
 
+repo = TaskRepository()
 tasks = repo.find(limit=100)  # 1回のクエリ（tasks と users）
 for task in tasks:
     print(task.user.name)  # クエリなし
@@ -522,9 +571,9 @@ for task in tasks:
 task_ids = [task.id for task in repo.find(options=[], limit=100)]  # 高速
 ```
 
-#### クラス属性で default_options / default_order_by を設定する
+#### クラス属性で共通値を定義する
 
-コンストラクタで代入する代わりに、クラス属性でデフォルト値を定義できます。属性は通常の Python の属性検索順序で参照され、インスタンス属性がクラス属性の値を上書きします。クラス属性はサブクラス間でデフォルト値を共有するのに便利です。
+クラス属性でデフォルト値を定義すると、Repository インスタンス間で設定を共有できます。
 
 ```python
 from sqlalchemy.orm import joinedload
@@ -534,15 +583,15 @@ from repom.database import get_reusable_sync_transaction
 class TaskRepository(BaseRepository[Task]):
     # すべての取得メソッドに適用されるデフォルト eager load
     default_options = [joinedload(Task.user)]
-    # order_by 未指定時の既定ソート（許可カラムのホワイトリストに含まれる必要あり）
+    # order_by 未指定時の既定ソート
     default_order_by = 'created_at:desc'
 
 # 使い方
 with get_reusable_sync_transaction() as session:
     repo = TaskRepository(session=session)
-    tasks = repo.find()          # user を eager load 済み & created_at desc でソート
+    tasks = repo.find(limit=100) # user を eager load 済み & created_at desc でソート
     latest = repo.find_one([])   # default_order_by が自動適用
-    raw = repo.find(options=[])  # eager loading だけスキップしたい場合
+    raw = repo.find(options=[], limit=100)  # eager loading だけスキップしたい場合
 ```
 
 ### ベストプラクティス
@@ -560,17 +609,17 @@ with get_reusable_sync_transaction() as session:
 
 ```python
 # ❌ N+1 問題（101回のクエリ）
-tasks = repo.find()  # 1回
+tasks = repo.find(limit=100)  # 1回
 for task in tasks:   # 100件
     user = task.user # 100回のクエリ
 
 # ✅ joinedload（1回のクエリ）
-tasks = repo.find(options=[joinedload(Task.user)])
+tasks = repo.find(options=[joinedload(Task.user)], limit=100)
 for task in tasks:
     user = task.user # クエリなし
 
 # ✅ selectinload（2回のクエリ）
-tasks = repo.find(options=[selectinload(Task.tags)])
+tasks = repo.find(options=[selectinload(Task.tags)], limit=100)
 for task in tasks:
     tags = task.tags # クエリなし
 
@@ -685,14 +734,15 @@ class TaskRepository(AsyncBaseRepository[Task]):
 from sqlalchemy.orm import joinedload, selectinload
 
 class TaskRepository(AsyncBaseRepository[Task]):
-    async def find_with_user(self, **kwargs):
+    async def find_with_user(self, limit: int = 100, **kwargs):
         """ユーザー情報を含めて取得"""
         return await self.find(
             options=[joinedload(Task.user)],
+            limit=limit,
             **kwargs
         )
     
-    async def find_full(self, **kwargs):
+    async def find_full(self, limit: int = 100, **kwargs):
         """すべての関連情報を含めて取得"""
         return await self.find(
             options=[
@@ -700,6 +750,7 @@ class TaskRepository(AsyncBaseRepository[Task]):
                 selectinload(Task.tags),
                 selectinload(Task.comments)
             ],
+            limit=limit,
             **kwargs
         )
 ```
@@ -770,8 +821,3 @@ class OrderRepository(AsyncBaseRepository[Order]):
 - **[auto_import_models ガイド](../features/auto_import_models_guide.md)**: モデルの自動インポート
 - **[BaseModel ソースコード](../../../repom/models/base_model.py)**: BaseModel 実装の詳細
 - **[BaseRepository ソースコード](../../../repom/repositories/base_repository.py)**: BaseRepository 実装の詳細
-
----
-
-**最終更新**: 2026-01-21  
-**対象バージョン**: repom v2.0+

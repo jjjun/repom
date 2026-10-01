@@ -1,23 +1,23 @@
-# Session and transaction patterns
+# Repository のセッションとトランザクション管理
 
-Repository constructors accept an optional SQLAlchemy session:
+Repository のコンストラクタには、任意で SQLAlchemy session を渡せます。
 
 ```python
 repo = TaskRepository(session=session)
 ```
 
-Passing a session makes the caller the transaction owner. Repository write
-methods flush changes but do not commit that external session. Without a
-session, a repository opens a session for each operation; its write methods
-commit and refresh automatically.
+session を渡すと、呼び出し側がトランザクションを管理します。Repository の書き込み
+メソッドは変更を flush しますが、渡された session を commit しません。session を渡さない
+場合、Repository は操作ごとに session を開き、書き込みメソッドが commit と refresh を
+自動で行います。
 
-Use an explicit transaction whenever several repository operations must
-succeed or fail together.
+複数の Repository 操作をまとめて成功または失敗させる場合は、明示的なトランザクションを
+使ってください。
 
-## Synchronous application code
+## 同期アプリケーションコード
 
-Use `get_reusable_sync_session()` for reads or when the caller owns commit
-boundaries:
+読み取りや commit の境界を呼び出し側が管理する場合は
+`get_reusable_sync_session()` を使います。
 
 ```python
 from repom.database import get_reusable_sync_session
@@ -29,12 +29,12 @@ with get_reusable_sync_session() as session:
     session.commit()  # Optional; the context manager never commits for you.
 ```
 
-The session is rolled back if a transaction remains open and then closed on
-exit. Use `get_reusable_sync_transaction()` when a group of operations should
-commit together or roll back together.
+トランザクションが開いたままの場合、終了時に rollback してから session を閉じます。
+複数の操作をまとめて commit または rollback する場合は、
+`get_reusable_sync_transaction()` を使ってください。
 
-`get_reusable_sync_transaction()` is the usual context manager for workers,
-commands, and other long-running processes:
+`get_reusable_sync_transaction()` は worker、コマンド、その他の長時間実行プロセスで
+一般的に使う context manager です。
 
 ```python
 from repom.database import get_reusable_sync_transaction
@@ -48,11 +48,11 @@ with get_reusable_sync_transaction() as session:
     audit_repo.dict_save({"task_id": task.id, "action": "created"})
 ```
 
-The context manager commits on success and rolls back on error. It leaves the
-engine available for the next transaction in the same process.
+成功時に commit し、エラー時に rollback します。同じプロセスで次のトランザクションを
+開始できるよう、engine は破棄しません。
 
-For a one-shot script, use `get_standalone_sync_transaction()`. It has the
-same transaction semantics and disposes the engine on exit:
+1 回だけ実行するスクリプトでは `get_standalone_sync_transaction()` を使います。
+トランザクションの動作は同じですが、終了時に engine を破棄します。
 
 ```python
 from repom.database import get_standalone_sync_transaction
@@ -62,9 +62,9 @@ with get_standalone_sync_transaction() as session:
     tasks = TaskRepository(session=session).get_all()
 ```
 
-## FastAPI dependencies
+## FastAPI の dependency
 
-The sync generator functions are dependency providers, not context managers:
+同期 generator 関数は dependency provider であり、context manager ではありません。
 
 ```python
 from fastapi import Depends
@@ -83,30 +83,27 @@ def create_task(session: Session = Depends(get_db_transaction, scope="function")
     return TaskRepository(session=session).dict_save({"title": "Review"})
 ```
 
-Use `get_db_session()` for a session without an automatic commit and
-`get_db_transaction()` when the request should commit on success and roll
-back on error.
+自動 commit しない session には `get_db_session()` を使い、リクエスト成功時に commit、
+エラー時に rollback する場合は `get_db_transaction()` を使います。
 
-**FastAPI transaction dependencies:** For write routes, use
-`Depends(get_db_transaction, scope="function")` or
-`Depends(get_async_db_transaction, scope="function")`.
-This requires FastAPI >= 0.121.0. With the default `scope="request"`, the commit
-runs after the response is sent, so a client that reads immediately after the
-write can miss it and a commit failure is reported to the client as success.
-`scope="function"` commits
-before the response is sent. It also closes the session before the send, so do
-not use it with a `StreamingResponse` that reads from the session while
-streaming. `get_db_session()` does not commit on exit and needs no scope.
-`get_async_db_session()` commits on exit, so reserve it for read routes; it
-needs no scope for that use.
+**FastAPI のトランザクション dependency:** 書き込み route では
+`Depends(get_db_transaction, scope="function")` または
+`Depends(get_async_db_transaction, scope="function")` を使います。FastAPI >= 0.121.0 が
+必要です。既定の `scope="request"` では、response の送信後に commit するため、書き込み
+直後に読み込んだ client から変更が見えない場合があります。また commit に失敗しても、
+client には成功として通知されます。`scope="function"` では response 送信前に commit
+します。送信前に session も閉じるため、streaming 中に session を読み込む
+`StreamingResponse` には使わないでください。`get_db_session()` は終了時に commit しない
+ため、scope の指定は不要です。`get_async_db_session()` は終了時に commit するので、
+読み取り route に使い、その場合は scope の指定は不要です。
 
-Do not write `with get_db_session()`: it is a generator intended for
-dependency injection.
+`get_db_session()` は dependency injection 用の generator なので、
+`with get_db_session()` のようには使わないでください。
 
-## Asynchronous application code
+## 非同期アプリケーションコード
 
-Use `get_reusable_async_session()` for reads or when the caller owns commit
-boundaries:
+読み取りや commit の境界を呼び出し側が管理する場合は
+`get_reusable_async_session()` を使います。
 
 ```python
 from repom.database import get_reusable_async_session
@@ -118,14 +115,13 @@ async with get_reusable_async_session() as session:
     await session.commit()  # Optional; the context manager never commits for you.
 ```
 
-It rolls back any open transaction and closes the session on exit. This
-context manager does not commit, unlike the FastAPI dependency
-`get_async_db_session()`, which commits on success. Use
-`get_reusable_async_transaction()` when a group of operations should commit
-together or roll back together.
+終了時に開いたままのトランザクションを rollback し、session を閉じます。この context
+manager は commit しません。成功時に commit する FastAPI dependency の
+`get_async_db_session()` とは動作が異なります。複数の操作をまとめて commit または
+rollback する場合は `get_reusable_async_transaction()` を使ってください。
 
-Use the async dependency providers with FastAPI and configure repom's lifespan
-manager so engines are disposed during shutdown:
+FastAPI では非同期 dependency provider を使い、repom の lifespan manager を設定して
+shutdown 時に engine を破棄します。
 
 ```python
 from fastapi import Depends, FastAPI
@@ -152,7 +148,7 @@ async def create_task(
     return await TaskRepository(session=session).dict_save({"title": "Review"})
 ```
 
-For a one-shot async script, use the async context manager:
+1 回だけ実行する非同期スクリプトでは、次の async context manager を使います。
 
 ```python
 import asyncio
@@ -169,8 +165,9 @@ async def main():
 asyncio.run(main())
 ```
 
-For long-running async code, use `get_reusable_async_transaction()` for each
-transaction and call `dispose_engines()` when the process shuts down:
+長時間実行する非同期コードでは、トランザクションごとに
+`get_reusable_async_transaction()` を使い、プロセス終了時に `dispose_engines()` を
+呼び出します。
 
 ```python
 import asyncio
@@ -189,30 +186,27 @@ async def main():
 asyncio.run(main())
 ```
 
-## Repository instance reuse and concurrency
+## Repository インスタンスの再利用と並行処理
 
-A `BaseRepository` or `AsyncBaseRepository` instance built without an
-explicit `session=` may safely be shared across concurrent requests, tasks,
-or threads. `_session_scope()` keeps the internally-opened session in a
-`contextvars.ContextVar`, so each task and each thread gets its own value;
-concurrent callers on the same instance never observe each other's session,
-uncommitted rows, or identity map.
+明示的な `session=` なしで作成した `BaseRepository` または `AsyncBaseRepository` の
+インスタンスは、複数の request、task、thread で安全に共有できます。`_session_scope()` は
+内部で開いた session を `contextvars.ContextVar` に保持するため、task と thread ごとに
+異なる値が使われます。同じインスタンスを同時に呼び出しても、互いの session、未 commit の
+行、identity map は共有されません。
 
-An instance built with an explicit `session=` is bound to that one
-caller-owned session for its lifetime. The rule below about not sharing one
-`AsyncSession` between concurrently running tasks still applies in that
-case.
+明示的な `session=` を渡して作成したインスタンスは、その呼び出し側所有の session に
+ライフタイム全体を通して結び付きます。この場合も、1 つの `AsyncSession` を同時実行中の
+複数 task で共有しないでください。
 
-## Ownership rules
+## 所有権のルール
 
-- Pass sessions by keyword: `Repository(session=session)`.
-- Do not pass a session as the first positional argument; that position is the
-  optional model.
-- Do not share one `AsyncSession` between concurrently running tasks.
-- With an external session, the caller owns commit and rollback.
-- Use one explicit transaction for operations that must be atomic.
-- Prefer repository subclasses with a declared model over repeating the model
-  at each call site.
+- session はキーワード引数で渡します: `Repository(session=session)`。
+- session を第 1 位置引数として渡さないでください。この位置は任意の model 用です。
+- 1 つの `AsyncSession` を同時実行中の複数 task で共有しないでください。
+- 外部 session を使う場合、commit と rollback は呼び出し側が行います。
+- 原子的に実行したい操作には、1 つの明示的なトランザクションを使います。
+- 呼び出しごとに model を繰り返し指定するより、model を宣言した Repository subclass を
+  推奨します。
 
-See [AsyncBaseRepository](async_repository_guide.md) for async-specific query
-and save examples.
+非同期の検索と保存の例は
+[AsyncBaseRepository ガイド](async_repository_guide.md)を参照してください。
