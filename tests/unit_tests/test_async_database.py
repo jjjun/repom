@@ -705,6 +705,135 @@ class TestDatabaseManager:
         assert manager._async_engine is None
 
 
+class TestCancellationResilientEngineDisposal:
+    @staticmethod
+    async def _manager_with_open_driver_connection(monkeypatch):
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        manager = DatabaseManager()
+        manager._async_engine = engine
+
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+            driver_connection = connection.sync_connection.connection.driver_connection
+
+        close_started = asyncio.Event()
+        release_close = asyncio.Event()
+        close_calls = []
+        original_close = type(driver_connection).close
+
+        async def delayed_close(connection):
+            if connection is driver_connection:
+                close_calls.append(connection)
+                close_started.set()
+                await release_close.wait()
+            await original_close(connection)
+
+        monkeypatch.setattr(type(driver_connection), "close", delayed_close)
+        return (
+            manager,
+            engine,
+            driver_connection,
+            close_started,
+            release_close,
+            close_calls,
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "disposal_path", ["dispose_async", "dispose_all", "standalone_transaction"]
+    )
+    async def test_repeated_cancellation_waits_for_real_driver_close(
+        self, disposal_path, monkeypatch
+    ):
+        manager, _, driver, close_started, release_close, close_calls = (
+            await self._manager_with_open_driver_connection(monkeypatch)
+        )
+        monkeypatch.setattr(database_module, "_db_manager", manager)
+
+        async def run_disposal():
+            if disposal_path == "dispose_async":
+                await manager.dispose_async()
+            elif disposal_path == "dispose_all":
+                await manager.dispose_all()
+            else:
+                async with get_standalone_async_transaction() as session:
+                    await session.execute(text("SELECT 1"))
+
+        disposal_task = asyncio.create_task(run_disposal())
+        waiter_task = None
+        try:
+            await close_started.wait()
+
+            waiter_task = asyncio.create_task(manager.dispose_async())
+            waiter_started = asyncio.Event()
+            asyncio.get_running_loop().call_soon(waiter_started.set)
+            await waiter_started.wait()
+            assert not waiter_task.done()
+
+            disposal_task.cancel()
+            repeated_cancel_sent = asyncio.Event()
+
+            def cancel_again():
+                disposal_task.cancel()
+                repeated_cancel_sent.set()
+
+            asyncio.get_running_loop().call_soon(cancel_again)
+            await repeated_cancel_sent.wait()
+            assert disposal_task.cancelling() >= 2
+            assert not disposal_task.done()
+
+            release_close.set()
+            with pytest.raises(asyncio.CancelledError):
+                await disposal_task
+            await waiter_task
+
+            assert driver._connection is None
+            assert manager._async_engine is None
+            assert manager._async_disposal_tasks == set()
+
+            await manager.dispose_async()
+            assert len(close_calls) == 1
+        finally:
+            release_close.set()
+            for task in (disposal_task, waiter_task):
+                if task is not None:
+                    try:
+                        await task
+                    except BaseException:
+                        pass
+
+    @pytest.mark.asyncio
+    async def test_new_engine_survives_disposal_of_detached_engine(self, monkeypatch):
+        manager, old_engine, driver, close_started, release_close, _ = (
+            await self._manager_with_open_driver_connection(monkeypatch)
+        )
+        monkeypatch.setattr(config, "db_url", "sqlite:///:memory:")
+
+        disposal_task = asyncio.create_task(manager.dispose_async())
+        try:
+            await close_started.wait()
+
+            replacement_engine = await manager.get_async_engine()
+            assert replacement_engine is not old_engine
+
+            release_close.set()
+            await disposal_task
+
+            assert driver._connection is None
+            assert manager._async_engine is replacement_engine
+            async with replacement_engine.connect() as connection:
+                result = await connection.execute(text("SELECT 1"))
+                assert result.scalar_one() == 1
+            await manager.dispose_async()
+            assert manager._async_engine is None
+        finally:
+            release_close.set()
+            if not disposal_task.done():
+                await disposal_task
+            if manager._async_engine is not None:
+                await manager.dispose_async()
+
+
 class TestLifespanManager:
     """get_lifespan_manager() が FastAPI 互換の lifespan callable を返すことの
     回帰テスト。以前は ``_db_manager.lifespan_context()`` という生成済みの

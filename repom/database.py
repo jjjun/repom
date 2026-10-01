@@ -394,6 +394,7 @@ class DatabaseManager:
         _async_engine: Cached asynchronous engine instance
         _sync_session_factory: Cached synchronous session factory
         _async_session_factory: Cached asynchronous session factory
+        _async_disposal_tasks: Async engine disposal tasks still in progress
         _lock: Thread lock guarding lazy engine/session-factory creation and
             disposal, so concurrent callers (e.g. FastAPI's sync Depends
             running in a thread pool) never create more than one engine.
@@ -405,6 +406,7 @@ class DatabaseManager:
         self._async_engine: Optional[AsyncEngine] = None
         self._sync_session_factory: Optional[sessionmaker] = None
         self._async_session_factory: Optional[async_sessionmaker] = None
+        self._async_disposal_tasks: set[asyncio.Task[None]] = set()
         self._lock = threading.Lock()
 
     @contextmanager
@@ -803,18 +805,38 @@ class DatabaseManager:
         Dispose the asynchronous engine and clear cached factories.
 
         This closes all connections in the connection pool.
-        Should be called on application shutdown.
+        Should be called on application shutdown. The engine is detached before
+        disposal starts, so a new engine can be created while its predecessor
+        closes. Concurrent disposal calls wait for all disposal tasks they see.
         """
-        # The engine reference is cleared under the lock and disposed
-        # afterwards, so the lock is never held across an ``await`` (doing so
-        # would risk deadlocking the event loop against another coroutine
-        # blocked on the same threading.Lock).
+        # Detach and register disposal tasks under the lock, then await them only
+        # after leaving it so another caller can create or dispose an engine.
         with self._lock:
             engine = self._async_engine
             self._async_engine = None
             self._async_session_factory = None
+
+            if engine is not None:
+                task = asyncio.create_task(engine.dispose())
+                self._async_disposal_tasks.add(task)
+            disposal_tasks = tuple(self._async_disposal_tasks)
+
+        if disposal_tasks:
+            try:
+                disposal_results = asyncio.gather(
+                    *disposal_tasks, return_exceptions=True
+                )
+                await _run_shielded(disposal_results)
+                for result in disposal_results.result():
+                    if isinstance(result, BaseException):
+                        raise result
+            finally:
+                with self._lock:
+                    self._async_disposal_tasks.difference_update(
+                        task for task in disposal_tasks if task.done()
+                    )
+
         if engine is not None:
-            await engine.dispose()
             logger.debug("Async engine disposed")
 
     # ========================================

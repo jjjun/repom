@@ -83,6 +83,9 @@
 
 ### Fixed
 
+- Async engine disposal now finishes connection cleanup before propagating caller
+  cancellation. Concurrent disposal calls await in-flight cleanup, and a replacement
+  engine created during disposal remains available.
 - Async session cleanup now retrieves completed shielded tasks, so commit failures
   propagate and pending writes roll back when an eager task factory is active.
 - Database engines and session factories are disposed when a lifespan body exits
