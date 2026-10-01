@@ -1,22 +1,16 @@
-# Feature guides
+# 機能ガイド一覧
 
-## Configuration and database lifecycle
+## 設定とデータベースのライフサイクル
 
-- [Configuration hooks](config_hook_guide.md)
-- [Alembic migrations](alembic_migration_guide.md)
-- [Model discovery](auto_import_models_guide.md)
-- [Master-data synchronization](master_data_sync_guide.md)
-- [Database backup and restore](backup_guide.md)
+- [CONFIG_HOOK](config_hook_guide.md)
+- [Alembic マイグレーション](alembic_migration_guide.md)
+- [モデル自動 import](auto_import_models_guide.md)
+- [マスターデータ同期](master_data_sync_guide.md)
+- [データベースのバックアップとリストア](backup_guide.md)
 
-## Diagnostics and infrastructure
+## 診断とインフラ
 
-- [Logging](logging_guide.md)
+- [ロギング](logging_guide.md)
 - [QueryAnalyzer](query_analyzer_guide.md)
-- [Docker responsibility boundary](docker_manager_guide.md)
-- [Compose generation](docker_compose_guide.md)
-- [Generic discovery responsibility boundary](discovery_guide.md)
-- [NUL-byte validation](nul_byte_validation.md)
-
-Generic package discovery and Docker/Compose orchestration are implemented by
-basekit. These pages describe repom's integration points and service-specific
-behavior instead of duplicating basekit's API reference.
+- [Docker manager と Compose の責務境界](docker_manager_guide.md)
+- [NUL byte の検証](nul_byte_validation.md)

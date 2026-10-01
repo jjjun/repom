@@ -39,8 +39,9 @@ your_project/
 │   ├── 001_roles.py         # ロールマスタ
 │   ├── 002_users.py         # ユーザーマスタ
 │   └── 003_categories.py    # カテゴリマスタ
-└── repom/
-    └── config.py            # master_data_path 設定
+└── src/
+    └── mine_py/
+        └── config.py         # CONFIG_HOOK で master_data_path を設定
 ```
 
 ### 設定
@@ -48,11 +49,6 @@ your_project/
 デフォルトでは `root_path/data_master` がマスターデータディレクトリになります。
 `root_path` の既定値は repom package の親 directory なので、利用側 project の
 `data_master` を使う場合は CONFIG_HOOK で利用側の repository root に設定してください。
-
-```python
-# repom/config.py（自動設定）
-config.master_data_path  # => "<repo-root>/data_master"
-```
 
 **カスタマイズ例**:
 
@@ -126,9 +122,10 @@ data_master/
 uv run db_sync_master
 ```
 
-`config.db_type == 'postgres'` の場合、このコマンドは接続前に
-`ensure_running()` で PostgreSQL container を起動します。`db_create` と `db_delete`
-も PostgreSQL 使用時に同じ処理を行います。
+`config.db_type == 'postgres'` かつ `config.db_url_overridden` が偽の場合、このコマンドは
+接続前に `ensure_running()` で PostgreSQL container を起動します。`db_create` と
+`db_delete` も同じ条件で起動します。URL が明示的に設定されている場合は、3つのコマンドとも
+管理対象 container の起動を行わず、その URL へ接続します。
 
 ### 環境指定
 
@@ -142,6 +139,10 @@ EXEC_ENV=prod uv run db_sync_master
 # テスト環境
 EXEC_ENV=test uv run db_sync_master
 ```
+
+repom 同梱の `repom.config_hook:hook_config` を使う場合、`EXEC_ENV=test` は in-memory
+SQLite を選びます。この例ではデータベースファイルは作られず、データはプロセス終了後に
+残りません。利用側の CONFIG_HOOK で別の DB を選んでいる場合はその設定が適用されます。
 
 ### 実行結果の例
 
@@ -293,15 +294,14 @@ MASTER_DATA = generate_categories()
 
 ```python
 # data_master/001_config.py
-import os
+from repom.config import config
+from repom.exec_env import is_prod_exec_env
 from mine_py.models import Config
 
 MODEL_CLASS = Config
 
 # 環境に応じてデータを変える
-EXEC_ENV = os.getenv('EXEC_ENV', 'dev')
-
-if EXEC_ENV == 'prod':
+if is_prod_exec_env(config.exec_env):
     MASTER_DATA = [
         {"id": 1, "key": "api_url", "value": "https://api.example.com"},
     ]
@@ -447,5 +447,3 @@ EXEC_ENV=prod uv run db_sync_master
 - **[README.md](../../../README.md)** - コマンドリファレンス
 
 ---
-
-**最終更新**: 2025-11-19

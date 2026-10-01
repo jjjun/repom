@@ -23,15 +23,31 @@ hook は必ず1個の config 引数を受け取り、設定オブジェクトを
 import した時点で新しい `RepomConfig` を作ったり、引数なし関数を登録したりしないで
 ください。
 
-## Execution environment names
+## 実行環境名
 
-`EXEC_ENV=production` is treated like `prod`, ignoring case and surrounding whitespace.
-Other values besides `dev`, `test`, `prod`, and `production` produce a warning and use
-the dev database name/file for both PostgreSQL and SQLite.
+`EXEC_ENV=production` は `prod` と同じ扱いです。大文字小文字と前後の空白は区別されません。
+`dev`、`test`、`prod`、`production` 以外の値では警告を出し、PostgreSQL と SQLite の
+どちらも dev 用のデータベース名またはファイル名を使います。
 
-## runtime environment override
+## 実行時の環境変数による上書き
 
-project の既定値を先に設定し、環境変数 helper を最後に呼びます。
+project の既定値を設定した後、環境変数 helper を呼び出します。すべての repom 用
+helper を適用する場合は、次の一括 helper が正規の呼び出し方です。
+
+```python
+from repom.config_hooks import apply_repom_env_overrides
+
+
+def hook_config(config):
+    config.db_name = "myapp"
+    config.db_type = "postgres"
+    config.postgres.container.host_port = 5432
+
+    apply_repom_env_overrides(config)
+    return config
+```
+
+一部の設定だけを環境変数から上書きする場合は、必要な service helper を個別に選べます。
 
 ```python
 from repom.config_hooks.database import apply_database_env_overrides
@@ -55,8 +71,16 @@ def hook_config(config):
 ```
 
 これにより、コード上の既定値を deployment 環境で上書きできます。サポートする DB
-関連変数は [PostgreSQL runtime overrides](../postgresql/runtime_env_overrides.md) と
+関連変数は [PostgreSQL 実行時設定の上書き](../postgresql/runtime_env_overrides.md) と
 各 helper の docstring を参照してください。
+
+### 公開 parsing helper
+
+環境変数値の解析 helper は `repom.config_hooks.parsing` から公開されています。
+`parse_bool_env`、`parse_int_env`、`parse_port_env`、`parse_positive_int_env`、
+`parse_float_env` と、真偽値の集合 `TRUE_VALUES` / `FALSE_VALUES` を利用できます。
+`repom.config_hooks._parsing` は互換性のための alias なので、新しいコードでは
+`repom.config_hooks.parsing` を import してください。
 
 ## 主な設定
 
@@ -67,8 +91,16 @@ def hook_config(config):
 | PostgreSQL | `postgres.*`, `postgres.container.*` |
 | pgAdmin | `pgadmin.*`, `pgadmin.container.*` |
 | Redis | `redis.*`, `redis.container.*` |
-| model import | `model_locations`, `allowed_package_prefixes`, `model_excluded_dirs`, `model_import_strict` |
-| logging | `log_path`, `enable_sqlalchemy_echo`, `sqlalchemy_echo_level`, `sqlalchemy_hide_parameters` |
+| モデルの読み込み | `model_locations`, `allowed_package_prefixes`, `model_excluded_dirs`, `model_import_strict` |
+| Alembic | `alembic_script_location`, `alembic_version_locations`, `alembic_version_table`, `alembic_version_table_schema` |
+| ロギング | `log_path`, `enable_sqlalchemy_echo`, `sqlalchemy_echo_level`, `sqlalchemy_hide_parameters` |
+
+`db_url` が直接設定されている場合、または `REPOM_DATABASE_URL` / `DATABASE_URL` から
+設定された場合は、URL の backend に合わせて `db_type` が決まります。明示した
+`DB_TYPE` と URL の backend が異なると、その組み合わせごとに一度だけ警告が記録され、
+URL の backend が優先されます。
+`config.db_url_overridden` で URL が明示的に設定されているか確認できます。詳細は
+[PostgreSQL 実行時設定の上書き](../postgresql/runtime_env_overrides.md) を参照してください。
 
 有効値は次で確認します。
 

@@ -28,7 +28,7 @@ uv run db_backup
 `db_backup_path` を明示的に上書きした場合はそのパス直下にバックアップファイルが
 書き込まれます（`postgres` / `sqlite` サブディレクトリは追加されません）。
 
-- PostgreSQL: `<data_path>/backups/postgres/<postgres_db>_<YYYYmmdd_HHMMSS>.sql.gz`
+- PostgreSQL: `<data_path>/backups/postgres/<接続先の DB 名>_<YYYYmmdd_HHMMSS>.sql.gz`
 - SQLite: `<data_path>/backups/sqlite/<db のファイル名 stem>_<YYYYmmdd_HHMMSS><db のファイル名拡張子>`
 
 従来の `.sqlite3` バックアップも引き続き一覧に表示されます。
@@ -52,10 +52,23 @@ URL の上書きがない場合、PostgreSQL のバックアップ／リスト�
 `docker exec` を使い、起動していなければ host 上の `pg_dump` / `psql` に fallback します。
 SQLite では `config.sqlite.db_file_path` を対象にします。
 
+`config.db_url_overridden` が真の場合、PostgreSQL のバックアップ stem は URL の database 名、
+SQLite の stem は URL が示すファイル名になります。URL の backend が SQLite / PostgreSQL
+以外なら `db_backup` は `BackupError`、`db_restore` は `RestoreError` を
+`Unsupported database type` のメッセージで送出します。PostgreSQL URL に host、user、
+database のいずれかがない場合は、`PgConnParams.from_config()` が `ValueError` を送出します。
+
+URL override を使う PostgreSQL の host-side client tool も、prod 環境の TLS policy を適用した
+有効 URL の値で接続します。remote host で `sslmode` が未指定なら `require` が補われ、
+設定済みの `sslrootcert` も有効 URL に追加されます。host がない URL は local 扱いです。
+prod の remote host で弱い `sslmode` を指定すると、client process の起動前に拒否されます。
+詳しくは [PostgreSQL 実行時設定の上書き](../postgresql/runtime_env_overrides.md) を参照してください。
+
 ## ローテーション
 
 `MAX_BACKUPS_PER_DB = 3`（`repom/scripts/db_backup.py`）が、stem
-（PostgreSQL は `postgres_db`、SQLite は DB ファイル名から拡張子を除いた部分）ごとの
+（PostgreSQL は接続先 DB 名、URL override 時は URL の database 名、SQLite は DB ファイル名から
+拡張子を除いた部分）ごとの
 保持世代数です。ローテーション対象は `backup_name_pattern(stem, suffix)`
 （`_backup_utils.py`）が返す `<stem>_<8桁>_<6桁><suffix>` に
 `re.fullmatch` で一致するファイルだけで、単純な glob ではなく厳密なパターンで
@@ -65,7 +78,7 @@ SQLite では `config.sqlite.db_file_path` を対象にします。
    レガシーバックアップ（`db_<YYYYmmdd_HHMMSS>.sql.gz`）は、新しいパターンに
    一致しないため、ローテーションでも incomplete-file cleanup でも一切
    カウントされず、削除されません。
-2. 例外: `postgres_db` が文字通り `"db"` の場合は、レガシーファイルの stem も
+2. 例外: 接続先の PostgreSQL DB 名が文字通り `"db"` の場合は、レガシーファイルの stem も
    `"db"` と一致するため新しいパターンにマッチし、通常どおりローテーション対象
    （＝3世代を超えた分の削除対象）に含まれます。
 3. per-database naming への移行期間中は、レガシーファイルをすぐに消さず、
@@ -97,7 +110,7 @@ uv run db_restore
   不明または異なる場合は `y` の入力では進めず、リストア先データベース名を
   そのまま入力しないと実行されません。これにより、別環境のダンプを
   ワンキーで本番データベースへ流し込む事故を防いでいます。
-- ローテーション節の例外と対になりますが、`postgres_db` が文字通り `"db"` の
+- ローテーション節の例外と対になりますが、接続先の PostgreSQL DB 名が文字通り `"db"` の
   場合は `parse_backup_source_database()` が常に `None` を返すため、自分自身が
   作成した最新のバックアップでも `[legacy/unknown source database]` 扱いとなり、
   `db_restore` は毎回 `y` ではなくリストア先データベース名の入力を要求します。
@@ -107,14 +120,21 @@ SQLite のリストアでは、既存の DB ファイルがある場合に
 通常のバックアップローテーションの対象外で、自動削除されません。PostgreSQL の
 リストアには自動 safety copy はありません。
 
-PostgreSQL のリストアは
-`psql --no-psqlrc --single-transaction -v ON_ERROR_STOP=1 -f -` または
-`pg_restore --single-transaction` で実行されます。通常の SQL や custom-format の復元で
-ステートメントが失敗すると、そのリストアの変更はロールバックされ、リストア前の状態が
-保たれます。プレーン SQL ダンプに large object データが含まれる場合、large object の
-処理を囲む `BEGIN` / `COMMIT` が psql の外側のトランザクションを途中で終了させることが
-あります。repom のモデルは large object を使用せず、`bytea` 列には影響しません。
-custom-format の復元は `pg_restore --single-transaction` を使うため、この制限の対象外です。
+`db_restore` は PostgreSQL の gzip 圧縮したプレーン SQL (`.sql.gz`) だけを `psql` で
+復元します。`psql --no-psqlrc --single-transaction -v ON_ERROR_STOP=1 -f -` を使うため、
+通常の SQL でステートメントが失敗すると変更はロールバックされ、リストア前の状態が保たれます。
+large object を含むプレーン SQL ダンプでは、large object の処理を囲む `BEGIN` / `COMMIT`
+が psql の外側のトランザクションを途中で終了させる場合があります。repom のモデルは large
+object を使用せず、`bytea` 列には影響しません。
+
+## `pg_dump_tools` の library helper
+
+`repom.scripts.pg_dump_tools` は custom-format の PostgreSQL dump / restore を行う
+library helper を提供します。`PgConnParams.from_config()` は現在の設定から接続情報を作成し、
+`pg_dump_custom()` と `pg_restore_custom()` はそれぞれ custom-format の dump と restore を
+実行します。`pg_restore_custom()` は `pg_restore --single-transaction` を使用します。
+`pg_tools_available()` は設定された経路で必要な client tools を利用できるか確認します。
+これらは console script の `db_backup` / `db_restore` とは別の library API です。
 
 ## 失敗時の挙動
 
@@ -124,9 +144,11 @@ custom-format の復元は `pg_restore --single-transaction` を使うため、�
 `RuntimeError` のサブクラス）。呼び出し元プロセスの終了コードは非ゼロになるため、
 タスクの成否を記録するスケジューラ（fast-domain の arq cron など）は、
 失敗したバックアップ/リストアを失敗タスクとして正しく記録できます。
-ただし PostgreSQL path では `ensure_backup_dir()` と `postgres_tls_settings()` が
+ただし PostgreSQL path では `ensure_backup_dir()` と `PgConnParams.from_config()` が
 wrapping try の外で実行されるため、`OSError` / `ValueError` が
-`BackupError` / `RestoreError` に wrap されずに発生する場合があります。いずれも
+`BackupError` / `RestoreError` に wrap されずに発生する場合があります。`ValueError` は
+`PgConnParams.from_config()` が読む `config.db_url` の TLS policy、または URL に host / user /
+database がない場合の検査から発生します。いずれも
 コマンドの終了コードは非ゼロです。
 （`db_restore` でユーザーが `q` または確認プロンプトで中断した場合は例外にはならず、
 正常終了として扱われます。）
@@ -136,4 +158,6 @@ wrapping try の外で実行されるため、`OSError` / `ValueError` が
 - [`repom/scripts/db_backup.py`](../../../repom/scripts/db_backup.py)
 - [`repom/scripts/db_restore.py`](../../../repom/scripts/db_restore.py)
 - [`repom/scripts/_backup_utils.py`](../../../repom/scripts/_backup_utils.py)
+- [マスターデータ同期ガイド](master_data_sync_guide.md)
+- [PostgreSQL 実行時設定の上書き](../postgresql/runtime_env_overrides.md)
 - [README.md](../../../README.md) のコマンド一覧

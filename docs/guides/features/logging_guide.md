@@ -58,7 +58,7 @@ handler の汎用仕様は `basekit.logging` が正本です。repom 固有の�
 [`tests/unit_tests/test_logging.py`](../../../tests/unit_tests/test_logging.py) で
 確認できます。
 
-## SQLAlchemy query log
+## SQLAlchemy query log の設定
 
 ```python
 def hook_config(config):
@@ -90,7 +90,7 @@ def hook_config(config):
 `config.sqlalchemy_hide_parameters`（デフォルト `True`。環境変数
 `SQLALCHEMY_HIDE_PARAMETERS`）を有効のままにしておいてください。
 
-## module ごとのレベル
+## module ごとの log level
 
 ```python
 import logging
@@ -102,8 +102,9 @@ logging.getLogger("repom.repositories.base_repository").setLevel(logging.DEBUG)
 ## テスト
 
 通常の `uv run pytest` は repom logger を WARNING 以上に抑えます。
-`uv run pytest -vv -s` を明示した場合だけ `tests/conftest.py` が DEBUG log と stdout
-を有効にします。
+`tests/conftest.py` は pytest の verbosity が 1 以上（`-v` または `-vv`）の場合に DEBUG
+logging を有効にします。`-s` は pytest の出力 capture を無効にするだけで、logging level は
+変更しません。
 
 ## トラブルシューティング
 
