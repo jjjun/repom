@@ -285,6 +285,90 @@ class TestGetAsyncEngineAsyncpgConnectOptions:
         connect_args = captured["kwargs"]["connect_args"]
         assert set(connect_args) <= accepted_params
 
+    @pytest.mark.asyncio
+    async def test_create_async_engine_receives_overridden_tls_and_merged_options(
+        self, monkeypatch
+    ):
+        self._patch_postgres_config(
+            monkeypatch, sslmode="require", sslrootcert="url-ca.pem"
+        )
+        expected_ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        create_context_calls = []
+
+        def create_default_context(*, cafile=None):
+            create_context_calls.append(cafile)
+            return expected_ssl_context
+
+        monkeypatch.setattr(ssl, "create_default_context", create_default_context)
+
+        def password_callback():
+            return "synthetic-password"
+
+        source_connect_args = {
+            "sslmode": "verify-full",
+            "sslrootcert": "connect-ca.pem",
+            "connect_timeout": 7,
+            "password": password_callback,
+            "server_settings": {"statement_timeout": "1000"},
+        }
+        original_server_settings = dict(source_connect_args["server_settings"])
+        monkeypatch.setattr(
+            config,
+            "engine_kwargs_for_url",
+            lambda url: {"connect_args": source_connect_args},
+        )
+        captured = self._capture_create_async_engine(monkeypatch)
+
+        manager = DatabaseManager()
+        await manager.get_async_engine()
+
+        effective_args = captured["kwargs"]["connect_args"]
+        assert create_context_calls == ["connect-ca.pem"]
+        assert effective_args["ssl"] is expected_ssl_context
+        assert effective_args["ssl"].check_hostname is True
+        assert effective_args["timeout"] == 7
+        assert effective_args["password"] is password_callback
+        assert effective_args["server_settings"] == {
+            "statement_timeout": "1000"
+        }
+        assert source_connect_args["server_settings"] == original_server_settings
+        assert "sslmode" not in make_url(captured["url"]).query
+        assert "sslrootcert" not in make_url(captured["url"]).query
+
+    @pytest.mark.asyncio
+    async def test_create_async_engine_preserves_native_ssl_context_identity(
+        self, monkeypatch
+    ):
+        self._patch_postgres_config(monkeypatch, sslmode="require")
+        strict_ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+        def password_callback():
+            return "synthetic-password"
+
+        source_connect_args = {
+            "ssl": strict_ssl_context,
+            "timeout": 3,
+            "password": password_callback,
+            "server_settings": {"statement_timeout": "1000"},
+        }
+        monkeypatch.setattr(
+            config,
+            "engine_kwargs_for_url",
+            lambda url: {"connect_args": source_connect_args},
+        )
+        captured = self._capture_create_async_engine(monkeypatch)
+
+        manager = DatabaseManager()
+        await manager.get_async_engine()
+
+        effective_args = captured["kwargs"]["connect_args"]
+        assert effective_args["ssl"] is strict_ssl_context
+        assert effective_args["timeout"] == 3
+        assert effective_args["password"] is password_callback
+        assert effective_args["server_settings"] == {
+            "statement_timeout": "1000"
+        }
+
 
 class TestAdaptAsyncpgConnectOptionsSslMapping:
     """_adapt_asyncpg_connect_options() / _resolve_asyncpg_ssl() が libpq
