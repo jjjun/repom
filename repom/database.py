@@ -54,10 +54,12 @@ Example (CLI script - async):
     >>>     asyncio.run(main())
 """
 
+from collections.abc import Mapping
 from typing import Optional, AsyncGenerator, Generator, ContextManager, AsyncContextManager
 from contextlib import contextmanager, asynccontextmanager  # Only for DatabaseManager internal use
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import asyncio
+import math
 import ssl
 import threading
 
@@ -71,83 +73,233 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import Session, sessionmaker, declarative_base
 
-from repom.config import config
+from repom.config import _is_local_postgres_host, _postgres_connection_hosts, config
 from repom.exec_env import is_prod_exec_env
 from repom.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-_PASSWORD_QUERY_PARAM_NAMES = frozenset({"password", "pgpassword"})
+_SECRET_QUERY_PARAM_NAMES = frozenset(
+    {
+        "password",
+        "pgpassword",
+        "sslpassword",
+        "oauth_client_secret",
+        "scram_client_key",
+        "scram_server_key",
+    }
+)
+
+_ASYNCPG_CONNECT_ARGUMENTS = frozenset(
+    {
+        "dsn",
+        "host",
+        "port",
+        "user",
+        "password",
+        "passfile",
+        "service",
+        "servicefile",
+        "database",
+        "loop",
+        "timeout",
+        "statement_cache_size",
+        "max_cached_statement_lifetime",
+        "max_cacheable_statement_size",
+        "command_timeout",
+        "ssl",
+        "direct_tls",
+        "connection_class",
+        "record_class",
+        "server_settings",
+        "target_session_attrs",
+        "krbsrvname",
+        "gsslib",
+    }
+)
+
+_LIBPQ_ASYNCPG_CONNECT_ARGUMENTS = frozenset(
+    {"sslmode", "sslrootcert", "connect_timeout", "application_name"}
+)
+
+_ASYNCPG_DSN_OPTIONS = frozenset(
+    {
+        "sslcert",
+        "sslkey",
+        "sslpassword",
+        "sslcrl",
+        "ssl_min_protocol_version",
+        "ssl_max_protocol_version",
+    }
+)
+
+_SQLALCHEMY_ASYNCPG_CONNECT_ARGUMENTS = frozenset(
+    {"prepared_statement_cache_size", "prepared_statement_name_func"}
+)
 
 
-def _mask_password_query_params(url: str) -> str:
-    """Mask password-like query parameters (e.g. ``?password=`` or ``?pgpassword=``).
+def _mask_secret_query_params(url: str) -> str:
+    """Mask known secret query parameters in a database URL.
 
     ``make_url(...).render_as_string(hide_password=True)`` only hides a
-    password carried in the URL's userinfo; a libpq-style ``password=``/
-    ``pgpassword=`` query parameter passes through untouched.
+    password carried in the URL's userinfo. libpq also accepts passwords,
+    private-key passphrases, OAuth client secrets, and SCRAM keys as query
+    parameters; those values must be masked separately.
     """
-    parts = urlsplit(url)
-    if not parts.query:
-        return url
+    try:
+        parts = urlsplit(url)
+        if not parts.query:
+            return url
 
-    query_pairs = parse_qsl(parts.query, keep_blank_values=True)
-    if not any(key.lower() in _PASSWORD_QUERY_PARAM_NAMES for key, _ in query_pairs):
-        return url
+        query_pairs = parse_qsl(parts.query, keep_blank_values=True)
+        if not any(key.lower() in _SECRET_QUERY_PARAM_NAMES for key, _ in query_pairs):
+            return url
 
-    masked_pairs = [
-        (key, "***" if key.lower() in _PASSWORD_QUERY_PARAM_NAMES else value)
-        for key, value in query_pairs
-    ]
-    return urlunsplit(parts._replace(query=urlencode(masked_pairs, safe="*")))
+        masked_pairs = [
+            (key, "***" if key.lower() in _SECRET_QUERY_PARAM_NAMES else value)
+            for key, value in query_pairs
+        ]
+        return urlunsplit(parts._replace(query=urlencode(masked_pairs, safe="*")))
+    except (UnicodeError, ValueError):
+        return "<invalid database URL>"
 
 
 def safe_db_url(url: str) -> str:
     """Return a database URL suitable for display or logging."""
-    scheme, separator, remainder = url.partition("://")
-    if separator:
-        credentials, at, host = remainder.rpartition("@")
-        if at and credentials.count("@"):
-            return _mask_password_query_params(f"{scheme}://***@{host}")
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "<invalid database URL>"
+
+    sanitized_url = _mask_secret_query_params(url)
+    if sanitized_url == "<invalid database URL>":
+        return sanitized_url
+
+    if parts.netloc.count("@") > 1:
+        host = parts.netloc.rsplit("@", 1)[1]
+        masked_parts = parts._replace(netloc=f"***@{host}")
+        return _mask_secret_query_params(urlunsplit(masked_parts))
 
     try:
-        masked = make_url(url).render_as_string(hide_password=True)
+        masked = make_url(sanitized_url).render_as_string(hide_password=True)
     except Exception:
         return "<invalid database URL>"
-    return _mask_password_query_params(masked)
+    return _mask_secret_query_params(masked)
 
 
-def _warn_if_prod_sslmode_not_enforced() -> None:
+def _asyncpg_sslmode(connect_args: Mapping) -> Optional[str]:
+    """Return the TLS strength of asyncpg's native ``ssl`` argument."""
+    value = connect_args["ssl"]
+    if isinstance(value, str):
+        return value
+    if value is True or isinstance(value, ssl.SSLContext):
+        return "require"
+    return "disable"
+
+
+def _resolve_postgres_engine_policy(
+    db_url: str, engine_kwargs: dict, *, asyncpg: bool = False
+) -> tuple[str, dict, Optional[str], tuple[object, ...]]:
+    """Resolve TLS mode from asyncpg ssl, connect_args sslmode, then URL sslmode."""
+    url = make_url(db_url)
+    if url.get_backend_name() not in {"postgres", "postgresql"}:
+        return db_url, engine_kwargs, None, ()
+
+    raw_connect_args = engine_kwargs.get("connect_args")
+    if raw_connect_args is None:
+        connect_args = {}
+    elif isinstance(raw_connect_args, Mapping):
+        connect_args = dict(raw_connect_args)
+    else:
+        raise TypeError("connect_args must be a mapping for PostgreSQL")
+
+    if is_prod_exec_env(config.exec_env) and (
+        "dsn" in url.query or "dsn" in connect_args
+    ):
+        raise ValueError(
+            "PostgreSQL DSN overrides are not supported in prod because their "
+            "destination and TLS options cannot be validated safely"
+        )
+
+    hosts = _postgres_connection_hosts(url, connect_args)
+    is_remote = any(not _is_local_postgres_host(host) for host in hosts)
+    sslmode = (
+        _asyncpg_sslmode(connect_args)
+        if asyncpg and "ssl" in connect_args
+        else connect_args.get("sslmode", url.query.get("sslmode"))
+    )
+
+    if (
+        is_prod_exec_env(config.exec_env)
+        and is_remote
+        and not asyncpg
+        and "sslmode" in connect_args
+        and connect_args["sslmode"] is None
+    ):
+        raise ValueError(
+            "connect_args['sslmode'] cannot be None for a remote PostgreSQL "
+            "destination in prod"
+        )
+
+    tls = config.postgres_tls_settings_for_url(url, connect_args, sslmode=sslmode)
+
+    if (
+        is_prod_exec_env(config.exec_env)
+        and is_remote
+        and url.query.get("sslmode") is None
+        and connect_args.get("sslmode") is None
+    ):
+        # A raw SQLAlchemy URL with no TLS option otherwise inherits libpq's
+        # weaker default. Materialize the validated production default so both
+        # drivers receive it.
+        query = dict(url.query)
+        query["sslmode"] = tls.sslmode
+        url = url.set(query=query)
+        db_url = url.render_as_string(hide_password=False)
+
+    effective_sslmode = sslmode
+    if effective_sslmode is None:
+        effective_sslmode = tls.sslmode
+
+    if raw_connect_args is None or connect_args == raw_connect_args:
+        resolved_kwargs = engine_kwargs
+    else:
+        resolved_kwargs = dict(engine_kwargs)
+        resolved_kwargs["connect_args"] = connect_args
+    return db_url, resolved_kwargs, effective_sslmode, hosts
+
+
+def _warn_if_prod_sslmode_not_enforced(
+    db_url: str, engine_kwargs: dict, *, asyncpg: bool = False
+) -> None:
     """Log a warning when a prod PostgreSQL engine resolves to a non-require sslmode.
 
-    This only happens for a local host - config.postgres_sslmode already
-    requires 'require' or stronger in prod for any other host - but operators
-    should still be able to see that TLS is not enforced for that connection.
+    The same URL and connect_args resolver used for engine creation supplies the
+    destination and TLS mode, so the warning describes the effective connection.
     """
-    db_url = config.db_url
-    if db_url is None:
+    if not is_prod_exec_env(config.exec_env):
         return
 
     try:
-        url = make_url(db_url)
+        _, _, sslmode, hosts = _resolve_postgres_engine_policy(
+            db_url, engine_kwargs, asyncpg=asyncpg
+        )
     except Exception:
         return
-    if url.get_backend_name() not in {"postgres", "postgresql"}:
+    if sslmode is None or (
+        isinstance(sslmode, str)
+        and sslmode in {"require", "verify-ca", "verify-full"}
+    ):
         return
 
-    sslmode = url.query.get("sslmode", "prefer")
-    if isinstance(sslmode, tuple):
-        sslmode = sslmode[-1] if sslmode else "prefer"
-    if (
-        is_prod_exec_env(config.exec_env)
-        and sslmode != "require"
-        and not sslmode.startswith("verify")
-    ):
-        logger.warning(
-            f"PostgreSQL sslmode={sslmode!r} in prod for host "
-            f"{url.host!r}; TLS is not enforced for this connection."
-        )
+    if not hosts:
+        return
+    destination = ", ".join(repr(host) for host in hosts)
+    logger.warning(
+        f"PostgreSQL sslmode={sslmode!r} in prod for destination "
+        f"{destination}; TLS is not enforced for this connection."
+    )
 
 
 async def _run_shielded(awaitable) -> None:
@@ -160,8 +312,11 @@ async def _run_shielded(awaitable) -> None:
 
     The awaitable is wrapped in ``asyncio.shield`` and awaited in a loop: a
     cancellation of the outer task does not cancel the shielded task, so we keep
-    waiting until it finishes and then re-raise ``CancelledError`` to preserve
-    cancellation semantics.
+    waiting until it finishes. Its result is retrieved even if the task was
+    already done when this function started. If cleanup succeeds, any outer
+    cancellation is re-raised. If cleanup fails while the caller is cancelled,
+    the cleanup failure is raised with that cancellation as its cause; a
+    cancellation of the cleanup task itself is propagated.
     """
     task = asyncio.ensure_future(awaitable)
     pending_cancel: Optional[asyncio.CancelledError] = None
@@ -170,11 +325,30 @@ async def _run_shielded(awaitable) -> None:
             await asyncio.shield(task)
         except asyncio.CancelledError as exc:
             if task.done():
-                # The shielded cleanup itself was cancelled; propagate.
-                raise
+                if task.cancelled():
+                    # The shielded cleanup itself was cancelled; retrieve it below.
+                    break
+                # The outer task was cancelled as cleanup completed. Retrieve
+                # the task result below before deciding which outcome to raise.
+                pending_cancel = exc
+                break
             # The outer task was cancelled while cleanup is still running.
             # Remember the cancellation and keep waiting for cleanup to finish.
             pending_cancel = exc
+        except BaseException as cleanup_error:
+            if pending_cancel is not None:
+                raise cleanup_error from pending_cancel
+            raise
+
+    try:
+        task.result()
+    except BaseException as cleanup_error:
+        if pending_cancel is not None and not isinstance(
+            cleanup_error, asyncio.CancelledError
+        ):
+            raise cleanup_error from pending_cancel
+        raise
+
     if pending_cancel is not None:
         raise pending_cancel
 
@@ -220,6 +394,7 @@ class DatabaseManager:
         _async_engine: Cached asynchronous engine instance
         _sync_session_factory: Cached synchronous session factory
         _async_session_factory: Cached asynchronous session factory
+        _async_disposal_tasks: Async engine disposal tasks still in progress
         _lock: Thread lock guarding lazy engine/session-factory creation and
             disposal, so concurrent callers (e.g. FastAPI's sync Depends
             running in a thread pool) never create more than one engine.
@@ -231,6 +406,7 @@ class DatabaseManager:
         self._async_engine: Optional[AsyncEngine] = None
         self._sync_session_factory: Optional[sessionmaker] = None
         self._async_session_factory: Optional[async_sessionmaker] = None
+        self._async_disposal_tasks: set[asyncio.Task[None]] = set()
         self._lock = threading.Lock()
 
     @contextmanager
@@ -284,12 +460,15 @@ class DatabaseManager:
         if self._sync_engine is None:
             with self._lock:
                 if self._sync_engine is None:
-                    self._sync_engine = create_engine(
-                        config.db_url,
-                        **config.engine_kwargs
+                    sync_url, sync_kwargs, _, _ = _resolve_postgres_engine_policy(
+                        config.db_url, config.engine_kwargs
                     )
-                    _warn_if_prod_sslmode_not_enforced()
-                    logger.debug(f"Sync engine created: {safe_db_url(config.db_url)}")
+                    self._sync_engine = create_engine(
+                        sync_url,
+                        **sync_kwargs
+                    )
+                    _warn_if_prod_sslmode_not_enforced(sync_url, sync_kwargs)
+                    logger.debug(f"Sync engine created: {safe_db_url(sync_url)}")
         return self._sync_engine
 
     def get_sync_session_factory(self) -> sessionmaker:
@@ -474,15 +653,21 @@ class DatabaseManager:
             # across event loops running on different threads) is safe.
             with self._lock:
                 if self._async_engine is None:
+                    sync_url = config.db_url
+                    source_async_url = DatabaseManager._convert_to_async_uri(sync_url)
                     _, (async_url, async_engine_kwargs) = self.resolve_engine_settings(
-                        config.db_url, config.engine_kwargs
+                        sync_url, config.engine_kwargs
                     )
                     self._async_engine = create_async_engine(
                         async_url,
                         **async_engine_kwargs
                     )
-                    _warn_if_prod_sslmode_not_enforced()
-                    logger.debug(f"Async engine created: {safe_db_url(async_url)}")
+                    _warn_if_prod_sslmode_not_enforced(
+                        sync_url, config.engine_kwargs, asyncpg=True
+                    )
+                    logger.debug(
+                        f"Async engine created: {safe_db_url(source_async_url)}"
+                    )
         return self._async_engine
 
     async def get_async_session_factory(self) -> async_sessionmaker:
@@ -620,18 +805,38 @@ class DatabaseManager:
         Dispose the asynchronous engine and clear cached factories.
 
         This closes all connections in the connection pool.
-        Should be called on application shutdown.
+        Should be called on application shutdown. The engine is detached before
+        disposal starts, so a new engine can be created while its predecessor
+        closes. Concurrent disposal calls wait for all disposal tasks they see.
         """
-        # The engine reference is cleared under the lock and disposed
-        # afterwards, so the lock is never held across an ``await`` (doing so
-        # would risk deadlocking the event loop against another coroutine
-        # blocked on the same threading.Lock).
+        # Detach and register disposal tasks under the lock, then await them only
+        # after leaving it so another caller can create or dispose an engine.
         with self._lock:
             engine = self._async_engine
             self._async_engine = None
             self._async_session_factory = None
+
+            if engine is not None:
+                task = asyncio.create_task(engine.dispose())
+                self._async_disposal_tasks.add(task)
+            disposal_tasks = tuple(self._async_disposal_tasks)
+
+        if disposal_tasks:
+            try:
+                disposal_results = asyncio.gather(
+                    *disposal_tasks, return_exceptions=True
+                )
+                await _run_shielded(disposal_results)
+                for result in disposal_results.result():
+                    if isinstance(result, BaseException):
+                        raise result
+            finally:
+                with self._lock:
+                    self._async_disposal_tasks.difference_update(
+                        task for task in disposal_tasks if task.done()
+                    )
+
         if engine is not None:
-            await engine.dispose()
             logger.debug("Async engine disposed")
 
     # ========================================
@@ -677,9 +882,11 @@ class DatabaseManager:
             >>> app = FastAPI(lifespan=get_lifespan_manager())
         """
         # Startup: Nothing to do (lazy initialization)
-        yield
-        # Shutdown: Clean up all resources
-        await self.dispose_all()
+        try:
+            yield
+        finally:
+            # Shutdown: Clean up all resources
+            await self.dispose_all()
 
     # ========================================
     # Helper Methods
@@ -785,15 +992,19 @@ class DatabaseManager:
 
     @staticmethod
     def _adapt_asyncpg_connect_options(async_url: str, engine_kwargs: dict) -> "tuple[str, dict]":
-        """Translate libpq-style URL/connect_args into asyncpg's own parameters.
+        """Translate libpq-style options and preserve native asyncpg parameters.
 
         SQLAlchemy's asyncpg dialect merges the URL query string and connect_args
         straight into ``asyncpg.connect(**kw)``, which has no ``sslmode``,
         ``sslrootcert``, ``connect_timeout`` or ``application_name`` parameters
         and no catch-all ``**kwargs`` - so db_url's ``?sslmode=...`` and
         engine_kwargs's psycopg-style connect_args would otherwise raise
-        TypeError on the first async connection. Only the asyncpg driver is
-        affected; other drivers are returned unchanged.
+        TypeError on the first async connection. URL values are defaults;
+        explicit connect_args override them. Certificate options that asyncpg
+        accepts only in its DSN are moved to a DSN, while SQLAlchemy dialect
+        options remain in the URL. Conflicting aliases or unsupported options
+        raise ValueError. Only the asyncpg driver is affected; other drivers
+        are returned unchanged.
 
         Args:
             async_url: Async database URL (already converted by _convert_to_async_uri)
@@ -807,23 +1018,188 @@ class DatabaseManager:
             return async_url, engine_kwargs
 
         query = dict(url.query)
-        sslmode = query.pop("sslmode", None)
-        sslrootcert = query.pop("sslrootcert", None)
-        url = url.set(query=query)
-
-        asyncpg_connect_args = {}
-        if sslmode is not None:
-            asyncpg_connect_args["ssl"] = DatabaseManager._resolve_asyncpg_ssl(
-                sslmode, sslrootcert
+        supported_query_options = {
+            *_ASYNCPG_CONNECT_ARGUMENTS,
+            *_LIBPQ_ASYNCPG_CONNECT_ARGUMENTS,
+            *_ASYNCPG_DSN_OPTIONS,
+            "prepared_statement_cache_size",
+        }
+        unsupported_query_options = set(query) - supported_query_options
+        if unsupported_query_options:
+            names = ", ".join(sorted(repr(name) for name in unsupported_query_options))
+            raise ValueError(
+                f"Unsupported postgresql+asyncpg URL query option(s): {names}"
+            )
+        if "server_settings" in query:
+            raise ValueError(
+                "postgresql+asyncpg URL query option 'server_settings' must be "
+                "configured as a mapping in connect_args"
             )
 
-        connect_args = engine_kwargs.get("connect_args") or {}
+        url_sslmode = query.pop("sslmode", None)
+        url_sslrootcert = query.pop("sslrootcert", None)
+        url_connect_timeout = query.pop("connect_timeout", None)
+        url_application_name = query.pop("application_name", None)
+        url_dsn_options = {
+            name: query.pop(name)
+            for name in _ASYNCPG_DSN_OPTIONS
+            if name in query
+        }
+        url = url.set(query=query)
+
+        raw_connect_args = engine_kwargs.get("connect_args")
+        if raw_connect_args is None:
+            connect_args = {}
+        elif isinstance(raw_connect_args, Mapping):
+            connect_args = dict(raw_connect_args)
+        else:
+            raise TypeError("connect_args must be a mapping for postgresql+asyncpg")
+
+        unsupported_options = set(connect_args) - {
+            *_ASYNCPG_CONNECT_ARGUMENTS,
+            *_LIBPQ_ASYNCPG_CONNECT_ARGUMENTS,
+            *_ASYNCPG_DSN_OPTIONS,
+            *_SQLALCHEMY_ASYNCPG_CONNECT_ARGUMENTS,
+        }
+        if unsupported_options:
+            names = ", ".join(sorted(repr(name) for name in unsupported_options))
+            raise ValueError(
+                f"Unsupported postgresql+asyncpg connect_args option(s): {names}"
+            )
+
+        ssl_aliases = {
+            "sslmode",
+            "sslrootcert",
+            *_ASYNCPG_DSN_OPTIONS,
+        } & set(connect_args)
+        if "ssl" in connect_args and ssl_aliases:
+            names = ", ".join(sorted(ssl_aliases))
+            raise ValueError(
+                f"connect_args['ssl'] conflicts with libpq SSL option(s): {names}"
+            )
+
+        asyncpg_connect_args = {
+            name: value
+            for name, value in connect_args.items()
+            if name in _ASYNCPG_CONNECT_ARGUMENTS
+            and name != "server_settings"
+        }
+
+        connect_dsn_options = {
+            name: connect_args[name]
+            for name in _ASYNCPG_DSN_OPTIONS
+            if name in connect_args
+        }
+        if "ssl" in connect_args:
+            if url_dsn_options:
+                names = ", ".join(sorted(url_dsn_options))
+                raise ValueError(
+                    f"connect_args['ssl'] conflicts with asyncpg DSN URL option(s): "
+                    f"{names}"
+                )
+            url_dsn_options = {}
+        elif connect_dsn_options:
+            url_dsn_options.update(connect_dsn_options)
+
+        if url_dsn_options and "dsn" in connect_args:
+            raise ValueError(
+                "connect_args['dsn'] cannot be combined with asyncpg DSN URL or "
+                "connect_args options"
+            )
+
+        if "ssl" not in connect_args:
+            sslmode = connect_args.get("sslmode", url_sslmode)
+            sslrootcert = connect_args.get("sslrootcert", url_sslrootcert)
+            if sslrootcert and sslmode is None:
+                raise ValueError(
+                    "sslrootcert requires sslmode or a native asyncpg ssl option"
+                )
+            if url_dsn_options:
+                if sslmode is not None:
+                    url_dsn_options["sslmode"] = sslmode
+                if sslrootcert is not None:
+                    url_dsn_options["sslrootcert"] = sslrootcert
+                dsn_url = make_url("postgresql://").set(query=url_dsn_options)
+                asyncpg_connect_args["dsn"] = dsn_url.render_as_string(
+                    hide_password=False
+                )
+            elif sslmode is not None:
+                asyncpg_connect_args["ssl"] = DatabaseManager._resolve_asyncpg_ssl(
+                    sslmode, sslrootcert
+                )
+
+        timeout_value = None
+        has_timeout_value = False
+        if "timeout" in connect_args:
+            timeout_value = connect_args["timeout"]
+            has_timeout_value = True
+        elif url_connect_timeout is not None:
+            timeout_value = url_connect_timeout
+            has_timeout_value = True
+
         if "connect_timeout" in connect_args:
-            asyncpg_connect_args["timeout"] = connect_args["connect_timeout"]
-        if "application_name" in connect_args:
-            asyncpg_connect_args["server_settings"] = {
-                "application_name": connect_args["application_name"]
-            }
+            connect_timeout = connect_args["connect_timeout"]
+            if "timeout" in connect_args:
+                try:
+                    existing_timeout = float(timeout_value)
+                    connect_timeout_value = float(connect_timeout)
+                except (TypeError, ValueError, OverflowError) as error:
+                    raise ValueError(
+                        "connect_timeout and timeout must be numeric values"
+                    ) from error
+                if existing_timeout != connect_timeout_value:
+                    raise ValueError(
+                        "connect_args['connect_timeout'] conflicts with "
+                        "connect_args['timeout']"
+                    )
+            timeout_value = connect_timeout
+            has_timeout_value = True
+
+        if has_timeout_value and timeout_value is None and "timeout" in connect_args:
+            asyncpg_connect_args["timeout"] = None
+        elif has_timeout_value:
+            try:
+                timeout_value = float(timeout_value)
+            except (TypeError, ValueError, OverflowError) as error:
+                raise ValueError(
+                    "connect_timeout and timeout must be numeric values"
+                ) from error
+            if not math.isfinite(timeout_value) or timeout_value < 0:
+                raise ValueError(
+                    "connect_timeout and timeout must be finite, non-negative values"
+                )
+            asyncpg_connect_args["timeout"] = timeout_value
+
+        server_settings = connect_args.get("server_settings")
+        has_server_settings = "server_settings" in connect_args
+        if has_server_settings and server_settings is not None:
+            if not isinstance(server_settings, Mapping):
+                raise TypeError("connect_args['server_settings'] must be a mapping or None")
+            server_settings = dict(server_settings)
+
+        application_name = connect_args.get("application_name", url_application_name)
+        if application_name is not None:
+            if server_settings is None:
+                server_settings = {}
+            if (
+                "application_name" in server_settings
+                and server_settings["application_name"] != application_name
+                and "application_name" in connect_args
+            ):
+                raise ValueError(
+                    "connect_args['application_name'] conflicts with "
+                    "connect_args['server_settings']['application_name']"
+                )
+            if "application_name" not in server_settings:
+                server_settings["application_name"] = application_name
+            has_server_settings = True
+
+        for name in _SQLALCHEMY_ASYNCPG_CONNECT_ARGUMENTS:
+            if name in connect_args:
+                asyncpg_connect_args[name] = connect_args[name]
+
+        if has_server_settings:
+            asyncpg_connect_args["server_settings"] = server_settings
 
         adapted_kwargs = dict(engine_kwargs)
         if asyncpg_connect_args:
@@ -857,11 +1233,15 @@ class DatabaseManager:
             tuple[tuple[str, dict], tuple[str, dict]]: ((sync_url,
             sync_kwargs), (async_url, async_kwargs)).
         """
+        sync_url, sync_kwargs, _, _ = _resolve_postgres_engine_policy(
+            sync_url, engine_kwargs
+        )
         async_url = DatabaseManager._convert_to_async_uri(sync_url)
         async_url, async_kwargs = DatabaseManager._adapt_asyncpg_connect_options(
-            async_url, engine_kwargs
+            async_url, sync_kwargs
         )
-        return (sync_url, engine_kwargs), (async_url, async_kwargs)
+        _resolve_postgres_engine_policy(sync_url, sync_kwargs, asyncpg=True)
+        return (sync_url, sync_kwargs), (async_url, async_kwargs)
 
 
 # ========================================

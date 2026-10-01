@@ -452,6 +452,62 @@ class TestPostgresSSLMode:
 
         assert "sslmode=prefer" in url
 
+    @pytest.mark.parametrize(
+        "override",
+        [
+            "postgresql+psycopg://localhost/app?host=db.example.invalid&sslmode=disable",
+            "postgresql+psycopg:///app?host=db.example.invalid&sslmode=prefer",
+            "postgresql+psycopg://localhost/app?host=localhost,db.example.invalid&sslmode=allow",
+            "postgresql+psycopg://localhost/app?hostaddr=198.51.100.5&sslmode=prefer",
+            "postgresql+psycopg://localhost/app?host=localhost:5432&host=db.example.invalid:5432&sslmode=prefer",
+            "postgresql+psycopg://localhost/app?host=localhost,db.example.invalid&hostaddr=127.0.0.1&sslmode=prefer",
+        ],
+    )
+    def test_prod_rejects_weak_tls_for_effective_remote_destination(self, override):
+        from repom.config import RepomConfig
+
+        config = RepomConfig(exec_env="prod")
+        config.db_url = override
+
+        with pytest.raises(ValueError, match="sslmode"):
+            config.db_url
+
+    @pytest.mark.parametrize(
+        "override",
+        [
+            "postgresql+psycopg://localhost/app?host=db.example.invalid",
+            "postgresql+psycopg:///app?host=db.example.invalid",
+            "postgresql+psycopg://localhost/app?host=localhost,db.example.invalid",
+            "postgresql+psycopg://localhost/app?hostaddr=198.51.100.5",
+            "postgresql+psycopg://localhost/app?host=localhost:5432&host=db.example.invalid:5432",
+        ],
+    )
+    def test_prod_defaults_to_require_for_effective_remote_destination(self, override):
+        from repom.config import RepomConfig
+
+        config = RepomConfig(exec_env="prod")
+        config.db_url = override
+
+        assert make_url(config.db_url).query["sslmode"] == "require"
+
+    @pytest.mark.parametrize(
+        "override",
+        [
+            "postgresql+psycopg:///app?host=/var/run/postgresql&sslmode=prefer",
+            "postgresql+psycopg:///app?host=localhost:5432&sslmode=prefer",
+            "postgresql+psycopg://localhost/app?hostaddr=127.0.0.1&sslmode=prefer",
+            "postgresql+psycopg:///app?hostaddr=127.0.0.1,127.0.0.2&sslmode=prefer",
+            "postgresql+psycopg://[::1]/app?sslmode=prefer",
+        ],
+    )
+    def test_prod_keeps_local_socket_and_loopback_tls_exceptions(self, override):
+        from repom.config import RepomConfig
+
+        config = RepomConfig(exec_env="prod")
+        config.db_url = override
+
+        assert make_url(config.db_url).query["sslmode"] == "prefer"
+
 
 class TestPostgresTlsSettings:
     """postgres_tls_settings() は db_url とホストクライアントツールで共有される"""

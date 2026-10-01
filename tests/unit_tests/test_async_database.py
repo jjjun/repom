@@ -17,6 +17,7 @@ from repom.database import (
     get_lifespan_manager,
     convert_to_async_uri,
     DatabaseManager,
+    _run_shielded,
 )
 import repom.database as database_module
 from repom.config import config, RepomConfig
@@ -29,9 +30,10 @@ import time
 from unittest.mock import AsyncMock
 import asyncpg
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import event, select, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.engine.url import make_url
+from sqlalchemy.dialects.postgresql.asyncpg import PGDialect_asyncpg
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     AsyncEngine,
@@ -285,6 +287,90 @@ class TestGetAsyncEngineAsyncpgConnectOptions:
         connect_args = captured["kwargs"]["connect_args"]
         assert set(connect_args) <= accepted_params
 
+    @pytest.mark.asyncio
+    async def test_create_async_engine_receives_overridden_tls_and_merged_options(
+        self, monkeypatch
+    ):
+        self._patch_postgres_config(
+            monkeypatch, sslmode="require", sslrootcert="url-ca.pem"
+        )
+        expected_ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        create_context_calls = []
+
+        def create_default_context(*, cafile=None):
+            create_context_calls.append(cafile)
+            return expected_ssl_context
+
+        monkeypatch.setattr(ssl, "create_default_context", create_default_context)
+
+        def password_callback():
+            return "synthetic-password"
+
+        source_connect_args = {
+            "sslmode": "verify-full",
+            "sslrootcert": "connect-ca.pem",
+            "connect_timeout": 7,
+            "password": password_callback,
+            "server_settings": {"statement_timeout": "1000"},
+        }
+        original_server_settings = dict(source_connect_args["server_settings"])
+        monkeypatch.setattr(
+            config,
+            "engine_kwargs_for_url",
+            lambda url: {"connect_args": source_connect_args},
+        )
+        captured = self._capture_create_async_engine(monkeypatch)
+
+        manager = DatabaseManager()
+        await manager.get_async_engine()
+
+        effective_args = captured["kwargs"]["connect_args"]
+        assert create_context_calls == ["connect-ca.pem"]
+        assert effective_args["ssl"] is expected_ssl_context
+        assert effective_args["ssl"].check_hostname is True
+        assert effective_args["timeout"] == 7
+        assert effective_args["password"] is password_callback
+        assert effective_args["server_settings"] == {
+            "statement_timeout": "1000"
+        }
+        assert source_connect_args["server_settings"] == original_server_settings
+        assert "sslmode" not in make_url(captured["url"]).query
+        assert "sslrootcert" not in make_url(captured["url"]).query
+
+    @pytest.mark.asyncio
+    async def test_create_async_engine_preserves_native_ssl_context_identity(
+        self, monkeypatch
+    ):
+        self._patch_postgres_config(monkeypatch, sslmode="require")
+        strict_ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+        def password_callback():
+            return "synthetic-password"
+
+        source_connect_args = {
+            "ssl": strict_ssl_context,
+            "timeout": 3,
+            "password": password_callback,
+            "server_settings": {"statement_timeout": "1000"},
+        }
+        monkeypatch.setattr(
+            config,
+            "engine_kwargs_for_url",
+            lambda url: {"connect_args": source_connect_args},
+        )
+        captured = self._capture_create_async_engine(monkeypatch)
+
+        manager = DatabaseManager()
+        await manager.get_async_engine()
+
+        effective_args = captured["kwargs"]["connect_args"]
+        assert effective_args["ssl"] is strict_ssl_context
+        assert effective_args["timeout"] == 3
+        assert effective_args["password"] is password_callback
+        assert effective_args["server_settings"] == {
+            "statement_timeout": "1000"
+        }
+
 
 class TestAdaptAsyncpgConnectOptionsSslMapping:
     """_adapt_asyncpg_connect_options() / _resolve_asyncpg_ssl() が libpq
@@ -357,6 +443,151 @@ class TestAdaptAsyncpgConnectOptionsSslMapping:
 
         assert result_url == async_url
         assert result_kwargs == {"connect_args": {"connect_timeout": 5}}
+
+
+class TestAdaptAsyncpgConnectOptionsFromUrl:
+    @staticmethod
+    def _adapt(query, connect_args=None):
+        async_url = (
+            "postgresql+asyncpg://user:pass@localhost:5432/db"
+            f"?{query}"
+        )
+        engine_kwargs = {"connect_args": connect_args} if connect_args is not None else {}
+        return DatabaseManager._adapt_asyncpg_connect_options(async_url, engine_kwargs)
+
+    @pytest.mark.parametrize(
+        ("query", "expected_name", "expected_value"),
+        [
+            ("application_name=audit", "server_settings", {"application_name": "audit"}),
+            ("connect_timeout=7", "timeout", 7.0),
+        ],
+    )
+    def test_translates_individual_libpq_query_options(
+        self, query, expected_name, expected_value
+    ):
+        adapted_url, adapted_kwargs = self._adapt(query)
+
+        assert expected_name not in make_url(adapted_url).query
+        assert adapted_kwargs["connect_args"][expected_name] == expected_value
+        if query.startswith("connect_timeout="):
+            assert isinstance(adapted_kwargs["connect_args"]["timeout"], float)
+
+    def test_translates_supported_options_together_and_preserves_dialect_options(self):
+        adapted_url, adapted_kwargs = self._adapt(
+            "sslmode=require&application_name=url-app&connect_timeout=7"
+            "&prepared_statement_cache_size=37"
+        )
+
+        url = make_url(adapted_url)
+        assert url.query == {"prepared_statement_cache_size": "37"}
+        assert adapted_kwargs["connect_args"]["ssl"] == "require"
+        assert adapted_kwargs["connect_args"]["timeout"] == 7.0
+        assert adapted_kwargs["connect_args"]["server_settings"] == {
+            "application_name": "url-app"
+        }
+
+        _, dialect_kwargs = PGDialect_asyncpg().create_connect_args(url)
+        assert dialect_kwargs["prepared_statement_cache_size"] == 37
+
+    def test_connect_args_override_url_values(self):
+        adapted_url, adapted_kwargs = self._adapt(
+            "application_name=url-app&connect_timeout=7",
+            {
+                "application_name": "connect-app",
+                "connect_timeout": 9,
+                "server_settings": {"statement_timeout": "1000"},
+            },
+        )
+
+        assert "application_name" not in make_url(adapted_url).query
+        assert "connect_timeout" not in make_url(adapted_url).query
+        assert adapted_kwargs["connect_args"]["timeout"] == 9.0
+        assert adapted_kwargs["connect_args"]["server_settings"] == {
+            "application_name": "connect-app",
+            "statement_timeout": "1000",
+        }
+
+    def test_native_timeout_overrides_url_connect_timeout(self):
+        _, adapted_kwargs = self._adapt(
+            "connect_timeout=7", {"timeout": 11}
+        )
+
+        assert adapted_kwargs["connect_args"]["timeout"] == 11.0
+
+    @pytest.mark.parametrize(
+        ("query", "connect_args"),
+        [
+            ("connect_timeout=not-a-number", None),
+            ("", {"connect_timeout": "not-a-number"}),
+            ("connect_timeout=inf", None),
+            ("connect_timeout=-1", None),
+        ],
+    )
+    def test_rejects_invalid_connect_timeouts(self, query, connect_args):
+        with pytest.raises(ValueError, match="connect_timeout"):
+            self._adapt(query, connect_args)
+
+    def test_moves_certificate_options_to_asyncpg_dsn(self):
+        adapted_url, adapted_kwargs = self._adapt(
+            "sslmode=verify-full&sslrootcert=%2Fetc%2Fssl%2Fca.pem"
+            "&sslcert=%2Fetc%2Fssl%2Fclient%20cert.pem"
+            "&sslkey=%2Fetc%2Fssl%2Fclient.key"
+        )
+
+        assert make_url(adapted_url).query == {}
+        connect_args = adapted_kwargs["connect_args"]
+        assert "ssl" not in connect_args
+        assert "sslcert" not in connect_args
+        assert "sslkey" not in connect_args
+        dsn = make_url(connect_args["dsn"])
+        assert dsn.query == {
+            "sslcert": "/etc/ssl/client cert.pem",
+            "sslkey": "/etc/ssl/client.key",
+            "sslmode": "verify-full",
+            "sslrootcert": "/etc/ssl/ca.pem",
+        }
+
+    @pytest.mark.parametrize(
+        ("name", "value"),
+        [
+            ("sslcert", "/client.crt"),
+            ("sslkey", "/client.key"),
+            ("sslpassword", "key-password"),
+            ("sslcrl", "/client.crl"),
+            ("ssl_min_protocol_version", "TLSv1.2"),
+            ("ssl_max_protocol_version", "TLSv1.3"),
+        ],
+    )
+    def test_moves_individual_dsn_options(self, name, value):
+        adapted_url, adapted_kwargs = self._adapt(f"{name}={value}")
+
+        assert make_url(adapted_url).query == {}
+        assert make_url(adapted_kwargs["connect_args"]["dsn"]).query == {
+            name: value
+        }
+
+    def test_rejects_unsupported_url_options_during_resolution(self):
+        with pytest.raises(ValueError, match="Unsupported postgresql\\+asyncpg URL"):
+            self._adapt("sslcertificate=client.pem")
+
+    def test_rejects_native_ssl_with_url_certificate_options(self):
+        with pytest.raises(ValueError, match="connect_args\\['ssl'\\] conflicts"):
+            self._adapt("sslcert=client.pem", {"ssl": True})
+
+    def test_final_url_and_connect_args_bind_to_asyncpg_connect(self):
+        _, (adapted_url, adapted_kwargs) = DatabaseManager.resolve_engine_settings(
+            "postgresql+psycopg://user:pass@localhost:5432/db"
+            "?sslmode=require&application_name=url-app&connect_timeout=7"
+            "&prepared_statement_cache_size=37",
+            {"connect_args": {"command_timeout": 12.5}},
+        )
+        args, effective_kwargs = PGDialect_asyncpg().create_connect_args(
+            make_url(adapted_url)
+        )
+
+        assert effective_kwargs.pop("prepared_statement_cache_size") == 37
+        effective_kwargs.update(adapted_kwargs["connect_args"])
+        inspect.signature(asyncpg.connect).bind(*args, **effective_kwargs)
 
 
 class TestGetAsyncEngineEchoKwarg:
@@ -474,6 +705,135 @@ class TestDatabaseManager:
         assert manager._async_engine is None
 
 
+class TestCancellationResilientEngineDisposal:
+    @staticmethod
+    async def _manager_with_open_driver_connection(monkeypatch):
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        manager = DatabaseManager()
+        manager._async_engine = engine
+
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+            driver_connection = connection.sync_connection.connection.driver_connection
+
+        close_started = asyncio.Event()
+        release_close = asyncio.Event()
+        close_calls = []
+        original_close = type(driver_connection).close
+
+        async def delayed_close(connection):
+            if connection is driver_connection:
+                close_calls.append(connection)
+                close_started.set()
+                await release_close.wait()
+            await original_close(connection)
+
+        monkeypatch.setattr(type(driver_connection), "close", delayed_close)
+        return (
+            manager,
+            engine,
+            driver_connection,
+            close_started,
+            release_close,
+            close_calls,
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "disposal_path", ["dispose_async", "dispose_all", "standalone_transaction"]
+    )
+    async def test_repeated_cancellation_waits_for_real_driver_close(
+        self, disposal_path, monkeypatch
+    ):
+        manager, _, driver, close_started, release_close, close_calls = (
+            await self._manager_with_open_driver_connection(monkeypatch)
+        )
+        monkeypatch.setattr(database_module, "_db_manager", manager)
+
+        async def run_disposal():
+            if disposal_path == "dispose_async":
+                await manager.dispose_async()
+            elif disposal_path == "dispose_all":
+                await manager.dispose_all()
+            else:
+                async with get_standalone_async_transaction() as session:
+                    await session.execute(text("SELECT 1"))
+
+        disposal_task = asyncio.create_task(run_disposal())
+        waiter_task = None
+        try:
+            await close_started.wait()
+
+            waiter_task = asyncio.create_task(manager.dispose_async())
+            waiter_started = asyncio.Event()
+            asyncio.get_running_loop().call_soon(waiter_started.set)
+            await waiter_started.wait()
+            assert not waiter_task.done()
+
+            disposal_task.cancel()
+            repeated_cancel_sent = asyncio.Event()
+
+            def cancel_again():
+                disposal_task.cancel()
+                repeated_cancel_sent.set()
+
+            asyncio.get_running_loop().call_soon(cancel_again)
+            await repeated_cancel_sent.wait()
+            assert disposal_task.cancelling() >= 2
+            assert not disposal_task.done()
+
+            release_close.set()
+            with pytest.raises(asyncio.CancelledError):
+                await disposal_task
+            await waiter_task
+
+            assert driver._connection is None
+            assert manager._async_engine is None
+            assert manager._async_disposal_tasks == set()
+
+            await manager.dispose_async()
+            assert len(close_calls) == 1
+        finally:
+            release_close.set()
+            for task in (disposal_task, waiter_task):
+                if task is not None:
+                    try:
+                        await task
+                    except BaseException:
+                        pass
+
+    @pytest.mark.asyncio
+    async def test_new_engine_survives_disposal_of_detached_engine(self, monkeypatch):
+        manager, old_engine, driver, close_started, release_close, _ = (
+            await self._manager_with_open_driver_connection(monkeypatch)
+        )
+        monkeypatch.setattr(config, "db_url", "sqlite:///:memory:")
+
+        disposal_task = asyncio.create_task(manager.dispose_async())
+        try:
+            await close_started.wait()
+
+            replacement_engine = await manager.get_async_engine()
+            assert replacement_engine is not old_engine
+
+            release_close.set()
+            await disposal_task
+
+            assert driver._connection is None
+            assert manager._async_engine is replacement_engine
+            async with replacement_engine.connect() as connection:
+                result = await connection.execute(text("SELECT 1"))
+                assert result.scalar_one() == 1
+            await manager.dispose_async()
+            assert manager._async_engine is None
+        finally:
+            release_close.set()
+            if not disposal_task.done():
+                await disposal_task
+            if manager._async_engine is not None:
+                await manager.dispose_async()
+
+
 class TestLifespanManager:
     """get_lifespan_manager() が FastAPI 互換の lifespan callable を返すことの
     回帰テスト。以前は ``_db_manager.lifespan_context()`` という生成済みの
@@ -517,6 +877,101 @@ class TestLifespanManager:
 
         assert manager._sync_engine is None
         assert manager._async_engine is None
+
+    @pytest.mark.asyncio
+    async def test_disposes_resources_when_lifespan_body_raises(self, monkeypatch):
+        manager = DatabaseManager()
+        dispose_all = AsyncMock()
+        monkeypatch.setattr(manager, "dispose_all", dispose_all)
+        failure = RuntimeError("application failed")
+
+        with pytest.raises(RuntimeError) as exc_info:
+            async with manager.lifespan_context():
+                raise failure
+
+        assert exc_info.value is failure
+        assert manager._sync_engine is None
+        assert manager._async_engine is None
+        dispose_all.assert_awaited_once_with()
+
+    @pytest.mark.asyncio
+    async def test_disposes_resources_when_lifespan_task_is_cancelled(self, monkeypatch):
+        manager = DatabaseManager()
+        dispose_all = AsyncMock()
+        monkeypatch.setattr(manager, "dispose_all", dispose_all)
+        entered = asyncio.Event()
+
+        async def run_lifespan():
+            async with manager.lifespan_context():
+                entered.set()
+                await asyncio.Event().wait()
+
+        task = asyncio.create_task(run_lifespan())
+        await entered.wait()
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        dispose_all.assert_awaited_once_with()
+
+    @pytest.mark.asyncio
+    async def test_disposes_resources_when_lifespan_generator_is_closed(self, monkeypatch):
+        manager = DatabaseManager()
+        dispose_all = AsyncMock()
+        monkeypatch.setattr(manager, "dispose_all", dispose_all)
+        lifespan = manager.lifespan_context()
+
+        await lifespan.__aenter__()
+        await lifespan.gen.aclose()
+
+        dispose_all.assert_awaited_once_with()
+
+    @pytest.mark.asyncio
+    async def test_lifespan_does_not_initialize_unused_engines(self):
+        manager = DatabaseManager()
+
+        async with manager.lifespan_context():
+            pass
+
+        assert manager._sync_engine is None
+        assert manager._async_engine is None
+        assert manager._sync_session_factory is None
+        assert manager._async_session_factory is None
+
+    @pytest.mark.asyncio
+    async def test_failing_sqlite_lifespan_disposes_engines_and_clears_factories(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setattr(config, "db_url", f"sqlite:///{tmp_path / 'lifespan.sqlite3'}")
+        manager = DatabaseManager()
+        sync_factory = manager.get_sync_session_factory()
+        async_factory = await manager.get_async_session_factory()
+        sync_engine = manager._sync_engine
+        async_engine = manager._async_engine
+        assert manager._sync_session_factory is sync_factory
+        assert manager._async_session_factory is async_factory
+        sync_pool = sync_engine.pool
+        async_pool = async_engine.pool
+
+        with sync_engine.connect() as connection:
+            assert connection.execute(text("SELECT 1")).scalar_one() == 1
+        async with async_engine.connect() as connection:
+            result = await connection.execute(text("SELECT 1"))
+            assert result.scalar_one() == 1
+
+        failure = RuntimeError("application failed")
+        with pytest.raises(RuntimeError) as exc_info:
+            async with manager.lifespan_context():
+                raise failure
+
+        assert exc_info.value is failure
+        assert sync_pool.checkedin() == 0
+        assert async_pool.checkedin() == 0
+        assert manager._sync_engine is None
+        assert manager._async_engine is None
+        assert manager._sync_session_factory is None
+        assert manager._async_session_factory is None
 
 
 class TestFastAPIDependsPattern:
@@ -758,17 +1213,15 @@ class TestShieldedCleanup:
     """_run_shielded と非同期セッションのキャンセル耐性テスト"""
 
     @pytest.mark.asyncio
-    async def test_run_shielded_completes_when_outer_cancelled(self):
-        """外側のタスクがキャンセルされてもクリーンアップは完了し、
-        その後 CancelledError が伝播することを確認"""
-        from repom.database import _run_shielded
-
+    async def test_run_shielded_completes_when_outer_is_cancelled_repeatedly(self):
+        """繰り返しキャンセルされても cleanup 完了後に CancelledError が伝播する"""
         started = asyncio.Event()
+        release_cleanup = asyncio.Event()
         state = {"finished": False}
 
         async def cleanup():
             started.set()
-            await asyncio.sleep(0.05)
+            await release_cleanup.wait()
             state["finished"] = True
 
         async def runner():
@@ -777,12 +1230,114 @@ class TestShieldedCleanup:
         task = asyncio.ensure_future(runner())
         await started.wait()
         task.cancel()
+        await asyncio.sleep(0)
+        task.cancel()
+        await asyncio.sleep(0)
+        release_cleanup.set()
 
         with pytest.raises(asyncio.CancelledError):
             await task
 
         # クリーンアップは中断されず最後まで走り切る
         assert state["finished"] is True
+
+    @pytest.mark.asyncio
+    async def test_run_shielded_retrieves_already_successful_future(self):
+        future = asyncio.get_running_loop().create_future()
+        future.set_result(None)
+
+        await _run_shielded(future)
+
+    @pytest.mark.asyncio
+    async def test_run_shielded_propagates_already_failed_future(self):
+        future = asyncio.get_running_loop().create_future()
+        future.set_exception(RuntimeError("cleanup failed"))
+
+        with pytest.raises(RuntimeError, match="cleanup failed"):
+            await _run_shielded(future)
+
+    @pytest.mark.asyncio
+    async def test_run_shielded_propagates_already_cancelled_future(self):
+        future = asyncio.get_running_loop().create_future()
+        future.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await _run_shielded(future)
+
+    @pytest.mark.asyncio
+    async def test_run_shielded_propagates_eager_task_failure(self):
+        loop = asyncio.get_running_loop()
+        previous_task_factory = loop.get_task_factory()
+
+        async def fail_before_suspending():
+            raise RuntimeError("eager cleanup failed")
+
+        try:
+            loop.set_task_factory(asyncio.eager_task_factory)
+            with pytest.raises(RuntimeError, match="eager cleanup failed"):
+                await _run_shielded(fail_before_suspending())
+        finally:
+            loop.set_task_factory(previous_task_factory)
+
+    @pytest.mark.asyncio
+    async def test_cleanup_failure_is_chained_from_outer_cancellation(self):
+        cleanup_started = asyncio.Event()
+        release_cleanup = asyncio.Event()
+
+        async def cleanup():
+            cleanup_started.set()
+            await release_cleanup.wait()
+            raise RuntimeError("cleanup failed")
+
+        task = asyncio.create_task(_run_shielded(cleanup()))
+        await cleanup_started.wait()
+        task.cancel()
+        await asyncio.sleep(0)
+        release_cleanup.set()
+
+        with pytest.raises(RuntimeError, match="cleanup failed") as exc_info:
+            await task
+
+        assert isinstance(exc_info.value.__cause__, asyncio.CancelledError)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("use_transaction", [False, True])
+    async def test_commit_failure_rolls_back_with_eager_task_factory(
+        self, use_transaction, tmp_path
+    ):
+        manager, engine = self._build_pooled_manager(
+            tmp_path / f"eager_commit_{use_transaction}.sqlite3"
+        )
+        async with engine.begin() as connection:
+            await connection.execute(text("CREATE TABLE audit_item (id INTEGER PRIMARY KEY)"))
+
+        try:
+            loop = asyncio.get_running_loop()
+            previous_task_factory = loop.get_task_factory()
+
+            def reject_commit(session):
+                raise RuntimeError("AUDIT: commit rejected")
+
+            try:
+                loop.set_task_factory(asyncio.eager_task_factory)
+                session_context = (
+                    manager.get_async_transaction()
+                    if use_transaction
+                    else manager.get_async_session()
+                )
+                with pytest.raises(RuntimeError, match="AUDIT: commit rejected"):
+                    async with session_context as session:
+                        event.listen(session.sync_session, "before_commit", reject_commit)
+                        await session.execute(text("INSERT INTO audit_item VALUES (1)"))
+            finally:
+                loop.set_task_factory(previous_task_factory)
+
+            async with engine.connect() as connection:
+                result = await connection.execute(text("SELECT COUNT(*) FROM audit_item"))
+                assert result.scalar_one() == 0
+                assert (await connection.execute(text("SELECT 1"))).scalar_one() == 1
+        finally:
+            await manager.dispose_async()
 
     @staticmethod
     def _build_pooled_manager(db_file):

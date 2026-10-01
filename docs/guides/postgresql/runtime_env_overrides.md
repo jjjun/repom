@@ -62,8 +62,15 @@ host のない URL は `prefer` です。それ以外の環境では `prefer` �
 `sslrootcert` がなくてもその値を追加します。URL で `sslmode` を明示した場合は値を保持したうえで検証します。
 正規化後の環境が `prod` で接続先がリモート host のとき、`disable`、`allow`、`prefer` は
 `ValueError` になります。`require` または `verify-ca` / `verify-full` を指定してください。
-engine 作成時にも、実効 URL の `sslmode` が prod で TLS を強制しない場合は warning が記録されます。
-これはローカル host などで有効な設定を知らせるものです。
+接続先の判定には URL authority の host に加えて、URL query の `host` / `hostaddr` と
+`engine_kwargs.connect_args` の `host` / `hostaddr` を使います。libpq が対応する
+カンマ区切りの複数 host では、リモート host が一つでも含まれるとリモートとして扱います。
+`hostaddr` がある場合は実際の接続先アドレスとして判定します。URL query または
+`connect_args` の `dsn` は prod で接続先と TLS 設定を安全に検証できないため使用できません。
+asyncpg は `host` を使えますが、
+`hostaddr` はサポートしないため URL または `connect_args` に指定すると engine 設定時に拒否されます。
+`host` が Unix socket path または loopback のみの場合はローカルとして扱います。
+engine 作成時の warning も connect args を含む実効接続先と TLS 設定を表示します。
 
 URL override は `db_backup`、`db_restore`、`db_create`、`db_delete`、`db_sync_master` の対象にも
 なります。file-based SQLite の場合も override URL の path を使い、in-memory SQLite の backup / restore は
