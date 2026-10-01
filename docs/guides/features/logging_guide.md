@@ -90,6 +90,14 @@ def hook_config(config):
 `config.sqlalchemy_hide_parameters`（デフォルト `True`。環境変数
 `SQLALCHEMY_HIDE_PARAMETERS`）を有効のままにしておいてください。
 
+## DB URL の表示
+
+`safe_db_url()` は URL の userinfo にある password と、query parameter の
+`password`、`pgpassword`、`sslpassword`、`oauth_client_secret`、`scram_client_key`、
+`scram_server_key` を `***` に置き換えて表示します。query parameter 名は大文字小文字を
+区別せず、URI の percent encoding を復号して判定します。これら以外の接続情報は表示に
+残ります。
+
 ## module ごとの log level
 
 ```python

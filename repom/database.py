@@ -78,44 +78,65 @@ from repom.logging import get_logger
 logger = get_logger(__name__)
 
 
-_PASSWORD_QUERY_PARAM_NAMES = frozenset({"password", "pgpassword"})
+_SECRET_QUERY_PARAM_NAMES = frozenset(
+    {
+        "password",
+        "pgpassword",
+        "sslpassword",
+        "oauth_client_secret",
+        "scram_client_key",
+        "scram_server_key",
+    }
+)
 
 
-def _mask_password_query_params(url: str) -> str:
-    """Mask password-like query parameters (e.g. ``?password=`` or ``?pgpassword=``).
+def _mask_secret_query_params(url: str) -> str:
+    """Mask known secret query parameters in a database URL.
 
     ``make_url(...).render_as_string(hide_password=True)`` only hides a
-    password carried in the URL's userinfo; a libpq-style ``password=``/
-    ``pgpassword=`` query parameter passes through untouched.
+    password carried in the URL's userinfo. libpq also accepts passwords,
+    private-key passphrases, OAuth client secrets, and SCRAM keys as query
+    parameters; those values must be masked separately.
     """
-    parts = urlsplit(url)
-    if not parts.query:
-        return url
+    try:
+        parts = urlsplit(url)
+        if not parts.query:
+            return url
 
-    query_pairs = parse_qsl(parts.query, keep_blank_values=True)
-    if not any(key.lower() in _PASSWORD_QUERY_PARAM_NAMES for key, _ in query_pairs):
-        return url
+        query_pairs = parse_qsl(parts.query, keep_blank_values=True)
+        if not any(key.lower() in _SECRET_QUERY_PARAM_NAMES for key, _ in query_pairs):
+            return url
 
-    masked_pairs = [
-        (key, "***" if key.lower() in _PASSWORD_QUERY_PARAM_NAMES else value)
-        for key, value in query_pairs
-    ]
-    return urlunsplit(parts._replace(query=urlencode(masked_pairs, safe="*")))
+        masked_pairs = [
+            (key, "***" if key.lower() in _SECRET_QUERY_PARAM_NAMES else value)
+            for key, value in query_pairs
+        ]
+        return urlunsplit(parts._replace(query=urlencode(masked_pairs, safe="*")))
+    except (UnicodeError, ValueError):
+        return "<invalid database URL>"
 
 
 def safe_db_url(url: str) -> str:
     """Return a database URL suitable for display or logging."""
-    scheme, separator, remainder = url.partition("://")
-    if separator:
-        credentials, at, host = remainder.rpartition("@")
-        if at and credentials.count("@"):
-            return _mask_password_query_params(f"{scheme}://***@{host}")
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "<invalid database URL>"
+
+    sanitized_url = _mask_secret_query_params(url)
+    if sanitized_url == "<invalid database URL>":
+        return sanitized_url
+
+    if parts.netloc.count("@") > 1:
+        host = parts.netloc.rsplit("@", 1)[1]
+        masked_parts = parts._replace(netloc=f"***@{host}")
+        return _mask_secret_query_params(urlunsplit(masked_parts))
 
     try:
-        masked = make_url(url).render_as_string(hide_password=True)
+        masked = make_url(sanitized_url).render_as_string(hide_password=True)
     except Exception:
         return "<invalid database URL>"
-    return _mask_password_query_params(masked)
+    return _mask_secret_query_params(masked)
 
 
 def _warn_if_prod_sslmode_not_enforced() -> None:
