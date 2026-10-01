@@ -34,14 +34,17 @@
 
 ## PostgreSQL / Redis
 
-- [PostgreSQL](postgresql/README.md)
-- [PostgreSQL の実行時設定上書き](postgresql/runtime_env_overrides.md)
+- [PostgreSQL ガイド一覧](postgresql/README.md)
+- [PostgreSQL セットアップ](postgresql/postgresql_setup_guide.md)
+- [PostgreSQL の実行時環境変数](postgresql/runtime_env_overrides.md)
 - [PostgreSQL 認証情報のローテーション](postgresql/credential_rotation.md)
-- [Redis](redis/README.md)
+- [Redis ガイド一覧](redis/README.md)
+- [Redis の設定と service lifecycle](redis/redis_manager_guide.md)
 - [Redis 認証情報のローテーション](redis/credential_rotation.md)
 
 ## テスト
 
+- [テストガイド一覧](testing/README.md)
 - [テストガイド](testing/testing_guide.md)
 - [pytest fixture ガイド](testing/fixture_guide.md)
 

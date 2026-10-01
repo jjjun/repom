@@ -1,31 +1,28 @@
-# PostgreSQL Runtime Env Overrides
+# PostgreSQL の実行時環境変数
 
-PostgreSQL and pgAdmin runtime overrides are provided by helper functions under
-`repom.config_hooks/`. Call them at the end of your `CONFIG_HOOK` after setting
-project defaults.
+環境変数を `CONFIG_HOOK` から反映する方法と hook の設定例は
+[CONFIG_HOOK ガイド](../features/config_hook_guide.md)を参照してください。
+`apply_repom_env_overrides()` は repom が提供する環境変数 override をまとめて適用し、
+各 helper の呼び出し順も定義します。
+`repom.config_hooks.parsing` は環境変数の boolean、integer、port 値を解析する共通 helper を
+提供します。
 
-```python
-from repom.config_hooks.database import apply_database_env_overrides
-from repom.config_hooks.pgadmin import apply_pgadmin_env_overrides
-from repom.config_hooks.postgres import apply_postgres_env_overrides
+## 対応する環境変数
 
+repom の database、PostgreSQL、pgAdmin、SQLite の各 override helper が読む変数は次のとおりです。
 
-def hook_config(config):
-    config.db_type = "postgres"
-    config.db_name = "myapp"
-
-    apply_database_env_overrides(config)
-    apply_postgres_env_overrides(config)
-    apply_pgadmin_env_overrides(config)
-    return config
-```
-
-Supported variables:
-
-| Variable | Target |
+| 変数 | 設定先 |
 |---|---|
 | `DB_TYPE` | `config.db_type` |
-| `REPOM_DATABASE_URL` / `DATABASE_URL` | `config.db_url` (`REPOM_DATABASE_URL` wins) |
+| `REPOM_DATABASE_URL` / `DATABASE_URL` | `config.db_url` |
+| `SQLALCHEMY_ECHO` | `config.enable_sqlalchemy_echo` |
+| `SQLALCHEMY_ECHO_LEVEL` | `config.sqlalchemy_echo_level` |
+| `SQLALCHEMY_HIDE_PARAMETERS` | `config.sqlalchemy_hide_parameters` |
+| `SQLALCHEMY_POOL_SIZE` | `config.db_pool_size` |
+| `SQLALCHEMY_MAX_OVERFLOW` | `config.db_max_overflow` |
+| `SQLALCHEMY_POOL_TIMEOUT` | `config.db_pool_timeout` |
+| `SQLALCHEMY_POOL_RECYCLE` | `config.db_pool_recycle` |
+| `SQLALCHEMY_POOL_PRE_PING` | `config.db_pool_pre_ping` |
 | `POSTGRES_USER` | `config.postgres.user` |
 | `POSTGRES_PASSWORD` | `config.postgres.password` |
 | `POSTGRES_HOST` | `config.postgres.host` |
@@ -37,38 +34,51 @@ Supported variables:
 | `PGADMIN_DEFAULT_PASSWORD` | `config.pgadmin.password` |
 | `PGADMIN_HOST_PORT` | `config.pgadmin.container.host_port` |
 | `PGADMIN_EXPOSE_TO_LAN` | `config.pgadmin.container.expose_to_lan` |
+| `SQLITE_DB_PATH` | `config.sqlite.db_path` |
+| `SQLITE_DB_FILE` | `config.sqlite.db_file` |
+| `SQLITE_USE_FILE_DB` / `SQLITE_USE_IN_MEMORY_FOR_TESTS` | `config.sqlite.use_in_memory_for_tests` |
 
-`POSTGRES_PORT`, `POSTGRES_HOST_PORT`, and `PGADMIN_HOST_PORT` are validated as
-integer ports between 1 and 65535. `REPOM_POSTGRES_DB` pins the PostgreSQL
-database name exactly, so repom does not append the usual `exec_env` suffix. It
-affects PostgreSQL URL construction when no full database URL override is set.
-When `config.db_url` is overridden, `db_type` follows the URL backend instead;
-if an explicit `DB_TYPE` disagrees, the URL backend wins and repom logs one
-warning for that mismatch. SQLite selection without a URL override still follows
-`db_type`, including the default in-memory SQLite URL for `exec_env=test`.
+`POSTGRES_PORT`、`POSTGRES_HOST_PORT`、`PGADMIN_HOST_PORT` は 1 から 65535 の整数に
+限ります。expose 用の変数は `1` / `true` / `yes` / `on` または
+`0` / `false` / `no` / `off` を受け付けます。
+`REPOM_POSTGRES_DB` は PostgreSQL の DB 名を指定値に固定し、通常の `exec_env` suffix を
+追加しません。これは完全な DB URL override がないときに有効です。
 
-`POSTGRES_EXPOSE_TO_LAN` and `PGADMIN_EXPOSE_TO_LAN` accept a boolean
-(`1`/`true`/`yes`/`on` or `0`/`false`/`no`/`off`). `postgres_generate` publishes
-the container port on `127.0.0.1` unless the corresponding flag is `true`, in
-which case it binds `0.0.0.0` and the service becomes reachable from every
-host on the local network.
+## DB URL override と TLS policy
 
-Use `REPOM_DATABASE_URL` / `DATABASE_URL` only when you want a full URL override
-for every environment. Those variables set `config.db_url` directly and bypass
-the normal `db_type` URL construction. PostgreSQL overrides still receive the
-same TLS policy as generated URLs: if the URL omits `sslmode`, repom uses
-`config.postgres.sslmode` when set, or defaults to `prefer` outside prod and for
-local or hostless URLs, and `require` for remote prod hosts. A configured
-`config.postgres.sslrootcert` is added when repom supplies the missing
-`sslmode`, unless the URL already has `sslrootcert`. An explicit URL `sslmode`
-is preserved and validated; `disable`, `allow`, and `prefer` raise `ValueError`
-for remote prod hosts. Set the URL's `sslmode` to `require` or stronger to fix
-that error. Non-PostgreSQL overrides are returned unchanged.
+空でない `REPOM_DATABASE_URL` を最優先し、空または未設定なら `DATABASE_URL` を使います。
+選ばれた値は `config.db_url` に設定され、`config.db_url_overridden` は `True` になります。
+この場合、URL の backend に応じて `db_type` が決まります。明示された `DB_TYPE` と backend が
+異なるときは URL が優先され、repom は不一致について warning を1回記録します。
+`DB_TYPE` で選ぶ通常の URL 構築を使う場合、`config.db_url_overridden` は `False` です。
 
-These env variables affect repom's runtime config and generated compose files
-when the helpers are called before `postgres_generate` / `postgres_start`.
+PostgreSQL URL で `sslmode` が省略されると、`config.postgres.sslmode` の明示値、または
+環境と接続先に応じた既定値が使われます。`EXEC_ENV` を正規化した値が `prod` または
+`production` alias の場合、リモート host は `require`、localhost 等のローカル host と
+host のない URL は `prefer` です。それ以外の環境では `prefer` です。URL override と
+通常の設定の両方に同じ policy が適用されます。
 
-For existing Docker volumes, changing environment variables alone does not
-change initialized PostgreSQL roles or pgAdmin users. Use
-[credential_rotation.md](credential_rotation.md) for data-preserving rotation
-steps.
+`config.postgres.sslrootcert` があり、URL で `sslmode` を省略したとき、repom が補う URL に
+`sslrootcert` がなくてもその値を追加します。URL で `sslmode` を明示した場合は値を保持したうえで検証します。
+正規化後の環境が `prod` で接続先がリモート host のとき、`disable`、`allow`、`prefer` は
+`ValueError` になります。`require` または `verify-ca` / `verify-full` を指定してください。
+engine 作成時にも、実効 URL の `sslmode` が prod で TLS を強制しない場合は warning が記録されます。
+これはローカル host などで有効な設定を知らせるものです。
+
+URL override は `db_backup`、`db_restore`、`db_create`、`db_delete`、`db_sync_master` の対象にも
+なります。file-based SQLite の場合も override URL の path を使い、in-memory SQLite の backup / restore は
+拒否されます。PostgreSQL の backup と restore の詳細は
+[バックアップガイド](../features/backup_guide.md)、master data sync が managed container を
+skip する条件は[マスターデータ同期ガイド](../features/master_data_sync_guide.md)を参照してください。
+
+URL override がなく SQLite を使う場合、正規化後の `EXEC_ENV=test` かつ
+`sqlite.use_in_memory_for_tests=True` なら既定の URL は in-memory SQLite です。
+`SQLITE_USE_FILE_DB` と `SQLITE_USE_IN_MEMORY_FOR_TESTS` でこの選択を上書きできます。
+SQLite の file path 変数は `SQLITE_DB_PATH` と `SQLITE_DB_FILE` です。
+
+`POSTGRES_EXPOSE_TO_LAN` と `PGADMIN_EXPOSE_TO_LAN` が `true` の場合、生成した container port は
+`0.0.0.0` に bind されます。既定では `127.0.0.1` のみへ公開されます。
+
+実行時設定を確認するには `uv run repom_info` を使ってください。既存 Docker volume の
+PostgreSQL role や pgAdmin user は環境変数を変更しただけでは変わりません。
+データを保った認証情報の変更は[認証情報ローテーション](credential_rotation.md)を参照してください。

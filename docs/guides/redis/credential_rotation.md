@@ -1,45 +1,41 @@
-# Redis Credential Rotation
+# Redis 認証情報ローテーション
 
-`REDIS_PASSWORD` is applied to repom's Redis config when
-`repom.config_hooks.redis.apply_redis_env_overrides()` is called. Generated
-Redis instances pass that value to the container via the service environment
-and start Redis with `--requirepass`; the generated `redis.conf` never
-contains it. Health checks authenticate with the configured password.
+`repom.config_hooks.redis.apply_redis_env_overrides()` を呼ぶと、`REDIS_PASSWORD` は repom の Redis
+設定に反映されます。生成する Redis instance はその値を service environment 経由で container に渡し、
+`--requirepass` 付きで起動します。生成する `redis.conf` に password は入りません。health check は
+設定済み password で認証します。
 
-## Fresh Or Regenerated Config
+## 新規または再生成する設定
 
-For a fresh data volume, set the password and generate the Redis files:
+新しい data volume では password を設定して Redis file を生成します。
 
 ```bash
 REDIS_PASSWORD="new-password" uv run redis_generate
 ```
 
-Start Redis:
+Redis を起動します。
 
 ```bash
 REDIS_PASSWORD="new-password" uv run redis_start
 ```
 
-For an existing volume, use `redis_rotate_password` to change its live
-password. `redis_generate` and `redis_start` refuse to replace a generated
-`.env` when its password differs from the active configuration. Pass
-`--force-regenerate` only when intentionally replacing the generated secret;
-changed content keeps the previous `.env` as `.env.bak` with mode `0600`.
+既存 volume の password は `redis_rotate_password` で変更します。生成済み `.env` と設定値を扱う際の
+secret 保護および再生成については[Docker manager ガイド](../features/docker_manager_guide.md)を
+参照してください。
 
-Connect with:
+接続例:
 
 ```bash
 REDISCLI_AUTH="new-password" redis-cli -p 6379
 ```
 
-## Existing Running Instance
+## 起動中 instance の password 変更
 
-`main_rotate_password(argv)` accepts an explicit argument list. A task runner
-that parses its own options can call `rotate_redis_password_cli(...)` with
-keyword arguments to use the same password prompts, stdin handling, and
-execute safeguards as the console command.
+`main_rotate_password(argv)` は明示的な引数 list を受け取ります。独自の option parser を使う task
+runner は `rotate_redis_password_cli(...)` を keyword 引数で呼び出すと、console command と同じ
+password prompt、stdin、execute safeguard を使えます。
 
-Dry-run the runtime password change:
+まず runtime password 変更を dry-run します。
 
 ```bash
 printf '%s\n%s\n' 'new-password' 'old-password' | uv run redis_rotate_password \
@@ -47,7 +43,7 @@ printf '%s\n%s\n' 'new-password' 'old-password' | uv run redis_rotate_password \
   --old-password-stdin
 ```
 
-Execute it:
+確認後に実行します。
 
 ```bash
 printf '%s\n%s\n' 'new-password' 'old-password' | uv run redis_rotate_password \
@@ -56,35 +52,38 @@ printf '%s\n%s\n' 'new-password' 'old-password' | uv run redis_rotate_password \
   --execute
 ```
 
-Update the configured password holder first, then rotate Redis. When standard
-input is a TTY, omitting the new-password option prompts for it, and omitting
-the old-password option prompts for the current password.
-`--new-password` and `--old-password` remain available for compatibility, but
-expose their values in process arguments. `--allow-config-password` explicitly
-opts in to using the configured password as the new value.
-When more than one stdin option is used, the new password is read first.
+標準入力が TTY の場合、new-password option を省略すると新しい password を prompt し、old-password
+option を省略すると現在の password を prompt します。`--new-password` と `--old-password` は互換性の
+ため引き続き使えますが、process argument に値が見えます。`--allow-config-password` は設定済み password
+を新しい値として使う明示的な opt-in です。複数の stdin option を使う場合、新しい password を先に読みます。
 
-After execution, repom regenerates the compose files and the `.env` secrets
-file with the new password only after Redis confirms the change. This update
-uses the explicit secret overwrite path and keeps the previous `.env` as
-`.env.bak` when its content changes.
-The library function `repom.redis.manage.rotate_password` performs this
-compose-dir `.env` update itself, so callers and downstream wrappers do not
-need an additional persistence step.
-The runtime command passes the old password through `REDISCLI_AUTH` when it is
-supplied with `--old-password` or `--old-password-stdin`, or entered at the TTY
-prompt, and sends the new password through stdin. `REDISCLI_AUTH` is written to
-a 0600 temporary file and passed to the container with `docker exec --env-file`,
-and the file is removed as soon as the command finishes, so the old password is
-not placed in process arguments. The readiness poll used while starting Redis
-never sends a password at all: it pings unauthenticated and treats a NOAUTH
-reply as confirmation that the server is up.
+非 TTY で `--execute` を指定する場合は `--old-password` または `--old-password-stdin` が必要です。
+どちらも省略すると `ValueError` になります。password を設定していない Redis instance を非対話で
+rotation する場合は、現在の password として空行を `--old-password-stdin` に渡します。
 
-## Notes
+```bash
+printf '%s\n%s\n' 'new-password' '' | uv run redis_rotate_password \
+  --new-password-stdin \
+  --old-password-stdin \
+  --execute
+```
 
-- Generated Redis always requires a password: `redis_generate` refuses to
-  run when `REDIS_PASSWORD` is unset or still `CHANGE_ME`.
-- Rotation output masks passwords.
-- A failed rotation raises an error with the password masked instead of a raw
-  subprocess traceback.
-- `CONFIG SET requirepass` affects the running Redis instance immediately.
+実行前に設定値を先に更新してください。Redis が変更を確認した後に限り、repom は compose file と
+`.env` secrets file を新しい password で再生成します。変更後の `.env` には以前の file が
+`.env.bak` として残ります。library function `repom.redis.manage.rotate_password` も成功後に
+`.env` を更新するため、呼び出し側での追加保存は不要です。
+
+runtime command は `--old-password`、`--old-password-stdin`、または TTY prompt から得た旧 password を
+`REDISCLI_AUTH` 経由で渡し、新しい password は stdin から送ります。`REDISCLI_AUTH` は mode `0600` の
+一時 file に書かれ、`docker exec --env-file` で container に渡された後、command 終了時に削除されます。
+旧 password は process argument に入りません。Redis 起動時の readiness poll は認証情報を送らずに ping
+し、NOAUTH 応答を server 起動の確認として扱います。
+
+## 注意事項
+
+- port と `CHANGE_ME` password の設定規則は[設定ガイド](redis_manager_guide.md)を参照してください。
+- 生成する Redis は常に password を必要とします。`REDIS_PASSWORD` が未設定または `CHANGE_ME` の場合、
+  `redis_generate` は停止します。
+- rotation の出力では password が mask されます。
+- 失敗時は raw subprocess traceback の代わりに password を mask した error が送出されます。
+- `CONFIG SET requirepass` は起動中 Redis にただちに反映されます。
