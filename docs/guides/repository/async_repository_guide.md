@@ -2,6 +2,9 @@
 
 `AsyncBaseRepository` は `BaseRepository` と同じ query、bulk、Soft Delete API を
 `AsyncSession` 向けに提供します。I/O メソッドはすべて `await` してください。
+同期版と非同期版の公開 API の対応関係は
+[`test_repository_api_parity.py`](../../../tests/unit_tests/test_repository_api_parity.py) で検証されています。
+このガイドに記載していない `BaseRepository` の API も `AsyncBaseRepository` で利用できます。
 
 ## 定義
 
@@ -76,7 +79,19 @@ async def main():
 `get_reusable_async_transaction()` を `async with` で利用し、終了時に
 `dispose_engines()` を呼びます。
 
+読み取りや commit の境界を呼び出し側が管理する場合は
+`get_reusable_async_session()` を使います。この context manager は自動 commit せず、
+終了時に未完了のトランザクションを rollback して session を閉じます。詳細は
+[セッション管理パターンガイド](repository_session_patterns.md)を参照してください。
+
 ## 主要 API
+
+`find(params=..., filters=...)` は `FilterParams` から生成した条件と `filters` の条件を
+AND で結合します。`count()` も `params` と `filters` を受け取ります。
+`FilterParams` の定義、`field_to_column` のマッピング、および未マッピングフィールドの
+扱いは [FilterParams ガイド](repository_filter_params_guide.md)を参照してください。
+未マッピングフィールドの詳細は
+[該当する節](repository_filter_params_guide.md#未マッピングフィールド)を参照してください。
 
 ```python
 task = await repo.get_by_id(1)
@@ -98,8 +113,28 @@ updated = await repo.bulk_update([{"id": 1, "status": "done"}])
 deleted = await repo.bulk_delete(ids=[1, 2])
 ```
 
+```python
+from repom import AsyncBaseRepository, FilterParams
+
+
+class TaskParams(FilterParams):
+    status: str | None = None
+
+
+class TaskRepository(AsyncBaseRepository[Task]):
+    field_to_column = {"status": Task.status}
+
+
+repo = TaskRepository()
+params = TaskParams(status="active")
+tasks = await repo.find(params=params, filters=[Task.priority == "high"], limit=20)
+count = await repo.count(params=params, filters=[Task.priority == "high"])
+```
+
 `bulk_update()` と `bulk_delete()` は `filters=` を通じて SQLAlchemy 式も受け取ります。
 これらの式は、該当する `filter_by=` および `ids=` の条件と AND で結合されます。
+`bulk_update()` は既定で論理削除済みの行を対象から除き、含めるには
+`include_deleted=True` を指定します。
 `bulk_permanent_delete()` は、論理削除対応モデルも含め、常に一致する行を物理削除します。
 `get_or_create(lookup, defaults=None)` は `(instance, created)` を返し、一意キーへの同時挿入で
 別の処理が先行した場合は、その行を再検索して返します。
@@ -143,12 +178,11 @@ users = await user_repo.find(limit=10)
 
 ## Soft Delete
 
-`SoftDeletableMixin` を持つモデルでは `soft_delete()`、`restore()`、
-`permanent_delete()`、`find_deleted()` を await できます。Repository の
-Soft Delete メソッドは、内部セッションなら commit し、外部セッションなら
-flush のみを行います。外部セッションでは呼び出し側が transaction を確定します。
-
-詳細は [Soft Delete ガイド](../model/soft_delete_guide.md)を参照してください。
+論理削除 API の `soft_delete()`、`restore()`、`permanent_delete()`、`find_deleted()`、
+`find_deleted_before()` は await して使います。Repository の Soft Delete メソッドは、
+内部セッションなら commit し、外部セッションなら flush のみを行います。外部セッションでは
+呼び出し側が transaction を確定します。詳細は
+[Soft Delete ガイド](../model/soft_delete_guide.md)を参照してください。
 
 ## 関連資料
 

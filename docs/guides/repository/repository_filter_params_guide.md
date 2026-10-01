@@ -8,10 +8,9 @@
 - [基礎編：CRUD操作](base_repository_guide.md) - リポジトリの基本的な使い方
 - [上級編：検索・フィルタ・options](repository_advanced_guide.md) - 複雑な検索、eager loading、パフォーマンス最適化
 
-FastAPI のクエリパラメータへの変換（旧 `as_query_depends()`）は利用側フレーム
-ワーク（fast-domain）に移管されました。このガイドでは repom に残る
-`FilterParams` 本体の使い方（`find(params=...)` と組み合わせた検索）を説明し
-ます。
+FastAPI のクエリ dependency は利用側フレームワーク（fast-domain）の
+`as_query_depends()` が提供します。このガイドでは repom の `FilterParams` を
+`find(params=...)` と組み合わせて検索する方法を説明します。
 
 ---
 
@@ -25,13 +24,18 @@ FastAPI のクエリパラメータへの変換（旧 `as_query_depends()`）は
 ## 基本的な FilterParams
 
 ```python
-from repom import FilterParams
+from repom import BaseRepository, FilterParams
 from typing import Optional
 
 class TaskFilterParams(FilterParams):
     status: Optional[str] = None
     priority: Optional[str] = None
-    title: Optional[str] = None
+
+class TaskRepository(BaseRepository[Task]):
+    field_to_column = {
+        "status": Task.status,
+        "priority": Task.priority,
+    }
 ```
 
 ```python
@@ -84,7 +88,8 @@ count = repo.count_by_params(params)
 
 ### 方法2: `field_to_column` マッピング（シンプル）
 
-等価・部分一致・前方一致・リスト検索のみの場合は、マッピングだけで自動生成できます。
+等価・部分一致・前方一致・リスト検索・範囲比較だけで済む場合は、マッピングだけで
+自動生成できます。
 
 素のカラムを渡した場合は**完全一致（`==`）**になります。リスト型のフィールドは
 自動的に `IN` 検索になります。
@@ -108,7 +113,20 @@ repo = TaskRepository()
 tasks = repo.find(params=TaskFilterParams(status="active", title="task"), limit=100)
 ```
 
-`find(params=..., filters=...)` では、`params` から生成した条件と `filters` の条件を AND で組み合わせるため、両方を渡すと結果がさらに絞り込まれます。デフォルトの `_build_filters()` は、`FilterParams` の値が `None` でないフィールドに対して値が `None` でない `field_to_column` の対応エントリがない場合、リポジトリ名とフィールド名を含む `ValueError` を送出します。該当するフィールドを `field_to_column` に追加するか、`_build_filters()` をオーバーライドしてください。マッピング済みフィールドの処理を `super()._build_filters()` に委ねるオーバーライドでは、残りのフィールドはそのオーバーライドが処理するため、このエラーは発生しません。`count_by_params()` も同じルールに従います。
+`find(params=..., filters=...)` では、`params` から生成した条件と `filters` の条件を AND で組み合わせるため、両方を渡すと結果がさらに絞り込まれます。`count_by_params()` も同じルールに従います。
+
+### 未マッピングフィールド
+
+デフォルトの `_build_filters()` は、値が `None` でない `FilterParams` フィールドに対応する
+`field_to_column` のエントリがない、または対応する値が `None` の場合、Repository 名と
+フィールド名を含む `ValueError` を送出します。該当するフィールドを
+`field_to_column` に追加するか、`_build_filters()` をオーバーライドしてください。
+マッピング済みフィールドを `super()._build_filters()` に委ねるオーバーライドでは、
+残りのフィールドをそのオーバーライド側で処理します。`count_by_params()` も同じ規則です。
+
+この規則は [BaseRepository](base_repository_guide.md)、
+[AsyncBaseRepository](async_repository_guide.md)、
+[Soft Delete](../model/soft_delete_guide.md) の検索にも適用されます。
 
 `count(params=..., filters=...)` と `find_deleted(params=..., filters=...)` は、
 `FilterParams` から生成したマッピング済み条件と明示的な SQL 式を AND で結合します。
@@ -120,8 +138,9 @@ tasks = repo.find(params=TaskFilterParams(status="active", title="task"), limit=
 これらの比較には適用されません。
 
 ```python
-from datetime import datetime
+from datetime import datetime, timezone
 
+from repom import BaseRepository, FilterParams
 from repom.repositories import gte_column, lt_column
 
 class TaskFilterParams(FilterParams):
@@ -133,6 +152,14 @@ class TaskRepository(BaseRepository[Task]):
         "created_at_from": gte_column(Task.created_at),
         "created_at_before": lt_column(Task.created_at),
     }
+
+repo = TaskRepository()
+start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+end = datetime(2025, 12, 31, tzinfo=timezone.utc)
+tasks = repo.find(
+    params=TaskFilterParams(created_at_from=start, created_at_before=end),
+    limit=100,
+)
 ```
 
 部分一致・前方一致が必要な場合は `contains_column()` / `prefix_column()` で
@@ -162,8 +189,8 @@ class TaskRepository(BaseRepository[Task]):
 
 | 方式 | 用途 | コード量 | 柔軟性 |
 |------|------|---------|--------|
-| `field_to_column` マッピング | シンプルな等価・部分一致・IN検索 | 少ない | 低い |
-| `_build_filters()` オーバーライド | 複雑な条件（日付範囲、OR、サブクエリ） | 多い | 高い |
+| `field_to_column` マッピング | 等価・部分一致・IN・範囲比較 | 少ない | 低い |
+| `_build_filters()` オーバーライド | OR、サブクエリなどの複雑な条件 | 多い | 高い |
 
 **推奨**:
 - ✅ シンプルな検索 → `field_to_column` マッピング
@@ -175,65 +202,33 @@ class TaskRepository(BaseRepository[Task]):
 
 ### リスト型パラメータ（複数選択）
 
+リスト型フィールドは、`field_to_column` でカラムに対応付けると自動的に `IN` 検索に
+なります。
+
 ```python
-from typing import List, Optional
+from repom import BaseRepository, FilterParams
 
 class TaskFilterParams(FilterParams):
-    status: Optional[List[str]] = None  # 複数ステータス
-    priority: Optional[List[str]] = None
+    status: list[str] | None = None
+    priority: list[str] | None = None
 
 class TaskRepository(BaseRepository[Task]):
-    def _build_filters(self, params: Optional[TaskFilterParams]) -> list:
-        if not params:
-            return []
-        
-        filters = []
-        
-        if params.status:
-            # IN クエリ
-            filters.append(Task.status.in_(params.status))
-        
-        if params.priority:
-            filters.append(Task.priority.in_(params.priority))
-        
-        return filters
-```
+    field_to_column = {
+        "status": Task.status,
+        "priority": Task.priority,
+    }
 
-**クエリ例**:
-```
-GET /tasks?status=active&status=pending&priority=high
+repo = TaskRepository()
+tasks = repo.find(
+    params=TaskFilterParams(status=["active", "pending"], priority=["high"]),
+    limit=100,
+)
 ```
 
 ### 日付範囲検索
 
-```python
-from datetime import datetime
-from typing import Optional
-
-class TaskFilterParams(FilterParams):
-    created_after: Optional[datetime] = None
-    created_before: Optional[datetime] = None
-
-class TaskRepository(BaseRepository[Task]):
-    def _build_filters(self, params: Optional[TaskFilterParams]) -> list:
-        if not params:
-            return []
-        
-        filters = []
-        
-        if params.created_after:
-            filters.append(Task.created_at >= params.created_after)
-        
-        if params.created_before:
-            filters.append(Task.created_at <= params.created_before)
-        
-        return filters
-```
-
-**クエリ例**:
-```
-GET /tasks?created_after=2025-01-01T00:00:00&created_before=2025-12-31T23:59:59
-```
+日付範囲は `gte_column()` / `lt_column()` を `field_to_column` に指定します。
+実行できるコード例は、上記の[フィールドとカラムのマッピング](#方法2-field_to_column-マッピングシンプル)を参照してください。
 
 ---
 
@@ -262,10 +257,18 @@ class TaskFilterParams(FilterParams):
 
 ```python
 class TaskFilterParams(FilterParams):
-    status: str = "active"  # デフォルトはアクティブのみ
+    status: str = "active"
 ```
 
-ページング値は `FilterParams` の検索フィールドとしては使われません。ページングもパラメータに持たせる場合は、`repo.find(params=params, limit=params.limit, offset=params.offset)` のように明示して渡してください。
+このように `None` 以外のデフォルト値を持つフィールドも、デフォルトの検索条件 builder では
+検索対象です。`status` を `field_to_column` に対応付けるか、`_build_filters()` で処理しないと、
+`find(params=...)` は未マッピングフィールドの `ValueError` を送出します。
+
+ページング値は `FilterParams` の検索条件ではありません。デフォルト builder を使う場合、
+`limit` / `offset` は `FilterParams` subclass のフィールドに含めず、検索値の外で管理して
+`find(limit=..., offset=...)` に渡してください。マッピング値が `None` のエントリも未マッピングと
+同じ扱いです。ページング値を params に含める必要がある場合は `_build_filters()` を
+オーバーライドし、検索フィールドは `super()._build_filters(params)` に委ねてください。
 
 ---
 
@@ -278,8 +281,3 @@ class TaskFilterParams(FilterParams):
 
 - **[auto_import_models ガイド](../features/auto_import_models_guide.md)**: モデルの自動インポート
 - **[BaseRepository ソースコード](../../../repom/repositories/base_repository.py)**: 実装の詳細
-
----
-
-**最終更新**: 2025-12-28  
-**対象バージョン**: repom v2.0+

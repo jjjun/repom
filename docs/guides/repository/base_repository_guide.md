@@ -60,31 +60,46 @@ with get_reusable_sync_transaction() as session:
 
 | メソッド | 用途 | 戻り値 |
 |---------|------|--------|
-| `get_by_id(id)` | ID で取得 | `Optional[T]` |
+| `get_by_id(id, include_deleted=False, options=None)` | ID で取得 | `Optional[T]` |
 | `get_by(column, value)` | カラムで検索 | `List[T]` |
 | `get_all()` | 全件取得 | `List[T]` |
 | `find(params=None, filters=None, include_deleted=False, **kwargs)` | 条件検索 | `List[T]` |
+| `find_by_ids(ids, include_deleted=False, **kwargs)` | ID リストで一括取得 | `List[T]` |
 | `find_one(filters)` | 単一検索 | `Optional[T]` |
-| `count(filters)` | 件数カウント | `int` |
+| `count(filters=None, include_deleted=False, params=None)` | 件数カウント | `int` |
+| `count_by_params(params=None, include_deleted=False)` | FilterParams による件数カウント | `int` |
 | `save(instance)` | 保存 | `T` |
 | `saves(instances)` | 一括保存 | `None` |
+| `dict_save(data)` | 辞書から保存 | `T` |
+| `dict_saves(data_list)` | 辞書リストから一括保存 | `None` |
 | `bulk_insert(objects)` | 一括作成 | `list[T]` |
-| `bulk_update(values, filter_by=None, allow_unfiltered=False, include_deleted=False)` | 一括更新 | `int` |
-| `bulk_delete(filter_by=None, ids=None, allow_unfiltered=False)` | 一括削除 | `int` |
+| `bulk_update(values, filter_by=None, filters=None, allow_unfiltered=False, include_deleted=False)` | 一括更新 | `int` |
+| `bulk_delete(filter_by=None, ids=None, filters=None, allow_unfiltered=False)` | 一括削除 | `int` |
 | `bulk_permanent_delete(filter_by=None, ids=None, filters=None, allow_unfiltered=False)` | 物理一括削除 | `int` |
 | `get_or_create(lookup, defaults=None)` | 一意キーで取得または作成 | `tuple[T, bool]` |
 | `remove(instance)` | 削除 | `None` |
+| `soft_delete` / `restore` / `permanent_delete` / `find_deleted` / `find_deleted_before` | 論理削除 API | [Soft Delete ガイド](../model/soft_delete_guide.md)を参照 |
 
 `bulk_update()` と `bulk_delete()` は `filters=` を通じて SQLAlchemy 式も受け取ります。
 これらの式は、該当する `filter_by=` および `ids=` の条件と AND で結合されます。
-空でない `filters` シーケンスは、絞り込み条件を必須とする安全チェックを満たします。
+空でない `filters` も絞り込み条件を必須とする安全チェックを満たします。
+`bulk_update()` の空の `filter_by` は、`filters=` も空の場合にエラーになります。
+`bulk_delete()` と `bulk_permanent_delete()` は `filter_by`、`ids`、`filters` がすべて
+空の場合にエラーになります。`bulk_update()` で
+`filter_by` を省略し、`filters=` も空の場合は、更新する各辞書に `id` が必要です。
+空でない `filters=` を指定した場合は、更新内容が条件に一致する各行へ適用されます。
 `bulk_permanent_delete()` は、論理削除対応モデルも含め、常に物理削除を実行します。
 `get_or_create(lookup, defaults=None)` は `(instance, created)` を返し、同時挿入で別の処理が
 一意キーの行を先に作成した場合は、その行を再検索して返します。
 
 `find()` の `filters=` はキーワードで指定してください。位置引数は `params` として解釈されます。
+`find(params=...)` で使う各フィールドは `field_to_column` にマッピングするか、
+`_build_filters()` で処理してください。未マッピングフィールドの詳細は
+[FilterParams ガイド](repository_filter_params_guide.md#未マッピングフィールド)を参照してください。
 
-`get_by(..., single=True)` は主キー属性すべての昇順で並べ、最小の主キーを返します（`default_order_by` は適用しません）。`get_by_id()` は主キーの等価条件で最大 1 行に一致するため、`ORDER BY` を追加しません。`get_all()` は全件を取得し、`max_limit` の制限も適用しません。
+`get_by(..., single=True)` の並び順と `get_by_id()` の挙動は
+[order_by ガイド](order_by_guide.md#決定的な並び順)を参照してください。`get_all()` は全件を取得し、
+`max_limit` の制限も適用しません。
 
 ---
 
@@ -130,7 +145,11 @@ with get_reusable_sync_transaction() as session:
 - one-shot script（終了時 dispose を含む）: `get_standalone_sync_transaction()`
 - async パターン: `Depends(get_async_db_session)` / `Depends(get_async_db_transaction, scope="function")` / `get_standalone_async_transaction()`
 
-**詳細**: [セッション管理パターンガイド](repository_session_patterns.md)
+読み取りや呼び出し側が commit を管理する場合は `get_reusable_sync_session()` /
+`get_reusable_async_session()` を使います。これらは commit せず、未完了のトランザクションを
+rollback して session を閉じます。`get_db_session()` も commit しませんが、
+`get_async_db_session()` は成功時に commit します。詳細は
+[セッション管理パターンガイド](repository_session_patterns.md)を参照してください。
 
 ### Read（取得）
 
@@ -153,37 +172,35 @@ all_tasks = repo.get_all()
 リストを設定してください（詳細は
 [検索カラムの制限](repository_advanced_guide.md#get_by--bulk_update--bulk_delete-の検索カラムの制限)）。
 
-### Overriding `find()`
+### `find()` をオーバーライドする
 
-Custom `find()` implementations must accept and merge the `filters` and
-`include_deleted` arguments. Ignoring either argument can return records that
-callers did not request or expose soft-deleted records. `get_by()`,
-`get_by_id()`, and `find_one()` execute their own constrained queries, so they
-do not call an overridden `find()` implementation.
+`find()` を独自に実装する場合は、`filters` と `include_deleted` 引数を受け取り、
+検索条件へ統合してください。どちらかを無視すると、呼び出し側が要求していないレコードを
+返したり、論理削除済みレコードを公開したりするおそれがあります。`get_by()`、
+`get_by_id()`、`find_one()` はそれぞれ独自の条件付きクエリを実行するため、
+オーバーライドした `find()` は呼び出しません。
 
-To customise statement construction for both searches and identity lookups,
-override `_base_select()` instead. For example, a repository that needs to
-refresh identity-mapped objects can use:
+検索と ID 取得の両方で SELECT 文の構築を変更する場合は、代わりに `_base_select()` を
+オーバーライドしてください。たとえば、identity map にあるオブジェクトを再読み込みする
+リポジトリでは、次のようにできます。
 
 ```python
 def _base_select(self):
     return super()._base_select().execution_options(populate_existing=True)
 ```
 
-This hook applies to every repository query that selects model instances.
-Do not add filters in `_base_select()`; each caller owns its filters.
+このフックはモデルインスタンスを取得するすべての Repository クエリに適用されます。
+`_base_select()` ではフィルタを追加しないでください。各呼び出し側が検索条件を管理します。
 
-### When `populate_existing` is required
+### `populate_existing` が必要な場合
 
-`populate_existing=True` is often described as a freshness option, but for some
-mapping styles it is not optional at all.
+`populate_existing=True` はデータを最新にするためのオプションとして説明されることが
+ありますが、マッピング方法によっては必須です。
 
-A relationship declared `lazy="noload"` is left *populated* by an ordinary read -
-an empty list for a collection, `None` for a many-to-one - rather than being left
-unloaded. SQLAlchemy therefore considers the attribute already loaded. A later
-read of the same row with explicit eager-load `options` applies those options to
-the statement but does not overwrite the attribute, so the eager load silently
-does nothing:
+`lazy="noload"` と宣言した relationship は、通常の読み込み時に未ロードのままにはならず、
+コレクションなら空リスト、多対一なら `None` が設定されます。そのため SQLAlchemy は属性を
+すでにロード済みと判断します。同じ行を明示的な eager-load `options` 付きで再取得しても、
+クエリにはオプションが適用されますが属性は上書きされず、eager load が何もせずに終わります。
 
 ```
 lazy="noload", plain read, then re-read WITH selectinload
@@ -191,30 +208,28 @@ lazy="noload", plain read, then re-read WITH selectinload
   with    populate_existing : [<Child ...>]
 ```
 
-So a repository that combines `lazy="noload"` relationships with per-query load
-options needs `populate_existing=True` for those options to have any effect. The
-same applies to any strategy that leaves the attribute populated rather than
-unloaded.
+したがって、`lazy="noload"` の relationship とクエリ単位の load options を併用する
+Repository では、その options を機能させるために `populate_existing=True` が必要です。
+属性が未ロードではなく値を持つ状態になるほかの戦略でも同じです。
 
-This is the usual reason to reach for the flag. Read the next section before
-doing so.
+このフラグを使う主な理由はこれです。指定する前に次の節も確認してください。
 
-### `populate_existing` and unflushed changes
+### `populate_existing` と未 flush の変更
 
-repom sessions default to `autoflush=False`, an inherited setting that preserves
-explicit flush timing. When `_base_select()` uses `populate_existing=True`, a
-repository read can therefore discard an unflushed in-session change by
-reloading the instance from the database.
+repom の session は、明示した flush のタイミングを保つため、継承した設定により
+`autoflush=False` が既定です。そのため `_base_select()` で
+`populate_existing=True` を使うと、Repository の読み込みでデータベースからインスタンスを
+再読み込みし、session 内の未 flush の変更を破棄する場合があります。
 
-Flush before the read when the pending change must be retained:
+保留中の変更を保持する必要がある場合は、読み込み前に flush してください。
 
 ```python
 session.flush()
 item = repository.get_by_id(item.id)
 ```
 
-Alternatively, set `config.autoflush = True` in the application's
-`CONFIG_HOOK` to restore SQLAlchemy's default query-time flush behavior.
+または、アプリケーションの `CONFIG_HOOK` で `config.autoflush = True` を設定すると、
+SQLAlchemy の既定であるクエリ実行時の flush に戻せます。
 
 **関連モデルの取得（N+1 問題の解決）** については [上級編](repository_advanced_guide.md#eager-loadingn1問題の解決) を参照してください。
 `options` にコレクション関連への `joinedload()` を渡した場合も、結果は
@@ -266,8 +281,8 @@ deleted = repo.bulk_delete(allow_unfiltered=True)
 **論理削除（復元可能な削除）** については [SoftDelete ガイド](../model/soft_delete_guide.md) を参照してください。
 `bulk_delete()` は `SoftDeletableMixin` 対応モデルでは物理削除ではなく `deleted_at` を更新します。
 
-`bulk_update()` も `filter_by` に空の dict を渡すと同様に `ValueError` を送出します。
-`filter_by` 未指定時は各 dict の `id` を条件に使うため、この制限の対象外です。
+`bulk_update()` は `filter_by={}` の場合も `filters=` が空のときだけ `ValueError` を送出します。
+`filter_by` を省略し、`filters=` も空の場合は各更新辞書に `id` が必要です。
 
 `bulk_update()` はデフォルトで論理削除済みの行を除外し、`include_deleted=True` を指定すると更新対象に含めます。`bulk_delete()` は論理削除対応モデルでは未削除の行だけを対象にします。同期版の `bulk_update()` / `bulk_delete()` は外部セッションでも `expire_all()` を呼びますが、非同期版は呼びません。
 
@@ -379,8 +394,3 @@ else:
 
 - **[auto_import_models ガイド](../features/auto_import_models_guide.md)**: モデルの自動インポート
 - **[BaseRepository ソースコード](../../../repom/repositories/base_repository.py)**: 実装の詳細
-
----
-
-**最終更新**: 2025-12-28  
-**対象バージョン**: repom v2.0+

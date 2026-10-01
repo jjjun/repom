@@ -16,10 +16,10 @@
 
 ```python
 # OK
-repo.find(order_by="created_at:desc")
+repo.find(order_by="created_at:desc", limit=100)
 
 # NG（bare column）
-repo.find(order_by="created_at")
+repo.find(order_by="created_at", limit=100)
 # -> ValueError
 ```
 
@@ -32,12 +32,16 @@ class TaskRepository(BaseRepository[Task]):
 ```
 
 - `allowed_order_columns`: ソート可能なカラムのホワイトリスト
-- `default_order_by`: `order_by` 未指定時の既定値（canonical form で指定）
+- `default_order_by`: `order_by` 未指定時の既定値。canonical form の文字列、SQLAlchemy 式、
+  または式のリスト / タプルを指定できます。SQLAlchemy 式はカラム名のホワイトリストを
+  通らないため、アプリケーション側で安全な式だけを指定してください。
 
-Repository 定義から OpenAPI 用の `order_by` dependency を構築する機能
-（旧 `build_order_by_query_depends()`）は利用側フレームワーク（fast-domain）に
-移管されました。repom には並び替え候補を取得する introspection API のみが
-残ります。
+`default_order_by` は通常の Python 属性検索順序で解決され、インスタンス属性がクラス属性を
+上書きします。`get_order_by_default_value()` は文字列の既定値だけを canonical string として
+返し、文字列以外が設定されている場合は `None` を返します。
+
+OpenAPI 用の `order_by` dependency は利用側フレームワーク（fast-domain）が構築します。
+repom は並び替え候補を取得する introspection API を提供します。
 
 ## 決定的な並び順
 
@@ -50,8 +54,10 @@ Repository 定義から OpenAPI 用の `order_by` dependency を構築する機�
 `"created_at:desc"` は `created_at DESC, id DESC` の順で並び、`"id:desc"` では `id` は
 一度だけ指定されます。
 
-SQLAlchemy の並び替え式を指定すると、指定した内容が完全な並び順になります。複数の式を
-指定するには、リストまたはタプルを渡します。
+SQLAlchemy の並び替え式を `find()` または `set_find_option()` に指定すると、その内容が
+完全な並び順になります。式を直接渡した場合、自動で主キーのタイブレーカーは追加されない
+ため、ページングに使う場合は必要な一意キーを式に含めてください。複数の式を指定するには、
+リストまたはタプルを渡します。
 
 ```python
 order_by=[Task.created_at.desc(), Task.id.desc()]
@@ -130,8 +136,3 @@ class TaskRepository(BaseRepository[Task]):
 
 - `default_order_by` の正本は repository 側に寄せる
 - decorator 側・endpoint 側で `default_order_by` を二重管理しない
-
-## 移行メモ（旧仕様から来る場合）
-
-- `order_by="column"` は `column:asc` へ置換する
-- repository の `default_order_by` を canonical form に統一する
