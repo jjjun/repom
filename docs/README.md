@@ -11,6 +11,21 @@ repom の資料は用途別に次の3種類へ分けています。
 プロジェクトの導入と公開 API はルートの [README](../README.md)、開発規約は
 [AGENTS.md](../AGENTS.md) が正本です。
 
+## 情報の正本
+
+| 内容 | 正本 |
+| --- | --- |
+| 開発規約、コマンド、handoff | [AGENTS.md](../AGENTS.md) |
+| 導入、公開 API、設定概要 | [README.md](../README.md) |
+| Issue lifecycle | `issuekit protocol --role <role>` |
+| console scripts | `pyproject.toml` の `[project.scripts]` |
+| pytest 設定 | `pyproject.toml` の `[tool.pytest.ini_options]` |
+| 機能の使い方 | [guides](guides/README.md) |
+| 設計判断と制約 | [technical](technical/README.md) |
+
+`CLAUDE.md` と `.github/copilot-instructions.md` は tool 固有の短い入口だけを持ち、
+プロジェクト仕様を再録しません。
+
 ## Issue とクロスプロジェクト提案
 
 Issue は issuekit API の `project = "repom"` で管理します。廃止済みの
@@ -29,4 +44,5 @@ repom 外の変更が必要な場合は `issuekit propose --to <project>` を使
 - technical の履歴資料は、現行仕様と過去案を明確に区別する。
 - ideas のコードは未実装の概念例であることを明記する。
 - 同じ仕様を複数ファイルへコピーせず、正本へリンクする。
+- 外部 package が所有する API はその正本へ委ね、repom 固有の差分だけを記載する。
 - リポジトリ内リンクは相対パスを使い、端末固有の絶対パスを記載しない。

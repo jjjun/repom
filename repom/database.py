@@ -16,6 +16,22 @@ Example (FastAPI with lifespan):
     >>>     result = await session.execute(select(User))
     >>>     return result.scalars().all()
 
+Example (read-only sync session):
+    >>> from sqlalchemy import text
+    >>> from repom.database import get_reusable_sync_session
+    >>> with get_reusable_sync_session() as session:
+    ...     value = session.execute(text("SELECT 1")).scalar_one()
+
+Example (read-only async session):
+    >>> import asyncio
+    >>> from sqlalchemy import text
+    >>> from repom.database import get_reusable_async_session
+    >>> async def read_value():
+    ...     async with get_reusable_async_session() as session:
+    ...         result = await session.execute(text("SELECT 1"))
+    ...         return result.scalar_one()
+    >>> asyncio.run(read_value())
+
 Example (CLI script - sync):
     >>> from repom.database import get_reusable_sync_transaction
     >>> 

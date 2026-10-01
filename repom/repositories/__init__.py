@@ -10,6 +10,9 @@ Available Classes:
 - MatchMode / MatchColumn / contains_column / prefix_column: field_to_column
   で文字列の照合方法（完全一致・前方一致・部分一致）を明示するためのヘルパー
 - gte_column / gt_column / lte_column / lt_column: range comparison helpers
+- get_order_by_columns / get_order_by_default_value / get_order_by_values: order_by helpers
+- VirtualColumnError: virtual order_by column error
+- create_repository_instance / get_model_from_repository_class: repository introspection helpers
 """
 
 from repom.repositories._core import (

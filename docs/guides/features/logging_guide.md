@@ -117,5 +117,5 @@ logging を有効にします。`-s` は pytest の出力 capture を無効に�
 関連資料:
 
 - [CONFIG_HOOK](config_hook_guide.md)
-- [ロギング設計の履歴](../../technical/hybrid_package_logging_strategy.md)
+- [技術資料の所有範囲](../../technical/README.md#所有範囲と履歴)
 - [`repom/logging.py`](../../../repom/logging.py)

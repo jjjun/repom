@@ -6,6 +6,10 @@
 revision creation and migration execution read `version_locations` from that
 file.
 
+`RepomConfig.alembic_*` values seed the `alembic.ini` created by `alembic_init`
+only. The runtime never reads those values, so creation and execution cannot
+disagree about the configured version locations.
+
 For a consumer that reuses repom's migration environment:
 
 ```ini

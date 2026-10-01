@@ -245,7 +245,6 @@ data/              # 一時的なDBファイルは除外
 - user: 一般ユーザー
 - guest: ゲストユーザー
 
-最終更新: 2025-11-19
 """
 
 from mine_py.models import Role

@@ -12,7 +12,7 @@
 - **Shared foundations**: basekit (config, discovery, logging, and Docker utilities)
 - **Database ORM**: SQLAlchemy 2.0+
 - **Migration Tool**: Alembic
-- **Testing Framework**: pytest (unit and behavior tests)
+- **Testing Framework**: pytest (unit, behavior, and integration tests)
 - **Linting**: Ruff
 
 ## Project Structure
@@ -34,6 +34,7 @@ repom/
 │   ├── config_hooks/          # Runtime environment override helpers
 │   ├── config_hook.py         # Default repom configuration hook
 │   ├── config.py              # Environment-aware configuration
+│   ├── exec_env.py            # Execution environment normalization
 │   ├── database.py            # Database connection setup
 │   ├── credentials.py         # Shared credential helpers for PostgreSQL / pgAdmin / Redis rotation
 │   ├── docker_service.py      # Docker service helpers
@@ -45,10 +46,26 @@ repom/
 │   └── utility.py             # Shared utility functions
 ├── tests/                     # Test suite for shared functionality
 │   ├── unit_tests/           # Unit tests for base components
-│   ├── behavior_tests/       # Behavioural notes & examples
+│   ├── behavior_tests/       # Alembic env and model-discovery behavior tests
+│   │   └── conftest.py
 │   ├── integration_tests/    # External-project and database integration tests
+│   │   ├── mock_external_project/
+│   │   └── external_project_simulation/
+│   ├── fixtures/             # Shared test models and import fixtures
+│   ├── alembic_test_config.py
+│   ├── session_config.py
+│   ├── source_policy.py
 │   ├── conftest.py           # Pytest configuration
-├── alembic/                  # Shared migration environment referenced via script_location; versions/ holds repom's own migrations
+├── .github/
+│   ├── workflows/test.yml
+│   ├── workflows/dependency-audit.yml
+│   └── dependabot.yml
+├── scripts/                  # Development helper scripts
+├── alembic/                  # Shared migration environment referenced via script_location
+│   ├── README
+│   ├── script.py.mako
+│   ├── env.py
+│   └── versions/              # Empty (.gitkeep); consumers keep their own versions
 ├── data/                     # SQLite databases for each environment
 ├── data_master/              # Master data files
 ├── docs/                     # Documentation and usage notes
@@ -66,6 +83,10 @@ own settings. `EXEC_ENV` defaults to `dev`.
 in-memory SQLite for `test`. When file-based SQLite is selected with the default
 `db_name=repom`, the generated names are `repom_dev.sqlite3`,
 `repom_test.sqlite3`, and `repom.sqlite3`.
+
+`EXEC_ENV=production` is a case-insensitive alias for `prod` after trimming
+surrounding whitespace; unknown values warn and use dev database defaults. See
+the [CONFIG_HOOK guide](docs/guides/features/config_hook_guide.md).
 
 ### Setting Environment (POSIX shell)
 ```bash
@@ -101,6 +122,10 @@ The location of Alembic migration files is controlled **solely** by `alembic.ini
 - **External projects**: `version_locations = %(here)s/alembic/versions`
 
 **Important**: Both file creation (`alembic revision`) and execution (`alembic upgrade`) use the same location specified in `alembic.ini`. This ensures consistency and prevents confusion.
+
+`alembic_init` seeds a missing `alembic.ini` from `RepomConfig.alembic_*` values,
+which can be set in `CONFIG_HOOK`. After creation, runtime commands read only
+`alembic.ini`; see the [Alembic migration guide](docs/guides/features/alembic_migration_guide.md).
 
 ### Migration Version Table Control
 
@@ -149,84 +174,13 @@ leading `[`; `version_table`, `version_table_schema`, and each
 `autogenerate_exclude_tables` entry must additionally match a plain
 identifier pattern (`[A-Za-z_][A-Za-z0-9_]*`).
 
-### For External Projects (e.g., mine-py)
+### For External Projects
 
-**Step 1: Create alembic.ini**
-
-```ini
-# mine-py/alembic.ini
-[alembic]
-script_location = submod/repom/alembic
-
-# CRITICAL: This controls BOTH file creation and execution
-# %(here)s refers to the directory containing alembic.ini
-version_locations = %(here)s/alembic/versions
-
-# Optional: isolate an independent migration namespace.
-# Defaults to alembic_version when omitted.
-# version_table = alembic_version_fast_domain
-
-# Optional: place the version table in a named schema.
-# Defaults to no explicit schema when omitted.
-# version_table_schema = migration_fast_domain
-
-# Comma-separated sibling migration version tables to ignore during autogenerate.
-# Do not list the active version_table; Alembic excludes it automatically.
-# autogenerate_exclude_tables = alembic_version_fast_domain
-
-# Optional: validate the resolved database before Alembic runs.
-# The callable signature is validate_alembic_database(db_config).
-# pre_migration_hook = mine_py.alembic_runtime:validate_alembic_database
-```
-
-**Step 2: Configure the consuming project (required)**
-
-Set `CONFIG_HOOK` to a consumer-owned hook. This is required for Alembic
-autogenerate: `RepomConfig.model_locations` defaults to an empty list, so no
-consumer models are loaded unless the hook sets it. Without model locations,
-the empty-metadata guard cannot protect the live database from a migration
-that drops every table. Set `root_path` as well so database and data paths
-resolve under the consumer project rather than the repom checkout. Set a
-project-specific `db_name` when using file-based SQLite or when distinct
-PostgreSQL database names are needed.
-
-```bash
-# .env file
-CONFIG_HOOK=mine_py.config:get_repom_config
-```
-
-```python
-# mine-py/src/mine_py/config.py
-from pathlib import Path
-
-
-def get_repom_config(config):
-    config.root_path = str(Path(__file__).resolve().parents[2])
-    config.db_name = "mine_py"
-    config.model_locations = ['mine_py.models']
-    config.allowed_package_prefixes = {'mine_py.', 'repom.'}
-    config.model_excluded_dirs = {'base', 'mixin', '__pycache__'}
-    return config
-```
-
-**Step 3: Define Repository (recommended)**
-
-```python
-# mine-py/src/mine_py/repositories/user.py
-from repom import BaseRepository
-from mine_py.models import User
-from sqlalchemy.orm import Session
-
-class UserRepository(BaseRepository[User]):
-    pass
-
-# Usage in an application-owned transaction
-from repom.database import get_reusable_sync_transaction
-
-with get_reusable_sync_transaction() as session:
-    repo = UserRepository(session=session)
-    user = repo.get_by_id(1)
-```
+Set a consumer-owned `CONFIG_HOOK`, `root_path`, `model_locations`,
+`allowed_package_prefixes`, and project-specific `db_name` as needed.
+Configure migration settings in the consumer's `alembic.ini`; Alembic reads that
+file at runtime. Define app models and repositories in the consumer project.
+See the [Alembic migration guide](docs/guides/features/alembic_migration_guide.md).
 
 ## Testing Framework
 
@@ -251,7 +205,7 @@ db_engine, db_test = create_test_fixtures()
 
 ### Test Structure
 - **Unit Tests**: `tests/unit_tests/` - Core functionality tests
-- **Behavior Tests**: `tests/behavior_tests/` - Integration scenarios
+- **Behavior Tests**: `tests/behavior_tests/` - Alembic env and model-discovery behavior tests
 - **Integration Tests**: `tests/integration_tests/` - External-project and database integration tests
 
 ### Running Tests
@@ -279,24 +233,22 @@ uv run pytest -vv -s
 
 The repository's `.env.example` enables `repom.config_hook:hook_config`, which
 selects PostgreSQL for `dev` / `prod` and in-memory SQLite for `test`. Pytest's
-configured `addopts` include `-x` (stop after the first failure) and
-`--benchmark-skip`. Default runs capture successful test output and keep
-logging concise. Use the verbose command above when detailed stdout and DEBUG
-logs are needed.
+configured `addopts` include `-q` and `--benchmark-skip`. Default runs capture
+successful test output and keep logging concise. Use the verbose command above
+when detailed stdout and DEBUG logs are needed.
+
+- **CI**: `.github/workflows/test.yml` runs on pushes to `main`, pull requests,
+  and manual dispatch; it runs `uv sync --all-extras --dev --locked`, Ruff, and
+  pytest, plus a PostgreSQL integration job using `postgres:16-alpine` on port
+  5433. `.github/workflows/dependency-audit.yml` runs `pip-audit` weekly and
+  when dependency lock files change; `.github/dependabot.yml` checks GitHub
+  Actions weekly. Actions are
+  pinned to commit SHAs.
 
 ### For External Projects
 
-External projects (e.g., mine-py) can use the same helper:
-
-```python
-# external_project/tests/conftest.py
-from repom.testing import create_test_fixtures
-
-db_engine, db_test = create_test_fixtures(
-    db_url="sqlite:///:memory:",  # Optional
-    model_loader=my_loader          # Optional
-)
-```
+External projects can use the shared fixture factories. See the
+[testing guide](docs/guides/testing/testing_guide.md) for configuration and examples.
 
 ## Development Guidelines
 
@@ -321,6 +273,9 @@ db_engine, db_test = create_test_fixtures(
 - **inflect**: Pluralization utilities
 - **pytest**, **pytest-sqlalchemy**, **pytest-benchmark**, and **pytest-asyncio**: Development test tools
 - **ruff**: Development linting
+
+See [`dependency-groups`](pyproject.toml) in `pyproject.toml` for development
+tools. `issuekit` is installed globally and is not a development dependency.
 
 ## Configuration
 
@@ -363,7 +318,7 @@ issuekit: run `issuekit protocol --role <role>` or the MCP `get_protocol` tool.
 ## Handoff protocol
 
 This repo uses the issuekit multi-agent handoff. For the current steps, run
-`issuekit protocol --agent <agent>` (e.g. `codex`, `claude`, or `kimi`) or
+`issuekit protocol --agent <agent>` (e.g. `codex` or `claude`) or
 `issuekit protocol --role <role>` (e.g. `implementer` or `reviewer`), or read the
 issuekit MCP server instructions / `get_protocol` tool.
 

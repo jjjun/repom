@@ -68,4 +68,4 @@ NUL 文字があれば拒否します。port は既定で `127.0.0.1` に bind �
 - [`repom/docker_service.py`](../../../repom/docker_service.py)
 - [`repom/postgres/manage.py`](../../../repom/postgres/manage.py)
 - [`repom/redis/manage.py`](../../../repom/redis/manage.py)
-- [Docker manager 移管の履歴](../../technical/docker_manager_history.md)
+- [技術資料の所有範囲](../../technical/README.md#所有範囲と履歴)

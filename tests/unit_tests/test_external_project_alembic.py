@@ -1,8 +1,8 @@
 """Unit tests: Alembic configuration for an external project.
 
-This test simulates the scenario where an external project relies on its own
-alembic.ini configuration (script_location/version_locations) and no longer
-expects repom to expose alembic_versions_path via RepomConfig.
+This test verifies that an external project relies on its own alembic.ini
+configuration (script_location/version_locations). RepomConfig does not
+control migration version locations; alembic.ini is the sole source of truth.
 
 Expected behavior:
 - Version locations are controlled solely by alembic.ini
@@ -17,12 +17,6 @@ from repom.config import RepomConfig
 
 def test_alembic_versions_path_isolation():
     """Verify that version_locations are controlled by alembic.ini, not RepomConfig"""
-
-    # Simulate external project config
-    class ExternalProjectConfig(RepomConfig):
-        def __init__(self, custom_path: str):
-            super().__init__()
-            self._alembic_versions_path = custom_path
 
     # Create temp directory for external project
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -63,8 +57,8 @@ def test_alembic_versions_path_isolation():
             encoding="utf-8",
         )
 
-        # RepomConfig should not expose alembic_versions_path anymore
-        config = ExternalProjectConfig(str(external_versions_path))
+        # RepomConfig does not control version locations.
+        config = RepomConfig()
         with pytest.raises(AttributeError):
             _ = config.alembic_versions_path  # noqa: B018
 
