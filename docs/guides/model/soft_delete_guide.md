@@ -502,6 +502,8 @@ def downgrade():
     op.drop_column('articles', 'deleted_at')
 ```
 
+autogenerate で生成した revision では、`import repom.custom_types.UTCDateTime` が自動で追加され、型は `repom.custom_types.UTCDateTime.UTCDateTime(timezone=True)` と完全修飾で出力されます。上の手書きの import と型指定はそれと同等です。
+
 手動でマイグレーションを記述する場合は、`sa.DateTime(timezone=True)` を使っても構いません。
 
 適用：
