@@ -105,10 +105,11 @@
   support in `count()` and `find_deleted()`, range operators for `field_to_column`, and
   SAVEPOINT-backed `get_or_create()` in sync and async variants.
 - `get_reusable_sync_session()` and `get_reusable_async_session()` support
-  caller-managed session lifetimes. They never commit; they roll back an open
-  transaction on exit and close the session without disposing the reusable engine. The
-  async session helper does not change the commit-on-success behavior of the FastAPI
-  dependency `get_async_db_session()`.
+  caller-managed session lifetimes. They never commit; closing the session discards an
+  open transaction without expiring loaded objects, so loaded attributes remain readable
+  after exit while lazy loads still require an active session. Closing the session does
+  not dispose the reusable engine. The async session helper does not change the
+  commit-on-success behavior of the FastAPI dependency `get_async_db_session()`.
 - Repository defaults follow normal Python attribute lookup, so instance values for
   `default_options`, `default_order_by`, `max_limit`, and `field_to_column` override
   class values.

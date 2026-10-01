@@ -18,14 +18,15 @@ from repom.database import (
 import repom.database as database_module
 from repom.config import config
 from repom.models.base_model import BaseModel
+from tests.fixtures.models import Child, Parent
 from contextlib import contextmanager
 import threading
 import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 import pytest
-from sqlalchemy import Column, String, Engine
-from sqlalchemy.orm import Session
+from sqlalchemy import Column, String, Engine, select
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.engine import Inspector
 
 # テスト用モデル
@@ -185,7 +186,7 @@ class TestReusableSyncSession:
         monkeypatch.setattr(database_module, "_db_manager", manager)
         return manager, engine, session, session_factory
 
-    def test_rolls_back_pending_change_without_committing_or_disposing(self, tmp_path, monkeypatch):
+    def test_discards_pending_change_without_committing_or_disposing(self, tmp_path, monkeypatch):
         manager, engine, session, session_factory = self._make_manager(tmp_path, monkeypatch)
 
         try:
@@ -195,7 +196,7 @@ class TestReusableSyncSession:
                 session.flush()
 
             session.commit.assert_not_called()
-            session.rollback.assert_called_once_with()
+            session.rollback.assert_not_called()
             session.close.assert_called_once_with()
             assert manager._sync_engine is engine
 
@@ -207,8 +208,8 @@ class TestReusableSyncSession:
         finally:
             manager.dispose_sync()
 
-    def test_propagates_exception_after_rollback(self, tmp_path, monkeypatch):
-        manager, _, session, _ = self._make_manager(tmp_path, monkeypatch)
+    def test_propagates_exception_and_discards_pending_change(self, tmp_path, monkeypatch):
+        manager, _, session, session_factory = self._make_manager(tmp_path, monkeypatch)
 
         try:
             with pytest.raises(ValueError, match="force rollback"):
@@ -219,8 +220,42 @@ class TestReusableSyncSession:
                     raise ValueError("force rollback")
 
             session.commit.assert_not_called()
-            session.rollback.assert_called_once_with()
+            session.rollback.assert_not_called()
             session.close.assert_called_once_with()
+
+            with session_factory() as verify_session:
+                found = verify_session.query(DatabaseTestModel).filter_by(
+                    name="reusable_session_exception"
+                ).one_or_none()
+                assert found is None
+        finally:
+            manager.dispose_sync()
+
+    def test_loaded_relationship_values_remain_readable_after_exit(self, tmp_path, monkeypatch):
+        manager, _, session, session_factory = self._make_manager(tmp_path, monkeypatch)
+
+        try:
+            with session_factory() as setup_session:
+                parent = Parent(name="reusable_session_parent")
+                parent.children = [Child(name="reusable_session_child")]
+                setup_session.add(parent)
+                setup_session.commit()
+
+            with get_reusable_sync_session() as yielded_session:
+                loaded_parent = yielded_session.scalars(
+                    select(Parent)
+                    .options(selectinload(Parent.children))
+                    .where(Parent.name == "reusable_session_parent")
+                ).one()
+
+            assert loaded_parent.name == "reusable_session_parent"
+            assert [child.name for child in loaded_parent.children] == [
+                "reusable_session_child"
+            ]
+            session.commit.assert_not_called()
+            session.rollback.assert_not_called()
+            session.close.assert_called_once_with()
+            assert manager._sync_engine is not None
         finally:
             manager.dispose_sync()
 

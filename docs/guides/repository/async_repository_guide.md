@@ -80,8 +80,9 @@ async def main():
 `dispose_engines()` を呼びます。
 
 読み取りや commit の境界を呼び出し側が管理する場合は
-`get_reusable_async_session()` を使います。この context manager は自動 commit せず、
-終了時に未完了のトランザクションを rollback して session を閉じます。詳細は
+`get_reusable_async_session()` を使います。この context manager は commit せず、終了時に
+`session.close()` で未完了のトランザクションを破棄します。終了後も読み込み済みのオブジェクト属性は
+参照できますが、遅延読み込みはできません。詳細は
 [セッション管理パターンガイド](repository_session_patterns.md)を参照してください。
 
 ## 主要 API
