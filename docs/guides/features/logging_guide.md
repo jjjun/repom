@@ -23,6 +23,7 @@ logger.info("operation completed")
 利用側アプリケーションは、repom を import する前に logging を設定してください。
 
 ログレベルは `EXEC_ENV` から決まり、`prod` では `INFO`、それ以外では `DEBUG` です。
+`production` も `prod` と同じ扱いになり、環境名の大文字小文字や前後の空白は区別されません。
 `LOG_LEVEL` 環境変数を設定すると、大文字小文字を区別せずにこの既定値を上書きできます。
 ファイル handler にはこのレベルが設定され、console handler には `max(ログレベル, INFO)` が
 設定されます。そのため、本番環境で `DEBUG` のファイル出力を必要とする場合は、

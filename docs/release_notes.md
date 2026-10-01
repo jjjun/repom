@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Logging defaults now normalize `EXEC_ENV`, so `production`, mixed case, and
+  surrounding whitespace select the expected log level and file.
 - `RepomConfig` can configure the Alembic script location, version locations,
   version table, and version table schema when `alembic_init` creates a new ini.
   The Alembic reset, credential rotation, and query debugging entry points now

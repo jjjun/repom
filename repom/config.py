@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
@@ -118,6 +119,43 @@ class RepomConfig(Config):
 
         if self.auto_create_dirs:
             self._ensure_path_exists([self.db_backup_path, self.master_data_path])
+
+    # Temporary workaround for pending basekit EXEC_ENV normalization;
+    # remove once that fix lands.
+    @property
+    def log_file(self) -> Optional[str]:
+        return self._get_or_default(
+            "_log_file",
+            "test" if normalize_exec_env(self.exec_env) == "test" else "main",
+        )
+
+    @log_file.setter
+    def log_file(self, value: Optional[str]):
+        Config.log_file.fset(self, value)
+
+    @property
+    def log_level(self) -> int:
+        if self._log_level is not None:
+            return self._log_level
+
+        configured_level = os.getenv("LOG_LEVEL")
+        if configured_level is not None:
+            configured_level = configured_level.strip()
+            if configured_level:
+                level = logging.getLevelNamesMapping().get(configured_level.upper())
+                if level is None:
+                    raise ValueError(f"Invalid LOG_LEVEL value: {configured_level!r}")
+                return level
+
+        return (
+            logging.INFO
+            if normalize_exec_env(self.exec_env) == "prod"
+            else logging.DEBUG
+        )
+
+    @log_level.setter
+    def log_level(self, value: Optional[int]):
+        Config.log_level.fset(self, value)
 
     @property
     def db_type(self) -> str:
