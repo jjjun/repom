@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -30,7 +31,85 @@ _db_type_warning_lock = Lock()
 _POSTGRES_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 # 平文フォールバックを許すため prod のリモート接続では拒否する sslmode
-_POSTGRES_WEAK_SSLMODES = frozenset({"disable", "allow", "prefer"})
+_POSTGRES_STRONG_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
+
+
+def _postgres_host_values(value) -> tuple[object, ...]:
+    """Expand PostgreSQL host values, including libpq's comma-separated lists."""
+    if isinstance(value, (tuple, list)):
+        return tuple(host for item in value for host in _postgres_host_values(item))
+    if isinstance(value, str):
+        return tuple(part.strip() for part in value.split(","))
+    if value is None:
+        return (None,)
+    return (value,)
+
+
+def _is_local_postgres_host(host) -> bool:
+    """Return whether a PostgreSQL host selects a local socket or loopback."""
+    if host is None:
+        return True
+    if not isinstance(host, str):
+        return False
+
+    host = host.strip()
+    if not host or host.startswith(("/", "@", "\\\\")):
+        return True
+    if len(host) > 2 and host[1] == ":" and host[2] in "/\\\\":
+        return True
+
+    if host.startswith("[") and "]" in host:
+        host = host[1 : host.index("]")]
+    elif host.count(":") == 1:
+        name, port = host.rsplit(":", 1)
+        if port.isdecimal():
+            host = name
+
+    normalized = host.casefold().rstrip(".")
+    if normalized in _POSTGRES_LOCAL_HOSTS:
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def _postgres_connection_hosts(url: URL, connect_args=None) -> tuple[object, ...]:
+    """Resolve the destination values that override a PostgreSQL URL authority."""
+    query = url.query
+    host = query.get("host", url.host)
+    has_host = "host" in query or url.host is not None
+    hostaddr = query.get("hostaddr")
+    if connect_args is not None:
+        if "host" in connect_args:
+            host = connect_args["host"]
+            has_host = host is not None
+        if "hostaddr" in connect_args:
+            hostaddr = connect_args["hostaddr"]
+
+    if "dsn" in query or (connect_args is not None and "dsn" in connect_args):
+        return ("<DSN destination>",)
+    if host is None and hostaddr in (None, "") and (
+        "service" in query or (connect_args is not None and "service" in connect_args)
+    ):
+        return ("<service destination>",)
+
+    # libpq routes to hostaddr when it is present; host is then used for
+    # authentication and certificate matching. A remote address is remote even
+    # when the URL authority names localhost.
+    host_values = _postgres_host_values(host)
+    if hostaddr in (None, ""):
+        return host_values
+
+    hostaddr_values = _postgres_host_values(hostaddr)
+    if not has_host:
+        return hostaddr_values
+    if len(hostaddr_values) == len(host_values):
+        return tuple(
+            address if address not in (None, "") else host_value
+            for address, host_value in zip(hostaddr_values, host_values)
+        )
+    return (*hostaddr_values, *host_values, "<ambiguous hostaddr mapping>")
 
 
 @dataclass(frozen=True)
@@ -256,30 +335,29 @@ class RepomConfig(Config):
         return self._resolve_postgres_tls(self.postgres.host).sslmode
 
     def _resolve_postgres_tls(
-        self, host: Optional[str], sslmode: Optional[str] = None
+        self, host: object, sslmode: Optional[str] = None
     ) -> PostgresTlsSettings:
-        """Resolve and validate PostgreSQL TLS settings for *host*."""
+        """Resolve and validate PostgreSQL TLS settings for the destination."""
+        hosts = _postgres_host_values(host)
+        is_remote = any(not _is_local_postgres_host(value) for value in hosts)
         if sslmode is None:
             sslmode = self.postgres.sslmode
         if sslmode is None:
-            if (
-                not is_prod_exec_env(self.exec_env)
-                or host is None
-                or host in _POSTGRES_LOCAL_HOSTS
-            ):
-                sslmode = "prefer"
-            else:
-                sslmode = "require"
+            sslmode = (
+                "require"
+                if is_prod_exec_env(self.exec_env) and is_remote
+                else "prefer"
+            )
 
         if (
             is_prod_exec_env(self.exec_env)
-            and host is not None
-            and host not in _POSTGRES_LOCAL_HOSTS
-            and sslmode in _POSTGRES_WEAK_SSLMODES
+            and is_remote
+            and sslmode not in _POSTGRES_STRONG_SSLMODES
         ):
+            destination = ", ".join(repr(value) for value in hosts)
             raise ValueError(
                 f"PostgreSQL sslmode {sslmode!r} is not allowed in prod for "
-                f"a non-local host ({host!r}); set sslmode to 'require' or "
+                f"a non-local host ({destination}); set sslmode to 'require' or "
                 "stronger (config.postgres.sslmode for generated URLs, or "
                 "the URL query for URL overrides)."
             )
@@ -287,6 +365,19 @@ class RepomConfig(Config):
         return PostgresTlsSettings(
             sslmode=sslmode,
             sslrootcert=self.postgres.sslrootcert,
+        )
+
+    def postgres_tls_settings_for_url(
+        self, url: URL, connect_args=None, sslmode: Optional[str] = None
+    ) -> PostgresTlsSettings:
+        """Resolve and validate TLS settings for a PostgreSQL URL and overrides."""
+        if sslmode is None:
+            if connect_args is not None and "sslmode" in connect_args:
+                sslmode = connect_args["sslmode"]
+            else:
+                sslmode = url.query.get("sslmode")
+        return self._resolve_postgres_tls(
+            _postgres_connection_hosts(url, connect_args), sslmode=sslmode
         )
 
     def postgres_tls_settings(self) -> PostgresTlsSettings:
@@ -300,7 +391,7 @@ class RepomConfig(Config):
         同じ既定値と検証ロジックを共有する。
 
         Raises:
-            ValueError: prod でリモートホストへ接続し、sslmode が require
+            ValueError: prod でリモート接続先へ接続し、sslmode が require
                 未満（disable/allow/prefer）の場合。
         """
         return self._resolve_postgres_tls(self.postgres.host)
@@ -319,7 +410,7 @@ class RepomConfig(Config):
             コードされます。sslmode は postgres_sslmode（exec_env 別の既定値、
             または config.postgres.sslmode の明示値）から補われ、
             config.postgres.sslrootcert を設定すると sslrootcert クエリ
-            パラメータも付与されます。prod でリモートホストへ接続する際に
+            パラメータも付与されます。prod でリモート接続先へ接続する際に
             sslmode が require 未満の場合は ValueError を送出します。
 
         SQLite (db_type='sqlite', デフォルト):
@@ -353,9 +444,9 @@ class RepomConfig(Config):
 
             query = dict(url.query)
             if "sslmode" in query:
-                self._resolve_postgres_tls(url.host, sslmode=query["sslmode"])
+                self.postgres_tls_settings_for_url(url, sslmode=query["sslmode"])
             else:
-                tls = self._resolve_postgres_tls(url.host)
+                tls = self.postgres_tls_settings_for_url(url)
                 query["sslmode"] = tls.sslmode
                 if tls.sslrootcert and "sslrootcert" not in query:
                     query["sslrootcert"] = tls.sslrootcert

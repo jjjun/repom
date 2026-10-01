@@ -83,6 +83,11 @@
 
 ### Fixed
 
+- Production PostgreSQL TLS validation now follows effective `host` / `hostaddr`
+  destinations from URL query parameters and engine `connect_args`, including
+  comma-separated host lists. Remote destinations require `require` or stronger;
+  asyncpg rejects unsupported `hostaddr` overrides and production DSN overrides
+  are rejected when their destination cannot be validated safely.
 - Async PostgreSQL engine settings now translate supported libpq-style options from
   URL query parameters and `connect_args`, with `connect_args` taking precedence over
   URL values. They preserve native asyncpg options, merge `server_settings`, pass

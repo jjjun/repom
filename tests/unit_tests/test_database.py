@@ -16,13 +16,12 @@ from repom.database import (
     _db_manager,
 )
 import repom.database as database_module
-from repom.config import config
+from repom.config import RepomConfig, config
 from repom.models.base_model import BaseModel
 from tests.fixtures.models import Child, Parent
 from contextlib import contextmanager
 import threading
 import time
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 import pytest
 from sqlalchemy import Column, String, Engine, select
@@ -617,19 +616,21 @@ class TestDependencyExceptionForwarding:
 
 
 @pytest.mark.parametrize("exec_env", ["prod", "production", " Production "])
-def test_prod_sslmode_warning_includes_production_aliases(monkeypatch, caplog, exec_env):
-    test_config = SimpleNamespace(
-        exec_env=exec_env,
-        db_url="postgresql://user:secret@localhost/db?sslmode=prefer",
-    )
+def test_prod_sslmode_warning_includes_production_aliases(
+    monkeypatch, caplog, tmp_path, exec_env
+):
+    test_config = RepomConfig(root_path=str(tmp_path), exec_env=exec_env)
+    test_config.db_url = "postgresql://user:secret@localhost/db?sslmode=prefer"
     monkeypatch.setattr(database_module, "config", test_config)
 
     with caplog.at_level("WARNING", logger="repom.database"):
-        database_module._warn_if_prod_sslmode_not_enforced()
+        database_module._warn_if_prod_sslmode_not_enforced(
+            test_config.db_url, test_config.engine_kwargs
+        )
 
     assert any(
         "sslmode='prefer'" in record.message
-        and "host 'localhost'" in record.message
+        and "destination 'localhost'" in record.message
         and "TLS is not enforced" in record.message
         for record in caplog.records
     )

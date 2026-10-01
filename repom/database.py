@@ -73,7 +73,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import Session, sessionmaker, declarative_base
 
-from repom.config import config
+from repom.config import _is_local_postgres_host, _postgres_connection_hosts, config
 from repom.exec_env import is_prod_exec_env
 from repom.logging import get_logger
 
@@ -188,36 +188,118 @@ def safe_db_url(url: str) -> str:
     return _mask_secret_query_params(masked)
 
 
-def _warn_if_prod_sslmode_not_enforced() -> None:
+def _asyncpg_sslmode(connect_args: Mapping) -> Optional[str]:
+    """Return the TLS strength of asyncpg's native ``ssl`` argument."""
+    value = connect_args["ssl"]
+    if isinstance(value, str):
+        return value
+    if value is True or isinstance(value, ssl.SSLContext):
+        return "require"
+    return "disable"
+
+
+def _resolve_postgres_engine_policy(
+    db_url: str, engine_kwargs: dict, *, asyncpg: bool = False
+) -> tuple[str, dict, Optional[str], tuple[object, ...]]:
+    """Resolve TLS mode from asyncpg ssl, connect_args sslmode, then URL sslmode."""
+    url = make_url(db_url)
+    if url.get_backend_name() not in {"postgres", "postgresql"}:
+        return db_url, engine_kwargs, None, ()
+
+    raw_connect_args = engine_kwargs.get("connect_args")
+    if raw_connect_args is None:
+        connect_args = {}
+    elif isinstance(raw_connect_args, Mapping):
+        connect_args = dict(raw_connect_args)
+    else:
+        raise TypeError("connect_args must be a mapping for PostgreSQL")
+
+    if is_prod_exec_env(config.exec_env) and (
+        "dsn" in url.query or "dsn" in connect_args
+    ):
+        raise ValueError(
+            "PostgreSQL DSN overrides are not supported in prod because their "
+            "destination and TLS options cannot be validated safely"
+        )
+
+    hosts = _postgres_connection_hosts(url, connect_args)
+    is_remote = any(not _is_local_postgres_host(host) for host in hosts)
+    sslmode = (
+        _asyncpg_sslmode(connect_args)
+        if asyncpg and "ssl" in connect_args
+        else connect_args.get("sslmode", url.query.get("sslmode"))
+    )
+
+    if (
+        is_prod_exec_env(config.exec_env)
+        and is_remote
+        and not asyncpg
+        and "sslmode" in connect_args
+        and connect_args["sslmode"] is None
+    ):
+        raise ValueError(
+            "connect_args['sslmode'] cannot be None for a remote PostgreSQL "
+            "destination in prod"
+        )
+
+    tls = config.postgres_tls_settings_for_url(url, connect_args, sslmode=sslmode)
+
+    if (
+        is_prod_exec_env(config.exec_env)
+        and is_remote
+        and url.query.get("sslmode") is None
+        and connect_args.get("sslmode") is None
+    ):
+        # A raw SQLAlchemy URL with no TLS option otherwise inherits libpq's
+        # weaker default. Materialize the validated production default so both
+        # drivers receive it.
+        query = dict(url.query)
+        query["sslmode"] = tls.sslmode
+        url = url.set(query=query)
+        db_url = url.render_as_string(hide_password=False)
+
+    effective_sslmode = sslmode
+    if effective_sslmode is None:
+        effective_sslmode = tls.sslmode
+
+    if raw_connect_args is None or connect_args == raw_connect_args:
+        resolved_kwargs = engine_kwargs
+    else:
+        resolved_kwargs = dict(engine_kwargs)
+        resolved_kwargs["connect_args"] = connect_args
+    return db_url, resolved_kwargs, effective_sslmode, hosts
+
+
+def _warn_if_prod_sslmode_not_enforced(
+    db_url: str, engine_kwargs: dict, *, asyncpg: bool = False
+) -> None:
     """Log a warning when a prod PostgreSQL engine resolves to a non-require sslmode.
 
-    This only happens for a local host - config.postgres_sslmode already
-    requires 'require' or stronger in prod for any other host - but operators
-    should still be able to see that TLS is not enforced for that connection.
+    The same URL and connect_args resolver used for engine creation supplies the
+    destination and TLS mode, so the warning describes the effective connection.
     """
-    db_url = config.db_url
-    if db_url is None:
+    if not is_prod_exec_env(config.exec_env):
         return
 
     try:
-        url = make_url(db_url)
+        _, _, sslmode, hosts = _resolve_postgres_engine_policy(
+            db_url, engine_kwargs, asyncpg=asyncpg
+        )
     except Exception:
         return
-    if url.get_backend_name() not in {"postgres", "postgresql"}:
+    if sslmode is None or (
+        isinstance(sslmode, str)
+        and sslmode in {"require", "verify-ca", "verify-full"}
+    ):
         return
 
-    sslmode = url.query.get("sslmode", "prefer")
-    if isinstance(sslmode, tuple):
-        sslmode = sslmode[-1] if sslmode else "prefer"
-    if (
-        is_prod_exec_env(config.exec_env)
-        and sslmode != "require"
-        and not sslmode.startswith("verify")
-    ):
-        logger.warning(
-            f"PostgreSQL sslmode={sslmode!r} in prod for host "
-            f"{url.host!r}; TLS is not enforced for this connection."
-        )
+    if not hosts:
+        return
+    destination = ", ".join(repr(host) for host in hosts)
+    logger.warning(
+        f"PostgreSQL sslmode={sslmode!r} in prod for destination "
+        f"{destination}; TLS is not enforced for this connection."
+    )
 
 
 async def _run_shielded(awaitable) -> None:
@@ -354,12 +436,15 @@ class DatabaseManager:
         if self._sync_engine is None:
             with self._lock:
                 if self._sync_engine is None:
-                    self._sync_engine = create_engine(
-                        config.db_url,
-                        **config.engine_kwargs
+                    sync_url, sync_kwargs, _, _ = _resolve_postgres_engine_policy(
+                        config.db_url, config.engine_kwargs
                     )
-                    _warn_if_prod_sslmode_not_enforced()
-                    logger.debug(f"Sync engine created: {safe_db_url(config.db_url)}")
+                    self._sync_engine = create_engine(
+                        sync_url,
+                        **sync_kwargs
+                    )
+                    _warn_if_prod_sslmode_not_enforced(sync_url, sync_kwargs)
+                    logger.debug(f"Sync engine created: {safe_db_url(sync_url)}")
         return self._sync_engine
 
     def get_sync_session_factory(self) -> sessionmaker:
@@ -553,7 +638,9 @@ class DatabaseManager:
                         async_url,
                         **async_engine_kwargs
                     )
-                    _warn_if_prod_sslmode_not_enforced()
+                    _warn_if_prod_sslmode_not_enforced(
+                        sync_url, config.engine_kwargs, asyncpg=True
+                    )
                     logger.debug(
                         f"Async engine created: {safe_db_url(source_async_url)}"
                     )
@@ -1100,11 +1187,15 @@ class DatabaseManager:
             tuple[tuple[str, dict], tuple[str, dict]]: ((sync_url,
             sync_kwargs), (async_url, async_kwargs)).
         """
+        sync_url, sync_kwargs, _, _ = _resolve_postgres_engine_policy(
+            sync_url, engine_kwargs
+        )
         async_url = DatabaseManager._convert_to_async_uri(sync_url)
         async_url, async_kwargs = DatabaseManager._adapt_asyncpg_connect_options(
-            async_url, engine_kwargs
+            async_url, sync_kwargs
         )
-        return (sync_url, engine_kwargs), (async_url, async_kwargs)
+        _resolve_postgres_engine_policy(sync_url, sync_kwargs, asyncpg=True)
+        return (sync_url, sync_kwargs), (async_url, async_kwargs)
 
 
 # ========================================
