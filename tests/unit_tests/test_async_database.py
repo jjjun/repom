@@ -748,6 +748,101 @@ class TestLifespanManager:
         assert manager._sync_engine is None
         assert manager._async_engine is None
 
+    @pytest.mark.asyncio
+    async def test_disposes_resources_when_lifespan_body_raises(self, monkeypatch):
+        manager = DatabaseManager()
+        dispose_all = AsyncMock()
+        monkeypatch.setattr(manager, "dispose_all", dispose_all)
+        failure = RuntimeError("application failed")
+
+        with pytest.raises(RuntimeError) as exc_info:
+            async with manager.lifespan_context():
+                raise failure
+
+        assert exc_info.value is failure
+        assert manager._sync_engine is None
+        assert manager._async_engine is None
+        dispose_all.assert_awaited_once_with()
+
+    @pytest.mark.asyncio
+    async def test_disposes_resources_when_lifespan_task_is_cancelled(self, monkeypatch):
+        manager = DatabaseManager()
+        dispose_all = AsyncMock()
+        monkeypatch.setattr(manager, "dispose_all", dispose_all)
+        entered = asyncio.Event()
+
+        async def run_lifespan():
+            async with manager.lifespan_context():
+                entered.set()
+                await asyncio.Event().wait()
+
+        task = asyncio.create_task(run_lifespan())
+        await entered.wait()
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        dispose_all.assert_awaited_once_with()
+
+    @pytest.mark.asyncio
+    async def test_disposes_resources_when_lifespan_generator_is_closed(self, monkeypatch):
+        manager = DatabaseManager()
+        dispose_all = AsyncMock()
+        monkeypatch.setattr(manager, "dispose_all", dispose_all)
+        lifespan = manager.lifespan_context()
+
+        await lifespan.__aenter__()
+        await lifespan.gen.aclose()
+
+        dispose_all.assert_awaited_once_with()
+
+    @pytest.mark.asyncio
+    async def test_lifespan_does_not_initialize_unused_engines(self):
+        manager = DatabaseManager()
+
+        async with manager.lifespan_context():
+            pass
+
+        assert manager._sync_engine is None
+        assert manager._async_engine is None
+        assert manager._sync_session_factory is None
+        assert manager._async_session_factory is None
+
+    @pytest.mark.asyncio
+    async def test_failing_sqlite_lifespan_disposes_engines_and_clears_factories(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setattr(config, "db_url", f"sqlite:///{tmp_path / 'lifespan.sqlite3'}")
+        manager = DatabaseManager()
+        sync_factory = manager.get_sync_session_factory()
+        async_factory = await manager.get_async_session_factory()
+        sync_engine = manager._sync_engine
+        async_engine = manager._async_engine
+        assert manager._sync_session_factory is sync_factory
+        assert manager._async_session_factory is async_factory
+        sync_pool = sync_engine.pool
+        async_pool = async_engine.pool
+
+        with sync_engine.connect() as connection:
+            assert connection.execute(text("SELECT 1")).scalar_one() == 1
+        async with async_engine.connect() as connection:
+            result = await connection.execute(text("SELECT 1"))
+            assert result.scalar_one() == 1
+
+        failure = RuntimeError("application failed")
+        with pytest.raises(RuntimeError) as exc_info:
+            async with manager.lifespan_context():
+                raise failure
+
+        assert exc_info.value is failure
+        assert sync_pool.checkedin() == 0
+        assert async_pool.checkedin() == 0
+        assert manager._sync_engine is None
+        assert manager._async_engine is None
+        assert manager._sync_session_factory is None
+        assert manager._async_session_factory is None
+
 
 class TestFastAPIDependsPattern:
     """FastAPI Depends パターンのテスト - 実際の async generator protocol をテスト"""

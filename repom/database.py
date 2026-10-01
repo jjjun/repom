@@ -838,9 +838,11 @@ class DatabaseManager:
             >>> app = FastAPI(lifespan=get_lifespan_manager())
         """
         # Startup: Nothing to do (lazy initialization)
-        yield
-        # Shutdown: Clean up all resources
-        await self.dispose_all()
+        try:
+            yield
+        finally:
+            # Shutdown: Clean up all resources
+            await self.dispose_all()
 
     # ========================================
     # Helper Methods

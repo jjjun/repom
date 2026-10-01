@@ -83,6 +83,8 @@
 
 ### Fixed
 
+- Database engines and session factories are disposed when a lifespan body exits
+  with an exception or cancellation.
 - Production PostgreSQL TLS validation now follows effective `host` / `hostaddr`
   destinations from URL query parameters and engine `connect_args`, including
   comma-separated host lists. Remote destinations require `require` or stronger;
