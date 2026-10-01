@@ -118,12 +118,20 @@ PostgreSQL URL の TLS 既定値と `sslrootcert`、正規化後の production �
 [実行時環境変数ガイドの DB URL と TLS の節](runtime_env_overrides.md#db-url-override-と-tls-policy)を
 参照してください。
 
-非同期 PostgreSQL 接続では URL の `sslmode` / `sslrootcert` を初期値として使い、
-`engine_kwargs.connect_args` に明示した同じ設定があればそちらを優先します。
-`connect_timeout` は asyncpg の `timeout` に、`application_name` は
-`server_settings.application_name` に変換されます。asyncpg 固有の接続オプションと
-既存の `server_settings` は保持されます。未対応のオプションや同じ値に対する矛盾した
-指定は、非同期 engine の設定時に `ValueError` になります。
+非同期 PostgreSQL 接続では URL query の `sslmode` / `sslrootcert` を初期値として使い、
+`engine_kwargs.connect_args` に同じ設定があればそちらを優先します。URL と
+`connect_args` の `connect_timeout` は asyncpg の `timeout` に、
+`application_name` は `server_settings.application_name` に変換されます。
+`connect_args.timeout` と `connect_args.server_settings.application_name` が URL の値と
+重なる場合も、`connect_args` 側の値を使います。`connect_args` 内の
+`connect_timeout` と `timeout`、または `application_name` と
+`server_settings.application_name` が異なる値なら `ValueError` になります。
+
+asyncpg 固有の接続オプションと既存の `server_settings` は保持されます。
+`sslcert`、`sslkey`、`sslpassword`、`sslcrl`、`ssl_min_protocol_version`、
+`ssl_max_protocol_version` は asyncpg の DSN option として渡されます。SQLAlchemy の
+`prepared_statement_cache_size` などの dialect option は URL に残ります。未対応の URL
+option や connect_args は、非同期 engine の設定時に `ValueError` になります。
 
 ## トラブルシューティング
 

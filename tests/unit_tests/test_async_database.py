@@ -32,6 +32,7 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.engine.url import make_url
+from sqlalchemy.dialects.postgresql.asyncpg import PGDialect_asyncpg
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     AsyncEngine,
@@ -441,6 +442,151 @@ class TestAdaptAsyncpgConnectOptionsSslMapping:
 
         assert result_url == async_url
         assert result_kwargs == {"connect_args": {"connect_timeout": 5}}
+
+
+class TestAdaptAsyncpgConnectOptionsFromUrl:
+    @staticmethod
+    def _adapt(query, connect_args=None):
+        async_url = (
+            "postgresql+asyncpg://user:pass@localhost:5432/db"
+            f"?{query}"
+        )
+        engine_kwargs = {"connect_args": connect_args} if connect_args is not None else {}
+        return DatabaseManager._adapt_asyncpg_connect_options(async_url, engine_kwargs)
+
+    @pytest.mark.parametrize(
+        ("query", "expected_name", "expected_value"),
+        [
+            ("application_name=audit", "server_settings", {"application_name": "audit"}),
+            ("connect_timeout=7", "timeout", 7.0),
+        ],
+    )
+    def test_translates_individual_libpq_query_options(
+        self, query, expected_name, expected_value
+    ):
+        adapted_url, adapted_kwargs = self._adapt(query)
+
+        assert expected_name not in make_url(adapted_url).query
+        assert adapted_kwargs["connect_args"][expected_name] == expected_value
+        if query.startswith("connect_timeout="):
+            assert isinstance(adapted_kwargs["connect_args"]["timeout"], float)
+
+    def test_translates_supported_options_together_and_preserves_dialect_options(self):
+        adapted_url, adapted_kwargs = self._adapt(
+            "sslmode=require&application_name=url-app&connect_timeout=7"
+            "&prepared_statement_cache_size=37"
+        )
+
+        url = make_url(adapted_url)
+        assert url.query == {"prepared_statement_cache_size": "37"}
+        assert adapted_kwargs["connect_args"]["ssl"] == "require"
+        assert adapted_kwargs["connect_args"]["timeout"] == 7.0
+        assert adapted_kwargs["connect_args"]["server_settings"] == {
+            "application_name": "url-app"
+        }
+
+        _, dialect_kwargs = PGDialect_asyncpg().create_connect_args(url)
+        assert dialect_kwargs["prepared_statement_cache_size"] == 37
+
+    def test_connect_args_override_url_values(self):
+        adapted_url, adapted_kwargs = self._adapt(
+            "application_name=url-app&connect_timeout=7",
+            {
+                "application_name": "connect-app",
+                "connect_timeout": 9,
+                "server_settings": {"statement_timeout": "1000"},
+            },
+        )
+
+        assert "application_name" not in make_url(adapted_url).query
+        assert "connect_timeout" not in make_url(adapted_url).query
+        assert adapted_kwargs["connect_args"]["timeout"] == 9.0
+        assert adapted_kwargs["connect_args"]["server_settings"] == {
+            "application_name": "connect-app",
+            "statement_timeout": "1000",
+        }
+
+    def test_native_timeout_overrides_url_connect_timeout(self):
+        _, adapted_kwargs = self._adapt(
+            "connect_timeout=7", {"timeout": 11}
+        )
+
+        assert adapted_kwargs["connect_args"]["timeout"] == 11.0
+
+    @pytest.mark.parametrize(
+        ("query", "connect_args"),
+        [
+            ("connect_timeout=not-a-number", None),
+            ("", {"connect_timeout": "not-a-number"}),
+            ("connect_timeout=inf", None),
+            ("connect_timeout=-1", None),
+        ],
+    )
+    def test_rejects_invalid_connect_timeouts(self, query, connect_args):
+        with pytest.raises(ValueError, match="connect_timeout"):
+            self._adapt(query, connect_args)
+
+    def test_moves_certificate_options_to_asyncpg_dsn(self):
+        adapted_url, adapted_kwargs = self._adapt(
+            "sslmode=verify-full&sslrootcert=%2Fetc%2Fssl%2Fca.pem"
+            "&sslcert=%2Fetc%2Fssl%2Fclient%20cert.pem"
+            "&sslkey=%2Fetc%2Fssl%2Fclient.key"
+        )
+
+        assert make_url(adapted_url).query == {}
+        connect_args = adapted_kwargs["connect_args"]
+        assert "ssl" not in connect_args
+        assert "sslcert" not in connect_args
+        assert "sslkey" not in connect_args
+        dsn = make_url(connect_args["dsn"])
+        assert dsn.query == {
+            "sslcert": "/etc/ssl/client cert.pem",
+            "sslkey": "/etc/ssl/client.key",
+            "sslmode": "verify-full",
+            "sslrootcert": "/etc/ssl/ca.pem",
+        }
+
+    @pytest.mark.parametrize(
+        ("name", "value"),
+        [
+            ("sslcert", "/client.crt"),
+            ("sslkey", "/client.key"),
+            ("sslpassword", "key-password"),
+            ("sslcrl", "/client.crl"),
+            ("ssl_min_protocol_version", "TLSv1.2"),
+            ("ssl_max_protocol_version", "TLSv1.3"),
+        ],
+    )
+    def test_moves_individual_dsn_options(self, name, value):
+        adapted_url, adapted_kwargs = self._adapt(f"{name}={value}")
+
+        assert make_url(adapted_url).query == {}
+        assert make_url(adapted_kwargs["connect_args"]["dsn"]).query == {
+            name: value
+        }
+
+    def test_rejects_unsupported_url_options_during_resolution(self):
+        with pytest.raises(ValueError, match="Unsupported postgresql\\+asyncpg URL"):
+            self._adapt("sslcertificate=client.pem")
+
+    def test_rejects_native_ssl_with_url_certificate_options(self):
+        with pytest.raises(ValueError, match="connect_args\\['ssl'\\] conflicts"):
+            self._adapt("sslcert=client.pem", {"ssl": True})
+
+    def test_final_url_and_connect_args_bind_to_asyncpg_connect(self):
+        _, (adapted_url, adapted_kwargs) = DatabaseManager.resolve_engine_settings(
+            "postgresql+psycopg://user:pass@localhost:5432/db"
+            "?sslmode=require&application_name=url-app&connect_timeout=7"
+            "&prepared_statement_cache_size=37",
+            {"connect_args": {"command_timeout": 12.5}},
+        )
+        args, effective_kwargs = PGDialect_asyncpg().create_connect_args(
+            make_url(adapted_url)
+        )
+
+        assert effective_kwargs.pop("prepared_statement_cache_size") == 37
+        effective_kwargs.update(adapted_kwargs["connect_args"])
+        inspect.signature(asyncpg.connect).bind(*args, **effective_kwargs)
 
 
 class TestGetAsyncEngineEchoKwarg:

@@ -192,4 +192,7 @@ async def test_async_engine_log_masks_password(caplog, monkeypatch):
     assert ssl_password not in caplog.text
     assert "postgresql+asyncpg://user:***@localhost:5432/app" in caplog.text
     assert "sslpassword=***" in caplog.text
-    assert ssl_password in mock_create_async_engine.call_args.args[0]
+    assert ssl_password not in mock_create_async_engine.call_args.args[0]
+    assert ssl_password in mock_create_async_engine.call_args.kwargs["connect_args"][
+        "dsn"
+    ]

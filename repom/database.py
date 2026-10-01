@@ -59,6 +59,7 @@ from typing import Optional, AsyncGenerator, Generator, ContextManager, AsyncCon
 from contextlib import contextmanager, asynccontextmanager  # Only for DatabaseManager internal use
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import asyncio
+import math
 import ssl
 import threading
 
@@ -120,6 +121,21 @@ _ASYNCPG_CONNECT_ARGUMENTS = frozenset(
 
 _LIBPQ_ASYNCPG_CONNECT_ARGUMENTS = frozenset(
     {"sslmode", "sslrootcert", "connect_timeout", "application_name"}
+)
+
+_ASYNCPG_DSN_OPTIONS = frozenset(
+    {
+        "sslcert",
+        "sslkey",
+        "sslpassword",
+        "sslcrl",
+        "ssl_min_protocol_version",
+        "ssl_max_protocol_version",
+    }
+)
+
+_SQLALCHEMY_ASYNCPG_CONNECT_ARGUMENTS = frozenset(
+    {"prepared_statement_cache_size", "prepared_statement_name_func"}
 )
 
 
@@ -528,15 +544,19 @@ class DatabaseManager:
             # across event loops running on different threads) is safe.
             with self._lock:
                 if self._async_engine is None:
+                    sync_url = config.db_url
+                    source_async_url = DatabaseManager._convert_to_async_uri(sync_url)
                     _, (async_url, async_engine_kwargs) = self.resolve_engine_settings(
-                        config.db_url, config.engine_kwargs
+                        sync_url, config.engine_kwargs
                     )
                     self._async_engine = create_async_engine(
                         async_url,
                         **async_engine_kwargs
                     )
                     _warn_if_prod_sslmode_not_enforced()
-                    logger.debug(f"Async engine created: {safe_db_url(async_url)}")
+                    logger.debug(
+                        f"Async engine created: {safe_db_url(source_async_url)}"
+                    )
         return self._async_engine
 
     async def get_async_session_factory(self) -> async_sessionmaker:
@@ -846,10 +866,12 @@ class DatabaseManager:
         ``sslrootcert``, ``connect_timeout`` or ``application_name`` parameters
         and no catch-all ``**kwargs`` - so db_url's ``?sslmode=...`` and
         engine_kwargs's psycopg-style connect_args would otherwise raise
-        TypeError on the first async connection. URL TLS options are defaults;
-        explicit connect_args override them. Native asyncpg options are kept,
-        and conflicting aliases or unsupported options raise ValueError. Only
-        the asyncpg driver is affected; other drivers are returned unchanged.
+        TypeError on the first async connection. URL values are defaults;
+        explicit connect_args override them. Certificate options that asyncpg
+        accepts only in its DSN are moved to a DSN, while SQLAlchemy dialect
+        options remain in the URL. Conflicting aliases or unsupported options
+        raise ValueError. Only the asyncpg driver is affected; other drivers
+        are returned unchanged.
 
         Args:
             async_url: Async database URL (already converted by _convert_to_async_uri)
@@ -863,8 +885,33 @@ class DatabaseManager:
             return async_url, engine_kwargs
 
         query = dict(url.query)
+        supported_query_options = {
+            *_ASYNCPG_CONNECT_ARGUMENTS,
+            *_LIBPQ_ASYNCPG_CONNECT_ARGUMENTS,
+            *_ASYNCPG_DSN_OPTIONS,
+            "prepared_statement_cache_size",
+        }
+        unsupported_query_options = set(query) - supported_query_options
+        if unsupported_query_options:
+            names = ", ".join(sorted(repr(name) for name in unsupported_query_options))
+            raise ValueError(
+                f"Unsupported postgresql+asyncpg URL query option(s): {names}"
+            )
+        if "server_settings" in query:
+            raise ValueError(
+                "postgresql+asyncpg URL query option 'server_settings' must be "
+                "configured as a mapping in connect_args"
+            )
+
         url_sslmode = query.pop("sslmode", None)
         url_sslrootcert = query.pop("sslrootcert", None)
+        url_connect_timeout = query.pop("connect_timeout", None)
+        url_application_name = query.pop("application_name", None)
+        url_dsn_options = {
+            name: query.pop(name)
+            for name in _ASYNCPG_DSN_OPTIONS
+            if name in query
+        }
         url = url.set(query=query)
 
         raw_connect_args = engine_kwargs.get("connect_args")
@@ -878,6 +925,8 @@ class DatabaseManager:
         unsupported_options = set(connect_args) - {
             *_ASYNCPG_CONNECT_ARGUMENTS,
             *_LIBPQ_ASYNCPG_CONNECT_ARGUMENTS,
+            *_ASYNCPG_DSN_OPTIONS,
+            *_SQLALCHEMY_ASYNCPG_CONNECT_ARGUMENTS,
         }
         if unsupported_options:
             names = ", ".join(sorted(repr(name) for name in unsupported_options))
@@ -885,7 +934,11 @@ class DatabaseManager:
                 f"Unsupported postgresql+asyncpg connect_args option(s): {names}"
             )
 
-        ssl_aliases = {"sslmode", "sslrootcert"} & set(connect_args)
+        ssl_aliases = {
+            "sslmode",
+            "sslrootcert",
+            *_ASYNCPG_DSN_OPTIONS,
+        } & set(connect_args)
         if "ssl" in connect_args and ssl_aliases:
             names = ", ".join(sorted(ssl_aliases))
             raise ValueError(
@@ -895,8 +948,31 @@ class DatabaseManager:
         asyncpg_connect_args = {
             name: value
             for name, value in connect_args.items()
-            if name in _ASYNCPG_CONNECT_ARGUMENTS and name != "server_settings"
+            if name in _ASYNCPG_CONNECT_ARGUMENTS
+            and name != "server_settings"
         }
+
+        connect_dsn_options = {
+            name: connect_args[name]
+            for name in _ASYNCPG_DSN_OPTIONS
+            if name in connect_args
+        }
+        if "ssl" in connect_args:
+            if url_dsn_options:
+                names = ", ".join(sorted(url_dsn_options))
+                raise ValueError(
+                    f"connect_args['ssl'] conflicts with asyncpg DSN URL option(s): "
+                    f"{names}"
+                )
+            url_dsn_options = {}
+        elif connect_dsn_options:
+            url_dsn_options.update(connect_dsn_options)
+
+        if url_dsn_options and "dsn" in connect_args:
+            raise ValueError(
+                "connect_args['dsn'] cannot be combined with asyncpg DSN URL or "
+                "connect_args options"
+            )
 
         if "ssl" not in connect_args:
             sslmode = connect_args.get("sslmode", url_sslmode)
@@ -905,22 +981,61 @@ class DatabaseManager:
                 raise ValueError(
                     "sslrootcert requires sslmode or a native asyncpg ssl option"
                 )
-            if sslmode is not None:
+            if url_dsn_options:
+                if sslmode is not None:
+                    url_dsn_options["sslmode"] = sslmode
+                if sslrootcert is not None:
+                    url_dsn_options["sslrootcert"] = sslrootcert
+                dsn_url = make_url("postgresql://").set(query=url_dsn_options)
+                asyncpg_connect_args["dsn"] = dsn_url.render_as_string(
+                    hide_password=False
+                )
+            elif sslmode is not None:
                 asyncpg_connect_args["ssl"] = DatabaseManager._resolve_asyncpg_ssl(
                     sslmode, sslrootcert
                 )
 
+        timeout_value = None
+        has_timeout_value = False
+        if "timeout" in connect_args:
+            timeout_value = connect_args["timeout"]
+            has_timeout_value = True
+        elif url_connect_timeout is not None:
+            timeout_value = url_connect_timeout
+            has_timeout_value = True
+
         if "connect_timeout" in connect_args:
             connect_timeout = connect_args["connect_timeout"]
-            if (
-                "timeout" in connect_args
-                and connect_args["timeout"] != connect_timeout
-            ):
+            if "timeout" in connect_args:
+                try:
+                    existing_timeout = float(timeout_value)
+                    connect_timeout_value = float(connect_timeout)
+                except (TypeError, ValueError, OverflowError) as error:
+                    raise ValueError(
+                        "connect_timeout and timeout must be numeric values"
+                    ) from error
+                if existing_timeout != connect_timeout_value:
+                    raise ValueError(
+                        "connect_args['connect_timeout'] conflicts with "
+                        "connect_args['timeout']"
+                    )
+            timeout_value = connect_timeout
+            has_timeout_value = True
+
+        if has_timeout_value and timeout_value is None and "timeout" in connect_args:
+            asyncpg_connect_args["timeout"] = None
+        elif has_timeout_value:
+            try:
+                timeout_value = float(timeout_value)
+            except (TypeError, ValueError, OverflowError) as error:
                 raise ValueError(
-                    "connect_args['connect_timeout'] conflicts with "
-                    "connect_args['timeout']"
+                    "connect_timeout and timeout must be numeric values"
+                ) from error
+            if not math.isfinite(timeout_value) or timeout_value < 0:
+                raise ValueError(
+                    "connect_timeout and timeout must be finite, non-negative values"
                 )
-            asyncpg_connect_args["timeout"] = connect_timeout
+            asyncpg_connect_args["timeout"] = timeout_value
 
         server_settings = connect_args.get("server_settings")
         has_server_settings = "server_settings" in connect_args
@@ -929,20 +1044,26 @@ class DatabaseManager:
                 raise TypeError("connect_args['server_settings'] must be a mapping or None")
             server_settings = dict(server_settings)
 
-        if "application_name" in connect_args:
-            application_name = connect_args["application_name"]
+        application_name = connect_args.get("application_name", url_application_name)
+        if application_name is not None:
             if server_settings is None:
                 server_settings = {}
             if (
                 "application_name" in server_settings
                 and server_settings["application_name"] != application_name
+                and "application_name" in connect_args
             ):
                 raise ValueError(
                     "connect_args['application_name'] conflicts with "
                     "connect_args['server_settings']['application_name']"
                 )
-            server_settings["application_name"] = application_name
+            if "application_name" not in server_settings:
+                server_settings["application_name"] = application_name
             has_server_settings = True
+
+        for name in _SQLALCHEMY_ASYNCPG_CONNECT_ARGUMENTS:
+            if name in connect_args:
+                asyncpg_connect_args[name] = connect_args[name]
 
         if has_server_settings:
             asyncpg_connect_args["server_settings"] = server_settings
