@@ -124,10 +124,11 @@
 
 ### Changed
 
-- `EXEC_ENV` comparisons now use normalized values, including log-level and log-file
-  defaults. `test` (including surrounding whitespace and mixed case) selects the test
-  configuration and fixture guard; `production` is an alias for `prod` for PostgreSQL
-  database names, TLS defaults and enforcement, and destructive-operation guards.
+- Logging defaults now use basekit 0.7.0's normalized `EXEC_ENV`; the minimum basekit
+  version is 0.7.0. `test` (including surrounding whitespace and mixed case) selects
+  the test configuration and fixture guard; `production` is an alias for `prod` for
+  PostgreSQL database names, TLS defaults and enforcement, and destructive-operation
+  guards.
   Unknown values warn and use the dev database name/file for PostgreSQL and SQLite.
 - A non-empty `REPOM_DATABASE_URL` takes precedence over `DATABASE_URL`; an empty value
   falls through to `DATABASE_URL`. A URL override determines `db_type`, sets

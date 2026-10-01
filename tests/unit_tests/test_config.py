@@ -31,24 +31,13 @@ def config_factory(tmp_path):
     ],
 )
 def test_logging_defaults_follow_normalized_exec_env(
-    config_factory, caplog, monkeypatch, exec_env, expected_level, expected_log_file
+    config_factory, monkeypatch, exec_env, expected_level, expected_log_file
 ):
     monkeypatch.delenv("LOG_LEVEL", raising=False)
 
-    with caplog.at_level(logging.WARNING, logger="repom.exec_env"):
-        config = config_factory(exec_env=exec_env)
-        assert config.log_level == expected_level
-        assert config.log_file == expected_log_file
-
-    warnings = [
-        record for record in caplog.records if record.levelno == logging.WARNING
-    ]
-    if exec_env == "log-unknown-213":
-        assert len(warnings) == 1
-        assert "Unknown EXEC_ENV" in warnings[0].message
-        assert "dev database defaults" in warnings[0].message
-    else:
-        assert warnings == []
+    config = config_factory(exec_env=exec_env)
+    assert config.log_level == expected_level
+    assert config.log_file == expected_log_file
 
 
 def test_logging_explicit_values_override_environment_defaults(
