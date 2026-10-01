@@ -309,8 +309,12 @@ db_engine, db_test = create_test_fixtures(
 ## Key Dependencies
 
 - **basekit**: Shared config, discovery, logging, and Docker foundations; the
-  source is configured in `[tool.uv.sources]` in `pyproject.toml`. To update its
-  pin, change the `rev`, run `uv lock`, then run the tests.
+  source is configured in `[tool.uv.sources]` in `pyproject.toml`. Its version
+  floor is inert while the source is a git branch, so `uv.lock` is the effective
+  pin. To update it, run `uv lock --upgrade-package basekit`, review the lock
+  diff, run the tests, and commit `uv.lock`. `scripts/update_basekit_rev.ps1`
+  runs the lock and sync flow. Consumers' own `uv.lock` files, installed with
+  `uv sync --frozen`, are the review gate.
 - **sqlalchemy**: ORM and database toolkit
 - **alembic**: Database migration management
 - **pydantic**: Data validation and serialization

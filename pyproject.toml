@@ -6,7 +6,9 @@ authors = [{ name = "jj", email = "soft.management943@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.12,<4.0"
 dependencies = [
-  # To update the pin, change `rev` in [tool.uv.sources], then run `uv lock` and tests.
+  # The basekit floor is inert while its source is a git branch; uv.lock is the
+  # effective pin. Bump with `uv lock --upgrade-package basekit` and review the
+  # lock diff.
   "basekit>=0.6.1",
   "sqlalchemy>=2.0.49,<3.0.0",
   # >=1.16.0: Config.get_version_locations_list(), used by AlembicSetup.from_ini.
@@ -70,7 +72,7 @@ build-backend = "hatchling.build"
 packages = ["repom"]
 
 [tool.uv.sources]
-basekit = { git = "https://github.com/jjjun/basekit.git", rev = "b0c05f9398f11ce514ae38132e319f584adb5e7d" }
+basekit = { git = "https://github.com/jjjun/basekit.git", branch = "main" }
 [tool.pytest.ini_options]
 addopts = [
   "-q",
