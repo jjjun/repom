@@ -83,6 +83,8 @@
 
 ### Fixed
 
+- Async session cleanup now retrieves completed shielded tasks, so commit failures
+  propagate and pending writes roll back when an eager task factory is active.
 - Database engines and session factories are disposed when a lifespan body exits
   with an exception or cancellation.
 - Production PostgreSQL TLS validation now follows effective `host` / `hostaddr`

@@ -17,6 +17,7 @@ from repom.database import (
     get_lifespan_manager,
     convert_to_async_uri,
     DatabaseManager,
+    _run_shielded,
 )
 import repom.database as database_module
 from repom.config import config, RepomConfig
@@ -29,7 +30,7 @@ import time
 from unittest.mock import AsyncMock
 import asyncpg
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import event, select, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.dialects.postgresql.asyncpg import PGDialect_asyncpg
@@ -1083,17 +1084,15 @@ class TestShieldedCleanup:
     """_run_shielded と非同期セッションのキャンセル耐性テスト"""
 
     @pytest.mark.asyncio
-    async def test_run_shielded_completes_when_outer_cancelled(self):
-        """外側のタスクがキャンセルされてもクリーンアップは完了し、
-        その後 CancelledError が伝播することを確認"""
-        from repom.database import _run_shielded
-
+    async def test_run_shielded_completes_when_outer_is_cancelled_repeatedly(self):
+        """繰り返しキャンセルされても cleanup 完了後に CancelledError が伝播する"""
         started = asyncio.Event()
+        release_cleanup = asyncio.Event()
         state = {"finished": False}
 
         async def cleanup():
             started.set()
-            await asyncio.sleep(0.05)
+            await release_cleanup.wait()
             state["finished"] = True
 
         async def runner():
@@ -1102,12 +1101,114 @@ class TestShieldedCleanup:
         task = asyncio.ensure_future(runner())
         await started.wait()
         task.cancel()
+        await asyncio.sleep(0)
+        task.cancel()
+        await asyncio.sleep(0)
+        release_cleanup.set()
 
         with pytest.raises(asyncio.CancelledError):
             await task
 
         # クリーンアップは中断されず最後まで走り切る
         assert state["finished"] is True
+
+    @pytest.mark.asyncio
+    async def test_run_shielded_retrieves_already_successful_future(self):
+        future = asyncio.get_running_loop().create_future()
+        future.set_result(None)
+
+        await _run_shielded(future)
+
+    @pytest.mark.asyncio
+    async def test_run_shielded_propagates_already_failed_future(self):
+        future = asyncio.get_running_loop().create_future()
+        future.set_exception(RuntimeError("cleanup failed"))
+
+        with pytest.raises(RuntimeError, match="cleanup failed"):
+            await _run_shielded(future)
+
+    @pytest.mark.asyncio
+    async def test_run_shielded_propagates_already_cancelled_future(self):
+        future = asyncio.get_running_loop().create_future()
+        future.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await _run_shielded(future)
+
+    @pytest.mark.asyncio
+    async def test_run_shielded_propagates_eager_task_failure(self):
+        loop = asyncio.get_running_loop()
+        previous_task_factory = loop.get_task_factory()
+
+        async def fail_before_suspending():
+            raise RuntimeError("eager cleanup failed")
+
+        try:
+            loop.set_task_factory(asyncio.eager_task_factory)
+            with pytest.raises(RuntimeError, match="eager cleanup failed"):
+                await _run_shielded(fail_before_suspending())
+        finally:
+            loop.set_task_factory(previous_task_factory)
+
+    @pytest.mark.asyncio
+    async def test_cleanup_failure_is_chained_from_outer_cancellation(self):
+        cleanup_started = asyncio.Event()
+        release_cleanup = asyncio.Event()
+
+        async def cleanup():
+            cleanup_started.set()
+            await release_cleanup.wait()
+            raise RuntimeError("cleanup failed")
+
+        task = asyncio.create_task(_run_shielded(cleanup()))
+        await cleanup_started.wait()
+        task.cancel()
+        await asyncio.sleep(0)
+        release_cleanup.set()
+
+        with pytest.raises(RuntimeError, match="cleanup failed") as exc_info:
+            await task
+
+        assert isinstance(exc_info.value.__cause__, asyncio.CancelledError)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("use_transaction", [False, True])
+    async def test_commit_failure_rolls_back_with_eager_task_factory(
+        self, use_transaction, tmp_path
+    ):
+        manager, engine = self._build_pooled_manager(
+            tmp_path / f"eager_commit_{use_transaction}.sqlite3"
+        )
+        async with engine.begin() as connection:
+            await connection.execute(text("CREATE TABLE audit_item (id INTEGER PRIMARY KEY)"))
+
+        try:
+            loop = asyncio.get_running_loop()
+            previous_task_factory = loop.get_task_factory()
+
+            def reject_commit(session):
+                raise RuntimeError("AUDIT: commit rejected")
+
+            try:
+                loop.set_task_factory(asyncio.eager_task_factory)
+                session_context = (
+                    manager.get_async_transaction()
+                    if use_transaction
+                    else manager.get_async_session()
+                )
+                with pytest.raises(RuntimeError, match="AUDIT: commit rejected"):
+                    async with session_context as session:
+                        event.listen(session.sync_session, "before_commit", reject_commit)
+                        await session.execute(text("INSERT INTO audit_item VALUES (1)"))
+            finally:
+                loop.set_task_factory(previous_task_factory)
+
+            async with engine.connect() as connection:
+                result = await connection.execute(text("SELECT COUNT(*) FROM audit_item"))
+                assert result.scalar_one() == 0
+                assert (await connection.execute(text("SELECT 1"))).scalar_one() == 1
+        finally:
+            await manager.dispose_async()
 
     @staticmethod
     def _build_pooled_manager(db_file):

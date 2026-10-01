@@ -312,8 +312,11 @@ async def _run_shielded(awaitable) -> None:
 
     The awaitable is wrapped in ``asyncio.shield`` and awaited in a loop: a
     cancellation of the outer task does not cancel the shielded task, so we keep
-    waiting until it finishes and then re-raise ``CancelledError`` to preserve
-    cancellation semantics.
+    waiting until it finishes. Its result is retrieved even if the task was
+    already done when this function started. If cleanup succeeds, any outer
+    cancellation is re-raised. If cleanup fails while the caller is cancelled,
+    the cleanup failure is raised with that cancellation as its cause; a
+    cancellation of the cleanup task itself is propagated.
     """
     task = asyncio.ensure_future(awaitable)
     pending_cancel: Optional[asyncio.CancelledError] = None
@@ -322,11 +325,30 @@ async def _run_shielded(awaitable) -> None:
             await asyncio.shield(task)
         except asyncio.CancelledError as exc:
             if task.done():
-                # The shielded cleanup itself was cancelled; propagate.
-                raise
+                if task.cancelled():
+                    # The shielded cleanup itself was cancelled; retrieve it below.
+                    break
+                # The outer task was cancelled as cleanup completed. Retrieve
+                # the task result below before deciding which outcome to raise.
+                pending_cancel = exc
+                break
             # The outer task was cancelled while cleanup is still running.
             # Remember the cancellation and keep waiting for cleanup to finish.
             pending_cancel = exc
+        except BaseException as cleanup_error:
+            if pending_cancel is not None:
+                raise cleanup_error from pending_cancel
+            raise
+
+    try:
+        task.result()
+    except BaseException as cleanup_error:
+        if pending_cancel is not None and not isinstance(
+            cleanup_error, asyncio.CancelledError
+        ):
+            raise cleanup_error from pending_cancel
+        raise
+
     if pending_cancel is not None:
         raise pending_cancel
 

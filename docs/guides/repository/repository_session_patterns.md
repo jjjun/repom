@@ -101,6 +101,7 @@ client には成功として通知されます。`scope="function"` では respo
 
 `get_db_session()` は dependency injection 用の generator なので、
 `with get_db_session()` のようには使わないでください。
+非同期 dependency では commit の例外が伝播し、session の rollback と close を試みます。
 
 ## 非同期アプリケーションコード
 
