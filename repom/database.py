@@ -340,17 +340,18 @@ class DatabaseManager:
 
     @contextmanager
     def get_sync_session_no_commit(self) -> Generator[Session, None, None]:
-        """Get a session that rolls back open work and closes without committing."""
+        """Get a session that closes without committing.
+
+        Closing the session discards any open transaction without expiring loaded
+        objects. Their loaded attribute values remain readable after exit; lazy
+        loads still require an active session.
+        """
         factory = self.get_sync_session_factory()
         session = factory()
         try:
             yield session
         finally:
-            try:
-                if session.in_transaction():
-                    session.rollback()
-            finally:
-                session.close()
+            session.close()
 
     @contextmanager
     def get_sync_transaction(self) -> Generator[Session, None, None]:
@@ -537,17 +538,18 @@ class DatabaseManager:
 
     @asynccontextmanager
     async def get_async_session_no_commit(self) -> AsyncGenerator[AsyncSession, None]:
-        """Get an async session that rolls back open work and closes without committing."""
+        """Get an async session that closes without committing.
+
+        Closing the session discards any open transaction without expiring loaded
+        objects. Their loaded attribute values remain readable after exit; lazy
+        loads still require an active session.
+        """
         factory = await self.get_async_session_factory()
         session = factory()
         try:
             yield session
         finally:
-            try:
-                if session.in_transaction():
-                    await _run_shielded(session.rollback())
-            finally:
-                await _run_shielded(session.close())
+            await _run_shielded(session.close())
 
     @asynccontextmanager
     async def get_async_transaction(self) -> AsyncGenerator[AsyncSession, None]:
@@ -1019,11 +1021,13 @@ def get_reusable_sync_transaction():
 
 
 def get_reusable_sync_session() -> ContextManager[Session]:
-    """Get a reusable session that never commits and rolls back on exit.
+    """Get a reusable session that never commits and closes on exit.
 
     Use this for reads or when the caller needs to manage commit boundaries.
-    Unlike ``get_db_session()``, this is a context manager. The FastAPI
-    dependency ``get_db_session()`` also does not commit on exit.
+    Closing the session discards any open transaction while preserving loaded
+    attribute values for use after the context exits. Lazy loads still require
+    an active session. Unlike ``get_db_session()``, this is a context manager.
+    The FastAPI dependency ``get_db_session()`` also does not commit on exit.
     """
     return _db_manager.get_sync_session_no_commit()
 
@@ -1163,12 +1167,14 @@ def get_reusable_async_transaction():
 
 
 def get_reusable_async_session() -> AsyncContextManager[AsyncSession]:
-    """Get a reusable async session that never commits and rolls back on exit.
+    """Get a reusable async session that never commits and closes on exit.
 
     Use this for reads or when the caller needs to manage commit boundaries.
-    Unlike ``get_async_db_session()``, this is a context manager and does not
-    commit on exit. The FastAPI dependency ``get_async_db_session()`` commits
-    on success.
+    Closing the session discards any open transaction while preserving loaded
+    attribute values for use after the context exits. Lazy loads still require
+    an active session. Unlike ``get_async_db_session()``, this context manager
+    does not commit on exit. The FastAPI dependency ``get_async_db_session()``
+    commits on success.
     """
     return _db_manager.get_async_session_no_commit()
 

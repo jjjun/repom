@@ -5,6 +5,7 @@ DatabaseManager の非同期セッション管理機能を検証します。
 """
 
 from repom.examples.models.sample import SampleModel
+from tests.fixtures.models import Child, Parent
 from repom.database import (
     Base,
     get_async_engine,
@@ -29,6 +30,7 @@ from unittest.mock import AsyncMock
 import asyncpg
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.orm import selectinload
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -1070,7 +1072,7 @@ class TestReusableAsyncSession:
         assert not hasattr(result, "__anext__")
 
     @pytest.mark.asyncio
-    async def test_rolls_back_pending_change_without_committing_or_disposing(
+    async def test_discards_pending_change_without_committing_or_disposing(
         self, tmp_path, monkeypatch
     ):
         manager, engine, session, session_factory = await self._make_manager(
@@ -1084,7 +1086,7 @@ class TestReusableAsyncSession:
                 await session.flush()
 
             session.commit.assert_not_awaited()
-            session.rollback.assert_awaited_once_with()
+            session.rollback.assert_not_awaited()
             session.close.assert_awaited_once_with()
             assert manager._async_engine is engine
 
@@ -1099,8 +1101,8 @@ class TestReusableAsyncSession:
             await manager.dispose_async()
 
     @pytest.mark.asyncio
-    async def test_propagates_exception_after_rollback(self, tmp_path, monkeypatch):
-        manager, _, session, _ = await self._make_manager(tmp_path, monkeypatch)
+    async def test_propagates_exception_and_discards_pending_change(self, tmp_path, monkeypatch):
+        manager, _, session, session_factory = await self._make_manager(tmp_path, monkeypatch)
 
         try:
             with pytest.raises(ValueError, match="force rollback"):
@@ -1111,8 +1113,50 @@ class TestReusableAsyncSession:
                     raise ValueError("force rollback")
 
             session.commit.assert_not_awaited()
-            session.rollback.assert_awaited_once_with()
+            session.rollback.assert_not_awaited()
             session.close.assert_awaited_once_with()
+
+            async with session_factory() as verify_session:
+                result = await verify_session.execute(
+                    select(SampleModel).where(
+                        SampleModel.value == "reusable_async_session_exception"
+                    )
+                )
+                assert result.scalar_one_or_none() is None
+        finally:
+            await manager.dispose_async()
+
+    @pytest.mark.asyncio
+    async def test_loaded_relationship_values_remain_readable_after_exit(
+        self, tmp_path, monkeypatch
+    ):
+        manager, _, session, session_factory = await self._make_manager(
+            tmp_path, monkeypatch
+        )
+
+        try:
+            async with session_factory() as setup_session:
+                parent = Parent(name="reusable_async_session_parent")
+                parent.children = [Child(name="reusable_async_session_child")]
+                setup_session.add(parent)
+                await setup_session.commit()
+
+            async with get_reusable_async_session() as yielded_session:
+                result = await yielded_session.scalars(
+                    select(Parent)
+                    .options(selectinload(Parent.children))
+                    .where(Parent.name == "reusable_async_session_parent")
+                )
+                loaded_parent = result.one()
+
+            assert loaded_parent.name == "reusable_async_session_parent"
+            assert [child.name for child in loaded_parent.children] == [
+                "reusable_async_session_child"
+            ]
+            session.commit.assert_not_awaited()
+            session.rollback.assert_not_awaited()
+            session.close.assert_awaited_once_with()
+            assert manager._async_engine is not None
         finally:
             await manager.dispose_async()
 

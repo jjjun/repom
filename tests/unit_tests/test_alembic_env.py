@@ -13,6 +13,7 @@ from basekit.config_hook import ConfigHookLoadError
 
 import repom.config
 import repom.utility
+from repom.alembic import render_repom_type
 
 
 def test_env_keeps_preexisting_loggers_enabled(monkeypatch):
@@ -107,6 +108,7 @@ def test_env_configures_version_table(
 
     assert configured_options["version_table"] == expected_version_table
     assert configured_options["include_object"] is env_globals["include_object"]
+    assert configured_options["render_item"] is render_repom_type
     if not offline_mode:
         assert configured_options["connection"] is connection
 

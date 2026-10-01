@@ -291,6 +291,8 @@ uv run alembic revision --autogenerate -m "Add custom model"
 uv run alembic upgrade head
 ```
 
+`repom.custom_types` の型を含む revision を autogenerate すると、使用したカスタム型モジュールの import は自動で追加されます。生成された migration は実行前に内容を確認してください。
+
 ### ディレクトリ構造
 
 ```

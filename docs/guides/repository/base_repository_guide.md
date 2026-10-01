@@ -146,8 +146,9 @@ with get_reusable_sync_transaction() as session:
 - async パターン: `Depends(get_async_db_session)` / `Depends(get_async_db_transaction, scope="function")` / `get_standalone_async_transaction()`
 
 読み取りや呼び出し側が commit を管理する場合は `get_reusable_sync_session()` /
-`get_reusable_async_session()` を使います。これらは commit せず、未完了のトランザクションを
-rollback して session を閉じます。`get_db_session()` も commit しませんが、
+`get_reusable_async_session()` を使います。これらは commit せず、終了時に `session.close()` で
+未完了のトランザクションを破棄します。終了後も読み込み済みのオブジェクト属性は参照できますが、
+遅延読み込みはできません。`get_db_session()` も commit しませんが、
 `get_async_db_session()` は成功時に commit します。詳細は
 [セッション管理パターンガイド](repository_session_patterns.md)を参照してください。
 

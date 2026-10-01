@@ -9,6 +9,7 @@ from basekit.discovery import validate_package_security
 
 from repom.database import Base
 from repom.config import config as db_config
+from repom.alembic import render_repom_type
 from repom.utility import load_models
 
 # this is the Alembic Config object, which provides
@@ -158,6 +159,7 @@ def run_migrations_offline() -> None:
         version_table=version_table,
         version_table_schema=version_table_schema,
         include_object=include_object,
+        render_item=render_repom_type,
     )
 
     with context.begin_transaction():
@@ -185,6 +187,7 @@ def run_migrations_online() -> None:
             version_table=version_table,
             version_table_schema=version_table_schema,
             include_object=include_object,
+            render_item=render_repom_type,
         )
 
         with context.begin_transaction():

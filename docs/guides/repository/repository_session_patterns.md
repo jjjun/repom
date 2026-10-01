@@ -29,7 +29,9 @@ with get_reusable_sync_session() as session:
     session.commit()  # Optional; the context manager never commits for you.
 ```
 
-トランザクションが開いたままの場合、終了時に rollback してから session を閉じます。
+この context manager は commit しません。終了時に `session.close()` で開いたままの
+トランザクションを破棄します。終了後も読み込み済みのオブジェクト属性は参照できますが、
+遅延読み込みはできません。
 複数の操作をまとめて commit または rollback する場合は、
 `get_reusable_sync_transaction()` を使ってください。
 
@@ -115,8 +117,9 @@ async with get_reusable_async_session() as session:
     await session.commit()  # Optional; the context manager never commits for you.
 ```
 
-終了時に開いたままのトランザクションを rollback し、session を閉じます。この context
-manager は commit しません。成功時に commit する FastAPI dependency の
+この context manager は commit しません。終了時に `session.close()` で開いたままの
+トランザクションを破棄します。終了後も読み込み済みのオブジェクト属性は参照できますが、
+遅延読み込みはできません。成功時に commit する FastAPI dependency の
 `get_async_db_session()` とは動作が異なります。複数の操作をまとめて commit または
 rollback する場合は `get_reusable_async_transaction()` を使ってください。
 
