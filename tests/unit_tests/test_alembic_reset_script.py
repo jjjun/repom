@@ -6,6 +6,7 @@ resolution (repom#160).
 """
 
 
+import re
 import sys
 from io import BytesIO, StringIO, TextIOWrapper
 from unittest.mock import MagicMock
@@ -117,7 +118,7 @@ def test_describe_alembic_reset_raises_for_missing_ini(monkeypatch, tmp_path):
 
     with pytest.raises(
         FileNotFoundError,
-        match=f"Alembic config file not found: {ini_path}",
+        match=re.escape(f"Alembic config file not found: {ini_path}"),
     ):
         alembic_reset.describe_alembic_reset(ini_path)
 

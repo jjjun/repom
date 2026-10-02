@@ -4,8 +4,8 @@ import subprocess
 from unittest.mock import MagicMock
 
 import pytest
-from basekit.docker_manager import DockerCommandExecutor
 
+import repom.docker_service as docker_service
 from repom.docker_service import (
     DockerUnavailableError,
     ensure_running,
@@ -16,16 +16,77 @@ from repom.docker_service import (
 
 def test_is_container_running_returns_underlying_result(monkeypatch):
     monkeypatch.setattr(
-        DockerCommandExecutor, "is_container_running", MagicMock(return_value=True)
+        docker_service.subprocess,
+        "run",
+        MagicMock(
+            return_value=subprocess.CompletedProcess(
+                args=["docker", "ps"],
+                returncode=0,
+                stdout="repom_postgres\tUp 2 minutes\n",
+                stderr="",
+            )
+        ),
     )
 
     assert is_container_running("repom_postgres") is True
 
 
+@pytest.mark.parametrize("running_name", ["x_dev", "id_x", "xx"])
+def test_is_container_running_requires_an_exact_name_match(monkeypatch, running_name):
+    monkeypatch.setattr(
+        docker_service.subprocess,
+        "run",
+        MagicMock(
+            return_value=subprocess.CompletedProcess(
+                args=["docker", "ps"],
+                returncode=0,
+                stdout=f"{running_name}\tUp 2 minutes\n",
+                stderr="",
+            )
+        ),
+    )
+
+    assert is_container_running("x") is False
+
+
+def test_is_container_running_splits_compose_names(monkeypatch):
+    monkeypatch.setattr(
+        docker_service.subprocess,
+        "run",
+        MagicMock(
+            return_value=subprocess.CompletedProcess(
+                args=["docker", "ps"],
+                returncode=0,
+                stdout="other,x\tUp 2 minutes\n",
+                stderr="",
+            )
+        ),
+    )
+
+    assert is_container_running("x") is True
+
+
+def test_is_container_running_returns_false_for_restarting_container(monkeypatch):
+    monkeypatch.setattr(
+        docker_service.subprocess,
+        "run",
+        MagicMock(
+            return_value=subprocess.CompletedProcess(
+                args=["docker", "ps"],
+                returncode=0,
+                stdout="x\tRestarting (1) 3 seconds ago\n",
+                stderr="",
+            )
+        ),
+    )
+
+    assert is_container_running("x") is False
+
+
 def test_is_container_running_raises_docker_unavailable_when_docker_missing(monkeypatch):
     monkeypatch.setattr(
-        DockerCommandExecutor,
-        "is_container_running",
+        docker_service.subprocess,
+        "run",
         MagicMock(side_effect=FileNotFoundError("docker not found")),
     )
 
@@ -37,11 +98,7 @@ def test_is_container_running_raises_docker_unavailable_with_daemon_stderr(monke
     original = subprocess.CalledProcessError(
         1, ["docker", "ps"], stderr="Cannot connect to the Docker daemon"
     )
-    monkeypatch.setattr(
-        DockerCommandExecutor,
-        "is_container_running",
-        MagicMock(side_effect=original),
-    )
+    monkeypatch.setattr(docker_service.subprocess, "run", MagicMock(side_effect=original))
 
     with pytest.raises(
         DockerUnavailableError, match="Cannot connect to the Docker daemon"
@@ -84,8 +141,8 @@ def test_start_service_prints_check_logs_hint_on_system_exit(capsys):
 
 def test_ensure_running_reports_docker_missing(monkeypatch):
     monkeypatch.setattr(
-        DockerCommandExecutor,
-        "is_container_running",
+        docker_service.subprocess,
+        "run",
         MagicMock(side_effect=FileNotFoundError("docker not found")),
     )
 
@@ -103,11 +160,7 @@ def test_ensure_running_reports_unreachable_docker_daemon(monkeypatch):
     daemon_error = subprocess.CalledProcessError(
         1, ["docker", "ps"], stderr="Cannot connect to the Docker daemon"
     )
-    monkeypatch.setattr(
-        DockerCommandExecutor,
-        "is_container_running",
-        MagicMock(side_effect=daemon_error),
-    )
+    monkeypatch.setattr(docker_service.subprocess, "run", MagicMock(side_effect=daemon_error))
 
     with pytest.raises(RuntimeError, match="Cannot connect to the Docker daemon"):
         ensure_running(
@@ -131,9 +184,7 @@ def test_ensure_running_reports_unreachable_docker_daemon(monkeypatch):
 def test_ensure_running_converts_start_failure_to_runtime_error(
     monkeypatch, start_error
 ):
-    monkeypatch.setattr(
-        DockerCommandExecutor, "is_container_running", lambda name: False
-    )
+    monkeypatch.setattr(docker_service, "is_container_running", lambda name: False)
     manager = MagicMock()
     manager.start.side_effect = start_error
     generate = MagicMock()
@@ -149,3 +200,68 @@ def test_ensure_running_converts_start_failure_to_runtime_error(
 
     generate.assert_called_once_with()
     manager.start.assert_called_once_with(timeout_seconds=30)
+
+
+def test_ensure_running_start_error_includes_compose_context(monkeypatch, tmp_path):
+    monkeypatch.setattr(docker_service, "is_container_running", lambda name: False)
+    compose_file = tmp_path / "docker-compose.generated.yml"
+    manager = MagicMock()
+    compose_error = subprocess.CalledProcessError(
+        1, ["docker", "compose", "-p", "repom_postgres", "up", "-d"]
+    )
+    system_exit = SystemExit(1)
+    system_exit.__context__ = compose_error
+    manager.start.side_effect = system_exit
+
+    with pytest.raises(RuntimeError) as excinfo:
+        ensure_running(
+            manager_factory=lambda: manager,
+            container_names={"postgres": "repom_postgres"},
+            generate_fn=MagicMock(),
+            service_label="PostgreSQL",
+            timeout_seconds=30,
+            generated_files=(compose_file,),
+            prepare_fn=MagicMock(),
+            project_name="repom_postgres",
+        )
+
+    message = str(excinfo.value)
+    assert str(compose_file) in message
+    assert "repom_postgres" in message
+    assert "returned non-zero exit status 1" in message
+    assert excinfo.value.__cause__ is system_exit
+
+
+def test_ensure_running_includes_timeout_context_from_system_exit(monkeypatch):
+    monkeypatch.setattr(docker_service, "is_container_running", lambda name: False)
+    manager = MagicMock()
+    timeout_error = TimeoutError("readiness probe timed out")
+    system_exit = SystemExit(1)
+    system_exit.__context__ = timeout_error
+    manager.start.side_effect = system_exit
+
+    with pytest.raises(RuntimeError, match="readiness probe timed out"):
+        ensure_running(
+            manager_factory=lambda: manager,
+            container_names={"Redis": "repom_redis"},
+            generate_fn=MagicMock(),
+            service_label="Redis",
+            timeout_seconds=30,
+        )
+
+
+def test_ensure_running_wraps_configuration_errors_with_the_original_cause(monkeypatch):
+    monkeypatch.setattr(docker_service, "is_container_running", lambda name: False)
+    config_error = ValueError("REDIS_PASSWORD must not be empty")
+
+    with pytest.raises(RuntimeError, match="REDIS_PASSWORD must not be empty") as excinfo:
+        ensure_running(
+            manager_factory=MagicMock(),
+            container_names={"Redis": "repom_redis"},
+            generate_fn=MagicMock(),
+            service_label="Redis",
+            timeout_seconds=30,
+            prepare_fn=MagicMock(side_effect=config_error),
+        )
+
+    assert excinfo.value.__cause__ is config_error

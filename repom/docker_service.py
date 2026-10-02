@@ -9,8 +9,6 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Protocol
 
-from basekit.docker_manager import DockerCommandExecutor
-
 
 class DockerUnavailableError(RuntimeError):
     """Raised when the docker CLI is missing or its daemon is unreachable."""
@@ -85,14 +83,35 @@ def remove_service(manager_factory: ManagerFactory) -> None:
 def is_container_running(container_name: str) -> bool:
     """Return whether ``container_name`` is running.
 
-    Wraps DockerCommandExecutor.is_container_running() so a missing docker
+    Uses Docker's formatted name column for an exact match. A missing docker
     CLI (FileNotFoundError) and an unreachable daemon (CalledProcessError,
     e.g. Docker Desktop installed but not running) both surface as
-    DockerUnavailableError, carrying the daemon's stderr, instead of two
-    different exception types.
+    DockerUnavailableError, carrying the daemon's stderr.
     """
     try:
-        return DockerCommandExecutor.is_container_running(container_name)
+        result = subprocess.run(
+            [
+                "docker",
+                "ps",
+                "--filter",
+                f"name={container_name}",
+                "--format",
+                "{{.Names}}\t{{.Status}}",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        for line in result.stdout.splitlines():
+            names_and_status = line.split("\t", maxsplit=1)
+            if len(names_and_status) != 2:
+                continue
+            names, status = names_and_status
+            if status.strip().startswith("Up") and any(
+                name.strip() == container_name for name in names.split(",")
+            ):
+                return True
+        return False
     except FileNotFoundError as exc:
         raise DockerUnavailableError(
             "docker command not found. "
@@ -117,8 +136,11 @@ def ensure_running(
     timeout_seconds: int,
     *,
     generated_files: tuple[Path, ...] | Callable[[], tuple[Path, ...]] | None = None,
+    prepare_fn: GenerateFn | None = None,
+    project_name: str | None = None,
+    reported_container_names: tuple[str, ...] | None = None,
 ) -> None:
-    """Start a down service, reusing generated files when their paths are given."""
+    """Prepare and start a down service, wrapping configuration/start failures."""
 
     running_by_label = {
         label: is_container_running(container_name)
@@ -141,7 +163,12 @@ def ensure_running(
         else ()
     )
     should_generate = generated_file_paths is None or bool(missing_files)
-    if generated_file_paths is None:
+    if prepare_fn is not None:
+        startup_action = (
+            "rewriting secret-free files; stored .env is reused when present or "
+            "created when missing..."
+        )
+    elif generated_file_paths is None:
         startup_action = "generating and starting..."
     elif should_generate:
         startup_action = "generated compose files are missing; generating and starting..."
@@ -149,11 +176,30 @@ def ensure_running(
         startup_action = "using existing generated compose files and starting..."
     print(f"\n[{service_label}] auto-start ({status}); {startup_action}")
 
+    compose_file = next(
+        (path for path in generated_file_paths or () if path.suffix in {".yml", ".yaml"}),
+        None,
+    )
+    selected_project_name = project_name or next(iter(container_names.values()), "unknown")
+    containers = ", ".join(
+        reported_container_names or tuple(container_names.values())
+    ) or "unknown"
+
     try:
-        if should_generate:
+        if prepare_fn is not None:
+            prepare_fn()
+        elif should_generate:
             generate_fn()
         manager_factory().start(timeout_seconds=timeout_seconds)
-    except (TimeoutError, SystemExit) as exc:
+    except (ValueError, TimeoutError, SystemExit) as exc:
+        underlying_error = exc
+        if isinstance(exc, SystemExit) and isinstance(
+            exc.__context__, (subprocess.CalledProcessError, TimeoutError)
+        ):
+            underlying_error = exc.__context__
+        compose_path = str(compose_file) if compose_file is not None else "unknown"
         raise RuntimeError(
-            f"Failed to start {service_label} via Docker: {exc}"
+            f"Failed to start {service_label} via Docker (compose file: "
+            f"{compose_path}; project: {selected_project_name}; containers: "
+            f"{containers}): {underlying_error}"
         ) from exc

@@ -14,12 +14,13 @@ import subprocess
 from pathlib import Path
 
 from repom.config import config
-from repom.credentials import reject_default_credential
+from repom.credentials import DEFAULT_CREDENTIAL_PLACEHOLDER, reject_default_credential
 from repom.docker_compose_safety import (
     format_bound_port,
     format_env_file,
     quote_yaml_string,
     reject_control_characters,
+    validate_stored_secret_values,
     validate_secret_file_overwrite,
     write_secret_file,
 )
@@ -133,7 +134,9 @@ def generate_pgadmin_servers_json() -> dict:
     }
 
 
-def generate_docker_compose() -> DockerComposeGenerator:
+def generate_docker_compose(
+    *, validate_credentials: bool = True
+) -> DockerComposeGenerator:
     """Generate a compose model for PostgreSQL and optional pgAdmin."""
 
     manager = PostgresManager()
@@ -142,8 +145,9 @@ def generate_docker_compose() -> DockerComposeGenerator:
     init_dir = manager.get_init_dir()
 
     user = reject_control_characters(pg.user, field_name="postgres.user")
-    reject_default_credential(pg.password, env_var="POSTGRES_PASSWORD")
-    reject_control_characters(pg.password, field_name="postgres.password")
+    if validate_credentials:
+        reject_default_credential(pg.password, env_var="POSTGRES_PASSWORD")
+        reject_control_characters(pg.password, field_name="postgres.password")
     container_name = reject_control_characters(
         container.get_container_name(), field_name="postgres.container.container_name"
     )
@@ -184,8 +188,13 @@ def generate_docker_compose() -> DockerComposeGenerator:
         pgadmin_email = reject_control_characters(
             config.pgadmin.email, field_name="pgadmin.email"
         )
-        reject_default_credential(config.pgadmin.password, env_var="PGADMIN_DEFAULT_PASSWORD")
-        reject_control_characters(config.pgadmin.password, field_name="pgadmin.password")
+        if validate_credentials:
+            reject_default_credential(
+                config.pgadmin.password, env_var="PGADMIN_DEFAULT_PASSWORD"
+            )
+            reject_control_characters(
+                config.pgadmin.password, field_name="pgadmin.password"
+            )
         pgadmin_container_name = reject_control_characters(
             pgadmin_container.get_container_name(),
             field_name="pgadmin.container.container_name",
@@ -322,6 +331,49 @@ def generate(*, overwrite_secrets: bool = False):
         print("\n pgAdmin: Disabled (set config.pgadmin.container.enabled=True to enable)")
 
 
+def _write_secret_free_artifacts() -> None:
+    """Regenerate PostgreSQL artifacts without changing the compose-dir secrets."""
+
+    manager = PostgresManager()
+    generator = generate_docker_compose(validate_credentials=False)
+    init_sql = generate_init_sql()
+    init_dir = manager.get_init_dir()
+    compose_dir = manager.get_compose_dir()
+    (init_dir / "01_init_databases.sql").write_text(init_sql, encoding="utf-8")
+    generator.write_to_file(compose_dir / COMPOSE_FILENAME)
+    if config.pgadmin.container.enabled:
+        servers_json_path = compose_dir / "servers.json"
+        servers_config = generate_pgadmin_servers_json()
+        servers_json_path.write_text(
+            json.dumps(servers_config, indent=2), encoding="utf-8"
+        )
+
+
+def _prepare_auto_start() -> None:
+    """Refresh PostgreSQL artifacts while keeping an existing .env authoritative."""
+
+    compose_dir = PostgresManager().get_compose_dir()
+    env_path = compose_dir / ".env"
+    if not env_path.is_file():
+        generate()
+        return
+
+    current_secrets = {"POSTGRES_PASSWORD": config.postgres.password}
+    if config.pgadmin.container.enabled:
+        current_secrets["PGADMIN_DEFAULT_PASSWORD"] = config.pgadmin.password
+    rotation_commands = ("postgres_rotate_credentials",)
+    if config.pgadmin.container.enabled:
+        rotation_commands += ("pgadmin_rotate_password",)
+    validate_stored_secret_values(
+        env_path,
+        current_secrets,
+        default_credential_placeholder=DEFAULT_CREDENTIAL_PLACEHOLDER,
+        rotation_commands=rotation_commands,
+        generate_command="postgres_generate",
+    )
+    _write_secret_free_artifacts()
+
+
 def start(*, overwrite_secrets: bool = False):
     """Generate files and start PostgreSQL."""
 
@@ -348,6 +400,7 @@ def main_start() -> None:
 def stop():
     """Stop PostgreSQL."""
 
+    _write_secret_free_artifacts()
     stop_service(PostgresManager)
 
 
@@ -375,6 +428,13 @@ def ensure_running(
     }
     if include_pgadmin and bool(getattr(config.pgadmin.container, "enabled", False)):
         container_names["pgadmin"] = config.pgadmin.container.get_container_name()
+    reported_container_names = [
+        config.postgres.container.get_container_name(),
+    ]
+    if config.pgadmin.container.enabled:
+        reported_container_names.append(
+            config.pgadmin.container.get_container_name()
+        )
 
     def get_generated_files() -> tuple[Path, Path]:
         compose_dir = PostgresManager().get_compose_dir()
@@ -390,10 +450,14 @@ def ensure_running(
         "PostgreSQL",
         timeout_seconds,
         generated_files=get_generated_files,
+        prepare_fn=_prepare_auto_start,
+        project_name=config.postgres.container.get_container_name(),
+        reported_container_names=tuple(reported_container_names),
     )
 
 
 def remove():
     """Remove PostgreSQL containers and volumes."""
 
+    _write_secret_free_artifacts()
     remove_service(PostgresManager)

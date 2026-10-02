@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 from _fake_pg_client import fake_client_command
 from repom.config import RepomConfig
-from repom.scripts import pg_dump_tools
+from repom.scripts import _backup_utils, pg_dump_tools
 from repom.scripts.pg_dump_tools import (
     PgConnParams,
     pg_dump_custom,
@@ -104,7 +104,7 @@ def test_pg_dump_custom_uses_docker_stdout_without_file(monkeypatch, tmp_path: P
     build_calls: list[tuple[str, dict]] = []
 
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(return_value=True),
     )
@@ -143,7 +143,7 @@ def test_pg_dump_custom_uses_host_file_when_container_stopped(monkeypatch, tmp_p
     run_calls = []
 
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(return_value=False),
     )
@@ -194,7 +194,7 @@ def test_pg_restore_custom_streams_dump_bytes_to_docker(monkeypatch, tmp_path: P
     build_calls: list[tuple[str, dict]] = []
 
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(return_value=True),
     )
@@ -252,7 +252,7 @@ def test_pg_dump_custom_via_docker_reports_missing_docker_binary(monkeypatch, tm
     dump_path = tmp_path / "db.dump"
 
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(return_value=True),
     )
@@ -277,7 +277,7 @@ def test_pg_restore_custom_via_docker_reports_missing_docker_binary(monkeypatch,
     dump_path.write_bytes(b"CUSTOM-DUMP")
 
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(return_value=True),
     )
@@ -307,7 +307,7 @@ def test_pg_restore_custom_via_docker_returns_result_when_child_exits_before_rea
     dump_path.write_bytes(os.urandom(20 * 1024 * 1024))
 
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(return_value=True),
     )
@@ -330,7 +330,7 @@ def test_pg_dump_custom_via_docker_empty_output_removes_dump_file(monkeypatch, t
     dump_path = tmp_path / "db.dump"
 
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(return_value=True),
     )
@@ -359,7 +359,7 @@ def test_pg_dump_custom_via_docker_failure_after_partial_output_removes_dump_fil
     dump_path = tmp_path / "db.dump"
 
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(return_value=True),
     )
@@ -381,7 +381,7 @@ def test_pg_dump_custom_via_docker_failure_after_partial_output_removes_dump_fil
 
 def test_pg_tools_available_returns_true_when_only_container_available(monkeypatch):
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        pg_dump_tools,
         "is_container_running",
         MagicMock(return_value=True),
     )
@@ -394,13 +394,11 @@ def test_pg_tools_available_falls_back_to_host_tools_when_docker_daemon_unavaila
     monkeypatch,
 ):
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        pg_dump_tools,
         "is_container_running",
         MagicMock(
-            side_effect=subprocess.CalledProcessError(
-                1,
-                ["docker", "ps"],
-                stderr="Cannot connect to the Docker daemon",
+            side_effect=pg_dump_tools.DockerUnavailableError(
+                "docker is unavailable: Cannot connect to the Docker daemon"
             )
         ),
     )
@@ -415,13 +413,11 @@ def test_pg_dump_custom_falls_back_to_host_when_docker_daemon_unavailable(
     dump_path = tmp_path / "db.dump"
 
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(
-            side_effect=subprocess.CalledProcessError(
-                1,
-                ["docker", "ps"],
-                stderr="Cannot connect to the Docker daemon",
+            side_effect=pg_dump_tools.DockerUnavailableError(
+                "docker is unavailable: Cannot connect to the Docker daemon"
             )
         ),
     )
@@ -447,13 +443,11 @@ def test_pg_restore_custom_falls_back_to_host_when_docker_daemon_unavailable(
     commands = []
 
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(
-            side_effect=subprocess.CalledProcessError(
-                1,
-                ["docker", "ps"],
-                stderr="Cannot connect to the Docker daemon",
+            side_effect=pg_dump_tools.DockerUnavailableError(
+                "docker is unavailable: Cannot connect to the Docker daemon"
             )
         ),
     )
@@ -491,7 +485,7 @@ def test_pg_tool_result_redacts_password_and_adds_version_mismatch_hint(
     )
 
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(return_value=False),
     )
@@ -527,7 +521,7 @@ def test_pg_dump_custom_via_host_passes_tls_settings_in_env(monkeypatch, tmp_pat
     run_calls = []
 
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(return_value=False),
     )
@@ -558,7 +552,7 @@ def test_pg_dump_custom_via_host_leaves_inherited_sslmode_untouched_without_tls_
     run_calls = []
 
     monkeypatch.setattr(
-        pg_dump_tools.DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(return_value=False),
     )

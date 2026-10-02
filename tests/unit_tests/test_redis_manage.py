@@ -7,6 +7,7 @@ Tests verify that redis/manage.py correctly uses config values for:
 - Docker image version
 """
 
+import os
 from pathlib import Path
 import stat
 from unittest.mock import MagicMock, patch
@@ -428,7 +429,8 @@ class TestRedisSecretFilePermissions:
 
         assert env_file.read_text(encoding="utf-8") == 'REDIS_PASSWORD="new-redis-secret"\n'
         assert (compose_dir / ".env.bak").read_text(encoding="utf-8") == original_env
-        assert stat.S_IMODE((compose_dir / ".env.bak").stat().st_mode) == 0o600
+        if os.name == "posix":
+            assert stat.S_IMODE((compose_dir / ".env.bak").stat().st_mode) == 0o600
 
 
 class TestRedisEnsureRunning:
@@ -457,14 +459,14 @@ class TestRedisEnsureRunning:
 
         with patch.object(manage, "config", mock_config):
             with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
+                "repom.docker_service.is_container_running",
                 return_value=False,
             ):
-                with patch.object(manage, "generate") as generate:
+                with patch.object(manage, "_prepare_auto_start") as prepare:
                     with patch.object(manage, "RedisManager", return_value=manager_instance):
                         manage.ensure_running()
 
-        generate.assert_not_called()
+        prepare.assert_called_once_with()
         manager_instance.get_compose_dir.assert_called_once_with()
         manager_instance.start.assert_called_once_with(timeout_seconds=30)
 
@@ -475,7 +477,7 @@ class TestRedisEnsureRunning:
 
         with patch.object(manage, "config", self._patch_config()):
             with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
+                "repom.docker_service.is_container_running",
                 return_value=True,
             ) as is_running:
                 with patch.object(manage, "generate") as generate:
@@ -495,7 +497,7 @@ class TestRedisEnsureRunning:
         manager_instance.get_compose_dir.return_value = tmp_path / "redis"
         with patch.object(manage, "config", self._patch_config()):
             with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
+                "repom.docker_service.is_container_running",
                 return_value=False,
             ):
                 with patch.object(manage, "generate") as generate:
@@ -516,7 +518,7 @@ class TestRedisEnsureRunning:
         manager_instance.get_compose_dir.return_value = tmp_path / "redis"
         with patch.object(manage, "config", self._patch_config()):
             with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
+                "repom.docker_service.is_container_running",
                 return_value=False,
             ):
                 with patch.object(manage, "generate"):
@@ -576,6 +578,8 @@ def test_lifecycle_entrypoints_run_expected_compose_command(
         monkeypatch.setattr(
             RedisManager, "wait_for_service", lambda self, max_retries: None
         )
+    else:
+        monkeypatch.setattr(manage, "_write_secret_free_artifacts", MagicMock())
 
     entrypoint()
 
@@ -587,3 +591,198 @@ def test_lifecycle_entrypoints_run_expected_compose_command(
         cwd=compose_file.parent,
         project_name=RedisManager().get_container_name(),
     )
+
+
+class TestRedisAutoStartArtifactRefresh:
+    def _make_config(self, tmp_path, *, name, port, volume, password):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            data_path=tmp_path,
+            redis=RedisConfig(
+                password=password,
+                container=RedisContainerConfig(
+                    container_name=name,
+                    host_port=port,
+                    volume_name=volume,
+                ),
+            ),
+        )
+
+    def _make_manager(self, tmp_path):
+        compose_dir = tmp_path / "redis"
+        init_dir = tmp_path / "redis_init"
+        compose_dir.mkdir()
+        init_dir.mkdir()
+        manager = MagicMock()
+        manager.get_compose_dir.return_value = compose_dir
+        manager.get_init_dir.return_value = init_dir
+        return manager, compose_dir, init_dir
+
+    def test_missing_env_runs_full_generation(self, tmp_path):
+        manager, compose_dir, _ = self._make_manager(tmp_path)
+        current_config = self._make_config(
+            tmp_path,
+            name="redis_current",
+            port=26379,
+            volume="redis_current_data",
+            password="configured-secret",
+        )
+        with patch.object(manage, "config", current_config):
+            with patch.object(manage, "RedisManager", return_value=manager):
+                with patch("repom.docker_service.is_container_running", return_value=False):
+                    manage.ensure_running()
+
+        env_path = compose_dir / ".env"
+        assert env_path.read_text(encoding="utf-8") == (
+            'REDIS_PASSWORD="configured-secret"\n'
+        )
+        assert "redis_current" in (
+            compose_dir / manage.COMPOSE_FILENAME
+        ).read_text(encoding="utf-8")
+        manager.start.assert_called_once_with(timeout_seconds=30)
+
+    def test_auto_start_rewrites_for_current_container_and_reuses_env(
+        self, tmp_path
+    ):
+        manager, compose_dir, init_dir = self._make_manager(tmp_path)
+        config_a = self._make_config(
+            tmp_path,
+            name="redis_a",
+            port=26379,
+            volume="redis_a_data",
+            password="saved-secret",
+        )
+        config_b = self._make_config(
+            tmp_path,
+            name="redis_b",
+            port=26380,
+            volume="redis_b_data",
+            password=DEFAULT_CREDENTIAL_PLACEHOLDER,
+        )
+        with patch.object(manage, "config", config_a):
+            with patch.object(manage, "RedisManager", return_value=manager):
+                manage.generate()
+
+        env_path = compose_dir / ".env"
+        original_env = env_path.read_bytes()
+        compose_file = compose_dir / manage.COMPOSE_FILENAME
+
+        def assert_built_for_b(*, timeout_seconds):
+            compose = compose_file.read_text(encoding="utf-8")
+            assert "redis_b" in compose
+            assert "26380:6379" in compose
+            assert "redis_b_data:/data" in compose
+            assert "redis_a" not in compose
+            assert "redis_a_data" not in compose
+
+        manager.start.side_effect = assert_built_for_b
+        with patch.object(manage, "config", config_b):
+            with patch.object(manage, "RedisManager", return_value=manager):
+                with patch("repom.docker_service.is_container_running", return_value=False):
+                    manage.ensure_running()
+
+        manager.start.assert_called_once_with(timeout_seconds=30)
+        assert env_path.read_bytes() == original_env
+        assert not (compose_dir / ".env.bak").exists()
+        assert (init_dir / "redis.conf").is_file()
+
+    def test_auto_start_refuses_changed_secret_before_writing_files(self, tmp_path):
+        manager, compose_dir, _ = self._make_manager(tmp_path)
+        config_a = self._make_config(
+            tmp_path,
+            name="redis_a",
+            port=26379,
+            volume="redis_a_data",
+            password="saved-secret",
+        )
+        with patch.object(manage, "config", config_a):
+            with patch.object(manage, "RedisManager", return_value=manager):
+                manage.generate()
+
+        env_path = compose_dir / ".env"
+        compose_file = compose_dir / manage.COMPOSE_FILENAME
+        original_env = env_path.read_bytes()
+        original_compose = compose_file.read_bytes()
+        config_b = self._make_config(
+            tmp_path,
+            name="redis_b",
+            port=26380,
+            volume="redis_b_data",
+            password="different-secret",
+        )
+        with patch.object(manage, "config", config_b):
+            with patch.object(manage, "RedisManager", return_value=manager):
+                with patch("repom.docker_service.is_container_running", return_value=False):
+                    with pytest.raises(RuntimeError) as excinfo:
+                        manage.ensure_running()
+
+        message = str(excinfo.value)
+        assert str(env_path) in message
+        assert "redis_rotate_password" in message
+        assert "redis_generate --force-regenerate" in message
+        assert "saved-secret" not in message
+        assert "different-secret" not in message
+        assert env_path.read_bytes() == original_env
+        assert compose_file.read_bytes() == original_compose
+        assert not (compose_dir / ".env.bak").exists()
+        manager.start.assert_not_called()
+
+    def test_auto_start_reports_path_for_invalid_stored_env_without_writing(
+        self, tmp_path
+    ):
+        manager, compose_dir, init_dir = self._make_manager(tmp_path)
+        env_path = compose_dir / ".env"
+        env_path.write_text("REDIS_PASSWORD=x\n", encoding="utf-8")
+        compose_file = compose_dir / manage.COMPOSE_FILENAME
+        compose_file.write_text("existing compose\n", encoding="utf-8")
+        redis_conf = init_dir / "redis.conf"
+        redis_conf.write_text("existing config\n", encoding="utf-8")
+        current_config = self._make_config(
+            tmp_path,
+            name="redis_current",
+            port=26379,
+            volume="redis_current_data",
+            password="configured-secret",
+        )
+
+        with patch.object(manage, "config", current_config):
+            with patch.object(manage, "RedisManager", return_value=manager):
+                with patch("repom.docker_service.is_container_running", return_value=False):
+                    with pytest.raises(RuntimeError) as excinfo:
+                        manage.ensure_running()
+
+        message = str(excinfo.value)
+        assert str(env_path) in message
+        assert "redis_generate --force-regenerate" in message
+        assert "REDIS_PASSWORD=x" not in message
+        assert env_path.read_text(encoding="utf-8") == "REDIS_PASSWORD=x\n"
+        assert compose_file.read_text(encoding="utf-8") == "existing compose\n"
+        assert redis_conf.read_text(encoding="utf-8") == "existing config\n"
+        manager.start.assert_not_called()
+
+    @pytest.mark.parametrize("entrypoint", [manage.stop, manage.remove])
+    def test_stop_and_remove_refresh_compose_before_lifecycle_call(
+        self, entrypoint, tmp_path
+    ):
+        manager, compose_dir, _ = self._make_manager(tmp_path)
+        compose_file = compose_dir / manage.COMPOSE_FILENAME
+        compose_file.write_text("container_name: redis_a\n", encoding="utf-8")
+        config_b = self._make_config(
+            tmp_path,
+            name="redis_b",
+            port=26380,
+            volume="redis_b_data",
+            password=DEFAULT_CREDENTIAL_PLACEHOLDER,
+        )
+
+        def assert_current_compose():
+            compose = compose_file.read_text(encoding="utf-8")
+            assert "redis_b" in compose
+            assert "redis_a" not in compose
+
+        lifecycle_method = "stop" if entrypoint is manage.stop else "remove"
+        getattr(manager, lifecycle_method).side_effect = assert_current_compose
+        with patch.object(manage, "config", config_b):
+            with patch.object(manage, "RedisManager", return_value=manager):
+                entrypoint()

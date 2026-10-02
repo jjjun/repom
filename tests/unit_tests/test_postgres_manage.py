@@ -3,6 +3,7 @@
 DockerService, Volume 生成、および docker-compose.yml ファイル出力の機能をテストします。
 """
 
+import json
 import os
 import stat
 from pathlib import Path
@@ -829,7 +830,8 @@ class TestDirectorySeparation:
             'PGADMIN_DEFAULT_PASSWORD="pgadmin-new-secret"\n'
         )
         assert (compose_dir / ".env.bak").read_text(encoding="utf-8") == original_env
-        assert stat.S_IMODE((compose_dir / ".env.bak").stat().st_mode) == 0o600
+        if os.name == "posix":
+            assert stat.S_IMODE((compose_dir / ".env.bak").stat().st_mode) == 0o600
 
     def test_postgres_redis_no_conflict(self, tmp_path):
         """postgres_generate と redis_generate の両方実行時に競合しない"""
@@ -988,6 +990,8 @@ def test_lifecycle_entrypoints_run_expected_compose_command(
         monkeypatch.setattr(
             PostgresManager, "wait_for_service", lambda self, max_retries: None
         )
+    else:
+        monkeypatch.setattr(manage, "_write_secret_free_artifacts", MagicMock())
 
     entrypoint()
 
@@ -999,6 +1003,242 @@ def test_lifecycle_entrypoints_run_expected_compose_command(
         cwd=compose_file.parent,
         project_name=PostgresManager().get_container_name(),
     )
+
+
+class TestPostgresAutoStartArtifactRefresh:
+    def _make_config(
+        self,
+        tmp_path,
+        *,
+        postgres_name,
+        postgres_port,
+        postgres_volume,
+        postgres_password,
+        pgadmin_enabled,
+        pgadmin_name="pgadmin",
+        pgadmin_port=5050,
+        pgadmin_volume="pgadmin_data",
+        pgadmin_password="admin-secret",
+        db_name="app",
+    ):
+        from types import SimpleNamespace
+
+        from repom.postgres.config import (
+            PgAdminConfig,
+            PgAdminContainerConfig,
+            PostgresConfig,
+            PostgresContainerConfig,
+        )
+
+        return SimpleNamespace(
+            data_path=tmp_path,
+            db_name=db_name,
+            postgres=PostgresConfig(
+                password=postgres_password,
+                container=PostgresContainerConfig(
+                    container_name=postgres_name,
+                    host_port=postgres_port,
+                    volume_name=postgres_volume,
+                ),
+            ),
+            pgadmin=PgAdminConfig(
+                email="admin@example.com",
+                password=pgadmin_password,
+                container=PgAdminContainerConfig(
+                    enabled=pgadmin_enabled,
+                    container_name=pgadmin_name,
+                    host_port=pgadmin_port,
+                    volume_name=pgadmin_volume,
+                ),
+            ),
+        )
+
+    def _make_manager(self, tmp_path):
+        compose_dir = tmp_path / "postgres"
+        init_dir = tmp_path / "postgresql_init"
+        compose_dir.mkdir()
+        init_dir.mkdir()
+        manager = MagicMock()
+        manager.get_compose_dir.return_value = compose_dir
+        manager.get_init_dir.return_value = init_dir
+        return manager, compose_dir, init_dir
+
+    def test_auto_start_rewrites_postgres_and_pgadmin_for_current_environment(
+        self, tmp_path
+    ):
+        from repom.credentials import DEFAULT_CREDENTIAL_PLACEHOLDER
+
+        manager, compose_dir, init_dir = self._make_manager(tmp_path)
+        config_a = self._make_config(
+            tmp_path,
+            postgres_name="postgres_a",
+            postgres_port=5433,
+            postgres_volume="postgres_a_data",
+            postgres_password="saved-db-secret",
+            pgadmin_enabled=True,
+            pgadmin_name="pgadmin_a",
+            pgadmin_port=5051,
+            pgadmin_volume="pgadmin_a_data",
+            pgadmin_password="saved-admin-secret",
+            db_name="app_a",
+        )
+        config_b = self._make_config(
+            tmp_path,
+            postgres_name="postgres_b",
+            postgres_port=5434,
+            postgres_volume="postgres_b_data",
+            postgres_password=DEFAULT_CREDENTIAL_PLACEHOLDER,
+            pgadmin_enabled=True,
+            pgadmin_name="pgadmin_b",
+            pgadmin_port=5052,
+            pgadmin_volume="pgadmin_b_data",
+            pgadmin_password="",
+            db_name="app_b",
+        )
+        with patch.object(manage, "config", config_a):
+            with patch.object(manage, "PostgresManager", return_value=manager):
+                manage.generate()
+
+        env_path = compose_dir / ".env"
+        original_env = env_path.read_bytes()
+        compose_file = compose_dir / manage.COMPOSE_FILENAME
+        servers_json = compose_dir / "servers.json"
+
+        def assert_built_for_b(*, timeout_seconds):
+            compose = compose_file.read_text(encoding="utf-8")
+            assert "postgres_b" in compose
+            assert "pgadmin_b" in compose
+            assert "5434:5432" in compose
+            assert "5052:80" in compose
+            assert "postgres_b_data:/var/lib/postgresql/data" in compose
+            assert "pgadmin_b_data:/var/lib/pgadmin" in compose
+            assert "postgres_a" not in compose
+            assert "pgadmin_a" not in compose
+            assert "app_b_dev" in (init_dir / "01_init_databases.sql").read_text(
+                encoding="utf-8"
+            )
+            server = json.loads(servers_json.read_text(encoding="utf-8"))["Servers"]["1"]
+            assert server["Name"] == "postgres_b"
+            assert server["MaintenanceDB"] == "app_b_dev"
+
+        manager.start.side_effect = assert_built_for_b
+        with patch.object(manage, "config", config_b):
+            with patch.object(manage, "PostgresManager", return_value=manager):
+                with patch("repom.docker_service.is_container_running", return_value=False):
+                    manage.ensure_running()
+
+        manager.start.assert_called_once_with(timeout_seconds=30)
+        assert env_path.read_bytes() == original_env
+        assert not (compose_dir / ".env.bak").exists()
+
+    def test_auto_start_refuses_new_required_pgadmin_secret_before_writing(
+        self, tmp_path
+    ):
+        from repom.credentials import DEFAULT_CREDENTIAL_PLACEHOLDER
+
+        manager, compose_dir, _ = self._make_manager(tmp_path)
+        config_a = self._make_config(
+            tmp_path,
+            postgres_name="postgres_a",
+            postgres_port=5433,
+            postgres_volume="postgres_a_data",
+            postgres_password="saved-db-secret",
+            pgadmin_enabled=False,
+        )
+        with patch.object(manage, "config", config_a):
+            with patch.object(manage, "PostgresManager", return_value=manager):
+                manage.generate()
+
+        env_path = compose_dir / ".env"
+        compose_file = compose_dir / manage.COMPOSE_FILENAME
+        original_env = env_path.read_bytes()
+        original_compose = compose_file.read_bytes()
+        config_b = self._make_config(
+            tmp_path,
+            postgres_name="postgres_b",
+            postgres_port=5434,
+            postgres_volume="postgres_b_data",
+            postgres_password=DEFAULT_CREDENTIAL_PLACEHOLDER,
+            pgadmin_enabled=True,
+            pgadmin_name="pgadmin_b",
+            pgadmin_password=DEFAULT_CREDENTIAL_PLACEHOLDER,
+        )
+        with patch.object(manage, "config", config_b):
+            with patch.object(manage, "PostgresManager", return_value=manager):
+                with patch("repom.docker_service.is_container_running", return_value=False):
+                    with pytest.raises(RuntimeError) as excinfo:
+                        manage.ensure_running()
+
+        message = str(excinfo.value)
+        assert str(env_path) in message
+        assert "pgadmin_rotate_password" in message
+        assert "postgres_generate --force-regenerate" in message
+        assert env_path.read_bytes() == original_env
+        assert compose_file.read_bytes() == original_compose
+        assert not (compose_dir / ".env.bak").exists()
+        manager.start.assert_not_called()
+
+    def test_auto_start_refusal_omits_pgadmin_rotation_when_disabled(self, tmp_path):
+        manager, compose_dir, _ = self._make_manager(tmp_path)
+        config_a = self._make_config(
+            tmp_path,
+            postgres_name="postgres_a",
+            postgres_port=5433,
+            postgres_volume="postgres_a_data",
+            postgres_password="saved-db-secret",
+            pgadmin_enabled=False,
+        )
+        with patch.object(manage, "config", config_a):
+            with patch.object(manage, "PostgresManager", return_value=manager):
+                manage.generate()
+
+        config_b = self._make_config(
+            tmp_path,
+            postgres_name="postgres_b",
+            postgres_port=5434,
+            postgres_volume="postgres_b_data",
+            postgres_password="different-db-secret",
+            pgadmin_enabled=False,
+        )
+        with patch.object(manage, "config", config_b):
+            with patch.object(manage, "PostgresManager", return_value=manager):
+                with patch("repom.docker_service.is_container_running", return_value=False):
+                    with pytest.raises(RuntimeError) as excinfo:
+                        manage.ensure_running()
+
+        message = str(excinfo.value)
+        assert "postgres_rotate_credentials" in message
+        assert "pgadmin_rotate_password" not in message
+        manager.start.assert_not_called()
+
+    @pytest.mark.parametrize("entrypoint", [manage.stop, manage.remove])
+    def test_stop_and_remove_refresh_compose_before_lifecycle_call(
+        self, entrypoint, tmp_path
+    ):
+        from repom.credentials import DEFAULT_CREDENTIAL_PLACEHOLDER
+
+        manager, compose_dir, _ = self._make_manager(tmp_path)
+        compose_file = compose_dir / manage.COMPOSE_FILENAME
+        compose_file.write_text("container_name: postgres_a\n", encoding="utf-8")
+        config_b = self._make_config(
+            tmp_path,
+            postgres_name="postgres_b",
+            postgres_port=5434,
+            postgres_volume="postgres_b_data",
+            postgres_password=DEFAULT_CREDENTIAL_PLACEHOLDER,
+            pgadmin_enabled=False,
+        )
+
+        def assert_current_compose():
+            compose = compose_file.read_text(encoding="utf-8")
+            assert "postgres_b" in compose
+            assert "postgres_a" not in compose
+
+        lifecycle_method = "stop" if entrypoint is manage.stop else "remove"
+        getattr(manager, lifecycle_method).side_effect = assert_current_compose
+        with patch.object(manage, "config", config_b):
+            with patch.object(manage, "PostgresManager", return_value=manager):
+                entrypoint()
 
 
 class TestPostgresEnsureRunning:
@@ -1026,14 +1266,14 @@ class TestPostgresEnsureRunning:
 
         with patch.object(manage, "config", mock_config):
             with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
+                "repom.docker_service.is_container_running",
                 return_value=False,
             ):
-                with patch.object(manage, "generate") as generate:
+                with patch.object(manage, "_prepare_auto_start") as prepare:
                     with patch.object(manage, "PostgresManager", return_value=manager_instance):
                         manage.ensure_running()
 
-        generate.assert_not_called()
+        prepare.assert_called_once_with()
         manager_instance.get_compose_dir.assert_called_once_with()
         manager_instance.start.assert_called_once_with(timeout_seconds=30)
 
@@ -1043,7 +1283,7 @@ class TestPostgresEnsureRunning:
 
         with patch.object(manage, "config", self._patch_config(pgadmin_enabled=True)):
             with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
+                "repom.docker_service.is_container_running",
                 return_value=True,
             ) as is_running:
                 with patch.object(manage, "generate") as generate:
@@ -1060,7 +1300,7 @@ class TestPostgresEnsureRunning:
 
         with patch.object(manage, "config", self._patch_config(pgadmin_enabled=False)):
             with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
+                "repom.docker_service.is_container_running",
                 return_value=True,
             ) as is_running:
                 with patch.object(manage, "generate") as generate:
@@ -1079,7 +1319,7 @@ class TestPostgresEnsureRunning:
         manager_instance.get_compose_dir.return_value = tmp_path / "postgres"
         with patch.object(manage, "config", self._patch_config(pgadmin_enabled=False)):
             with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
+                "repom.docker_service.is_container_running",
                 return_value=False,
             ):
                 with patch.object(manage, "generate") as generate:
@@ -1103,7 +1343,7 @@ class TestPostgresEnsureRunning:
 
         with patch.object(manage, "config", self._patch_config(pgadmin_enabled=True)):
             with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
+                "repom.docker_service.is_container_running",
                 side_effect=is_container_running,
             ):
                 with patch.object(manage, "generate") as generate:
@@ -1121,7 +1361,7 @@ class TestPostgresEnsureRunning:
 
         with patch.object(manage, "config", self._patch_config(pgadmin_enabled=True)):
             with patch(
-                "basekit.docker_manager.DockerCommandExecutor.is_container_running",
+                "repom.docker_service.is_container_running",
                 return_value=True,
             ) as is_running:
                 with patch.object(manage, "generate") as generate:

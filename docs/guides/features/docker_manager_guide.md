@@ -21,12 +21,21 @@ wrapper、PostgreSQL / Redis 向けの Compose 設定生成だけを所有しま
 | `uv run postgres_stop` | `uv run redis_stop` |
 | `uv run postgres_remove` | `uv run redis_remove` |
 
-`ensure_running()` は Compose file と `.env` が両方存在する場合、それらを再利用します。
-どちらかがない場合だけファイルを生成します。明示的な `*_generate` と `*_start` は
-ファイルを再生成しますが、現在の credential と異なる `.env` の上書きは拒否します。
-既存 service の credential を変更するには対応する rotation command を使うか、
-秘密情報を意図的に置き換える場合に `--force-regenerate` を指定してください。
-内容が変わる場合は前の `.env` を mode `0600` の `.env.bak` として保存します。
+`ensure_running()` は service が停止しているとき、現在の設定から秘密情報を含まない
+生成物を書き直してから起動します。既存の `.env` はそのまま再利用し、存在しない場合は
+通常の生成処理で作成します。設定した実 credential が保存済み `.env` と異なる場合や、
+必要な key が `.env` にない場合は起動を拒否します。credential の変更には対応する
+rotation command を使ってください。明示的な `*_generate` と `*_start` は従来どおり
+生成物を再生成し、現在の credential と異なる `.env` の上書きは拒否します。秘密情報を
+意図的に置き換える場合は `--force-regenerate` を指定してください。内容が変わる場合は
+前の `.env` を mode `0600` の `.env.bak` として保存します。
+
+複数の `EXEC_ENV` が同じ `data_path` を共有する場合、各環境の auto-start はその環境の
+container 名、port、volume を使って秘密情報を含まない生成物を書き直します。一方、
+compose directory の `.env` は共有されるため、同じ service を使う環境は同一の secret を
+設定してください。異なる実 credential が設定されていると `ensure_running()` は拒否します。
+`*_stop` と `*_remove` も現在の設定で Compose file を書き直してから実行するため、対象環境の
+`EXEC_ENV` を指定してください。
 
 アプリ起動時に必要なサービスを保証する場合は、サービス固有の
 `ensure_running()` を利用できます。
@@ -58,8 +67,8 @@ NUL 文字があれば拒否します。port は既定で `127.0.0.1` に bind �
 場合に `ValueError` を送出します。`repom.docker_service.DockerUnavailableError` は
 `RuntimeError` の subclass で、Docker CLI がない場合や daemon に接続できない場合に
 送出されます。`repom.docker_service.is_container_running(container_name)` は container
-の稼働状態を `bool` で返し、Docker が利用できない場合は `DockerUnavailableError` を
-送出します。
+の稼働状態を exact name match で `bool` として返し、Docker が利用できない場合は
+`DockerUnavailableError` を送出します。
 
 関連資料:
 

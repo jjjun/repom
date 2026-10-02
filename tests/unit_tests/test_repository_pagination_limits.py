@@ -1,5 +1,6 @@
 """Pagination validation shared by the sync and async repositories."""
 from unittest.mock import patch
+import os
 import sys
 import warnings
 
@@ -155,7 +156,7 @@ async def test_omitted_limit_warning_points_to_caller(
             await seeded_repo.find(); expected_lineno = sys._getframe().f_lineno  # noqa: E702
 
     assert len(caught) == 1
-    assert caught[0].filename == __file__
+    assert os.path.normcase(caught[0].filename) == os.path.normcase(__file__)
     assert caught[0].lineno == expected_lineno
 
 

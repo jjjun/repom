@@ -12,6 +12,7 @@ quoted here first.
 from __future__ import annotations
 
 import os
+import re
 import stat
 from collections.abc import Mapping
 from pathlib import Path
@@ -87,6 +88,93 @@ def format_env_file(values: Mapping[str, str]) -> str:
     return "".join(f"{line}\n" for line in lines)
 
 
+def parse_env_file(content: str) -> dict[str, str]:
+    """Parse the quoted format emitted by :func:`format_env_file`."""
+
+    values: dict[str, str] = {}
+    lines = content.split("\n")
+    if lines[-1] == "":
+        lines.pop()
+    for line_number, line in enumerate(lines, start=1):
+        if not line or "=" not in line:
+            raise ValueError(f"Invalid generated .env entry on line {line_number}")
+        key, encoded_value = line.split("=", maxsplit=1)
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) is None:
+            raise ValueError(f"Invalid generated .env key on line {line_number}")
+        if not encoded_value.startswith('"') or not encoded_value.endswith('"'):
+            raise ValueError(f"Invalid generated .env value on line {line_number}")
+
+        encoded_value = encoded_value[1:-1]
+        decoded = []
+        index = 0
+        while index < len(encoded_value):
+            character = encoded_value[index]
+            if character == "\\":
+                index += 1
+                if index >= len(encoded_value) or encoded_value[index] not in {'\\', '"'}:
+                    raise ValueError(
+                        f"Invalid generated .env escape on line {line_number}"
+                    )
+                decoded.append(encoded_value[index])
+            elif character == "$":
+                index += 1
+                if index >= len(encoded_value) or encoded_value[index] != "$":
+                    raise ValueError(
+                        f"Invalid generated .env dollar escape on line {line_number}"
+                    )
+                decoded.append("$")
+            elif character == '"':
+                raise ValueError(f"Invalid generated .env quote on line {line_number}")
+            else:
+                decoded.append(character)
+            index += 1
+
+        if key in values:
+            raise ValueError(f"Duplicate generated .env key on line {line_number}")
+        decoded_value = "".join(decoded)
+        reject_control_characters(decoded_value, field_name=key)
+        values[key] = decoded_value
+    return values
+
+
+def validate_stored_secret_values(
+    path: Path,
+    current_values: Mapping[str, str | None],
+    *,
+    default_credential_placeholder: str,
+    rotation_commands: tuple[str, ...],
+    generate_command: str,
+) -> None:
+    """Keep an existing generated ``.env`` authoritative during auto-start."""
+
+    try:
+        stored_values = parse_env_file(path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise ValueError(
+            f"Cannot safely read stored credentials from {path}. Run "
+            f"{generate_command} --force-regenerate or restore {path}.bak."
+        ) from exc
+    commands = ", ".join(rotation_commands)
+    for key, current_value in current_values.items():
+        if key not in stored_values:
+            raise ValueError(
+                f"Refusing to auto-start because {path} does not contain the "
+                f"required {key} entry. Use {commands} to rotate credentials, "
+                f"or {generate_command} --force-regenerate to regenerate it."
+            )
+        if (
+            current_value
+            and current_value != default_credential_placeholder
+            and current_value != stored_values[key]
+        ):
+            raise ValueError(
+                f"Refusing to auto-start because credentials in {path} differ "
+                f"from the current configuration. Use {commands} to rotate "
+                f"credentials, or {generate_command} --force-regenerate to "
+                "intentionally replace them."
+            )
+
+
 def write_secret_file(path: Path, content: str) -> None:
     """Write plaintext secrets owner-only, backing up changed prior content."""
 
@@ -135,9 +223,11 @@ __all__ = [
     "LOOPBACK_HOST",
     "format_bound_port",
     "format_env_file",
+    "parse_env_file",
     "quote_yaml_string",
     "reject_control_characters",
     "backup_secret_file",
     "validate_secret_file_overwrite",
+    "validate_stored_secret_values",
     "write_secret_file",
 ]

@@ -78,8 +78,13 @@ uv run repom_info
 は `${POSTGRES_PASSWORD}` のような変数参照でこれを読み込みます。生成物は
 runtime artifact です。設定の正本は `CONFIG_HOOK` と環境変数です。
 
-compose file と `.env` がそろっている場合、application の `ensure_running()` は再生成せずに
-既存の compose project を起動します。詳細は
+application の `ensure_running()` は停止した PostgreSQL / pgAdmin を起動する前に、現在の
+設定から秘密情報を含まない生成物を書き直し、既存の `.env` をそのまま再利用します。
+`.env` がない場合は通常の生成処理で作成します。複数の `EXEC_ENV` が同じ `data_path` を
+共有すると `.env` も共有されるため、各環境で同じ PostgreSQL / pgAdmin secret を設定して
+ください。異なる実 credential や必要な key の不足がある場合は起動を拒否します。
+`postgres_stop` と `postgres_remove` も現在の設定で Compose file を書き直すため、対象環境の
+`EXEC_ENV` を指定してください。詳細は
 [Docker manager ガイド](../features/docker_manager_guide.md)を参照してください。
 
 ## 停止と削除

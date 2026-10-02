@@ -83,6 +83,11 @@
 
 ### Fixed
 
+- Docker service auto-start now rewrites secret-free generated artifacts from the active
+  configuration and reuses the stored `.env`; configuration and secret mismatch errors
+  from `ensure_running()` are raised as `RuntimeError`. Container running checks now
+  require an exact name match. `*_stop` and `*_remove` also rewrite the secret-free
+  Compose artifacts from the active configuration before running Compose.
 - Async engine disposal now finishes connection cleanup before propagating caller
   cancellation. Concurrent disposal calls await in-flight cleanup, and a replacement
   engine created during disposal remains available.

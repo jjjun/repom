@@ -1,14 +1,11 @@
 
 import gzip
 import io
-import subprocess
 from unittest.mock import MagicMock
 import os
 import time
 
 import pytest
-from basekit.docker_manager import DockerCommandExecutor
-
 from _fake_pg_client import fake_client_command, missing_binary_command
 from repom.docker_service import DockerUnavailableError
 from repom.scripts import _backup_utils
@@ -323,13 +320,11 @@ def test_run_postgres_via_docker_or_host_uses_host_when_docker_daemon_unavailabl
     via_host = MagicMock(return_value="host-result")
 
     monkeypatch.setattr(
-        DockerCommandExecutor,
+        _backup_utils,
         "is_container_running",
         MagicMock(
-            side_effect=subprocess.CalledProcessError(
-                1,
-                ["docker", "ps"],
-                stderr="Cannot connect to the Docker daemon",
+            side_effect=DockerUnavailableError(
+                "docker is unavailable: Cannot connect to the Docker daemon"
             )
         ),
     )

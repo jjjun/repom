@@ -8,8 +8,10 @@ import pytest
 from repom.docker_compose_safety import (
     format_bound_port,
     format_env_file,
+    parse_env_file,
     quote_yaml_string,
     reject_control_characters,
+    validate_stored_secret_values,
     write_secret_file,
 )
 
@@ -87,6 +89,63 @@ class TestFormatEnvFile:
         env-file interpolation unchanged."""
         content = format_env_file({"PASSWORD": 'a b#c$d"e\\f'})
         assert content == 'PASSWORD="a b#c$$d\\"e\\\\f"\n'
+
+    def test_parse_env_file_round_trips_format_env_file(self):
+        values = {
+            "PLAIN": "value",
+            "SPECIAL": 'a b#c$d"e\\f\t',
+            "SEPARATORS": "vertical\vform\frecord\x1cnext\x85line\u2028item",
+            "EMPTY": "",
+        }
+
+        assert parse_env_file(format_env_file(values)) == values
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            "INVALID\n",
+            'PASSWORD="unescaped"quote"\n',
+            'PASSWORD="single$sign"\n',
+            'PASSWORD="bad\\qescape"\n',
+        ],
+    )
+    def test_parse_env_file_rejects_content_outside_generated_format(self, content):
+        with pytest.raises(ValueError):
+            parse_env_file(content)
+
+
+class TestValidateStoredSecretValues:
+    def test_stored_secret_is_authoritative_for_unset_or_placeholder_values(self, tmp_path):
+        path = tmp_path / ".env"
+        path.write_text(format_env_file({"PASSWORD": "saved-secret"}), encoding="utf-8")
+
+        validate_stored_secret_values(
+            path,
+            {"PASSWORD": "CHANGE_ME"},
+            default_credential_placeholder="CHANGE_ME",
+            rotation_commands=("rotate_password",),
+            generate_command="service_generate",
+        )
+
+    def test_refusal_names_file_and_recovery_commands_without_secrets(self, tmp_path):
+        path = tmp_path / ".env"
+        path.write_text(format_env_file({"PASSWORD": "saved-secret"}), encoding="utf-8")
+
+        with pytest.raises(ValueError) as excinfo:
+            validate_stored_secret_values(
+                path,
+                {"PASSWORD": "different-secret"},
+                default_credential_placeholder="CHANGE_ME",
+                rotation_commands=("rotate_password",),
+                generate_command="service_generate",
+            )
+
+        message = str(excinfo.value)
+        assert str(path) in message
+        assert "rotate_password" in message
+        assert "service_generate --force-regenerate" in message
+        assert "saved-secret" not in message
+        assert "different-secret" not in message
 
 
 class TestWriteSecretFile:
