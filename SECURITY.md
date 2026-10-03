@@ -47,9 +47,17 @@ Trace the active call path before treating a static template as a runtime defaul
   `db_sync_master` executes, and module names passed to
   `debug_repository_queries` are operator/developer-controlled. `CONFIG_HOOK`
   may also be loaded from a `.env` file that `load_dotenv()` discovers. In
-  particular, `alembic.ini` is trusted code-equivalent configuration. Receiving
-  request data in one of these settings would cross a trust boundary and remains
-  reportable. A package-prefix check does not sandbox imported Python code.
+  particular, `alembic.ini` is trusted, code-equivalent configuration:
+  `pre_migration_hook`, logging handler `class` and `args` used by `fileConfig`,
+  `script_location` (which selects the migration `env.py`), `prepend_sys_path`,
+  and `[post_write_hooks]` can load or execute code. Model discovery checks
+  configured package names and `pre_migration_hook` checks its module component
+  with raw string-prefix matching before importing; neither constrains which
+  file supplies a module name, and the checks do not sandbox imported Python
+  code. `CONFIG_HOOK` (including values loaded from `.env`), master-data files,
+  and CLI-named debug modules are outside these checks.
+  Receiving request data in one of these settings would cross a trust boundary
+  and remains reportable.
 - Consumers own authentication, record/tenant authorization, input schemas,
   field exposure, and limits at their application boundary. repom must preserve
   the predicates and restrictions passed to it. A dropped authorization filter
@@ -252,23 +260,49 @@ Unless a difference is stated below, these contracts apply to both
 
 ### Discovery and migrations
 
-- Model discovery and `pre_migration_hook` must enforce the configured package
-  boundary before importing a disallowed module. Hook errors must abort the
-  command. Mutating the hook's config argument must not redirect the database
-  already selected by the shared migration environment.
-- Alembic and other operations requiring complete metadata must reject failed
-  model imports. The configured-model/empty-metadata guard must not be bypassed
-  into a destructive autogenerate result. Display-only discovery has a different
-  failure-reporting contract.
-- Generated INI values must retain the newline, carriage-return, NUL, leading
-  section-marker, and identifier restrictions appropriate to each option.
-  Template inputs must come from trusted configuration as specified in
-  [AGENTS.md](AGENTS.md); validation does not turn the generator into an
-  untrusted-configuration service.
+- Enforced import checks: model discovery validates each configured model
+  package name before importing it, and `pre_migration_hook` validates its
+  module component before loading the callable. Both use raw `startswith`
+  matching. Prefixes should end in `.`, because a dotless prefix also admits
+  sibling names. An empty prefix set disables the discovery check but rejects
+  every hook. A string value for `allowed_package_prefixes` is iterated one
+  character at a time. These checks validate names only; they do not select or
+  constrain the file that supplies a name. `prepend_sys_path = .` in the default
+  `alembic.ini` affects import resolution. `CONFIG_HOOK` (including values
+  loaded from `.env`), master-data files executed by `db_sync_master`, and
+  module names passed to `debug_repository_queries` are outside these checks.
+- Hook behavior: the hook runs after logging `fileConfig` and model imports, but
+  before Alembic connects, for both offline and online environment execution.
+  It receives the live, process-wide `RepomConfig`; its return value is ignored
+  and an exception aborts the command. The migration URL is set before the hook
+  runs, so changing the config does not redirect that migration, though the
+  mutation persists in the process. This non-redirection behavior is
+  source-verified and has no focused test. `alembic_reset`, `db_create`,
+  `db_delete`, and `db_sync_master` do not run the hook.
+- Model imports and metadata: `env.py` and `db_create` reject model-module import
+  failures. `configure_mappers` failures are logged but do not trigger strict
+  import failure. The empty-metadata guard rejects zero discovered tables only
+  when `model_locations` is non-empty. It does not detect unset locations,
+  skipped modules, or omitted packages, any of which can lead autogenerate to
+  propose `drop_table`. Discovery skips underscore-prefixed modules and
+  excluded directories, and uses only the first path of a namespace package.
+  Display-only discovery still imports model code and applies package checks.
+  Review generated migrations.
+- INI generation: path options reject newline, carriage return, NUL, and a
+  leading `[`. `%` interpolation is intentionally allowed. Identifier options
+  and each exclusion entry must match `[A-Za-z_][A-Za-z0-9_]*`. String-form
+  `autogenerate_exclude_tables` values are split, trimmed, validated, and
+  rejoined before they are written, so the emitted value has passed the same
+  newline, carriage-return, NUL, and identifier checks. Template inputs must
+  come from trusted configuration as specified in [AGENTS.md](AGENTS.md);
+  validation does not make the generator an untrusted-configuration service.
 - Runtime migration paths and namespace settings come from `alembic.ini`.
-  Namespace-specific operations must respect the selected version table, schema,
-  and version files. Sibling version-table exclusions are not permission to hide
-  model-table drift from autogenerate or `alembic check`.
+  `autogenerate_exclude_tables` accepts any table name; limiting it to sibling
+  version tables is a review rule, not an enforced control. An exclusion matches
+  a reflected table by unqualified name in any schema, suppressing that
+  database-only table's removal drift from autogenerate and `alembic check`.
+  Column drift is still compared. Do not list model tables. Review namespace
+  version-table, schema, and version-file settings for each migration namespace.
 
 ### Administrative operations and files
 
@@ -276,6 +310,11 @@ Unless a difference is stated below, these contracts apply to both
   their documented confirmation outside production. This CLI guard is not a
   blanket production prohibition on every restore, migration, or Python helper.
   Review each entry point's target selection and confirmation contract.
+- By default, `alembic_reset` drops the configured version table and then deletes
+  top-level `*.py` files other than `__init__.py`, plus `__pycache__`, from every
+  configured `version_locations` directory, including absolute paths. A failure
+  partway through leaves a partial reset. The `AlembicSetup.reset_migrations`
+  and `AlembicReset` Python APIs have no CLI confirmation guard.
 - Test fixture factories must retain their safety gate: test environment,
   in-memory SQLite, or explicit `allow_destructive=True`. These checks cannot
   prove a URL names disposable data; consumers must select a dedicated database.
