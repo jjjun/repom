@@ -144,6 +144,12 @@ repom 同梱の `repom.config_hook:hook_config` を使う場合、`EXEC_ENV=test
 SQLite を選びます。この例ではデータベースファイルは作られず、データはプロセス終了後に
 残りません。利用側の CONFIG_HOOK で別の DB を選んでいる場合はその設定が適用されます。
 
+`db_sync_master` に確認プロンプトや production 環境の拒否はありません。`EXEC_ENV=prod` でも実行でき、
+マスターデータ directory 内の Python file を実行して `session.merge()` で upsert します。
+実行前に接続先と実行対象の Python file を確認してください。
+Python から `load_master_data_files()` と `sync_master_data()` を直接呼び出す場合も、file の実行や upsert に
+確認・環境 guard はありません。
+
 ### 実行結果の例
 
 ```

@@ -306,47 +306,104 @@ Unless a difference is stated below, these contracts apply to both
 
 ### Administrative operations and files
 
-- `db_delete` and the `alembic_reset` CLI must refuse production and require
-  their documented confirmation outside production. This CLI guard is not a
-  blanket production prohibition on every restore, migration, or Python helper.
+- `db_delete`/`db_remove` and the `alembic_reset` CLI refuse `prod` and the
+  normalized `production` alias. Outside production, they require a TTY `y`
+  confirmation, or `--yes` when stdin is not a TTY; `--yes` does not skip a TTY
+  prompt. These guards do not apply to other entry points:
+  - `db_restore` has no environment refusal or `--yes` option. Its CLI confirms
+    with `input()` and accepts piped stdin; a same-database restore asks for `y`,
+    and a cross-database or unknown-source restore asks for the exact target
+    name. The callable `restore_sqlite()`, `restore_postgresql()`,
+    `restore_postgresql_via_host()`, and `restore_postgresql_via_docker()`
+    helpers bypass those prompts and have no environment guard.
+  - `db_sync_master` has no confirmation or environment guard. It executes the
+    operator-controlled master-data Python files and upserts rows with
+    `session.merge()`; it can run in production. Its callable
+    `load_master_data_files()` executes those files and `sync_master_data()`
+    upserts rows without a confirmation or environment guard as well.
+  - `postgres_remove` and `redis_remove`, and their Python `remove()` helper
+    paths, run Compose `down -v` without a confirmation prompt.
+  - `postgres_rotate_credentials`, `redis_rotate_password`, and
+    `pgadmin_rotate_password` default to a dry-run and require `--execute` to
+    change credentials. The Python APIs
+    `repom.postgres.credentials.rotate_postgres_credentials()`,
+    `repom.redis.manage.rotate_password()`, and
+    `repom.postgres.credentials.rotate_pgadmin_password()` also default to
+    dry-run. pgAdmin volume recreation additionally requires both
+    `--recreate-volume` and `--confirm-recreate-volume` with `--execute`; the
+    `recreate_pgadmin_volume()` helper defaults to `confirm=False`.
+  - `pg_restore_custom()` always invokes `pg_restore --clean --if-exists` and
+    has no confirmation or environment guard.
   Review each entry point's target selection and confirmation contract.
 - By default, `alembic_reset` drops the configured version table and then deletes
   top-level `*.py` files other than `__init__.py`, plus `__pycache__`, from every
   configured `version_locations` directory, including absolute paths. A failure
   partway through leaves a partial reset. The `AlembicSetup.reset_migrations`
   and `AlembicReset` Python APIs have no CLI confirmation guard.
-- Test fixture factories must retain their safety gate: test environment,
-  in-memory SQLite, or explicit `allow_destructive=True`. These checks cannot
-  prove a URL names disposable data; consumers must select a dedicated database.
+- Test fixture factories accept normalized `EXEC_ENV=test`, an in-memory
+  SQLite URL detected by the current `startswith("sqlite")` and
+  `":memory:" in url` substring heuristic, or explicit
+  `allow_destructive=True`, evaluated when the factory is called.
+  `EXEC_ENV=test` permits any URL. These checks cannot prove a URL names
+  disposable data; consumers must select a dedicated database.
 - Backup, restore, retention, and migration-file cleanup must act on the intended
   target. Assess path construction, existing files, links, failure cleanup, and
-  backup naming against a concrete attacker capability. A failed backup must not
-  be presented as a completed recovery artifact. PostgreSQL backup names reject
-  path separators and `..`; custom-format dumps are written to owner-only sibling
-  partial files, published after success, and checksummed. Restore verifies a
-  checksum when one is present and warns for older files without one.
+  backup naming against a concrete attacker capability. `db_backup` and
+  `pg_dump_custom()` create exclusive 0600 sibling partial files and publish the
+  backup after success; both generate SHA-256 sidecars. PostgreSQL backup names
+  are derived from the database name after rejecting path separators and `..`.
+  The backup is published before its sidecar, so a missing sidecar warns and
+  restore proceeds; a present but mismatched sidecar fails verification. The
+  sidecar detects a mismatch only when present and does not authenticate a
+  backup against replacement of both files.
 - Backup files and generated secret files, including temporary and backup copies,
-  contain sensitive data. Preserve restrictive permissions where supported and
-  verify actual access control on the target OS. POSIX mode bits alone are not
-  evidence of equivalent Windows ACL isolation.
+  contain sensitive data. Backup partial files use exclusive POSIX mode 0600.
+  Secret files are written before they are chmod-ed to 0600, so their initial
+  permissions depend briefly on the process umask. repom sets no Windows ACLs,
+  and the compose directory itself is not restricted. Permission tests skip on
+  Windows; POSIX mode bits alone are not evidence of equivalent Windows ACL
+  isolation.
 - Generated Compose/configuration/initialization content must not allow values
   to inject additional directives or SQL. Published service ports default to
   loopback; LAN exposure requires explicit configuration. Generation must retain
   the missing/placeholder-credential checks for enabled services.
 - Generated Compose image references, container names, and named-volume names
   are validated before they reach the shared writer. Volume names must match
-  Docker's named-volume syntax so they cannot become host bind mounts.
+  Docker's named-volume syntax so they cannot become host bind mounts. Host-side
+  bind-mount paths derived from configured data paths are not validated.
+- Normal generation refuses missing or placeholder credentials for enabled
+  services. Auto-start checks required `.env` keys and rejects a mismatch when
+  the configured credential is non-empty and non-placeholder, but it does not
+  independently reject empty or placeholder values stored in `.env`. Stop and
+  remove rewrite generated files with credential validation disabled and do not
+  validate the stored `.env` contents.
 - Existing secret files must not be silently replaced with different credentials.
   Intentional regeneration and credential rotation must preserve their explicit
   execution/overwrite controls and consistent persistent configuration.
   PostgreSQL and Redis rotations validate generated configuration before changing
-  the live credential and print recovery steps if file persistence fails after a
-  successful live change.
+  the live credential, then persist `.env` after the live change. A persistence
+  failure can leave the live and stored credentials inconsistent; these two
+  commands print recovery steps. pgAdmin password rotation also changes the live
+  password before regenerating files, and a persistence failure can leave them
+  inconsistent.
 - Subprocess argument, environment, stdin, and secret-file channels must preserve
   data boundaries and avoid unintended credential exposure. An argv list by
   itself does not establish safety against the invoked program's option parsing.
-  Explicit password CLI flags can expose process arguments; interactive/stdin
-  alternatives do not make every subprocess or container channel secret-free.
+  Host PostgreSQL client tools receive the password through `PGPASSWORD`.
+  PostgreSQL rotation sends SQL through stdin and supplies the current password
+  through a mode-0600 env file passed with `docker exec --env-file`. The pgAdmin
+  update command carries its password in argv; Redis rotation's explicit
+  `--new-password` and `--old-password` options also expose values in argv.
+  The Redis health check uses `redis-cli ping` with `REDISCLI_AUTH` from the
+  Compose service environment, not a password CLI flag. Docker exposes service
+  environment values through `docker inspect`. Some `docker exec` paths pass a
+  configured container name without rejecting a leading `-`. Client-tool
+  database arguments reject libpq connection-string and URI forms, but argv
+  lists alone do not prevent option parsing by the invoked program.
+- The packaged `repom/postgres/docker-compose.template.yml` and
+  `repom/redis/docker-compose.template.yml` files are not read by the runtime
+  Compose generators. Review their contents separately if a consumer uses them
+  directly.
 
 ## Reportable Findings and Severity Context
 

@@ -31,6 +31,8 @@ uv run db_backup
 - PostgreSQL: `<data_path>/backups/postgres/<接続先の DB 名>_<YYYYmmdd_HHMMSS>.sql.gz`
 - SQLite: `<data_path>/backups/sqlite/<db のファイル名 stem>_<YYYYmmdd_HHMMSS><db のファイル名拡張子>`
 
+PostgreSQL の backup name は DB 名から作られますが、path separator と `..` を含む DB 名は拒否されます。
+
 従来の `.sqlite3` バックアップも引き続き一覧に表示されます。
 
 いずれも作成のたびに `.sha256` サイドカーファイル（`write_checksum()`）が
@@ -38,7 +40,10 @@ uv run db_backup
 （`warn_if_checksum_missing()`）。サイドカーが存在しない古いバックアップは
 警告を出すだけでリストアは継続し、サイドカーはあるが値が一致しない場合は
 `ChecksumError` が `RestoreError` に wrap されて呼び出し元へ通知され、リストアを
-中断します。
+中断します。`db_backup` と `pg_dump_custom()` は exclusive な sibling `.partial` file を mode `0600` で
+作成し、成功後に backup file を公開します。checksum sidecar は backup file の公開後に書かれるため、
+sidecar がない場合は警告のみで restore が続行します。この checksum は sidecar がある場合の不一致を
+検出しますが、backup と sidecar の両方を置き換えた場合の真正性は保証しません。
 
 ## データベース接続先
 
@@ -105,6 +110,11 @@ uv run db_restore
 （`_backup_utils.py`）で元データベース名を読み取り、一覧表示・確認の両方で
 使用します。
 
+`db_restore` は `input()` による確認のみで、production 環境の拒否や `--yes` option はありません。
+stdin を pipe で渡した場合も確認値として受け付けます。
+Python から `restore_sqlite()`、`restore_postgresql()`、`restore_postgresql_via_host()` または
+`restore_postgresql_via_docker()` を直接呼び出す場合、これらの確認は実行されません。
+
 - 一覧はリストア先データベース自身のバックアップを先頭にまとめ、他データベース
   （または元データベースが不明なレガシーファイル）のバックアップはその後に
   続けて表示します。元データベースが不明なものは `[legacy/unknown source
@@ -136,7 +146,9 @@ object を使用せず、`bytea` 列には影響しません。
 `repom.scripts.pg_dump_tools` は custom-format の PostgreSQL dump / restore を行う
 library helper を提供します。`PgConnParams.from_config()` は現在の設定から接続情報を作成し、
 `pg_dump_custom()` と `pg_restore_custom()` はそれぞれ custom-format の dump と restore を
-実行します。`pg_restore_custom()` は `pg_restore --single-transaction` を使用します。
+実行します。`pg_dump_custom()` は owner-only の sibling partial file と checksum sidecar を使います。
+`pg_restore_custom()` は `pg_restore --clean --if-exists --single-transaction` を確認なしで実行し、
+production 環境の拒否もありません。
 `pg_tools_available()` は設定された経路で必要な client tools を利用できるか確認します。
 これらは console script の `db_backup` / `db_restore` とは別の library API です。
 

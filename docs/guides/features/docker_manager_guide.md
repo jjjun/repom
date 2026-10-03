@@ -37,6 +37,18 @@ compose directory の `.env` は共有されるため、同じ service を使う
 `*_stop` と `*_remove` も現在の設定で Compose file を書き直してから実行するため、対象環境の
 `EXEC_ENV` を指定してください。
 
+`postgres_remove` と `redis_remove` は Compose の `down -v` を実行し、named volume も削除します。
+確認プロンプトや production 環境の拒否はないため、実行前に `EXEC_ENV` と対象 volume を確認してください。
+`postgres_rotate_credentials`、`redis_rotate_password`、`pgadmin_rotate_password` は既定で dry-run です。
+実際に credential を変更するには `--execute` が必要です。明示的な password option は process argument に
+値を含むため、stdin option または TTY prompt を使用してください。pgAdmin volume の再作成には
+`--recreate-volume`、`--execute`、`--confirm-recreate-volume` のすべてが必要です。
+
+通常の `*_generate` は有効な service の credential が未設定または placeholder の場合に失敗します。
+auto-start は既存 `.env` の必須 key と設定値との差を確認しますが、設定側が空または placeholder の場合に
+`.env` 内の空値・placeholder 値を独立して拒否しません。`*_stop` と `*_remove` は credential 検証なしで
+生成物を書き直すため、既存 `.env` の値は検証しません。
+
 アプリ起動時に必要なサービスを保証する場合は、サービス固有の
 `ensure_running()` を利用できます。
 
@@ -60,7 +72,8 @@ standalone `docker-compose` に fallback します。v1 で作成した stack �
 
 `repom/docker_compose_safety.py` は Compose に渡す YAML 文字列を quote し、値に改行・復帰・
 NUL 文字があれば拒否します。port は既定で `127.0.0.1` に bind し、秘密情報を含む
-`.env` file は mode `0600` で作成します。
+`.env` file は書き込み後に mode `0600` にします。secret の書き込み直後から chmod までの間は
+作成時の umask に依存します。repom は Windows ACL を設定せず、compose directory 自体も制限しません。
 
 `repom.postgres.manage.generate()` と `repom.redis.manage.generate()` は、password が
 未設定または `CHANGE_ME` のままの場合や、password に改行・復帰・NUL 文字が含まれる
@@ -69,6 +82,11 @@ NUL 文字があれば拒否します。port は既定で `127.0.0.1` に bind �
 送出されます。`repom.docker_service.is_container_running(container_name)` は container
 の稼働状態を exact name match で `bool` として返し、Docker が利用できない場合は
 `DockerUnavailableError` を送出します。
+
+生成時には image reference、container name、named-volume name を検証します。`data_path` などから
+作る host bind-mount path は検証しません。Redis の health check は `redis-cli ping` を使い、password は
+Compose service environment の `REDISCLI_AUTH` で渡します。Docker の service environment は
+`docker inspect` から参照できます。
 
 関連資料:
 
