@@ -13,6 +13,8 @@
   確認範囲の軸の記録、動的検証に必要な環境、テスト対応表、項目の分担を反映。
 - 2026-10-03: V02 の advisory 監査範囲、PostgreSQL 実機検証の限界、§7 の保留事項追跡を明確化。
 - 2026-10-03: repom#243 の判断に基づき、結果の保存・開示、検証環境、独立レビュー、レビュー契機の扱いを更新。
+- 2026-10-03: 初回の全件試行を反映し、秘密の表示表現、独立 context と継承 context、
+  fixture engine binding と rollback の境界、platform skip の内訳、既知制限の追跡を明確化。
 
 この文書はレビューの観点と記録形式のひな形です。実施済みの監査結果でも、
 全項目が安全だという宣言でもありません。各項目の初期状態は **未確認** です。
@@ -106,7 +108,7 @@ OS/driver・実DBか fake かを記録します。静的証拠だけで結論を
 | M02 | sensitive_fields と serializable_fields が重なる場合や、instance 属性が同名の場合も出力制限が保たれるか | `BaseModel.to_dict()` とその利用箇所。ログや外部 serializer への適用を別に確認 |
 | M03 | NUL 等の検証がどの書き込み経路で働くか。Core/bulk、SQL 式、custom type、column_property の限界を記録したか | `repom/nul_bytes.py`, mapper events、同期/非同期 bulk update |
 | T01 | 内部/外部 session の commit・rollback・flush・SAVEPOINT・merge の責任と、部分失敗後の状態が契約どおりか | repository の session 管理、`repom/database.py` |
-| T02 | session の並行共有、例外、キャンセルでデータや接続の状態を取り違えないか。commit 中断時の不確実性を隠していないか | `DatabaseManager` と repository の実際の呼び出し経路。manager のテストだけで repository を検証済みにしない |
+| T02 | session の並行共有、例外、キャンセルでデータや接続の状態を取り違えないか。commit 中断時の不確実性を隠していないか。独立に開始した sibling context の分離と、active repository scope 内で作成した child task / copied context の session inheritance を別々に検証したか。後者が親の内部 session を引き継ぐ場合の同時利用・親 scope 終了前の commit を記録したか | `DatabaseManager` と repository の実際の呼び出し経路、`test_repository_session_isolation.py`。manager のテストだけで repository を検証済みにしない |
 
 ### 接続先・秘密情報
 
@@ -114,7 +116,7 @@ OS/driver・実DBか fake かを記録します。静的証拠だけで結論を
 | --- | --- | --- |
 | C01 | 同じ設定から ORM・Alembic・診断・backup/restore が実際にどこへ接続するか。host だけでなく port・database・user の上書きと優先順位も比較したか。`EXEC_ENV` の正規化（`prod`/`production`、大文字小文字・空白、未知の値の dev 扱い）が TLS・破壊的操作・命名・fixture の guard で一致するか | `repom/config.py`, `repom/exec_env.py`, `database.py`, `alembic/env.py`, `repom/scripts/pg_dump_tools.py`; 下の比較表を使う |
 | C02 | TLS の要求が URL・connect_args・環境変数・driver 変換後も保たれるか。暗号化と相手の証明書/hostname 検証を区別したか | `database.py`, `config.py`, `_backup_utils.py`; SQLite / PostgreSQL / Redis / pgAdmin の適用差を記録。サービス側の公開範囲は O06 |
-| C03 | 正常時と失敗時の repr・ログ・例外・例外 chain・CLI 出力に秘密が出ないか。不正 URL、percent encoding、query 内 DSN、子プロセス stderr も確認したか | `safe_db_url`, Alembic setup、`repom_info`, backup/restore、credential helpers |
+| C03 | 正常時と失敗時の repr・ログ・例外・例外 chain・CLI 出力に秘密が出ないか。SQL、Redis command、URL などへの escaping/encoding 後の表示表現も確認し、raw 値が見つからないだけで秘匿済みとせず、秘密を可逆に復元できる形で残っていないか調べたか。不正 URL、percent encoding、query 内 DSN、子プロセス stderr も確認したか | `safe_db_url`, Alembic setup、`repom_info`, backup/restore、credential helpers |
 | C04 | SQL ログ、結果行、QueryAnalyzer、デバッグ出力の保存内容と閲覧者を確認したか。hide_parameters を万能な秘匿処理と扱っていないか | `repom/logging.py`, `repom/diagnostics/`, `debug_repository_queries.py` |
 
 接続先の比較は、同じテスト設定ごとに表を埋めます。URL 表示だけで一致と判断せず、
@@ -158,13 +160,13 @@ driver に渡る引数と子プロセスの argv/env を比較します。libpq 
 
 | ID | 確認する問い | 調査の入口 |
 | --- | --- | --- |
-| V01 | テストが使う実際の DB・ファイルは隔離されているか。fixture gate や環境名だけに依存していないか | `repom/testing.py`, `tests/conftest.py`, `tests/session_config.py` |
+| V01 | テストが使う実際の DB・ファイルは隔離されているか。`bind_global_manager` の engine binding と fixture session に明示して参加する transaction rollback を区別し、sync factory は sync engine のみ、async factory は async engine のみを manager に bind することを確認したか。repository data の post-run snapshot は事後検出であり実行中の containment ではないことを踏まえ、実際の target と別 connection/process の副作用を調べたか | `repom/testing.py`, `tests/conftest.py`, `tests/session_config.py`, `docs/guides/testing/testing_guide.md` |
 | V02 | lock と実行環境が一致するか。実行環境と lock 全体の advisory 監査を区別し、platform marker と選択した extras/groups の範囲を記録したか。advisory 確認と git 依存の source review を区別したか | `pyproject.toml`, `uv.lock`, dependency-audit workflow。監査ツールの失敗/未実行、skip、未監査項目を0件としない。コマンドは §4 |
 | V03 | 修正前に失敗し修正後に成功する回帰テストと、正当な利用を維持するテストがあるか | 対象 issue の元の再現、変更した共通処理と各入口。修正前の確認方法は §4 |
 | V04 | sync/async、SQLite/PostgreSQL、CLI/Python API、host/Docker、Windows/POSIX の確認範囲を分けたか。skip と fake と実機の差を残したか | 対象テストと `.github/workflows/test.yml`。CI 定義と実行結果も区別 |
 | V05 | issue の完了理由に修正証拠があり、文書修正・改善提案・判断待ちを取り違えていないか | issuekit の原文、受け入れ条件、実装・独立レビュー記録、残件の追跡先 |
 | V06 | SECURITY.md、公開ガイド、breaking change の release note が実装と一致するか | `SECURITY.md`, `docs/guides/`, `docs/release_notes.md` |
-| V07 | SECURITY.md に書かれた既知の制限・欠陥・未決事項ごとに、追跡 issue、管理者判断、送付済み提案のどれかを参照できるか。completed issue の残件と outgoing 提案の状態を確認したか | `SECURITY.md`, `issuekit queue`, `issuekit show <id>`, `issuekit outgoing --to <project>`, §7 |
+| V07 | SECURITY.md の既知制限・欠陥・未決事項の追跡先を確認し、issuekit の各記録から該当する SECURITY.md section と現在の扱いをたどれるか。既知制限の文書化、文書不整合の修正、コード修正と変更後の証拠、管理者が明示的に受容したリスクを別々に記録したか。completed issue の残件と outgoing proposal の状態を確認したか | `SECURITY.md`, `issuekit queue`, `issuekit show <id>`, `issuekit outgoing --to <project>`, §2, §7 |
 | V08 | CI と開発用の自動実行（workflow の permissions、action の SHA 固定、SessionStart hook、pre-commit、MCP 設定、VS Code task）が意図しないコマンド実行や秘密の露出を生まないか | `.github/`, `.claude/hooks/session-start.sh`, `.claude/settings.json`, `.codex/config.toml`, `.mcp.json`, `.pre-commit-config.yaml`, `.vscode/tasks.json` |
 
 ## 4. 検証コマンドを選ぶための入口
@@ -191,7 +193,7 @@ driver に渡る引数と子プロセスの argv/env を比較します。libpq 
 | --- | --- | --- |
 | PostgreSQL | C01（同期 ORM の接続先のみ）, A02, M03, O03, Q04 | AGENTS.md の `docker run` で起動し、`CONFIG_HOOK=repom.config_hook:hook_config EXEC_ENV=test DB_TYPE=postgres POSTGRES_PASSWORD=<test password> uv run pytest tests/integration_tests/test_postgres_integration.py`。未設定だと全件 skip になり、確認済みの根拠にならない。このコマンドは同期 psycopg のみ |
 | Docker | O04, O05, O06, backup/restore の Docker 経路 | 実サービスの起動・資格情報変更・復元は依頼範囲に従う。fake の成功で代えない |
-| POSIX | O02, O06 | Windows では権限・symlink のテストが skip になる（2026-10-03 時点で 10 件）。CI（Ubuntu）の結果で補う場合は run を記録する |
+| POSIX | O02, O06 | 2026-10-03 の Windows full run（HEAD `256b782d`、`uv run pytest`）は 1937 件 pass、29 件 skip: POSIX 専用 13 件（mode 12 件、symlink 1 件）、PostgreSQL 14 件、benchmark 2 件。`test_pg_dump_tools.py`、`test_postgres_manage.py`、`test_redis_manage.py` にある3つの inline `os.name == 'posix'` mode assertion は Windows では実行されず、pytest の skip 数にも出ない。POSIX の証拠には source revision が対応する completed Ubuntu run を記録する |
 | Windows | O06 | repom は ACL を設定しない。実際の権限は `icacls <path>` で確認する |
 | ネットワーク・GitHub | V02, V04 | V02 の audit run は §4 の手順で対象 lock 内容と日付を確認する。V04 の CI run 確認には `gh run list --branch main`（認証が必要）を使える |
 

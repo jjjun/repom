@@ -2,7 +2,7 @@
 
 ``basekit.docker_compose`` renders ``DockerService``/``DockerVolume`` fields
 into YAML lines with plain ``f"{key}: {value}"`` interpolation and no
-escaping (see ``docs/guides/features/docker_compose_guide.md`` for the
+escaping (see ``docs/guides/features/docker_manager_guide.md`` for the
 ownership boundary between basekit and repom). repom controls the values
 handed to that generator, so every value that reaches a Compose environment
 block, a healthcheck, or a generated secrets file must be validated and
