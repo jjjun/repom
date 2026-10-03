@@ -107,8 +107,12 @@
   `name` is `repom` or already starts with `repom.`. Internal logger names now match
   their module paths.
 - BREAKING: `PgConnParams.from_config()` rejects PostgreSQL URL query parameters
-  `host`, `hostaddr`, `service`, and `dsn` with `ValueError`. PostgreSQL client tools
-  reject database names containing `=` or written as `postgres://` or
+  `host`, `hostaddr`, `service`, `dsn`, `port`, `dbname`, `database`, `user`, and
+  `password` with `ValueError`, regardless of the PostgreSQL URL driver name. Put
+  supported identity values in the URL authority/path, or select other destination
+  options through an explicit client-tool configuration; `sslmode` and `sslrootcert`
+  remain supported query options. PostgreSQL
+  client tools reject database names containing `=` or written as `postgres://` or
   `postgresql://` URIs. PostgreSQL backup names reject path separators and `..`.
 - BREAKING: PostgreSQL client tools use Docker exec only when the configured host is
   local. Remote hosts use host client tools even when the managed container is running;

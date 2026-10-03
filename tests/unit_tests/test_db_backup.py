@@ -87,6 +87,40 @@ def test_backup_postgresql_rejects_unsafe_database_filename(
     assert not (tmp_path / "backups").exists()
 
 
+@pytest.mark.parametrize(
+    "query", ["port=6543", "dbname=other_database", "user=other_user"]
+)
+def test_backup_postgresql_rejects_url_identity_overrides_before_execution(
+    monkeypatch, tmp_path, query, caplog
+):
+    config = _mock_postgres_config(tmp_path)
+    config.db_type = "postgres"
+    config.db_url_overridden = True
+    config.db_url = (
+        "postgresql://authority_user:authority-secret-password@"
+        f"db.example.internal:5432/app?{query}"
+    )
+    monkeypatch.setattr(db_backup, "config", config)
+    postgres_runner = MagicMock()
+    docker_probe = MagicMock()
+    client_process = MagicMock()
+    docker_exec = MagicMock()
+    monkeypatch.setattr(db_backup, "run_postgres_via_docker_or_host", postgres_runner)
+    monkeypatch.setattr(_backup_utils, "is_container_running", docker_probe)
+    monkeypatch.setattr(db_backup, "run_streaming_command", client_process)
+    monkeypatch.setattr(DockerCommandExecutor, "exec_command", docker_exec)
+
+    with pytest.raises(ValueError, match="URL query overrides") as exc_info:
+        db_backup.main()
+
+    assert "authority-secret-password" not in str(exc_info.value)
+    assert "authority-secret-password" not in caplog.text
+    postgres_runner.assert_not_called()
+    docker_probe.assert_not_called()
+    client_process.assert_not_called()
+    docker_exec.assert_not_called()
+
+
 @POSIX_ONLY
 def test_backup_directory_is_0700(monkeypatch, tmp_path):
     backup_dir = tmp_path / "backups"

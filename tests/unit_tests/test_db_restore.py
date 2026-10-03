@@ -255,6 +255,41 @@ def test_postgres_restore_override_uses_url_host_and_credentials(monkeypatch, tm
     assert child_env["PGSSLROOTCERT"] == "/tmp/url-ca.pem"
 
 
+@pytest.mark.parametrize(
+    "query", ["port=6543", "dbname=other_database", "user=other_user"]
+)
+def test_postgres_restore_rejects_url_identity_overrides_before_execution(
+    monkeypatch, tmp_path, query, caplog
+):
+    _make_backup_file(tmp_path)
+    config = _mock_postgres_config(tmp_path)
+    config.db_type = "postgres"
+    config.db_url_overridden = True
+    config.db_url = (
+        "postgresql://authority_user:authority-secret-password@"
+        f"db.example.internal:5432/app?{query}"
+    )
+    monkeypatch.setattr(db_restore, "config", config)
+    postgres_runner = MagicMock()
+    docker_probe = MagicMock()
+    client_process = MagicMock()
+    docker_exec = MagicMock()
+    monkeypatch.setattr(db_restore, "run_postgres_via_docker_or_host", postgres_runner)
+    monkeypatch.setattr(_backup_utils, "is_container_running", docker_probe)
+    monkeypatch.setattr(db_restore, "run_streaming_command", client_process)
+    monkeypatch.setattr(DockerCommandExecutor, "exec_command", docker_exec)
+
+    with pytest.raises(ValueError, match="URL query overrides") as exc_info:
+        db_restore.main()
+
+    assert "authority-secret-password" not in str(exc_info.value)
+    assert "authority-secret-password" not in caplog.text
+    postgres_runner.assert_not_called()
+    docker_probe.assert_not_called()
+    client_process.assert_not_called()
+    docker_exec.assert_not_called()
+
+
 def test_restore_postgresql_via_host_raises_before_launching_process_on_invalid_tls(
     monkeypatch, tmp_path
 ):

@@ -50,8 +50,11 @@ sidecar がない場合は警告のみで restore が続行します。この ch
 `config.db_url` が上書きされている場合、`db_backup` / `db_restore` はその URL を接続先に
 します。PostgreSQL ではクライアント引数、パスワード、TLS 設定を URL から取得し、管理対象
 コンテナの状態確認や `docker exec` を行わず、host 上で `pg_dump` / `psql` を実行します。
-URL クエリの `host`、`hostaddr`、`service`、`dsn` による接続先の上書きは拒否し、URL authority
-の接続先を使います。
+URL クエリに `host`、`hostaddr`、`service`、`dsn`、`port`、`dbname`、`database`、`user`、
+`password` が含まれる PostgreSQL URL は、URL driver 名によらず `PgConnParams.from_config()` が
+`ValueError` で拒否します。URL authority/path で表せる接続先と認証情報はそこに置き、`hostaddr`、
+`service`、`dsn` を使う場合は明示的な client-tool 設定を選んでください。`sslmode` と
+`sslrootcert` は引き続き query で指定できます。
 SQLite では URL が示すファイルをバックアップ／リストア対象にし、インメモリ SQLite の URL
 は拒否します。
 
@@ -70,7 +73,8 @@ URL override を使う PostgreSQL の host-side client tool も、prod 環境の
 有効 URL の値で接続します。remote host で `sslmode` が未指定なら `require` が補われ、
 設定済みの `sslrootcert` も有効 URL に追加されます。host がない URL は local 扱いです。
 prod の remote host で弱い `sslmode` を指定すると、client process の起動前に拒否されます。
-ただし、クライアントツールでは URL クエリの `host`、`hostaddr`、`service`、`dsn` による接続先の上書きを拒否し、URL authority の接続先を使います。`-d` に渡す DB 名も、libpq の接続文字列や URI として解釈される形式は拒否します。
+URL の identity query override も `db_backup` / `db_restore` が Docker probe や client process を
+始める前に拒否します。`-d` に渡す DB 名も、libpq の接続文字列や URI として解釈される形式は拒否します。
 詳しくは [PostgreSQL 実行時設定の上書き](../postgresql/runtime_env_overrides.md) を参照してください。
 
 ## ローテーション
@@ -150,7 +154,9 @@ library helper を提供します。`PgConnParams.from_config()` は現在の設
 `pg_restore_custom()` は `pg_restore --clean --if-exists --single-transaction` を確認なしで実行し、
 production 環境の拒否もありません。
 `pg_tools_available()` は設定された経路で必要な client tools を利用できるか確認します。
-これらは console script の `db_backup` / `db_restore` とは別の library API です。
+これらは console script の `db_backup` / `db_restore` とは別の library API です。URL 由来の
+接続情報には `PgConnParams.from_config()` を使ってください。直接構築した `PgConnParams` は
+呼び出し元が明示的に渡す trusted 値であり、URL query validation を通りません。
 
 ## 失敗時の挙動
 

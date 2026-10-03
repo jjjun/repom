@@ -205,10 +205,16 @@ Unless a difference is stated below, these contracts apply to both
   engines from `db_url` only. Diagnostics probes and synchronous test fixtures
   pass engine kwargs without the engine-policy resolver. Review backup/restore
   host-tool and `docker exec` paths separately: URL-overridden client tools use
-  the parsed URL authority and reject query destination overrides, while the
-  configured local-host path may target the managed container through
-  `docker exec`; configured remote hosts use host client tools. Client-tool
-  database names must not use libpq connection-string syntax. `database_info`
+  the URL authority/path and reject query overrides for `host`, `hostaddr`,
+  `service`, `dsn`, `port`, `dbname`, `database`, `user`, and `password`,
+  regardless of the PostgreSQL URL driver name. Put those identity values in
+  the URL authority/path where represented, or use an explicit client-tool
+  configuration for other destination selectors;
+  `sslmode` and `sslrootcert` remain supported query options. Rejection occurs
+  before backup/restore Docker probes or client processes. The configured
+  local-host path may target the managed container through `docker exec`;
+  configured remote hosts use host client tools. Client-tool database names
+  must not use libpq connection-string syntax. `database_info`
   reports configured `postgres_db` even when a URL override selects another
   database. Host-less URLs are classified as local, although libpq may then use
   `PGHOST` or `PGSERVICE`. `prod` and the normalized `production` alias receive

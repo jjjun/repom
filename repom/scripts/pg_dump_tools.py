@@ -30,6 +30,17 @@ VERSION_MISMATCH_HINT = (
     "Hint: PostgreSQL client/server versions appear to differ. Start the "
     "managed PostgreSQL container or install matching PostgreSQL client tools."
 )
+UNSUPPORTED_CLIENT_QUERY_PARAMETERS = {
+    "host",
+    "hostaddr",
+    "service",
+    "dsn",
+    "port",
+    "dbname",
+    "database",
+    "user",
+    "password",
+}
 
 
 @dataclass(frozen=True)
@@ -62,6 +73,16 @@ class PgConnParams:
         active_config = config_obj or config
         if active_config.db_url_overridden:
             url = make_url(active_config.db_url)
+            unsupported_overrides = UNSUPPORTED_CLIENT_QUERY_PARAMETERS.intersection(
+                url.query
+            )
+            if unsupported_overrides:
+                names = ", ".join(sorted(unsupported_overrides))
+                raise ValueError(
+                    "PostgreSQL client tools do not support URL query overrides for: "
+                    f"{names}"
+                )
+
             missing = [
                 name
                 for name, value in (
@@ -75,15 +96,6 @@ class PgConnParams:
                 raise ValueError(
                     "PostgreSQL client tools require a URL with "
                     f"{', '.join(missing)}; Unix-socket URLs are not supported."
-                )
-            overridden_destination = {"host", "hostaddr", "service", "dsn"}.intersection(
-                url.query
-            )
-            if overridden_destination:
-                names = ", ".join(sorted(overridden_destination))
-                raise ValueError(
-                    "PostgreSQL client tools do not support URL destination "
-                    f"overrides: {names}"
                 )
 
             def query_value(name: str) -> str | None:

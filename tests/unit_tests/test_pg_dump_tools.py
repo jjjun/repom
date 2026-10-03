@@ -5,6 +5,9 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
+
 from _fake_pg_client import fake_client_command
 from repom.config import RepomConfig
 from repom.scripts import _backup_utils, pg_dump_tools
@@ -90,22 +93,91 @@ def test_pg_conn_params_disables_docker_for_remote_configured_host():
     assert PgConnParams.from_config(config).use_docker is False
 
 
-@pytest.mark.parametrize("destination_option", ["host", "hostaddr", "service", "dsn"])
-def test_pg_conn_params_rejects_url_destination_query_overrides(destination_option):
+@pytest.mark.parametrize(
+    ("query", "unsupported_parameter"),
+    [
+        ("host=other.example.internal", "host"),
+        ("hostaddr=203.0.113.10", "hostaddr"),
+        ("service=other_service", "service"),
+        ("dsn=host%3Dother.example.internal", "dsn"),
+        ("port=%36%35%34%33", "port"),
+        ("port=6543&port=7654", "port"),
+        ("dbname=other_database", "dbname"),
+        ("database=other_database", "database"),
+        ("user=query-secret-user", "user"),
+        ("password=query-secret-password", "password"),
+        ("%70ort=%36%35%34%33", "port"),
+    ],
+)
+def test_pg_conn_params_rejects_url_connection_query_overrides(
+    query, unsupported_parameter
+):
     config = RepomConfig()
     config.db_url = (
-        "postgresql://url_user@db.example.internal/url_db"
-        f"?{destination_option}=other.example.internal"
+        "postgresql://url_user:url-secret-password@db.example.internal/url_db"
+        f"?{query}"
     )
 
-    with pytest.raises(ValueError, match="destination overrides"):
+    with pytest.raises(ValueError) as exc_info:
+        PgConnParams.from_config(config)
+
+    assert str(exc_info.value) == (
+        "PostgreSQL client tools do not support URL query overrides for: "
+        f"{unsupported_parameter}"
+    )
+    assert "url-secret-password" not in str(exc_info.value)
+    assert "query-secret" not in str(exc_info.value)
+    assert "other.example.internal" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("driver", "query", "argument", "query_value"),
+    [
+        ("psycopg", "port=6543", "port", "6543"),
+        ("psycopg", "dbname=other_database", "dbname", "other_database"),
+        ("psycopg", "user=other_user", "user", "other_user"),
+        (
+            "psycopg",
+            "password=query-secret-password",
+            "password",
+            "query-secret-password",
+        ),
+        ("asyncpg", "database=other_database", "database", "other_database"),
+    ],
+)
+def test_pg_conn_params_rejects_identity_options_that_sqlalchemy_applies(
+    driver, query, argument, query_value
+):
+    config = RepomConfig()
+    config.db_url = (
+        f"postgresql+{driver}://authority_user:authority_password@"
+        f"db.example.internal:5432/app?{query}"
+    )
+    url = make_url(config.db_url)
+    engine = create_engine(url)
+    try:
+        _, dialect_arguments = engine.dialect.create_connect_args(url)
+    finally:
+        engine.dispose()
+
+    authority_value = {
+        "port": str(url.port or 5432),
+        "dbname": url.database,
+        "database": url.database,
+        "user": url.username,
+        "password": url.password,
+    }[argument]
+    assert dialect_arguments[argument] == query_value
+    assert dialect_arguments[argument] != authority_value
+
+    with pytest.raises(ValueError, match="URL query overrides"):
         PgConnParams.from_config(config)
 
 
 @pytest.mark.parametrize(
     "url",
     [
-        "postgresql://url_user:url_password@/url_db?host=/var/run/postgresql",
+        "postgresql://url_user:url_password@/url_db",
         "postgresql://db.example.internal/url_db",
         "postgresql://url_user@db.example.internal/",
     ],
