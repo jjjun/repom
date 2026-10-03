@@ -43,7 +43,8 @@ class QueryBuilderMixin(Generic[T]):
     # デフォルトの eager loading options
     default_options: Sequence[Any] = ()
     default_order_by = None
-    # limit の上限（サブクラスで上書き可能）。None で上限チェックを無効化。
+    # 明示された root row limit の上限（サブクラスで上書き可能）。None で上限チェックを無効化。
+    # offset、IN リスト、relationship 展開、クエリコストは制限しない。
     max_limit: Optional[int] = 1000
     field_to_column: Optional[Mapping[str, Any]] = None
 
@@ -51,9 +52,11 @@ class QueryBuilderMixin(Generic[T]):
         """Build the base SELECT for this repository.
 
         Override to customise statement construction, such as execution
-        options or hints. This applies to every repository query that selects
-        model instances. Do not apply filtering here; filters are the caller's
-        contract.
+        options or hints. Standard repository query paths use this hook, but it
+        does not cover every model load: get_or_create() builds direct SELECT
+        statements, internal-session save paths call session.refresh(), and
+        remove() uses merge(). Do not apply filtering here; filters are the
+        caller's contract.
         """
         return select(self.model)
 

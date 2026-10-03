@@ -172,7 +172,8 @@ class SoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
         Args:
             filters (Optional[List[Callable]]): 追加のフィルタ条件
             params (Optional[FilterParams]): フィルタ条件に AND で追加する検索パラメータ
-            **kwargs: offset, limit, order_by などのオプション
+            **kwargs: offset, limit, order_by, options などの検索オプション。未知の option keyword は
+                無視されます。
 
         Returns:
             List[T]: 削除済みレコードのリスト（論理削除非対応モデルは空リスト）
@@ -193,7 +194,8 @@ class SoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
 
         Args:
             before_date (datetime): この日時より前に削除されたレコードを検索
-            **kwargs: offset, limit, order_by などのオプション
+            **kwargs: offset, limit, order_by, options を適用します。filters、params と未知の
+                keyword は無視されます。条件を追加する場合は find_deleted(filters=...) を使います。
 
         Returns:
             List[T]: 条件に一致するレコードのリスト（論理削除非対応モデルは空リスト）
@@ -343,7 +345,8 @@ class AsyncSoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
         Args:
             filters (Optional[List[Callable]]): 追加のフィルタ条件
             params (Optional[FilterParams]): フィルタ条件に AND で追加する検索パラメータ
-            **kwargs: offset, limit, order_by などのオプション
+            **kwargs: offset, limit, order_by, options などの検索オプション。未知の option keyword は
+                無視されます。
 
         Returns:
             List[T]: 削除済みレコードのリスト（論理削除非対応モデルは空リスト）
@@ -364,7 +367,8 @@ class AsyncSoftDeleteRepositoryMixin(_SoftDeleteQueryBuilder[T]):
 
         Args:
             before_date (datetime): この日時より前に削除されたレコードを検索
-            **kwargs: offset, limit, order_by などのオプション
+            **kwargs: offset, limit, order_by, options を適用します。filters、params と未知の
+                keyword は無視されます。条件を追加する場合は find_deleted(filters=...) を使います。
 
         Returns:
             List[T]: 条件に一致するレコードのリスト（論理削除非対応モデルは空リスト）

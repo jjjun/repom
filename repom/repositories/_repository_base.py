@@ -39,11 +39,17 @@ class RepositoryBase(Generic[T]):
     渡されていないかの検出）はサブクラスがクラス属性で差し替えます。
 
     スレッド/タスク安全性:
-        ``session`` を明示せずに構築したインスタンスは、複数のリクエスト・
-        タスク・スレッドで共有しても安全です。``_session_scope()`` が内部で
-        開くセッションは ``contextvars.ContextVar`` に保持されるため、
-        タスク/スレッドごとに独立した値を持ち、他の呼び出し元のセッション・
-        未コミットの変更・identity map を参照することはありません。
+        ``session`` を明示せずに構築したインスタンスは、独立して開始された
+        context 間で共有できます。``_session_scope()`` が内部で開くセッションは
+        ``contextvars.ContextVar`` に保持され、独立した context では別の値を
+        持ちます。ただし、consumer code がこの private scope 内で子 task や
+        context をコピーする thread を開始すると、子側が同じ内部セッションを
+        引き継ぐ場合があります。その session は同時利用できず、子側の書き込みが
+        親 scope の終了前に commit することもあります。``asyncio.create_task()``、
+        ``asyncio.TaskGroup``、``asyncio.to_thread()``、``contextvars.copy_context().run()``
+        などで子処理を開始しないでください。thread の context 継承は Python の
+        version と設定にも依存します。この制約は consumer code の利用方法に関するもので、
+        request 間の脆弱性が確認されたという意味ではありません。
         ``session`` を明示したインスタンスは、その呼び出し元が所有する
         セッションに紐づくため、そのセッションを複数タスクで同時利用しない
         という通常の SQLAlchemy の制約がそのまま適用されます。

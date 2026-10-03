@@ -122,9 +122,11 @@ tasks = await repo.find(offset=10, limit=10)
 
 - `offset` / `limit` は 0 以上の整数のみ受け付けます（負値や bool は `TypeError` /
   `ValueError`）。
-- `limit` はリポジトリの `max_limit` クラス属性（デフォルト 1000）を超えると
-  `ValueError` を送出します。ページ API など外部入力をそのまま渡す場合は、この
-  上限に依存して DoS を防いでください。
+- 明示した `limit` は、リポジトリの `max_limit` クラス属性（デフォルト 1000）を超えると
+  `ValueError` になります。これはこのクエリが返す root row 数の上限であり、DoS 全般を防ぐ保証
+  ではありません。limit の省略、offset、IN リストのサイズ、relationship の展開、クエリ自体の
+  実行コストは制限しません。外部入力ではページサイズやリスト長を別途検証し、必要に応じて
+  rate limit、statement timeout、データベース側の実行制御も設定してください。
 
 ```python
 class TaskRepository(AsyncBaseRepository[Task]):

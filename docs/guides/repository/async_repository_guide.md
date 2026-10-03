@@ -172,10 +172,12 @@ tasks = await task_repo.find(limit=10)
 users = await user_repo.find(limit=10)
 ```
 
-`session=` を省略した Repository インスタンスは、この制約の対象外です。
-`_session_scope()` が開く内部セッションは contextvars で task ごとに
-独立して保持されるため、同じインスタンスを複数 task で共有しても
-セッションや identity map を取り合いません。
+`session=` を省略した Repository インスタンスでも、独立して開始された task context では
+それぞれ別の内部セッションを使います。一方、内部 session scope が有効な間に開始した
+`asyncio.create_task()` や `asyncio.TaskGroup` の子 task は context を引き継ぎ、同じ内部
+session object を使うことがあります。`asyncio.gather()` で開始する coroutine も task 化されると
+同じ注意が必要です。これらの子 task から同じ Repository を並行して使わないでください。
+子 task の書き込みが親 scope の終了前に内部 session を commit する場合もあります。
 
 ## Soft Delete
 

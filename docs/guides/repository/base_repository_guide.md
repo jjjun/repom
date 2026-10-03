@@ -190,8 +190,13 @@ def _base_select(self):
     return super()._base_select().execution_options(populate_existing=True)
 ```
 
-このフックはモデルインスタンスを取得するすべての Repository クエリに適用されます。
-`_base_select()` ではフィルタを追加しないでください。各呼び出し側が検索条件を管理します。
+このフックは、多くの標準 Repository 検索と ID 取得の SELECT 構築に使われますが、
+モデルの読み込みすべてには適用されません。`get_or_create()` の初回・再試行 lookup は
+直接 `select(self.model)` を構築します。lookup の等価条件と論理削除フィルタは適用されますが、
+この hook で指定した `execution_options` などは適用されません。内部 session を使う保存系処理の
+`session.refresh()` と `remove()` の `merge()` も、この hook を通りません。
+`_base_select()` は tenant scoping 用の境界ではありません。ここでフィルタを追加せず、
+認可や tenant 条件は各呼び出し側で明示してください。
 
 ### `populate_existing` が必要な場合
 

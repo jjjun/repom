@@ -285,21 +285,35 @@ print(f"{len(deleted_articles)} 件の削除済み記事")
 
 #### find_deleted_before(before_date, **kwargs) -> List[T]
 
-指定日時より前に削除されたレコードを取得します。
-
-**パラメータ**:
-- `before_date`: この日時より前に削除されたレコードを検索
+指定日時より前に削除されたレコードを取得します。`**kwargs` で使える検索オプションは
+`offset`、`limit`、`order_by`、`options` です。`filters` や `params` はこのメソッドの
+条件にはならず、未知の keyword と同様に無視されます。tenant などで対象を絞る場合は
+`find_deleted(filters=...)` を使ってください。
 
 ```python
 from datetime import datetime, timedelta, timezone
 
 # 30日以上前に削除されたレコードを取得
 threshold = datetime.now(timezone.utc) - timedelta(days=30)
-old_deleted = repo.find_deleted_before(threshold)
+old_deleted = repo.find_deleted_before(threshold, limit=100)
 
 # 物理削除
 for item in old_deleted:
     repo.permanent_delete(item.id)
+```
+
+`find_deleted_before()` はすべての tenant の該当行を返します。tenant ごとのループ内でこの
+メソッドを呼んでから `permanent_delete()` すると、各 tenant に限定した削除にはなりません。
+tenant を限定した purge では、たとえば次のように row 条件を明示してください。
+
+```python
+old_deleted = repo.find_deleted(
+    filters=[
+        Article.deleted_at < threshold,
+        Article.tenant_id == tenant_id,
+    ],
+    limit=100,
+)
 ```
 
 ## 非同期 Repository とセッション管理
@@ -370,43 +384,89 @@ repo.permanent_delete(1)
 
 ### FastAPI での使用
 
+次は認証・認可を consumer 側で実装する場合の略記例です。`User`、`tenant_id`、
+`get_current_user`、およびデータベース dependency は各アプリケーションの実装に置き換えてください。
+route の URL prefix だけでは認可されません。すべての mutation で actor と対象 row の
+owner/tenant 関係を検証し、同じ caller-owned transaction 内で変更してください。
+`get_db_transaction` は正常終了時に commit し、Repository は渡された session では flush のみを行います。
+`scope="function"` を使うには FastAPI 0.121.0 以降が必要です。
+
 ```python
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 from repom import BaseRepository
+from repom.database import get_db_transaction
+from myapp.auth import User, get_current_user
 from myapp.models import Article
 
 router = APIRouter()
 
 @router.delete("/articles/{article_id}")
-def soft_delete_article(article_id: int):
-    """記事を論理削除"""
-    repo = BaseRepository(Article)
-    if repo.soft_delete(article_id):
-        return {"success": True, "message": "記事を削除しました"}
-    raise HTTPException(status_code=404, detail="記事が見つかりません")
+def soft_delete_article(
+    article_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db_transaction, scope="function"),
+):
+    repo = BaseRepository(Article, session=session)
+    filters = [
+        Article.id == article_id,
+        Article.tenant_id == current_user.tenant_id,
+    ]
+    if repo.find_one(filters=filters) is None:
+        raise HTTPException(status_code=404, detail="記事が見つかりません")
+
+    # bulk_delete は ID と tenant 条件の両方を mutation に適用します。
+    changed = repo.bulk_delete(
+        ids=[article_id],
+        filters=[Article.tenant_id == current_user.tenant_id],
+    )
+    if not changed:
+        raise HTTPException(status_code=404, detail="記事が見つかりません")
+    return {"success": True, "message": "記事を削除しました"}
 
 @router.post("/articles/{article_id}/restore")
-def restore_article(article_id: int):
-    """削除した記事を復元"""
-    repo = BaseRepository(Article)
-    if repo.restore(article_id):
-        return {"success": True, "message": "記事を復元しました"}
-    raise HTTPException(status_code=404, detail="削除済み記事が見つかりません")
+def restore_article(
+    article_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db_transaction, scope="function"),
+):
+    repo = BaseRepository(Article, session=session)
+    locked_deleted = session.scalar(
+        select(Article)
+        .where(
+            Article.id == article_id,
+            Article.tenant_id == current_user.tenant_id,
+            Article.deleted_at.is_not(None),
+        )
+        .with_for_update()
+    )
+    if locked_deleted is None:
+        raise HTTPException(status_code=404, detail="削除済み記事が見つかりません")
+    if not repo.restore(article_id):
+        raise HTTPException(status_code=404, detail="削除済み記事が見つかりません")
+    return {"success": True, "message": "記事を復元しました"}
 
 @router.get("/articles")
 def list_articles(
     include_deleted: bool = False,
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_db_transaction, scope="function"),
 ):
     """記事一覧を取得"""
-    repo = BaseRepository(Article)
+    repo = BaseRepository(Article, session=session)
     if include_deleted and not current_user.is_staff:
         raise HTTPException(status_code=403, detail="Forbidden")
-    articles = repo.find(include_deleted=include_deleted, limit=100)
+    articles = repo.find(include_deleted=include_deleted, filters=[Article.tenant_id == current_user.tenant_id], limit=100)
     return [article.to_dict() for article in articles]
 ```
 
-一覧 API で `include_deleted=True` を許可する場合は、値を Repository に渡す前にアプリケーション側の認可チェック（またはスタッフ専用ルート）を必ず行ってください。詳細は [SECURITY.md](../../../SECURITY.md) を参照してください。FastAPI の `Depends` で利用する `get_current_user` とスタッフ判定は、アプリケーションの認証・認可実装に合わせてください。
+restore 例は tenant 条件付きの row lock を取り、同じ transaction 内で ID のみを受け取る
+`restore()` を呼びます。利用するデータベースがこの row lock をサポートしない場合や、所有権の
+同時変更を別経路で防げない場合は、DB 制約や行レベルポリシーも使ってください。
+`include_deleted=True` を
+許可する場合も、値を Repository に渡す前に staff 認可を必ず行います。詳細は
+[SECURITY.md](../../../SECURITY.md) を参照してください。
 
 ### バッチ処理での物理削除
 
@@ -571,11 +631,22 @@ def daily_cleanup():
 
 削除済みデータを管理画面で確認できるようにします：
 
+`require_staff` は全 tenant を横断できる global staff を表します。tenant-scoped staff の場合は
+`find_deleted()` に tenant filter を追加してください。
+
 ```python
+def require_staff(current_user: User = Depends(get_current_user)) -> User:
+    if not current_user.is_staff:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return current_user
+
 @router.get("/admin/deleted-articles")
-def list_deleted_articles():
+def list_deleted_articles(
+    _staff: User = Depends(require_staff),
+    session: Session = Depends(get_db_transaction, scope="function"),
+):
     """削除済み記事の管理画面"""
-    repo = BaseRepository(Article)
+    repo = BaseRepository(Article, session=session)
     deleted = repo.find_deleted(order_by=Article.deleted_at.desc(), limit=100)
     return [
         {

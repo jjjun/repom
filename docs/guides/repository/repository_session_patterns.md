@@ -193,10 +193,19 @@ asyncio.run(main())
 ## Repository インスタンスの再利用と並行処理
 
 明示的な `session=` なしで作成した `BaseRepository` または `AsyncBaseRepository` の
-インスタンスは、複数の request、task、thread で安全に共有できます。`_session_scope()` は
-内部で開いた session を `contextvars.ContextVar` に保持するため、task と thread ごとに
-異なる値が使われます。同じインスタンスを同時に呼び出しても、互いの session、未 commit の
-行、identity map は共有されません。
+インスタンスは、それぞれ独立して開始された request、task、thread context 間で安全に共有できます。
+`_session_scope()` は内部で開いた session を `contextvars.ContextVar` に保持するため、
+独立した context では session、未 commit の行、identity map は共有されません。
+
+ただし、内部 session scope が有効な間に開始した子処理は、親の context をコピーして同じ内部
+session object を引き継ぐことがあります。例として、`asyncio.create_task()`、`asyncio.gather()`
+で task 化される coroutine、`asyncio.TaskGroup` 内の task、`asyncio.to_thread()`、
+`contextvars.copy_context().run()` があります。子 task や thread から同じ Repository を使うと
+session を同時利用する可能性があり、子側の書き込みが親 scope の終了前にその内部 session を
+commit することもあります。通常の `threading.Thread` と `executor.submit()` は Python 3.12.8
+では context を継承しませんが、Python 3.14 では thread context 継承が有効になる場合があります。
+継承の有無を前提にせず、consumer code がこの private scope 内で子処理を開始しないでください。
+これは利用上の制約であり、request 間の脆弱性が確認されたという意味ではありません。
 
 明示的な `session=` を渡して作成したインスタンスは、その呼び出し側所有の session に
 ライフタイム全体を通して結び付きます。この場合も、1 つの `AsyncSession` を同時実行中の
