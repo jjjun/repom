@@ -196,35 +196,12 @@ def setup_users(db_test):
 - テスト間でデータが完全に分離される
 - **推奨**: ほとんどのケースでこれを使う
 
-### scope='class'
+### scope='class' / scope='module'
 
-```python
-@pytest.fixture(scope='class')
-def setup_users(db_test):
-    """クラス内の全テストで同じデータを共有"""
-    # クラスごとに1回だけ呼ばれる
-    return create_test_users(db_test)
-```
-
-**特徴:**
-- テストクラス単位で1回実行
-- クラス内の全テストでデータを共有
-- **注意**: テストがデータを変更すると他のテストに影響する
-
-### scope='module'
-
-```python
-@pytest.fixture(scope='module')
-def setup_users(db_test):
-    """モジュール内の全テストで同じデータを共有"""
-    # モジュールごとに1回だけ呼ばれる
-    return create_test_users(db_test)
-```
-
-**特徴:**
-- テストファイル単位で1回実行
-- 高速だが、テスト間の独立性が損なわれる
-- **使用は慎重に**: 読み取り専用データに限る
+`db_test` は function scope なので、これに依存する class-scoped または module-scoped fixture は
+pytest の `ScopeMismatch` になります。`db_test` を使う fixture は function scope にしてください。
+複数 test でデータを共有する必要がある場合は、より広い scope の独立した transaction と cleanup を設計します。
+`create_test_fixtures()` はその設計を提供しません。
 
 ### scope='session'
 
@@ -236,7 +213,8 @@ db_engine, db_test = create_test_fixtures()
 
 **特徴:**
 - `db_engine` は session scope、`db_test` は function scope の fixture
-- schema 作成と test ごとの transaction rollback は factory が管理
+- schema 作成は factory が管理し、test ごとの rollback は `db_test` を通した書き込みが対象
+- 他の session や connection からの書き込みが `db_test` の rollback に含まれる保証はない
 - factory の実装と引数は [`repom/testing.py`](../../../repom/testing.py) を参照
 
 ---
@@ -347,13 +325,13 @@ async def test_find(self, setup_method):
     results = await data['repo'].find(limit=100)
 ```
 
-### 問題2: フィクスチャのデータが他のテストに影響
+### 問題2: db_test と fixture scope の不一致
 
 **症状:**  
-あるテストがデータを変更すると、他のテストが失敗する。
+class-scoped または module-scoped fixture が `db_test` に依存すると `ScopeMismatch` が発生する。
 
 **原因:**  
-scope='class' や scope='module' で同じデータを共有している。
+`db_test` は function scope で、pytest はより広い scope の fixture から function-scoped fixture への依存を許可しない。
 
 **解決策:**
 ```python
@@ -364,6 +342,9 @@ def setup_users(db_test):  # scope指定なし = function
     # ...
 
 ```
+
+別の広い scope の database/session 設計で test 間にデータを共有する場合は、cleanup を行い、共有データの変更が
+他の test に影響しないようにしてください。`create_test_fixtures()` の `db_test` はその用途には使えません。
 
 fixture factory と破壊的操作ガードの正本は[テストガイド](testing_guide.md)です。
 

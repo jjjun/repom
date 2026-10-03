@@ -1,8 +1,8 @@
 # テストガイド
 
 repom は pytest 用の同期・非同期 fixture factory を提供します。DB schema は
-test session ごとに作成し、各 test は独立した transaction を rollback するため、
-テスト間でデータを残しません。
+test session ごとに作成され、`db_test` / `async_db_test` を通した各 test の書き込みは
+test ごとに rollback されます。別 session や別 connection からの書き込みが、この rollback に含まれる保証はありません。
 
 ## このリポジトリでの実行
 
@@ -18,6 +18,14 @@ PostgreSQL 統合テストは、`CONFIG_HOOK=repom.config_hook:hook_config`、
 `EXEC_ENV=test`、`DB_TYPE=postgres`、`POSTGRES_PASSWORD` が設定され、
 `127.0.0.1:5433` で PostgreSQL に接続できる場合に実行されます。CI workflow と
 `AGENTS.md` に記載されたコマンドは PostgreSQL 統合テスト用にこれらを設定します。
+PostgreSQL 統合テストには専用の破棄可能な database を使ってください。テストは固定名の
+`integration_test` table を作成・削除するほか、UUID 名の schema も使います。`EXEC_ENV=test` は
+database が破棄可能かどうかを検証しません。
+
+この repository の test setup は一時 root を設定し、設定済みの元の config hook も呼び出します。
+hook や環境変数から指定した database URL と SQLite path は一時 root の外を指す場合があります。
+`tests/conftest.py` の保護対象 path の比較は test session 終了後に変更を検出しますが、root 外への書き込みを
+防ぐものではありません。`EXEC_ENV=test` も sandbox ではないため、実行前に接続先を確認してください。
 
 既定の pytest 設定は `pyproject.toml` の `[tool.pytest.ini_options]` にあります。
 通常実行は成功時の出力を抑え、`-vv -s` の明示時だけ詳細な stdout と DEBUG log を
@@ -39,17 +47,17 @@ db_engine, db_test = create_test_fixtures()
 
 `db_test` は rollback 対象の外部 `scoped_session` です。Repository に明示して使います。
 
-セッションスコープのフィクスチャが有効な間、`DatabaseManager` をフィクスチャのエンジンに
-結び付けるには、`bind_global_manager=True` を指定します。これは
-`DatabaseManager.bind_engine_for_tests()` を使い、`get_db_session()`、
-`get_db_transaction()`、`get_reusable_sync_session()`、
-`get_reusable_sync_transaction()`、`get_standalone_sync_transaction()`、
-`get_sync_engine()`、`get_inspector()`、
-`get_async_db_session()`、`get_async_db_transaction()`、`get_async_engine()`、
-`get_reusable_async_session()`、`get_reusable_async_transaction()`、
-`get_standalone_async_transaction()` といった global
-`DatabaseManager` を使う API を、session-scoped engine fixture が有効な間だけ
-そのエンジンへ bind します。fixture 終了時に以前の engine と session factory が復元されます。
+`bind_global_manager=True` は fixture engine を `DatabaseManager` に一時的に bind します。
+同期 factory は同期 engine だけを、非同期 factory は非同期 engine だけを bind し、反対側の engine は変わりません。
+これは engine routing の設定であり、manager API が返す session を `db_test` / `async_db_test` の
+session や transaction に参加させるものではありません。in-memory SQLite の `StaticPool` のように pool が
+DBAPI connection を共有する場合、fixture session の未 commit 行が見えることはありますが、fixture の rollback は
+manager session からの書き込みを取り消す保証をしません。rollback を必要とする書き込みには、fixture の session を
+明示して使ってください。fixture 終了時には以前の engine と session factory が復元されます。
+
+`get_standalone_sync_transaction()` と `get_standalone_async_transaction()` は終了時に対応する manager engine を
+dispose して cached slot を消去します。global manager の binding 中にこれらを使うと fixture engine を dispose し、
+次の manager 呼び出しで設定から別の engine が作成されることがあるため、併用しないでください。
 session 管理パターンは[セッション管理ガイド](../repository/repository_session_patterns.md)を
 参照してください。
 
@@ -77,9 +85,9 @@ from repom.testing import create_async_test_fixtures
 async_db_engine, async_db_test = create_async_test_fixtures()
 ```
 
-非同期用ファクトリーにも同じ `bind_global_manager=True` を指定できます。
-アプリケーション側で独自の非同期セッションを開くコードに対し、マネージャーの非同期エンジンが
-一時的に設定されます。
+非同期用ファクトリーにも `bind_global_manager=True` を指定できます。manager の非同期 engine だけが
+一時的に fixture engine に bind されます。`async_db_test` 以外の session による書き込みが fixture rollback に
+含まれる保証はないため、rollback を必要とするコードには `async_db_test` を明示して渡してください。
 
 ```python
 import pytest
