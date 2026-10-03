@@ -148,6 +148,22 @@ class UniqueLookupRepository(BaseRepository[UniqueLookupModel]):
         super().__init__(UniqueLookupModel, session)
 
 
+class ProtectedLookupModel(BaseModel):
+    __tablename__ = 'protected_lookup_model'
+    sensitive_fields = {'label'}
+    serializable_fields = {'key'}
+    updatable_fields = {'label'}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class ProtectedLookupRepository(BaseRepository[ProtectedLookupModel]):
+    def __init__(self, session):
+        super().__init__(ProtectedLookupModel, session)
+
+
 class RacingUniqueLookupRepository(UniqueLookupRepository):
     def __init__(self, session):
         super().__init__(session)
@@ -488,6 +504,18 @@ def test_dict_save(db_test):
     assert repo.get_by_id(saved_instance.id) == saved_instance
 
 
+@pytest.mark.parametrize(
+    'control_field',
+    ['sensitive_fields', 'serializable_fields', 'updatable_fields'],
+)
+def test_dict_save_rejects_model_control_overrides(db_test, control_field):
+    repo = ProtectedLookupRepository(session=db_test)
+    data = {'key': 'single', 'label': 'value', control_field: set()}
+
+    with pytest.raises(TypeError, match='class-level model controls'):
+        repo.dict_save(data)
+
+
 def test_saves(db_test):
     """
     Listの中に入ったインスタンスを保存するテスト
@@ -510,6 +538,21 @@ def test_dict_saves(db_test):
     assert len(all_objs) >= 2
     assert all_objs[0].value == 1
     assert all_objs[1].value == 2
+
+
+@pytest.mark.parametrize(
+    'control_field',
+    ['sensitive_fields', 'serializable_fields', 'updatable_fields'],
+)
+def test_dict_saves_rejects_model_control_overrides(db_test, control_field):
+    repo = ProtectedLookupRepository(session=db_test)
+    data_list = [
+        {'key': 'first', 'label': 'value'},
+        {'key': 'second', 'label': 'value', control_field: set()},
+    ]
+
+    with pytest.raises(TypeError, match='class-level model controls'):
+        repo.dict_saves(data_list)
 
 
 def test_bulk_insert_returns_saved_objects(db_test):
@@ -1036,6 +1079,20 @@ def test_get_or_create_creates_and_reuses_unique_lookup(db_test):
     assert was_created_again is False
     assert existing.id == created.id
     assert existing.label == "first"
+
+
+@pytest.mark.parametrize(
+    'control_field',
+    ['sensitive_fields', 'serializable_fields', 'updatable_fields'],
+)
+def test_get_or_create_rejects_model_control_overrides_in_defaults(db_test, control_field):
+    repo = ProtectedLookupRepository(session=db_test)
+
+    with pytest.raises(TypeError, match='class-level model controls'):
+        repo.get_or_create(
+            {'key': 'protected'},
+            {'label': 'value', control_field: set()},
+        )
 
 
 def test_get_or_create_recovers_when_unique_row_is_inserted_after_select(db_test):

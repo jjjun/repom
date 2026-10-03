@@ -60,6 +60,25 @@ def test_add_related_item_creates_new_target_and_link(db_test):
     assert _link_count(db_test, owner.id, target.id) == 1
 
 
+@pytest.mark.parametrize(
+    'control_field',
+    ['sensitive_fields', 'serializable_fields', 'updatable_fields'],
+)
+def test_add_related_item_rejects_model_control_overrides(db_test, control_field):
+    owner = _create_owner(db_test)
+    data = {'name': 'Target A', 'slug': 'target-a', control_field: set()}
+
+    with pytest.raises(TypeError, match='class-level model controls'):
+        owner.add_related_item(
+            data=data,
+            target_model_class=ManyToManyTargetModel,
+            link_model_class=ManyToManyLinkModel,
+            self_foreign_key='owner_id',
+            target_foreign_key='target_id',
+            lookup_fields=['slug'],
+        )
+
+
 def test_add_related_item_links_existing_unlinked_target(db_test):
     owner = _create_owner(db_test)
     existing = ManyToManyTargetModel(name="Existing", slug="existing")

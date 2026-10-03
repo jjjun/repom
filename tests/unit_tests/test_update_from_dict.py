@@ -397,6 +397,26 @@ def test_update_from_dict_rejects_unlisted_field(db_test):
     assert result is False
 
 
+def test_update_from_dict_uses_class_updatable_fields():
+    model = AllowlistedModel(name='original', is_admin=False)
+    model.updatable_fields = {'name', 'is_admin'}
+
+    result = model.update_from_dict({'is_admin': True})
+
+    assert model.is_admin is False
+    assert result is False
+
+
+def test_model_constructor_rejects_updatable_fields():
+    with pytest.raises(TypeError, match='class-level model controls'):
+        AllowlistedModel(name='original', updatable_fields={'name', 'is_admin'})
+
+
+def test_model_constructor_rejects_unmapped_callable_attributes():
+    with pytest.raises(TypeError, match='only accepts mapped model attributes'):
+        AllowlistedModel(name='original', to_dict=lambda: {})
+
+
 def test_update_from_dict_requires_explicit_allowlist(db_test):
     model = NoAllowlistModel(name='original')
     db_test.add(model)

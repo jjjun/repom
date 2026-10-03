@@ -46,6 +46,16 @@
   `deleted_at` remain excluded. `BaseModel.to_dict()` still returns all columns by
   default and supports `sensitive_fields` and `serializable_fields` to limit serialized
   values.
+- BREAKING: `BaseModel` construction rejects `sensitive_fields`, `serializable_fields`,
+  and `updatable_fields`, plus every keyword that is not a mapped attribute in the
+  SQLAlchemy mapper, including methods, plain properties, hybrid properties with setters,
+  and class constants. Rejections raise `TypeError`: control names start with
+  `"<Model>() cannot set class-level model controls:"`; other invalid names start with
+  `"<Model>() only accepts mapped model attributes; invalid:"`. `to_dict()` and
+  `update_from_dict()` now read these controls from the class, so instance attributes no
+  longer change serialization or update behavior. Assign non-mapped attributes after
+  construction, or override `__init__` in the consumer model if its constructor needs
+  other keywords.
 - BREAKING: `get_all()` excludes soft-deleted rows by default and applies repository
   default ordering; pass `include_deleted=True` to include deleted rows. `bulk_update()`
   also excludes soft-deleted rows by default. `bulk_update()` and `bulk_delete()` reject

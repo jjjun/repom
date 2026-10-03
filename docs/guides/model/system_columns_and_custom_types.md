@@ -145,6 +145,10 @@ transaction の rollback は session を管理する呼び出し側の責務で�
 
 `update_from_dict()` には明示的な allowlist が必要です。`allowed_fields` を渡すか、class
 attribute `updatable_fields` を設定してください。どちらもない場合は `ValueError` が発生します。
+`updatable_fields`、`sensitive_fields`、`serializable_fields` はモデルクラスで設定します。
+インスタンスの属性でこれらの値を上書きしても、更新やシリアライズの制限は変わりません。
+`BaseModel` の constructor はこれらの設定名と、マップされていない属性名を keyword argument として
+受け付けません。
 
 ```python
 from sqlalchemy import String, create_engine
@@ -181,7 +185,8 @@ primary-key column（mapper から解決し、column 名は問いません）、
 
 `to_dict()` は既定ですべての column を返します。password hash などの column を出力から除くには
 `sensitive_fields` を設定してください。`serializable_fields` を設定すると、明示した項目だけを
-返せます。
+返せます。`sensitive_fields` に含まれる column は、`serializable_fields` にも含まれていても
+常に出力されません。
 
 ```python
 from repom import BaseModel

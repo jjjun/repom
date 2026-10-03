@@ -148,6 +148,22 @@ class AsyncUniqueLookupRepository(AsyncBaseRepository[AsyncUniqueLookupModel]):
         super().__init__(AsyncUniqueLookupModel, session)
 
 
+class AsyncProtectedLookupModel(BaseModel):
+    __tablename__ = 'async_protected_lookup_model'
+    sensitive_fields = {'label'}
+    serializable_fields = {'key'}
+    updatable_fields = {'label'}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class AsyncProtectedLookupRepository(AsyncBaseRepository[AsyncProtectedLookupModel]):
+    def __init__(self, session):
+        super().__init__(AsyncProtectedLookupModel, session)
+
+
 class RacingAsyncUniqueLookupRepository(AsyncUniqueLookupRepository):
     def __init__(self, session):
         super().__init__(session)
@@ -437,6 +453,19 @@ async def test_dict_save(async_db_test):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'control_field',
+    ['sensitive_fields', 'serializable_fields', 'updatable_fields'],
+)
+async def test_dict_save_rejects_model_control_overrides(async_db_test, control_field):
+    repo = AsyncProtectedLookupRepository(session=async_db_test)
+    data = {'key': 'single', 'label': 'value', control_field: set()}
+
+    with pytest.raises(TypeError, match='class-level model controls'):
+        await repo.dict_save(data)
+
+
+@pytest.mark.asyncio
 async def test_saves(async_db_test):
     """
     Listの中に入ったインスタンスを保存するテスト
@@ -460,6 +489,22 @@ async def test_dict_saves(async_db_test):
     assert len(all_objs) >= 2
     assert all_objs[0].value == 1
     assert all_objs[1].value == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'control_field',
+    ['sensitive_fields', 'serializable_fields', 'updatable_fields'],
+)
+async def test_dict_saves_rejects_model_control_overrides(async_db_test, control_field):
+    repo = AsyncProtectedLookupRepository(session=async_db_test)
+    data_list = [
+        {'key': 'first', 'label': 'value'},
+        {'key': 'second', 'label': 'value', control_field: set()},
+    ]
+
+    with pytest.raises(TypeError, match='class-level model controls'):
+        await repo.dict_saves(data_list)
 
 
 @pytest.mark.asyncio
@@ -944,6 +989,21 @@ async def test_get_or_create_creates_and_reuses_unique_lookup(async_db_test):
     assert was_created_again is False
     assert existing.id == created.id
     assert existing.label == "first"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'control_field',
+    ['sensitive_fields', 'serializable_fields', 'updatable_fields'],
+)
+async def test_get_or_create_rejects_model_control_overrides_in_defaults(async_db_test, control_field):
+    repo = AsyncProtectedLookupRepository(session=async_db_test)
+
+    with pytest.raises(TypeError, match='class-level model controls'):
+        await repo.get_or_create(
+            {'key': 'protected'},
+            {'label': 'value', control_field: set()},
+        )
 
 
 @pytest.mark.asyncio

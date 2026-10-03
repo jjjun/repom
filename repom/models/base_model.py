@@ -18,6 +18,8 @@ _SUBCLASS_FLAG_DEFAULTS = (
     ('use_updated_at', False),
 )
 
+_MODEL_CONTROL_FIELDS = frozenset({'sensitive_fields', 'serializable_fields', 'updatable_fields'})
+
 
 def _resolve_subclass_flag(cls, name, value, default):
     resolved = getattr(cls, name, default) if value is _UNSET else value
@@ -59,6 +61,24 @@ class BaseModel(Base):
 
     # to_dict() が返すフィールドを絞り込む場合に指定する（None は全カラムが対象）
     serializable_fields: set = None
+
+    def __init__(self, **kwargs):
+        control_fields = _MODEL_CONTROL_FIELDS.intersection(kwargs)
+        if control_fields:
+            fields = ', '.join(sorted(control_fields))
+            raise TypeError(
+                f"{type(self).__name__}() cannot set class-level model controls: {fields}"
+            )
+
+        mapped_fields = set(inspect(type(self)).attrs.keys())
+        invalid_fields = set(kwargs) - mapped_fields
+        if invalid_fields:
+            fields = ', '.join(sorted(invalid_fields))
+            raise TypeError(
+                f"{type(self).__name__}() only accepts mapped model attributes; invalid: {fields}"
+            )
+
+        super().__init__(**kwargs)
 
     def __init_subclass__(
         cls,
@@ -188,8 +208,8 @@ class BaseModel(Base):
         Returns:
             dict: カラム名をキーとした辞書。
         """
-        sensitive_fields = self.sensitive_fields or set()
-        serializable_fields = self.serializable_fields
+        sensitive_fields = type(self).sensitive_fields or set()
+        serializable_fields = type(self).serializable_fields
         column_keys = [c.key for c in inspect(self).mapper.column_attrs]
         if serializable_fields is not None:
             column_keys = [key for key in column_keys if key in serializable_fields]
@@ -228,7 +248,7 @@ class BaseModel(Base):
             ValueError: allowed_fields も updatable_fields も指定されていない場合。
         """
         if allowed_fields is None:
-            allowed_fields = self.updatable_fields
+            allowed_fields = type(self).updatable_fields
         if allowed_fields is None:
             raise ValueError(
                 f"{type(self).__name__}.update_from_dict() は allowed_fields を"

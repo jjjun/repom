@@ -102,12 +102,16 @@ reviewed revision. A listed control or existing test is not proof of enforcement
 - `BaseModel.update_from_dict()` requires `allowed_fields` or `updatable_fields`,
   writes only mapped column attributes, and excludes all primary-key attributes,
   `created_at`, `updated_at`, and mapped `deleted_at` even if allowlisted.
-  `exclude_fields` can narrow the selected allowlist. These are this method's
-  guarantees, not automatic protection for constructors, direct assignment, or
-  every bulk-update API.
+  `updatable_fields` is read from the model class, so an instance attribute
+  cannot broaden it. `exclude_fields` can narrow the selected allowlist. The
+  inherited `BaseModel` constructor rejects these control names and keywords
+  that are not mapped model attributes. These are this method's guarantees, not
+  automatic protection for direct assignment or every bulk-update API.
 - `to_dict()` must always omit `sensitive_fields`, including when those names
-  appear in `serializable_fields`. With no serialization allowlist, other mapped
-  columns are returned; consumers must identify their sensitive columns.
+  appear in `serializable_fields`. Both `sensitive_fields` and
+  `serializable_fields` are read from the model class, so instance attributes
+  cannot weaken their restrictions. With no serialization allowlist, other
+  mapped columns are returned; consumers must identify their sensitive columns.
 - NUL-byte validation on supported ORM and repository bulk-write paths must not
   be accidentally bypassed. It is not general input validation or a guarantee
   for arbitrary SQL executed outside those paths. Review custom-type bind/result
