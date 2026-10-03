@@ -303,7 +303,9 @@ def test_prod_connect_args_host_override_is_effective_for_both_drivers(monkeypat
 def test_prod_local_socket_and_loopback_keep_weak_tls_exception(monkeypatch, sync_url):
     monkeypatch.setattr(database_module, "config", RepomConfig(exec_env="prod"))
 
-    (resolved_sync_url, _), _ = DatabaseManager.resolve_engine_settings(sync_url, {})
+    (resolved_sync_url, _), _ = DatabaseManager.resolve_engine_settings(
+        sync_url, {}, environ={"PGHOST": "db.example.invalid"}
+    )
 
     assert make_url(resolved_sync_url).query["sslmode"] == "prefer"
 
@@ -352,3 +354,161 @@ def test_prod_tls_warning_does_not_label_remote_override_as_localhost(monkeypatc
     )
 
     assert not caplog.records
+
+
+@pytest.mark.parametrize(
+    "sync_url",
+    [
+        "postgresql+psycopg:///app",
+        "postgresql+psycopg:///app?host=",
+    ],
+)
+def test_prod_hostless_url_uses_remote_pghost_for_sync_and_async_tls(sync_url):
+    environment = {"PGHOST": "db.example.invalid"}
+    policy_config = RepomConfig(exec_env="prod")
+
+    sync_url, sync_kwargs, sslmode, hosts = database_module._resolve_postgres_engine_policy(
+        sync_url, {}, config_obj=policy_config, environ=environment
+    )
+    async_url, async_kwargs = DatabaseManager._adapt_asyncpg_connect_options(
+        DatabaseManager._convert_to_async_uri(sync_url), sync_kwargs
+    )
+
+    _, sync_connect_args = PGDialect_psycopg().create_connect_args(make_url(sync_url))
+    _, async_connect_args = PGDialect_asyncpg().create_connect_args(make_url(async_url))
+    sync_connect_args.update(sync_kwargs.get("connect_args", {}))
+    async_connect_args.update(async_kwargs.get("connect_args", {}))
+
+    assert sslmode == "require"
+    assert hosts == ("db.example.invalid",)
+    assert sync_connect_args["sslmode"] == "require"
+    assert async_connect_args["ssl"] == "require"
+
+
+@pytest.mark.parametrize(
+    ("sync_url", "connect_args", "environment"),
+    [
+        (
+            "postgresql+psycopg:///app?service=remote_service",
+            {},
+            {},
+        ),
+        (
+            "postgresql+psycopg:///app",
+            {"service": "remote_service"},
+            {},
+        ),
+        (
+            "postgresql+psycopg:///app",
+            {},
+            {"PGSERVICE": "remote_service"},
+        ),
+    ],
+)
+def test_prod_service_fallback_is_unresolved_and_requires_tls(
+    sync_url, connect_args, environment
+):
+    policy_config = RepomConfig(exec_env="prod")
+
+    resolved_url, _, sslmode, hosts = database_module._resolve_postgres_engine_policy(
+        sync_url,
+        {"connect_args": connect_args} if connect_args else {},
+        config_obj=policy_config,
+        environ=environment,
+    )
+
+    assert make_url(resolved_url).query["sslmode"] == "require"
+    assert sslmode == "require"
+    assert hosts == ("<service destination>",)
+
+
+@pytest.mark.parametrize(
+    ("sync_url", "environment", "expected_hosts"),
+    [
+        (
+            "postgresql+psycopg://localhost/app",
+            {"PGHOSTADDR": "198.51.100.5"},
+            ("198.51.100.5",),
+        ),
+        (
+            "postgresql+psycopg:///app",
+            {"PGHOST": "localhost,db.example.invalid"},
+            ("localhost", "db.example.invalid"),
+        ),
+    ],
+)
+def test_prod_environment_destination_fallbacks_require_tls(
+    sync_url, environment, expected_hosts
+):
+    resolved_url, _, sslmode, hosts = database_module._resolve_postgres_engine_policy(
+        sync_url,
+        {},
+        config_obj=RepomConfig(exec_env="prod"),
+        environ=environment,
+    )
+
+    assert make_url(resolved_url).query["sslmode"] == "require"
+    assert sslmode == "require"
+    assert hosts == expected_hosts
+
+
+def test_prod_pgsslmode_is_validated_and_adapted_for_both_drivers():
+    environment = {
+        "PGHOST": "db.example.invalid",
+        "PGSSLMODE": "verify-full",
+    }
+    policy_config = RepomConfig(exec_env="prod")
+    sync_url, sync_kwargs, sslmode, _ = database_module._resolve_postgres_engine_policy(
+        "postgresql+psycopg:///app",
+        {},
+        config_obj=policy_config,
+        environ=environment,
+    )
+    async_url, async_kwargs = DatabaseManager._adapt_asyncpg_connect_options(
+        DatabaseManager._convert_to_async_uri(sync_url), sync_kwargs
+    )
+
+    _, sync_connect_args = PGDialect_psycopg().create_connect_args(make_url(sync_url))
+    _, async_connect_args = PGDialect_asyncpg().create_connect_args(make_url(async_url))
+    sync_connect_args.update(sync_kwargs.get("connect_args", {}))
+    async_connect_args.update(async_kwargs.get("connect_args", {}))
+
+    assert sslmode == "verify-full"
+    assert sync_connect_args["sslmode"] == "verify-full"
+    assert async_connect_args["ssl"] == "verify-full"
+
+
+def test_config_db_url_uses_environment_destination_and_pgsslmode(monkeypatch):
+    monkeypatch.setenv("PGHOST", "db.example.invalid")
+    monkeypatch.delenv("PGHOSTADDR", raising=False)
+    monkeypatch.delenv("PGSERVICE", raising=False)
+    monkeypatch.setenv("PGSSLMODE", "verify-full")
+    policy_config = RepomConfig(exec_env="prod")
+    policy_config.db_url = "postgresql+psycopg:///app"
+
+    resolved_url = make_url(policy_config.db_url)
+
+    assert resolved_url.query["sslmode"] == "verify-full"
+
+
+def test_prod_rejects_weak_pgsslmode_for_remote_environment_destination():
+    with pytest.raises(ValueError, match="sslmode"):
+        database_module._resolve_postgres_engine_policy(
+            "postgresql+psycopg:///app",
+            {},
+            config_obj=RepomConfig(exec_env="prod"),
+            environ={"PGHOST": "db.example.invalid", "PGSSLMODE": "prefer"},
+        )
+
+
+def test_prod_hostless_url_without_environment_destination_keeps_local_prefer():
+    resolved_url, _, sslmode, hosts = database_module._resolve_postgres_engine_policy(
+        "postgresql+psycopg:///app",
+        {},
+        config_obj=RepomConfig(exec_env="prod"),
+        environ={},
+    )
+
+    assert make_url(resolved_url).query.get("sslmode") is None
+    assert sslmode == "prefer"
+    assert hosts == (None,)

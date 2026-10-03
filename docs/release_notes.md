@@ -4,6 +4,19 @@
 
 ### Breaking
 
+- BREAKING: In production, PostgreSQL destination and TLS policy now account for
+  `PGHOST` with host-less URLs, `PGHOSTADDR` even alongside an explicit URL host, and
+  a selected `PGSERVICE` / `service` setting. A selected service without both an
+  explicit host and hostaddr requires `sslmode=require` or stronger; `pg_service.conf`
+  is not parsed.
+- BREAKING: When the URL, `connect_args`, and `config.postgres.sslmode` do not set a
+  PostgreSQL TLS mode, `PGSSLMODE` is now honored, validated against the same policy,
+  and written into the engine URL for both drivers. A weak `PGSSLMODE` for a remote
+  production destination now raises `ValueError`. TLS mode precedence is URL or
+  `connect_args`, then `config.postgres.sslmode`, then `PGSSLMODE`, then the destination
+  default.
+- BREAKING: Host PostgreSQL client tools no longer inherit `PGHOSTADDR` or `PGSERVICE`
+  from the parent environment.
 - BREAKING: String entries in `order_by` and sequence `default_order_by` values are
   parsed as canonical `column:asc` or `column:desc` specifications and must name
   columns in `allowed_order_columns`; invalid or non-allowlisted strings raise

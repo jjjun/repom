@@ -60,6 +60,7 @@ from contextlib import contextmanager, asynccontextmanager  # Only for DatabaseM
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import asyncio
 import math
+import os
 import ssl
 import threading
 
@@ -205,9 +206,11 @@ def _resolve_postgres_engine_policy(
     *,
     asyncpg: bool = False,
     config_obj=None,
+    environ: Mapping[str, str] | None = None,
 ) -> tuple[str, dict, Optional[str], tuple[object, ...]]:
     """Resolve TLS mode from asyncpg ssl, connect_args sslmode, then URL sslmode."""
     policy_config = config if config_obj is None else config_obj
+    environ = os.environ if environ is None else environ
     url = make_url(db_url)
     if url.get_backend_name() not in {"postgres", "postgresql"}:
         return db_url, engine_kwargs, None, ()
@@ -228,7 +231,7 @@ def _resolve_postgres_engine_policy(
             "destination and TLS options cannot be validated safely"
         )
 
-    hosts = _postgres_connection_hosts(url, connect_args)
+    hosts = _postgres_connection_hosts(url, connect_args, environ)
     is_remote = any(not _is_local_postgres_host(host) for host in hosts)
     sslmode = (
         _asyncpg_sslmode(connect_args)
@@ -249,18 +252,20 @@ def _resolve_postgres_engine_policy(
         )
 
     tls = policy_config.postgres_tls_settings_for_url(
-        url, connect_args, sslmode=sslmode
+        url, connect_args, sslmode=sslmode, environ=environ
     )
 
     if (
-        is_prod_exec_env(policy_config.exec_env)
-        and is_remote
-        and url.query.get("sslmode") is None
-        and connect_args.get("sslmode") is None
+        url.query.get("sslmode") is None
+        and "sslmode" not in connect_args
+        and "ssl" not in connect_args
+        and (
+            "PGSSLMODE" in environ
+            or (is_prod_exec_env(policy_config.exec_env) and is_remote)
+        )
     ):
-        # A raw SQLAlchemy URL with no TLS option otherwise inherits libpq's
-        # weaker default. Materialize the validated production default so both
-        # drivers receive it.
+        # Materialize the resolved mode so sync libpq and asyncpg use the same
+        # policy, including a mode selected through PGSSLMODE.
         query = dict(url.query)
         query["sslmode"] = tls.sslmode
         url = url.set(query=query)
@@ -1221,7 +1226,10 @@ class DatabaseManager:
 
     @staticmethod
     def resolve_engine_settings(
-        sync_url: str, engine_kwargs: dict
+        sync_url: str,
+        engine_kwargs: dict,
+        *,
+        environ: Mapping[str, str] | None = None,
     ) -> "tuple[tuple[str, dict], tuple[str, dict]]":
         """Derive the (url, kwargs) pairs for the sync and async engines.
 
@@ -1238,19 +1246,23 @@ class DatabaseManager:
             engine_kwargs: Base keyword arguments for create_engine (also the
                 starting point for create_async_engine, before async-specific
                 adaptation).
+            environ: Optional environment mapping used to resolve PostgreSQL
+                destination and TLS fallback variables.
 
         Returns:
             tuple[tuple[str, dict], tuple[str, dict]]: ((sync_url,
             sync_kwargs), (async_url, async_kwargs)).
         """
         sync_url, sync_kwargs, _, _ = _resolve_postgres_engine_policy(
-            sync_url, engine_kwargs
+            sync_url, engine_kwargs, environ=environ
         )
         async_url = DatabaseManager._convert_to_async_uri(sync_url)
         async_url, async_kwargs = DatabaseManager._adapt_asyncpg_connect_options(
             async_url, sync_kwargs
         )
-        _resolve_postgres_engine_policy(sync_url, sync_kwargs, asyncpg=True)
+        _resolve_postgres_engine_policy(
+            sync_url, sync_kwargs, asyncpg=True, environ=environ
+        )
         return (sync_url, sync_kwargs), (async_url, async_kwargs)
 
 

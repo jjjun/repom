@@ -44,6 +44,18 @@ def _touch(path, mtime):
     os.utime(path, (mtime, mtime))
 
 
+def test_build_host_pg_env_drops_inherited_destination_overrides(monkeypatch):
+    monkeypatch.setenv("PGHOSTADDR", "198.51.100.5")
+    monkeypatch.setenv("PGSERVICE", "unexpected_service")
+
+    env = _backup_utils.build_host_pg_env("synthetic-password", "require")
+
+    assert "PGHOSTADDR" not in env
+    assert "PGSERVICE" not in env
+    assert env["PGPASSWORD"] == "synthetic-password"
+    assert env["PGSSLMODE"] == "require"
+
+
 def test_rotate_backups_keeps_newest_by_mtime(tmp_path):
     old = tmp_path / "db_20260101_000000.sql.gz"
     middle = tmp_path / "db_20260102_000000.sql.gz"

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
@@ -74,25 +76,38 @@ def _is_local_postgres_host(host) -> bool:
         return False
 
 
-def _postgres_connection_hosts(url: URL, connect_args=None) -> tuple[object, ...]:
+def _postgres_connection_hosts(
+    url: URL,
+    connect_args=None,
+    environ: Mapping[str, str] | None = None,
+) -> tuple[object, ...]:
     """Resolve the destination values that override a PostgreSQL URL authority."""
+    environ = os.environ if environ is None else environ
     query = url.query
     host = query.get("host", url.host)
-    has_host = "host" in query or url.host is not None
+    has_host = host not in (None, "")
     hostaddr = query.get("hostaddr")
+    has_hostaddr = hostaddr not in (None, "")
+    service_selected = bool(query.get("service") or environ.get("PGSERVICE"))
     if connect_args is not None:
         if "host" in connect_args:
             host = connect_args["host"]
-            has_host = host is not None
+            has_host = host not in (None, "")
         if "hostaddr" in connect_args:
             hostaddr = connect_args["hostaddr"]
+            has_hostaddr = hostaddr not in (None, "")
+        if connect_args.get("service"):
+            service_selected = True
 
     if "dsn" in query or (connect_args is not None and "dsn" in connect_args):
         return ("<DSN destination>",)
-    if host is None and hostaddr in (None, "") and (
-        "service" in query or (connect_args is not None and "service" in connect_args)
-    ):
+    if service_selected and not (has_host and has_hostaddr):
         return ("<service destination>",)
+
+    if not has_host:
+        host = environ.get("PGHOST") or host
+    if not has_hostaddr:
+        hostaddr = environ.get("PGHOSTADDR") or hostaddr
 
     # libpq routes to hostaddr when it is present; host is then used for
     # authentication and certificate matching. A remote address is remote even
@@ -335,13 +350,19 @@ class RepomConfig(Config):
         return self._resolve_postgres_tls(self.postgres.host).sslmode
 
     def _resolve_postgres_tls(
-        self, host: object, sslmode: Optional[str] = None
+        self,
+        host: object,
+        sslmode: Optional[str] = None,
+        environ: Mapping[str, str] | None = None,
     ) -> PostgresTlsSettings:
         """Resolve and validate PostgreSQL TLS settings for the destination."""
+        environ = os.environ if environ is None else environ
         hosts = _postgres_host_values(host)
         is_remote = any(not _is_local_postgres_host(value) for value in hosts)
         if sslmode is None:
             sslmode = self.postgres.sslmode
+        if sslmode is None:
+            sslmode = environ.get("PGSSLMODE")
         if sslmode is None:
             sslmode = (
                 "require"
@@ -368,7 +389,11 @@ class RepomConfig(Config):
         )
 
     def postgres_tls_settings_for_url(
-        self, url: URL, connect_args=None, sslmode: Optional[str] = None
+        self,
+        url: URL,
+        connect_args=None,
+        sslmode: Optional[str] = None,
+        environ: Mapping[str, str] | None = None,
     ) -> PostgresTlsSettings:
         """Resolve and validate TLS settings for a PostgreSQL URL and overrides."""
         if sslmode is None:
@@ -377,7 +402,9 @@ class RepomConfig(Config):
             else:
                 sslmode = url.query.get("sslmode")
         return self._resolve_postgres_tls(
-            _postgres_connection_hosts(url, connect_args), sslmode=sslmode
+            _postgres_connection_hosts(url, connect_args, environ),
+            sslmode=sslmode,
+            environ=environ,
         )
 
     def postgres_tls_settings(self) -> PostgresTlsSettings:

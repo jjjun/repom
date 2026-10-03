@@ -52,21 +52,25 @@ repom の database、PostgreSQL、pgAdmin、SQLite の各 override helper が読
 異なるときは URL が優先され、repom は不一致について warning を1回記録します。
 `DB_TYPE` で選ぶ通常の URL 構築を使う場合、`config.db_url_overridden` は `False` です。
 
-PostgreSQL URL で `sslmode` が省略されると、`config.postgres.sslmode` の明示値、または
-環境と接続先に応じた既定値が使われます。`EXEC_ENV` を正規化した値が `prod` または
-`production` alias の場合、リモート host は `require`、localhost 等のローカル host と
-host のない URL は `prefer` です。それ以外の環境では `prefer` です。URL override と
-通常の設定の両方に同じ URL-level policy が適用されます。
+PostgreSQL URL で `sslmode` が省略されると、`config.postgres.sslmode` の明示値、
+`PGSSLMODE`、または環境と接続先に応じた既定値が使われます。`EXEC_ENV` を正規化した値が
+`prod` または `production` alias の場合、リモート接続先には `require` 以上が必要です。
+URL に host がない場合も `PGHOST` と `PGHOSTADDR` を接続先判定に使います。`PGSERVICE`
+または `service` が選択され、host と hostaddr の両方を明示していない場合は接続先を
+解決できないものとして扱い、`require` 以上を要求します。これらの環境設定がなく、service
+も選択されていない hostless URL はローカル接続として扱い、既定値は `prefer` です。
+それ以外の環境では既定値は `prefer` です。URL override と通常の設定の両方に同じ
+URL-level policy が適用されます。
 
 接続先と TLS の検証範囲は entry point ごとに異なります。
 
 | Entry point | URL の設定 | `engine_kwargs.connect_args` |
 | --- | --- | --- |
-| `RepomConfig.db_url` | URL の host / query を検証します。 | 対象外です。 |
-| `DatabaseManager` / `resolve_engine_settings()` | URL と実効接続先を検証します。 | `host` / `hostaddr` / `dsn` と TLS を検証し、URL より優先します。 |
+| `RepomConfig.db_url` | URL の host / query と環境 fallback を検証します。 | 対象外です。 |
+| `DatabaseManager` / `resolve_engine_settings()` | URL と環境 fallback を含む実効接続先を検証します。 | `host` / `hostaddr` / `service` / `dsn` と TLS を検証し、URL より優先します。 |
 | `repom_info` / 同期 `database_info` probe | probe に渡された config を使い、共有 resolver で検証します。 | `DatabaseManager` と同じ検証を行い、短い `connect_timeout` のみ上書きします。 |
 | Alembic engine / `AlembicReset` / 同期 test fixture / consumer-built engine | URL-level policy のみ、または検証なしです。 | 共有 resolver を呼ばない限り検証されません。 |
-| PostgreSQL client tools | client-tool 固有の URL / host policy を使い、destination query overrides を拒否します。 | SQLAlchemy engine kwargs の対象外です。 `sslmode` / `sslrootcert` query と configured-host の TLS policy は client-tool 側で適用します。 |
+| PostgreSQL client tools | client-tool 固有の URL / host policy を使い、destination query overrides を拒否します。 | SQLAlchemy engine kwargs の対象外です。 `sslmode` / `sslrootcert` query と configured-host の TLS policy を適用し、host 指定を迂回する `PGHOSTADDR` / `PGSERVICE` は child process 環境から除きます。 |
 
 独自の engine を作る場合は、URL-level policy だけでは `connect_args` による接続先変更を検証できません。
 実効設定の検証には `DatabaseManager.resolve_engine_settings()` を使ってください。
@@ -75,10 +79,15 @@ host のない URL は `prefer` です。それ以外の環境では `prefer` �
 `sslrootcert` がなくてもその値を追加します。URL で `sslmode` を明示した場合は値を保持したうえで検証します。
 正規化後の環境が `prod` で接続先がリモート host のとき、`disable`、`allow`、`prefer` は
 `ValueError` になります。`require` または `verify-ca` / `verify-full` を指定してください。
+URL と `connect_args` に `sslmode` がなく、`config.postgres.sslmode` も未設定の場合は
+`PGSSLMODE` を検証して使います。選択された mode は sync / async 両方の engine に反映されます。
 共有 resolver を使う engine では、接続先の判定に URL authority の host に加えて、
-URL query の `host` / `hostaddr` と `engine_kwargs.connect_args` の `host` / `hostaddr` を使います。libpq が対応する
-カンマ区切りの複数 host では、リモート host が一つでも含まれるとリモートとして扱います。
-`hostaddr` がある場合は実際の接続先アドレスとして判定します。URL query または
+URL query、`engine_kwargs.connect_args`、および `PGHOST` / `PGHOSTADDR` の fallback を使います。
+`PGHOSTADDR` は URL host が明示されている場合も候補に含め、実際の接続先アドレスとして判定します。
+libpq が対応するカンマ区切りの複数 host では、リモート host が一つでも含まれるとリモートとして扱います。
+`PGSERVICE`、URL query の `service`、または `connect_args` の `service` が選択されていて
+host と hostaddr の両方を明示していない場合は、`pg_service.conf` を解析せず接続先を未解決として扱います。
+URL query または
 共有 resolver を使う engine entry point では、URL query または `connect_args` の `dsn` は
 prod で接続先と TLS 設定を安全に検証できないため使用できません。
 asyncpg は `host` を使えますが、

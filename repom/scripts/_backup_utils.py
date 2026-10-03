@@ -430,9 +430,12 @@ def build_host_pg_env(
     PGSSLROOTCERT instead of each copying os.environ separately. sslmode and
     sslrootcert are only set when provided, so a caller that has not resolved
     them (e.g. a directly constructed PgConnParams) leaves any inherited
-    PGSSLMODE / PGSSLROOTCERT untouched.
+    PGSSLMODE / PGSSLROOTCERT untouched. Inherited PGHOSTADDR and PGSERVICE are
+    removed so they cannot reroute commands that pass an explicit host.
     """
     env = os.environ.copy()
+    env.pop("PGHOSTADDR", None)
+    env.pop("PGSERVICE", None)
     if password is not None:
         env["PGPASSWORD"] = password
     if sslmode is not None:

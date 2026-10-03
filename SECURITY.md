@@ -217,9 +217,14 @@ Unless a difference is stated below, these contracts apply to both
   configured remote hosts use host client tools. Client-tool database names
   must not use libpq connection-string syntax. `database_info`
   reports configured `postgres_db` even when a URL override selects another
-  database. Host-less URLs are classified as local, although libpq may then use
-  `PGHOST` or `PGSERVICE`. `prod` and the normalized `production` alias receive
-  equivalent guards. Unknown `EXEC_ENV`
+  database. In `prod`, destination resolution includes `PGHOST` and
+  `PGHOSTADDR`, including `PGHOSTADDR` alongside an explicit URL host. A
+  selected `PGSERVICE` or `service` setting is unresolved unless both `host`
+  and `hostaddr` are explicit, so it requires strong TLS without parsing
+  `pg_service.conf`. A host-less URL with no destination fallback remains
+  local. Host client-tool subprocesses remove inherited `PGHOSTADDR` and
+  `PGSERVICE` so those values cannot reroute their explicit `-h` target. `prod`
+  and the normalized `production` alias receive equivalent guards. Unknown `EXEC_ENV`
   values warn once and use `dev` defaults for naming, TLS, and destructive
   command guards; `EXEC_ENV` is operator input, not proof of the real database's
   purpose.
@@ -233,8 +238,10 @@ Unless a difference is stated below, these contracts apply to both
   only URL-level enforcement or none unless they call it. repom writes its
   resolved `sslmode` into generated and PostgreSQL override URLs, and into
   `PGSSLMODE` for host libpq client tools
-  when a mode is resolved; `connect_args` TLS options override URL options.
-  Loopback/socket and development defaults may permit plaintext.
+  when a mode is resolved; `connect_args` TLS options override URL options. If
+  URL and `connect_args` omit `sslmode`, `PGSSLMODE` is validated and propagated
+  when no explicit `config.postgres.sslmode` is set. Loopback/socket and
+  development defaults may permit plaintext.
 - `require` alone is not a guarantee of certificate/hostname verification.
   Preserve explicitly selected `verify-ca`/`verify-full` semantics across driver
   adaptation. For libpq, absent `sslrootcert`, verification uses `PGSSLROOTCERT`
