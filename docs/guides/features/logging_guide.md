@@ -83,12 +83,14 @@ def hook_config(config):
     return config
 ```
 
-`INFO` と `DEBUG` はどちらも SQL 文に加えてバインドパラメータの実際の値をログへ
-出力します（`DEBUG` はさらに実行結果の行データも出力します）。パスワードハッシュ
-やトークンなど機微な値も記録され得るため、本番相当の実データを扱う環境で安易に
-有効化しないでください。値を伏せて SQL 文の傾向だけを確認したい場合は
+`INFO` と `DEBUG` は SQL 文を出力し、`DEBUG` はさらに実行結果の行データも出力します。
+engine を `engine_kwargs` で作成する場合、バインドパラメータは
 `config.sqlalchemy_hide_parameters`（デフォルト `True`。環境変数
-`SQLALCHEMY_HIDE_PARAMETERS`）を有効のままにしておいてください。
+`SQLALCHEMY_HIDE_PARAMETERS`）で制御されます。この設定は環境変数で無効にでき、Alembic の
+migration engine と `AlembicReset` の engine には設定されません。また `DEBUG` の結果行や
+`debug_repository_queries` の `to_dict()` 表示はこの設定では伏せられません。SQL 文自体に
+リテラル値が含まれる場合もあります。パスワードハッシュやトークンなど機微な値が記録され得るため、
+実データを扱う環境で安易に有効化しないでください。
 
 ## DB URL の表示
 

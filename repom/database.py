@@ -968,14 +968,16 @@ class DatabaseManager:
         | allow / prefer         | opportunistic TLS, no verification, may fall back  | "allow" / "prefer" (sslrootcert ignored)|
         | require, no rootcert   | TLS required, no verification                      | "require"                              |
         | require + rootcert     | TLS required; chain verified, no hostname check    | SSLContext(check_hostname=False)       |
-        | verify-ca, no rootcert | chain verified against default trust store         | "verify-ca"                            |
+        | verify-ca, no rootcert | chain verified against libpq default root cert | "verify-ca"              |
         | verify-ca + rootcert   | chain verified, no hostname check                  | SSLContext(check_hostname=False)       |
-        | verify-full, no rootcert| chain and hostname verified against default store | "verify-full"                          |
+        | verify-full, no rootcert| chain and hostname verified against libpq default root cert | "verify-full"            |
         | verify-full + rootcert | chain and hostname verified                        | SSLContext(check_hostname=True)        |
 
-        Without sslrootcert, the sslmode string is passed straight through so
-        asyncpg resolves the default root certificate (and, for verify-full,
-        the hostname check) itself.
+        Without sslrootcert, the sslmode string is passed straight through to
+        asyncpg, so its default trust behavior is driver-specific. libpq uses
+        PGSSLROOTCERT or ~/.postgresql/root.crt for its default root certificate;
+        it does not use the system trust store. With sslrootcert, this method
+        builds an SSLContext from that CA file; this path does not load CRLs.
 
         Args:
             sslmode: One of disable/allow/prefer/require/verify-ca/verify-full.

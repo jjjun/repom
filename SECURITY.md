@@ -189,33 +189,66 @@ Unless a difference is stated below, these contracts apply to both
 
 ### Connections and secret handling
 
-- The effective database destination must match the resolved configuration,
-  including explicit URL overrides. `prod` and the normalized `production`
-  alias must receive equivalent guards. `EXEC_ENV` is operator input, not proof
-  of the real database's purpose; unknown environments currently warn and use
-  development naming defaults.
-- PostgreSQL client tools reject URL `host`, `hostaddr`, `service`, and `dsn`
-  query overrides so their destination matches the parsed URL authority.
-  Docker execution is limited to empty, socket, loopback, and `localhost`
-  configured hosts; remote hosts use host client tools. Client-tool database
-  names must not use libpq connection-string syntax.
-- The current PostgreSQL policy requires TLS for non-local production targets.
-  Review URL query overrides, `connect_args`, `host`/`hostaddr`, multiple hosts,
-  asynchronous driver adaptation, migration connections, and host client tools
-  separately. A permitted override must not silently weaken an applicable
-  constraint. Loopback/socket and development defaults may permit plaintext.
+- Each entry point's actual destination must match the resolved configuration,
+  including `db_url`, `REPOM_DATABASE_URL` / `DATABASE_URL` overrides, and URL
+  query or SQLAlchemy `connect_args` values for `host`, `hostaddr`, `service`,
+  and `dsn`. `DatabaseManager` and `resolve_engine_settings()` resolve these
+  destination overrides; the shared `alembic/env.py` and `AlembicReset` build
+  engines from `db_url` only. Diagnostics probes and synchronous test fixtures
+  pass engine kwargs without the engine-policy resolver. Review backup/restore
+  host-tool and `docker exec` paths separately: URL-overridden client tools use
+  the parsed URL authority and reject query destination overrides, while the
+  configured local-host path may target the managed container through
+  `docker exec`; configured remote hosts use host client tools. Client-tool
+  database names must not use libpq connection-string syntax. `database_info`
+  reports configured `postgres_db` even when a URL override selects another
+  database. Host-less URLs are classified as local, although libpq may then use
+  `PGHOST` or `PGSERVICE`. `prod` and the normalized `production` alias receive
+  equivalent guards. Unknown `EXEC_ENV`
+  values warn once and use `dev` defaults for naming, TLS, and destructive
+  command guards; `EXEC_ENV` is operator input, not proof of the real database's
+  purpose.
+- In `prod`, non-local PostgreSQL destinations require `sslmode` of at least
+  `require`. `RepomConfig.db_url` and `postgres_tls_settings_for_url()` enforce
+  URL TLS policy, while `postgres_tls_settings()` applies it to the configured
+  host. `_resolve_postgres_engine_policy()` also checks `connect_args` and
+  asyncpg's `ssl`, but only `DatabaseManager` and `resolve_engine_settings()`
+  use that resolver. The migration engine, `AlembicReset`, diagnostics probes,
+  synchronous test fixtures, and consumer-built engines get only URL-level
+  enforcement or none. repom writes its resolved `sslmode` into generated and
+  PostgreSQL override URLs, and into `PGSSLMODE` for host libpq client tools
+  when a mode is resolved; `connect_args` TLS options override URL options.
+  Loopback/socket and development defaults may permit plaintext.
 - `require` alone is not a guarantee of certificate/hostname verification.
   Preserve explicitly selected `verify-ca`/`verify-full` semantics across driver
-  adaptation. Deployments needing authenticated remote peers must choose the
+  adaptation. For libpq, absent `sslrootcert`, verification uses `PGSSLROOTCERT`
+  or `~/.postgresql/root.crt`, not the system trust store. The asyncpg path
+  passes a mode string through when no root certificate is configured; with an
+  explicit root certificate, repom builds an `SSLContext` that does not load
+  CRLs. Deployments needing authenticated remote peers must choose the
   corresponding verification settings and trust roots.
 - Ordinary repr, logs, CLI status, diagnostics, and errors must not unexpectedly
-  expose credentials. Include malformed URLs, URL query secrets, exception
-  chains, and failing child-process output in review. `safe_db_url()` and secret
-  masking are controls to verify, not universal sanitizers.
-- SQLAlchemy parameters are hidden by default. Diagnostic capture and explicit
-  debug settings need separate assessment: `QueryAnalyzer` retains SQL and
-  parameters, and SQL text can itself contain literals. No general redaction
-  guarantee extends to every diagnostic artifact or application log.
+  expose credentials. `safe_db_url()` masks userinfo passwords and a fixed set
+  of query keys, including `dsn`; it is not a universal sanitizer. Alembic URL
+  values are percent-escaped before ConfigParser handling. Still review
+  malformed URLs: `RepomConfig.db_url` can fail in `make_url()` before
+  `safe_db_url()` runs, and `repom_info.main` prints uncaught display errors;
+  check parser exceptions for password fragments. An unencoded `@` can move a
+  password fragment into the host, which appears in TLS errors and warnings.
+  Restore `psql` stderr can contain SQL and backup data and is printed, logged,
+  and included in `RestoreError`; only the exact configured password is
+  masked. Include exception chains and failing child-process output in review.
+- `engine_kwargs` defaults SQLAlchemy `hide_parameters` to `True`, but
+  `SQLALCHEMY_HIDE_PARAMETERS` can disable it. The migration engine and
+  `AlembicReset` do not set it. SQLAlchemy DEBUG echo can log result rows
+  regardless of this option, and `debug_repository_queries` prints `to_dict()`
+  values. `QueryAnalyzer` retains SQL and parameters, and SQL text can itself
+  contain literals. No general redaction guarantee extends to every diagnostic
+  artifact or application log.
+- Redis helpers support plaintext `redis://` only, with no TLS option or
+  production guard. Redis credentials travel in plaintext to the configured
+  host, including the `repom_info` connectivity probe. pgAdmin's generated
+  server entry uses `SSLMode: prefer`.
 
 ### Discovery and migrations
 

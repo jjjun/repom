@@ -45,12 +45,15 @@ uv run db_backup
 `config.db_url` が上書きされている場合、`db_backup` / `db_restore` はその URL を接続先に
 します。PostgreSQL ではクライアント引数、パスワード、TLS 設定を URL から取得し、管理対象
 コンテナの状態確認や `docker exec` を行わず、host 上で `pg_dump` / `psql` を実行します。
+URL クエリの `host`、`hostaddr`、`service`、`dsn` による接続先の上書きは拒否し、URL authority
+の接続先を使います。
 SQLite では URL が示すファイルをバックアップ／リストア対象にし、インメモリ SQLite の URL
 は拒否します。
 
-URL の上書きがない場合、PostgreSQL のバックアップ／リストアは管理対象コンテナが起動中なら
+URL の上書きがない場合、PostgreSQL の設定 host が local なら、管理対象コンテナが起動中のとき
 `docker exec` を使い、起動していなければ host 上の `pg_dump` / `psql` に fallback します。
-SQLite では `config.sqlite.db_file_path` を対象にします。
+remote host の場合は host 上の client tool を使います。SQLite では
+`config.sqlite.db_file_path` を対象にします。
 
 `config.db_url_overridden` が真の場合、PostgreSQL のバックアップ stem は URL の database 名、
 SQLite の stem は URL が示すファイル名になります。URL の backend が SQLite / PostgreSQL
