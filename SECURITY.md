@@ -363,12 +363,11 @@ Unless a difference is stated below, these contracts apply to both
   sidecar detects a mismatch only when present and does not authenticate a
   backup against replacement of both files.
 - Backup files and generated secret files, including temporary and backup copies,
-  contain sensitive data. Backup partial files use exclusive POSIX mode 0600.
-  Secret files are written before they are chmod-ed to 0600, so their initial
-  permissions depend briefly on the process umask. repom sets no Windows ACLs,
-  and the compose directory itself is not restricted. Permission tests skip on
-  Windows; POSIX mode bits alone are not evidence of equivalent Windows ACL
-  isolation.
+  contain sensitive data. Backup partial files and secret-file temporary siblings
+  are created exclusively with POSIX mode 0600 before content is written, then
+  atomically replaced into place. repom sets no Windows ACLs, and the compose
+  directory itself is not restricted. Permission tests skip on Windows; POSIX
+  mode bits alone are not evidence of equivalent Windows ACL isolation.
 - Generated Compose/configuration/initialization content must not allow values
   to inject additional directives or SQL. Published service ports default to
   loopback; LAN exposure requires explicit configuration. Generation must retain

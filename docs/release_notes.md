@@ -201,6 +201,11 @@
 
 ### Changed
 
+- Generated `.env` and `.env.bak` secret files are written through exclusive
+  sibling temporary files created with POSIX mode `0600` before content is written,
+  then atomically replaced. Existing `.env` symlinks remain accepted, but are
+  replaced with regular files; ACLs on an existing destination are not preserved.
+  repom sets no Windows ACLs, so access follows the temporary file's inherited ACL.
 - Logging defaults now use basekit 0.7.0's normalized `EXEC_ENV`; the minimum basekit
   version is 0.7.0. `test` (including surrounding whitespace and mixed case) selects
   the test configuration and fixture guard; `production` is an alias for `prod` for

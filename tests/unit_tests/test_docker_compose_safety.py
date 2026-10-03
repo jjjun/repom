@@ -11,6 +11,7 @@ from repom.docker_compose_safety import (
     parse_env_file,
     quote_yaml_string,
     reject_control_characters,
+    validate_secret_file_overwrite,
     validate_stored_secret_values,
     write_secret_file,
 )
@@ -187,3 +188,137 @@ class TestWriteSecretFile:
         backup_path.write_text("OLDER=backup\n", encoding="utf-8")
         write_secret_file(path, "SECRET=A\n")
         assert backup_path.read_text(encoding="utf-8") == "OLDER=backup\n"
+
+    @pytest.mark.skipif(
+        os.name != "posix",
+        reason="POSIX mode bits do not establish Windows ACL isolation",
+    )
+    def test_secret_temporary_files_are_restricted_at_first_write_under_umask_022(
+        self, tmp_path, monkeypatch
+    ):
+        path = tmp_path / ".env"
+        modes_at_first_write = []
+        real_fdopen = os.fdopen
+
+        def recording_fdopen(file_descriptor, *args, **kwargs):
+            temp_file = real_fdopen(file_descriptor, *args, **kwargs)
+
+            class RecordingWriter:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc_info):
+                    return temp_file.__exit__(*exc_info)
+
+                def write(self, content):
+                    modes_at_first_write.append(
+                        stat.S_IMODE(os.fstat(file_descriptor).st_mode)
+                    )
+                    return temp_file.write(content)
+
+            return RecordingWriter()
+
+        monkeypatch.setattr(os, "fdopen", recording_fdopen)
+        previous_umask = os.umask(0o022)
+        try:
+            write_secret_file(path, "SECRET=original\n")
+            write_secret_file(path, "SECRET=updated\n")
+        finally:
+            os.umask(previous_umask)
+
+        assert len(modes_at_first_write) == 3
+        assert all(mode & 0o077 == 0 for mode in modes_at_first_write)
+        assert path.read_text(encoding="utf-8") == "SECRET=updated\n"
+        assert (tmp_path / ".env.bak").read_text(encoding="utf-8") == (
+            "SECRET=original\n"
+        )
+
+    @pytest.mark.parametrize(
+        ("failed_write", "expected_backup"),
+        [(1, "OLDER=backup\n"), (2, "SECRET=original\n")],
+    )
+    def test_failed_write_keeps_existing_secret_and_backup_usable(
+        self, tmp_path, monkeypatch, failed_write, expected_backup
+    ):
+        path = tmp_path / ".env"
+        backup_path = tmp_path / ".env.bak"
+        path.write_text("SECRET=original\n", encoding="utf-8")
+        backup_path.write_text("OLDER=backup\n", encoding="utf-8")
+        write_count = 0
+        real_fdopen = os.fdopen
+
+        def failing_fdopen(file_descriptor, *args, **kwargs):
+            nonlocal write_count
+            write_count += 1
+            temp_file = real_fdopen(file_descriptor, *args, **kwargs)
+
+            class FailingWriter:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc_info):
+                    return temp_file.__exit__(*exc_info)
+
+                def write(self, content):
+                    if write_count == failed_write:
+                        temp_file.write("partial")
+                        raise OSError("simulated secret file write failure")
+                    return temp_file.write(content)
+
+            return FailingWriter()
+
+        monkeypatch.setattr(os, "fdopen", failing_fdopen)
+
+        with pytest.raises(OSError, match="simulated secret file write failure"):
+            write_secret_file(path, "SECRET=updated\n")
+
+        assert write_count == failed_write
+        assert path.read_text(encoding="utf-8") == "SECRET=original\n"
+        assert backup_path.read_text(encoding="utf-8") == expected_backup
+        assert list(tmp_path.glob("..env.*.tmp")) == []
+
+    def test_replace_failure_removes_temp_without_reclosing_owned_descriptor(
+        self, tmp_path, monkeypatch
+    ):
+        path = tmp_path / ".env"
+        file_descriptors = []
+        close_calls = []
+        real_fdopen = os.fdopen
+        real_close = os.close
+
+        def recording_fdopen(file_descriptor, *args, **kwargs):
+            file_descriptors.append(file_descriptor)
+            return real_fdopen(file_descriptor, *args, **kwargs)
+
+        def recording_close(file_descriptor):
+            close_calls.append(file_descriptor)
+            return real_close(file_descriptor)
+
+        def failing_replace(source, destination):
+            raise OSError("simulated secret file replace failure")
+
+        monkeypatch.setattr(os, "fdopen", recording_fdopen)
+        monkeypatch.setattr(os, "close", recording_close)
+        monkeypatch.setattr(os, "replace", failing_replace)
+
+        with pytest.raises(OSError, match="simulated secret file replace failure"):
+            write_secret_file(path, "SECRET=value\n")
+
+        assert len(file_descriptors) == 1
+        assert file_descriptors[0] not in close_calls
+        assert list(tmp_path.glob("..env.*.tmp")) == []
+
+    def test_overwrite_refusal_keeps_existing_secret_unchanged(self, tmp_path):
+        path = tmp_path / ".env"
+        path.write_text("SECRET=original\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="Refusing to overwrite"):
+            validate_secret_file_overwrite(
+                path,
+                "SECRET=updated\n",
+                overwrite_secrets=False,
+                rotation_commands=("rotate_credentials",),
+            )
+
+        assert path.read_text(encoding="utf-8") == "SECRET=original\n"
+        assert not path.with_name(".env.bak").exists()

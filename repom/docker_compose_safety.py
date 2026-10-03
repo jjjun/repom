@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import os
 import re
-import stat
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -204,8 +204,40 @@ def write_secret_file(path: Path, content: str) -> None:
 
     if path.exists():
         backup_secret_file(path, content)
-    path.write_text(content, encoding="utf-8")
-    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    _write_secret_file_atomically(path, content)
+
+
+def _write_secret_file_atomically(path: Path, content: str) -> None:
+    """Write through a restrictive sibling temporary file, then replace path."""
+
+    file_descriptor, temp_path = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    try:
+        temp_file = os.fdopen(file_descriptor, "w", encoding="utf-8")
+    except BaseException:
+        try:
+            os.close(file_descriptor)
+        except OSError:
+            pass
+        try:
+            os.unlink(temp_path)
+        except FileNotFoundError:
+            pass
+        raise
+
+    try:
+        with temp_file:
+            temp_file.write(content)
+        os.replace(temp_path, path)
+    except BaseException:
+        try:
+            os.unlink(temp_path)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def validate_secret_file_overwrite(
@@ -239,8 +271,7 @@ def backup_secret_file(path: Path, new_content: str) -> None:
         return
 
     backup_path = path.with_name(f"{path.name}.bak")
-    backup_path.write_text(previous_content, encoding="utf-8")
-    os.chmod(backup_path, stat.S_IRUSR | stat.S_IWUSR)
+    _write_secret_file_atomically(backup_path, previous_content)
 
 
 __all__ = [

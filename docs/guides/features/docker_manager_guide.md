@@ -72,8 +72,7 @@ standalone `docker-compose` に fallback します。v1 で作成した stack �
 
 `repom/docker_compose_safety.py` は Compose に渡す YAML 文字列を quote し、値に改行・復帰・
 NUL 文字があれば拒否します。port は既定で `127.0.0.1` に bind し、秘密情報を含む
-`.env` file は書き込み後に mode `0600` にします。secret の書き込み直後から chmod までの間は
-作成時の umask に依存します。repom は Windows ACL を設定せず、compose directory 自体も制限しません。
+`.env` file は POSIX では mode `0600` の一時ファイルを内容の書き込み前に排他的に作成し、完成後に原子的に置き換えます。repom は Windows ACL を設定せず、compose directory 自体も制限しません。
 
 `repom.postgres.manage.generate()` と `repom.redis.manage.generate()` は、password が
 未設定または `CHANGE_ME` のままの場合や、password に改行・復帰・NUL 文字が含まれる
