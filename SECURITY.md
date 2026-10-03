@@ -149,23 +149,43 @@ Unless a difference is stated below, these contracts apply to both
 
 ### Model mutation and output
 
-- `BaseModel.update_from_dict()` requires `allowed_fields` or `updatable_fields`,
-  writes only mapped column attributes, and excludes all primary-key attributes,
-  `created_at`, `updated_at`, and mapped `deleted_at` even if allowlisted.
-  `updatable_fields` is read from the model class, so an instance attribute
-  cannot broaden it. `exclude_fields` can narrow the selected allowlist. The
-  inherited `BaseModel` constructor rejects these control names and keywords
-  that are not mapped model attributes. These are this method's guarantees, not
-  automatic protection for direct assignment or every bulk-update API.
-- `to_dict()` must always omit `sensitive_fields`, including when those names
-  appear in `serializable_fields`. Both `sensitive_fields` and
-  `serializable_fields` are read from the model class, so instance attributes
-  cannot weaken their restrictions. With no serialization allowlist, other
-  mapped columns are returned; consumers must identify their sensitive columns.
-- NUL-byte validation on supported ORM and repository bulk-write paths must not
-  be accidentally bypassed. It is not general input validation or a guarantee
-  for arbitrary SQL executed outside those paths. Review custom-type bind/result
-  processing and nested values without assuming stored content is harmless.
+- `BaseModel.update_from_dict()` raises `ValueError` when both `allowed_fields`
+  and the class's `updatable_fields` are `None`. An explicit `allowed_fields`
+  replaces, rather than narrows, `updatable_fields`. It assigns only allowlisted
+  ORM attribute keys from mapped `column_attrs`, including `column_property()`
+  expressions, and always skips mapper-resolved primary-key attributes and the
+  attribute keys `created_at`, `updated_at`, and a mapped `deleted_at`.
+  `exclude_fields` can only narrow the allowlist. An empty set, or a string,
+  can silently select no usable fields. Disallowed and unknown keys are ignored
+  silently. The method does no type or NUL validation itself.
+- These field-allowlist guarantees do not apply to model constructors, direct
+  assignment, `dict_save()`, `dict_saves()`, `get_or_create()` lookup and
+  defaults, `ManyToManyMixin.add_related_item()`, or `bulk_update()` in either
+  repository implementation. `bulk_update()` can write any mapped column,
+  including timestamps, `deleted_at`, and primary keys when `filter_by` or
+  `filters` is used. Consumers must filter request data before these APIs. The
+  inherited `BaseModel.__init__()` raises `TypeError` for `sensitive_fields`,
+  `serializable_fields`, `updatable_fields`, and any keyword that is not a
+  mapped attribute; it accepts every mapped attribute, so it is not a field
+  allowlist. `to_dict()` and `update_from_dict()` read these controls from the
+  class, so instance attributes cannot change them.
+- `to_dict()` returns mapped column attributes, including deferred and
+  `column_property()` values, excluding attribute keys in the class's
+  `sensitive_fields`, even when they also appear in `serializable_fields`.
+  `serializable_fields` can further limit returned columns. It does not serialize
+  relationships or recurse. Logs, diagnostics, and consumer serializers are
+  not filtered by `sensitive_fields`.
+- NUL-byte validation runs from `BaseModel` mapper `before_insert` and
+  `before_update` listeners during SQLAlchemy unit-of-work flushes, for sync and
+  async sessions. Sync and async repository `bulk_update()` also validate plain
+  values. Validation walks `str`, `dict`, `list`, and `tuple` values before
+  binding. It does not cover `session.execute(insert(...)/update(...))`,
+  including ORM bulk parameter lists, `bulk_insert_mappings()`,
+  `bulk_save_objects()`, SQL-expression values in `bulk_update()`, or models
+  based on plain `repom.database.Base`. Values written through other paths may
+  contain NUL. A String-typed expression `column_property()` currently causes
+  `_string_columns()` to raise `AttributeError` during each flush of that model;
+  this fails closed.
 
 ### Connections and secret handling
 
