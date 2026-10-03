@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,8 +57,28 @@ def format_size(size_bytes: int | None, *, unit: str = "auto") -> str:
     return f"{size_bytes} B"
 
 
-def resolve_sqlite_db_path(db_url: str, root_path: str | Path) -> Path | None:
-    """Resolve a SQLite URL to a local file path."""
+def _sqlite_uri_enabled(uri_value: Any) -> bool:
+    return uri_value is not None and (
+        not isinstance(uri_value, str)
+        or uri_value.strip().lower() not in {"false", "no", "off", "n", "f", "0"}
+    )
+
+
+def _is_sqlite_memory_url(db_url: str) -> bool:
+    try:
+        url = make_url(db_url)
+    except Exception:
+        return False
+
+    return (
+        url.get_backend_name() == "sqlite"
+        and not _sqlite_uri_enabled(url.query.get("uri"))
+        and (not url.database or url.database == ":memory:")
+    )
+
+
+def resolve_sqlite_db_path(db_url: str) -> Path | None:
+    """Resolve a file-based SQLite URL using the process working directory."""
     try:
         url = make_url(db_url)
     except Exception:
@@ -67,13 +88,13 @@ def resolve_sqlite_db_path(db_url: str, root_path: str | Path) -> Path | None:
         return None
 
     database = url.database
-    if not database or database == ":memory:" or database.startswith("file::memory:"):
+    uri_value = url.query.get("uri")
+    if _sqlite_uri_enabled(uri_value):
+        return None
+    if not database or database == ":memory:" or database.lower().startswith("file:"):
         return None
 
-    candidate = Path(database)
-    if candidate.is_absolute():
-        return candidate
-    return Path(root_path) / candidate
+    return Path(os.path.abspath(database))
 
 
 def _database_target(config_obj: Any) -> str:
@@ -154,14 +175,16 @@ def collect_database_info_sync(
     db_url = str(config.db_url)
 
     if config.db_type == "sqlite":
-        db_path = resolve_sqlite_db_path(db_url, config.root_path)
+        db_path = resolve_sqlite_db_path(db_url)
         if db_path is None:
+            is_memory = _is_sqlite_memory_url(db_url)
             return DatabaseInfo(
                 backend="sqlite",
-                target=":memory:",
+                target=":memory:" if is_memory else safe_db_url(db_url),
                 size_bytes=None,
-                size_text="N/A (in-memory)",
-                status="ok",
+                size_text="N/A (in-memory)" if is_memory else "N/A (unsupported)",
+                status="ok" if is_memory else "unsupported",
+                error="" if is_memory else "SQLite URL is not a supported file-based database",
             )
 
         exists = db_path.exists()

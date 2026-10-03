@@ -40,15 +40,13 @@ def cleanup_stale_backups(
 
 def sqlite_database_path() -> Path:
     """Return the file used by the active SQLite configuration."""
-    if config.db_url_overridden:
-        db_path = resolve_sqlite_db_path(config.db_url, config.root_path)
-        if db_path is None:
-            raise BackupError(
-                "SQLite backup requires a file-based database URL; "
-                "in-memory SQLite URLs are not supported."
-            )
-        return db_path
-    return Path(config.sqlite.db_file_path)
+    db_path = resolve_sqlite_db_path(config.db_url)
+    if db_path is None:
+        raise BackupError(
+            "SQLite backup requires a file-based database URL; "
+            "in-memory SQLite URLs are not supported, and SQLite URI URLs are not supported."
+        )
+    return db_path
 
 
 def backup_sqlite():

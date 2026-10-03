@@ -349,6 +349,7 @@ class TestRestoreStreamingWithoutDeadlock:
 def _mock_sqlite_config(backup_dir, db_file_path):
     config = MagicMock()
     config.db_url_overridden = False
+    config.db_url = f"sqlite:///{db_file_path}"
     config.db_backup_path = str(backup_dir)
     config.sqlite.db_file_path = str(db_file_path)
     return config
@@ -398,6 +399,39 @@ def test_restore_sqlite_visible_to_open_connection_after_next_query(monkeypatch,
         assert other_conn.execute("SELECT id FROM items").fetchall() == [(99,)]
     finally:
         other_conn.close()
+
+
+def test_restore_sqlite_uses_relative_url_file_from_process_working_directory(
+    monkeypatch, tmp_path
+):
+    cwd = tmp_path / "sqlite-cwd"
+    root = tmp_path / "sqlite-root"
+    backup_dir = tmp_path / "backups"
+    cwd.mkdir()
+    root.mkdir()
+    backup_dir.mkdir()
+    cwd_db = cwd / "target.sqlite3"
+    root_db = root / "target.sqlite3"
+    live_conn = _make_sqlite_db(cwd_db, row_id=1)
+    root_conn = _make_sqlite_db(root_db, row_id=2)
+    backup_file = backup_dir / "target_20260101_000000.sqlite3"
+    restore_source = _make_sqlite_db(backup_file, row_id=99)
+    restore_source.close()
+    write_checksum(backup_file)
+    try:
+        config = _mock_sqlite_config(backup_dir, root_db)
+        config.db_url = "sqlite:///target.sqlite3"
+        config.root_path = str(root)
+        monkeypatch.setattr(db_restore, "config", config)
+        monkeypatch.chdir(cwd)
+
+        db_restore.restore_sqlite(backup_file)
+
+        assert live_conn.execute("SELECT id FROM items").fetchall() == [(99,)]
+        assert root_conn.execute("SELECT id FROM items").fetchall() == [(2,)]
+    finally:
+        live_conn.close()
+        root_conn.close()
 
 
 def test_restore_sqlite_pre_restore_snapshot_includes_uncheckpointed_wal_data(monkeypatch, tmp_path):
@@ -578,6 +612,7 @@ def test_sqlite_restore_override_targets_url_file(monkeypatch, tmp_path):
         config.db_url = "sqlite:///url-db.sqlite3"
         config.db_backup_path = str(backup_dir)
         monkeypatch.setattr(db_restore, "config", config)
+        monkeypatch.chdir(tmp_path)
 
         assert db_restore.target_database_name() == "url-db"
         db_restore.restore_sqlite(backup_file)
@@ -598,6 +633,31 @@ def test_sqlite_restore_override_rejects_in_memory_url(monkeypatch, tmp_path):
 
     with pytest.raises(RestoreError, match="in-memory SQLite URLs are not supported"):
         db_restore.restore_sqlite(tmp_path / "backup.sqlite3")
+
+    assert not (tmp_path / "backups").exists()
+
+
+@pytest.mark.parametrize(
+    "db_url",
+    [
+        "sqlite:///relative.db?uri=true",
+        "sqlite:///file:relative.db?uri=true",
+        "sqlite:///file:memorydb?mode=memory&cache=shared&uri=true",
+        "sqlite://",
+    ],
+)
+def test_sqlite_restore_rejects_unsupported_urls_before_file_io(
+    monkeypatch, tmp_path, db_url
+):
+    backup_dir = tmp_path / "backups"
+    config = _mock_sqlite_config(backup_dir, tmp_path / "target.sqlite3")
+    config.db_url = db_url
+    monkeypatch.setattr(db_restore, "config", config)
+
+    with pytest.raises(RestoreError, match="file-based database URL"):
+        db_restore.restore_sqlite(tmp_path / "missing-backup.sqlite3")
+
+    assert not backup_dir.exists()
 
 
 def _mock_postgres_config_for_main(backup_dir, sslmode="prefer", sslrootcert=None):

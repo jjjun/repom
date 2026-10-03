@@ -4,6 +4,11 @@
 
 ### Breaking
 
+- BREAKING: SQLite backup, restore, and diagnostics now resolve file URLs against
+  the process working directory, matching SQLAlchemy. The exported
+  `resolve_sqlite_db_path()` no longer accepts `root_path`. SQLite in-memory URLs
+  and URI URLs are unsupported by backup and restore; database diagnostics retain
+  the `:memory:` target for in-memory URLs and report URI URLs as unsupported.
 - BREAKING: In production, PostgreSQL destination and TLS policy now account for
   `PGHOST` with host-less URLs, `PGHOSTADDR` even alongside an explicit URL host, and
   a selected `PGSERVICE` / `service` setting. A selected service without both an

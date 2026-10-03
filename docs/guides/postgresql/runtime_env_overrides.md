@@ -96,15 +96,17 @@ asyncpg は `host` を使えますが、
 `DatabaseManager` の engine 作成時の warning は connect args を含む実効接続先と TLS 設定を表示します。
 
 URL override は `db_backup`、`db_restore`、`db_create`、`db_delete`、`db_sync_master` の対象にも
-なります。file-based SQLite の場合も override URL の path を使い、in-memory SQLite の backup / restore は
-拒否されます。PostgreSQL の backup と restore の詳細は
+なります。SQLite の相対 file path は SQLAlchemy と同じくプロセスの作業ディレクトリを基準に解決されます。
+実行場所に左右されないよう絶対 path を推奨します。in-memory SQLite と `uri=true` を含む SQLite URI URL の
+backup / restore は拒否されます。PostgreSQL の backup と restore の詳細は
 [バックアップガイド](../features/backup_guide.md)、master data sync が managed container を
 skip する条件は[マスターデータ同期ガイド](../features/master_data_sync_guide.md)を参照してください。
 
 URL override がなく SQLite を使う場合、正規化後の `EXEC_ENV=test` かつ
 `sqlite.use_in_memory_for_tests=True` なら既定の URL は in-memory SQLite です。
 `SQLITE_USE_FILE_DB` と `SQLITE_USE_IN_MEMORY_FOR_TESTS` でこの選択を上書きできます。
-SQLite の file path 変数は `SQLITE_DB_PATH` と `SQLITE_DB_FILE` です。
+SQLite の file path 変数は `SQLITE_DB_PATH` と `SQLITE_DB_FILE` です。これらが相対 path を生成する場合も
+作業ディレクトリが基準となるため、絶対 path を推奨します。
 
 `POSTGRES_EXPOSE_TO_LAN` と `PGADMIN_EXPOSE_TO_LAN` が `true` の場合、生成した container port は
 `0.0.0.0` に bind されます。既定では `127.0.0.1` のみへ公開されます。

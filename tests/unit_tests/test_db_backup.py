@@ -335,6 +335,7 @@ class TestStreamingWithoutDeadlock:
 def _mock_sqlite_config(backup_dir, db_file_path):
     config = MagicMock()
     config.db_url_overridden = False
+    config.db_url = f"sqlite:///{db_file_path}"
     config.db_backup_path = str(backup_dir)
     config.sqlite.db_file_path = str(db_file_path)
     return config
@@ -379,6 +380,50 @@ def test_backup_sqlite_includes_uncheckpointed_wal_data(monkeypatch, tmp_path):
             result.close()
     finally:
         writer.close()
+
+
+def test_backup_sqlite_uses_relative_url_file_from_process_working_directory(
+    monkeypatch, tmp_path
+):
+    cwd = tmp_path / "sqlite-cwd"
+    root = tmp_path / "sqlite-root"
+    backup_dir = tmp_path / "backups"
+    cwd.mkdir()
+    root.mkdir()
+    cwd_db = cwd / "target.sqlite3"
+    root_db = root / "target.sqlite3"
+    for db_file, marker in ((cwd_db, "orm-selected"), (root_db, "other-file")):
+        conn = sqlite3.connect(str(db_file))
+        conn.execute("CREATE TABLE markers (value TEXT)")
+        conn.execute("INSERT INTO markers VALUES (?)", (marker,))
+        conn.commit()
+        conn.close()
+
+    config = _mock_sqlite_config(backup_dir, root_db)
+    config.db_url = "sqlite:///target.sqlite3"
+    config.root_path = str(root)
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.chdir(cwd)
+
+    db_backup.backup_sqlite()
+
+    backups = list(backup_dir.glob("target_*.sqlite3"))
+    assert len(backups) == 1
+    backup = sqlite3.connect(str(backups[0]))
+    try:
+        assert backup.execute("SELECT value FROM markers").fetchall() == [
+            ("orm-selected",)
+        ]
+    finally:
+        backup.close()
+
+    root_conn = sqlite3.connect(str(root_db))
+    try:
+        assert root_conn.execute("SELECT value FROM markers").fetchall() == [
+            ("other-file",)
+        ]
+    finally:
+        root_conn.close()
 
 
 def test_backup_sqlite_missing_source_fails_without_creating_file(monkeypatch, tmp_path):
@@ -761,6 +806,7 @@ def test_sqlite_backup_override_uses_url_file(monkeypatch, tmp_path):
         config.db_url = "sqlite:///url-db.sqlite3"
         config.db_backup_path = str(tmp_path / "backups")
         monkeypatch.setattr(db_backup, "config", config)
+        monkeypatch.chdir(tmp_path)
 
         db_backup.backup_sqlite()
 
@@ -786,6 +832,31 @@ def test_sqlite_backup_override_rejects_in_memory_url(monkeypatch, tmp_path):
 
     with pytest.raises(BackupError, match="in-memory SQLite URLs are not supported"):
         db_backup.backup_sqlite()
+
+    assert not (tmp_path / "backups").exists()
+
+
+@pytest.mark.parametrize(
+    "db_url",
+    [
+        "sqlite:///relative.db?uri=true",
+        "sqlite:///file:relative.db?uri=true",
+        "sqlite:///file:memorydb?mode=memory&cache=shared&uri=true",
+        "sqlite://",
+    ],
+)
+def test_sqlite_backup_rejects_unsupported_urls_before_file_io(
+    monkeypatch, tmp_path, db_url
+):
+    backup_dir = tmp_path / "backups"
+    config = _mock_sqlite_config(backup_dir, tmp_path / "target.sqlite3")
+    config.db_url = db_url
+    monkeypatch.setattr(db_backup, "config", config)
+
+    with pytest.raises(BackupError, match="file-based database URL"):
+        db_backup.backup_sqlite()
+
+    assert not backup_dir.exists()
 
 
 def test_main_raises_backup_error_for_unsupported_db_type(monkeypatch):

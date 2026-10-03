@@ -55,13 +55,15 @@ URL クエリに `host`、`hostaddr`、`service`、`dsn`、`port`、`dbname`、`
 `ValueError` で拒否します。URL authority/path で表せる接続先と認証情報はそこに置き、`hostaddr`、
 `service`、`dsn` を使う場合は明示的な client-tool 設定を選んでください。`sslmode` と
 `sslrootcert` は引き続き query で指定できます。
-SQLite では URL が示すファイルをバックアップ／リストア対象にし、インメモリ SQLite の URL
-は拒否します。
+SQLite では `config.db_url` が示すファイルをバックアップ／リストア対象にします。相対パスは
+SQLAlchemy と同じくプロセスの作業ディレクトリを基準に解決されるため、異なる作業ディレクトリ
+から実行しても同じ DB を参照できるよう、絶対パスを推奨します。インメモリ SQLite と
+`uri=true` を含む SQLite URI URL は拒否します。
 
 URL の上書きがない場合、PostgreSQL の設定 host が local なら、管理対象コンテナが起動中のとき
 `docker exec` を使い、起動していなければ host 上の `pg_dump` / `psql` に fallback します。
-remote host の場合は host 上の client tool を使います。SQLite では
-`config.sqlite.db_file_path` を対象にします。
+remote host の場合は host 上の client tool を使います。SQLite は URL override の有無にかかわらず
+`config.db_url` を対象にします。
 
 `config.db_url_overridden` が真の場合、PostgreSQL のバックアップ stem は URL の database 名、
 SQLite の stem は URL が示すファイル名になります。URL の backend が SQLite / PostgreSQL

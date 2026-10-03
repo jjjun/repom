@@ -43,33 +43,48 @@ def test_format_size_fixed_mb():
     assert format_size(0, unit="mb") == "0.00 MB"
 
 
-def test_resolve_sqlite_db_path(tmp_path):
-    relative = resolve_sqlite_db_path("sqlite:///data/app.sqlite3", tmp_path)
+def test_resolve_sqlite_db_path_uses_process_working_directory(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    relative = resolve_sqlite_db_path("sqlite:///data/app.sqlite3")
     assert relative == tmp_path / "data" / "app.sqlite3"
 
     absolute_db = tmp_path / "absolute.sqlite3"
-    absolute = resolve_sqlite_db_path(f"sqlite:///{absolute_db}", tmp_path)
+    absolute = resolve_sqlite_db_path(f"sqlite:///{absolute_db}")
     assert absolute == absolute_db
 
-    assert resolve_sqlite_db_path("sqlite:///:memory:", tmp_path) is None
-    assert resolve_sqlite_db_path("postgresql://localhost/db", tmp_path) is None
+    assert resolve_sqlite_db_path("sqlite:///:memory:") is None
+    assert resolve_sqlite_db_path("postgresql://localhost/db") is None
 
 
-def test_resolve_sqlite_db_path_uses_make_url(tmp_path):
+def test_resolve_sqlite_db_path_uses_make_url(monkeypatch, tmp_path):
     """A driver-qualified scheme and a query string must be parsed correctly
     (repom#163) - a literal-prefix check misreads both.
     """
+    monkeypatch.chdir(tmp_path)
     driver_qualified = resolve_sqlite_db_path(
-        "sqlite+pysqlite:///data/app.sqlite3", tmp_path
+        "sqlite+pysqlite:///data/app.sqlite3"
     )
     assert driver_qualified == tmp_path / "data" / "app.sqlite3"
 
     with_query_string = resolve_sqlite_db_path(
-        "sqlite:///data/app.sqlite3?timeout=30", tmp_path
+        "sqlite:///data/app.sqlite3?timeout=30"
     )
     assert with_query_string == tmp_path / "data" / "app.sqlite3"
 
-    assert resolve_sqlite_db_path("sqlite://", tmp_path) is None
+    assert resolve_sqlite_db_path("sqlite://") is None
+
+
+@pytest.mark.parametrize(
+    "db_url",
+    [
+        "sqlite:///relative.db?uri=true",
+        "sqlite:///file:relative.db?uri=true",
+        "sqlite:///file:memorydb?mode=memory&cache=shared&uri=true",
+        "sqlite:///file:relative.db",
+    ],
+)
+def test_resolve_sqlite_db_path_rejects_uri_urls(db_url):
+    assert resolve_sqlite_db_path(db_url) is None
 
 
 def test_collect_database_info_sync_sqlite_file(tmp_path):
@@ -110,6 +125,32 @@ def test_collect_database_info_sync_sqlite_missing_file(tmp_path):
     assert info.error == "SQLite database file not found"
 
 
+def test_collect_database_info_sync_sqlite_relative_file_uses_cwd(
+    monkeypatch, tmp_path
+):
+    cwd = tmp_path / "sqlite-cwd"
+    root = tmp_path / "sqlite-root"
+    cwd.mkdir()
+    root.mkdir()
+    cwd_db = cwd / "target.sqlite3"
+    root_db = root / "target.sqlite3"
+    cwd_db.write_bytes(b"cwd")
+    root_db.write_bytes(b"root")
+    mock_config = SimpleNamespace(
+        db_type="sqlite",
+        db_url="sqlite:///target.sqlite3",
+        root_path=root,
+    )
+    monkeypatch.chdir(cwd)
+
+    with patch.object(database_info.config_module, "config", mock_config):
+        info = collect_database_info_sync()
+
+    assert info.target == str(cwd_db)
+    assert info.size_bytes == 3
+    assert info.status == "ok"
+
+
 def test_collect_database_info_sync_sqlite_memory(tmp_path):
     mock_config = SimpleNamespace(
         db_type="sqlite",
@@ -125,6 +166,28 @@ def test_collect_database_info_sync_sqlite_memory(tmp_path):
     assert info.size_bytes is None
     assert info.size_text == "N/A (in-memory)"
     assert info.status == "ok"
+    assert info.error == ""
+
+
+def test_collect_database_info_sync_sqlite_uri_is_unsupported(tmp_path):
+    mock_config = SimpleNamespace(
+        db_type="sqlite",
+        db_url="sqlite:///file:relative.db?mode=memory&cache=shared&uri=true",
+        root_path=tmp_path,
+    )
+
+    with patch.object(database_info.config_module, "config", mock_config):
+        info = collect_database_info_sync()
+
+    assert info.backend == "sqlite"
+    assert info.target.startswith("sqlite:///file:relative.db?")
+    assert "mode=memory" in info.target
+    assert "uri=true" in info.target
+    assert info.size_bytes is None
+    assert info.size_text == "N/A (unsupported)"
+    assert info.status == "unsupported"
+    assert info.error == "SQLite URL is not a supported file-based database"
+    assert not (tmp_path / "file:relative.db").exists()
 
 
 def test_collect_database_info_sync_postgres_skips_size_query():

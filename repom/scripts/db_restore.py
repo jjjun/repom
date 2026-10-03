@@ -43,15 +43,13 @@ logger = get_logger(__name__)
 
 def sqlite_database_path() -> Path:
     """Return the file used by the active SQLite configuration."""
-    if config.db_url_overridden:
-        db_path = resolve_sqlite_db_path(config.db_url, config.root_path)
-        if db_path is None:
-            raise RestoreError(
-                "SQLite restore requires a file-based database URL; "
-                "in-memory SQLite URLs are not supported."
-            )
-        return db_path
-    return Path(config.sqlite.db_file_path)
+    db_path = resolve_sqlite_db_path(config.db_url)
+    if db_path is None:
+        raise RestoreError(
+            "SQLite restore requires a file-based database URL; "
+            "in-memory SQLite URLs are not supported, and SQLite URI URLs are not supported."
+        )
+    return db_path
 
 
 def _backup_suffix(name: str, suffixes: tuple[str, ...]) -> Optional[str]:
