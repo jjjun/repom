@@ -21,11 +21,11 @@ Repository-wide reviews include these surfaces and their supporting code:
 
 | Surface | Source entry points | Assets and boundaries |
 | --- | --- | --- |
-| Models and queries | `repom/models/`, `repom/repositories/`, `repom/mixins/`, `repom/custom_types/`, `repom/nul_bytes.py` | Stored records, query scope, writable and serializable fields |
-| Configuration and connections | `repom/config.py`, `repom/config_hook.py`, `repom/config_hooks/`, `repom/database.py`, `repom/exec_env.py`, backend config modules | Credentials, effective destination, TLS, session ownership |
-| Discovery and migrations | `repom/utility.py`, `alembic/`, `repom/alembic/`, `alembic.ini` | Python imports, schema/data integrity, migration namespaces and files |
-| Administration and services | `repom/scripts/`, `repom/credentials.py`, `repom/postgres/`, `repom/redis/`, `repom/docker_service.py`, `repom/docker_compose_safety.py` | Backup contents, subprocesses, secrets, containers, volumes, generated files |
-| Logging, diagnostics, testing, and delivery | `repom/logging.py`, `repom/diagnostics/`, `repom/testing.py`, `tests/`, `.github/`, `scripts/`, `pyproject.toml`, `uv.lock` | Sensitive output, test isolation, dependency and build integrity |
+| Models and queries | `repom/models/`, `repom/repositories/`, `repom/mixins/`, `repom/custom_types/`, `repom/nul_bytes.py`, `repom/exceptions.py`, `repom/__init__.py`, `repom/examples/` | Stored records, query scope, writable and serializable fields |
+| Configuration and connections | `repom/config.py`, `repom/config_hook.py`, `repom/config_hooks/`, `repom/database.py`, `repom/exec_env.py`, `repom/postgres/config.py`, `repom/sqlite/`, `repom/redis/config.py` | Credentials, effective destination, TLS, session ownership |
+| Discovery and migrations | `repom/utility.py`, `repom/scripts/db_sync_master.py`, `repom/scripts/debug_repository_queries.py`, `master_data_path` (default `data_master/`), `repom/examples/`, `alembic/`, `repom/alembic/`, `alembic.ini` | Python imports and file execution, schema/data integrity, migration namespaces and files |
+| Administration and services | `repom/scripts/`, `repom/credentials.py`, `repom/postgres/`, `repom/postgres/docker-compose.template.yml`, `repom/redis/`, `repom/redis/docker-compose.template.yml`, `repom/docker_service.py`, `repom/docker_compose_safety.py` | Backup contents, subprocesses, secrets, containers, volumes, generated files |
+| Logging, diagnostics, testing, and delivery | `repom/logging.py`, `repom/diagnostics/`, `repom/testing.py`, `tests/`, `.github/`, `.claude/hooks/session-start.sh`, `.claude/settings.json`, `.codex/config.toml`, `.mcp.json`, `.pre-commit-config.yaml`, `.vscode/tasks.json`, `scripts/`, `pyproject.toml`, `uv.lock` | Sensitive output, test isolation, dependency and build integrity |
 
 SQLite and PostgreSQL, including the asynchronous drivers, are primary database
 paths. Redis and pgAdmin management are also in scope. Examples, documentation,
@@ -43,10 +43,13 @@ Trace the active call path before treating a static template as a runtime defaul
   They run with the application's authority. A supported expression API is not
   a sandbox, but value-only APIs and explicit allowlists still need enforcement.
 - `CONFIG_HOOK`, model locations, package prefixes, `alembic.ini`, migration
-  scripts, and engine factories are operator/developer-controlled. In particular,
-  `alembic.ini` is trusted code-equivalent configuration. Receiving request data
-  in one of these settings would cross a trust boundary and remains reportable.
-  A package-prefix check does not sandbox imported Python code.
+  scripts, engine factories, the master-data directory whose Python files
+  `db_sync_master` executes, and module names passed to
+  `debug_repository_queries` are operator/developer-controlled. `CONFIG_HOOK`
+  may also be loaded from a `.env` file that `load_dotenv()` discovers. In
+  particular, `alembic.ini` is trusted code-equivalent configuration. Receiving
+  request data in one of these settings would cross a trust boundary and remains
+  reportable. A package-prefix check does not sandbox imported Python code.
 - Consumers own authentication, record/tenant authorization, input schemas,
   field exposure, and limits at their application boundary. repom must preserve
   the predicates and restrictions passed to it. A dropped authorization filter
@@ -56,9 +59,12 @@ Trace the active call path before treating a static template as a runtime defaul
   attacker can modify them without identifying that access and its prerequisites.
   Their trusted ownership does not excuse injection into generated formats,
   unintended file access, or disclosure to a less privileged observer.
-- Restoring SQL executes the selected backup's contents with database privileges.
-  Operators must establish backup provenance. A SHA-256 sidecar detects a mismatch;
-  it does not authenticate a backup when an attacker can replace both files.
+- Restoring plain SQL runs the backup through `psql`. `psql` executes SQL with the
+  restore role's database privileges and meta-commands with the OS privileges of
+  the `psql` process (the host user or the container user). A SHA-256 sidecar
+  detects a mismatch only when it is present. A missing sidecar logs a warning
+  and the restore proceeds. It does not authenticate a backup when an attacker
+  can replace or remove the sidecar.
 - `basekit`, SQLAlchemy, Alembic, database drivers, database servers, and Docker
   are dependencies across this repository's boundary. Review repom's use of them
   and identify the owning dependency for upstream defects. No claim that their
@@ -247,6 +253,12 @@ An empty findings list is not a security certification.
 - Execution of intentionally supplied Python hooks, migrations, or trusted SQL
   expressions is expected capability. A lower-trust route into those execution
   paths, or a bypass of an explicit restriction, is a separate finding.
+- The trusted-expression exclusion applies only to `ClauseElement` or
+  ORM-attribute objects supplied by application code. It does not cover plain
+  strings, including strings inside sequences, dicts, or other containers, that
+  reach a parser or SQLAlchemy label/attribute resolution. Reviews must identify
+  each expression-accepting parameter (for example, `order_by` sequences,
+  `filters`, `options`, `filter_by`/`get_by` values, and `ids`).
 - Deliberately selected administrative operations and documented overrides need
   their preconditions checked. The mere existence of a destructive API is not
   evidence of unauthorized access; unintended targets or bypassed safeguards are.
@@ -274,6 +286,10 @@ Existing tests provide useful evidence entry points: `test_update_from_dict.py`,
 `test_create_test_fixtures_safety.py`, and the administrative-command tests under
 `tests/unit_tests/`, plus migration behavior tests under `tests/behavior_tests/`.
 They do not replace source review or prove every platform/driver path is covered.
+CI runs on Ubuntu only. File-permission tests skip on Windows, and repom sets no
+Windows ACLs. The PostgreSQL integration job exercises only the synchronous
+psycopg path. asyncpg TLS adaptation, client-tool TLS, and Docker paths are
+covered by unit tests with fakes.
 
 The dependency audit workflow checks known advisories on dependency changes and
 weekly. This does not establish that a dependency is safe or audit private/git

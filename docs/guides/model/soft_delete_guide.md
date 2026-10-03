@@ -394,12 +394,19 @@ def restore_article(article_id: int):
     raise HTTPException(status_code=404, detail="削除済み記事が見つかりません")
 
 @router.get("/articles")
-def list_articles(include_deleted: bool = False):
+def list_articles(
+    include_deleted: bool = False,
+    current_user=Depends(get_current_user),
+):
     """記事一覧を取得"""
     repo = BaseRepository(Article)
+    if include_deleted and not current_user.is_staff:
+        raise HTTPException(status_code=403, detail="Forbidden")
     articles = repo.find(include_deleted=include_deleted, limit=100)
     return [article.to_dict() for article in articles]
 ```
+
+一覧 API で `include_deleted=True` を許可する場合は、値を Repository に渡す前にアプリケーション側の認可チェック（またはスタッフ専用ルート）を必ず行ってください。詳細は [SECURITY.md](../../../SECURITY.md) を参照してください。FastAPI の `Depends` で利用する `get_current_user` とスタッフ判定は、アプリケーションの認証・認可実装に合わせてください。
 
 ### バッチ処理での物理削除
 

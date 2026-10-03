@@ -277,6 +277,7 @@ uv run alembic current
 - [技術資料一覧](docs/technical/README.md)
 - [機能アイデア](docs/ideas/README.md)
 - [プロジェクト規約](AGENTS.md)
+- [Security Policy](SECURITY.md)
 
 Issue とクロスプロジェクト提案はローカル Markdown ではなく issuekit API で
 管理します。手順の正本は `issuekit protocol --role <role>` です。外部プロジェクト
