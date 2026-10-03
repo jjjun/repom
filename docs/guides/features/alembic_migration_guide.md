@@ -116,8 +116,10 @@ CLI の `main()` だけがこの例外を表示して終了コード 1 に変換
 
 開発中にマイグレーション履歴をリセットしたい場合：
 
+以下の CLI コマンドは production 環境での拒否と実行前確認を適用します。
+
 ```bash
-# CLI コマンドで実行（<root_path>/alembic.ini が必要）
+# ガード付き CLI（production は拒否され、実行前の確認が必要）
 uv run alembic_reset
 
 # 別の alembic.ini（別の名前空間）を対象にする場合
@@ -130,11 +132,17 @@ uv run alembic_reset -c path/to/alembic.ini
 
 **プログラムから実行**:
 ```python
+from repom.alembic.setup import AlembicSetup
+from repom.scripts.alembic_reset import reset_alembic_migrations
+
+# CLI と同じガードを適用して完全リセットする。
+# DB URL と実行環境は config.db_url / config.exec_env を使用する。
+# 非 TTY では CLI の --yes に相当する yes=True が必要。TTY では確認プロンプトが表示される。
+reset_alembic_migrations(config_path=project_root / "alembic.ini", yes=True)
+
 setup = AlembicSetup(project_root, db_url)
 
-# マイグレーション履歴とファイルをリセット
-setup.reset_migrations(drop_table=True, delete_files=True)
-
+# 低レベル API: production 拒否と確認は行わない。呼び出し側で両方を保証する。
 # テーブルのみ削除
 setup.reset_migrations(drop_table=True, delete_files=False)
 
@@ -142,10 +150,17 @@ setup.reset_migrations(drop_table=True, delete_files=False)
 setup.reset_migrations(drop_table=False, delete_files=True)
 ```
 
+`alembic_reset` CLI と `reset_alembic_migrations()` wrapper は完全リセットを行い、
 `is_prod_exec_env(config.exec_env)` が真になる環境（`prod` / `production`。大文字小文字と
 前後の空白は正規化）では `--yes` の有無に関わらず実行を拒否します。TTY では
 `--yes` を指定しても確認プロンプトが表示され、`y` の入力が必要です。非 TTY
-では `--yes` / `-y` が必要です。
+では `--yes` / `-y` が必要です。`AlembicSetup.reset_migrations()` は低レベル API で、
+production 拒否も確認も行いません。直接呼び出す場合、これらの安全策は呼び出し側が担います。
+非 TTY の Python プロセスから wrapper を呼び出す場合は CLI の `--yes` に相当する
+`yes=True` が必要です。TTY では `yes=True` を指定しても確認プロンプトが表示されます。
+production 環境での拒否、確認で `y` 以外を入力した場合、または非 TTY で `yes=True` を
+指定しなかった場合、wrapper は戻らず `SystemExit(1)` を送出します。処理を継続する必要がある
+Python 呼び出し元は `SystemExit` を捕捉してください。
 
 ---
 
@@ -174,9 +189,30 @@ EXEC_ENV=prod uv run alembic upgrade head
 
 **PowerShell の場合**:
 ```powershell
-$env:EXEC_ENV='dev'; uv run alembic upgrade head
-$env:EXEC_ENV='prod'; uv run alembic upgrade head
+function Invoke-WithExecEnv {
+    param([string]$ExecEnv, [scriptblock]$Action)
+
+    $hadExecEnv = Test-Path Env:EXEC_ENV
+    $previousExecEnv = $env:EXEC_ENV
+    try {
+        $env:EXEC_ENV = $ExecEnv
+        & $Action
+    }
+    finally {
+        if ($hadExecEnv) {
+            $env:EXEC_ENV = $previousExecEnv
+        }
+        else {
+            Remove-Item Env:EXEC_ENV -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Invoke-WithExecEnv 'dev' { uv run alembic upgrade head }
+Invoke-WithExecEnv 'prod' { uv run alembic upgrade head }
 ```
+
+wrapper はコマンドの成功・失敗にかかわらず、実行前の値（未設定の場合は未設定）へ戻します。
 
 ### ディレクトリ構造
 
@@ -208,6 +244,9 @@ in-memory SQLite を使用するため、通常はファイルを作成しませ
 
 **重要**: マイグレーションファイルの保存場所を制御するには `alembic.ini` が**必須**です。
 
+共有 `alembic/env.py` は設定ファイルがあると `logging.config.fileConfig()` を呼び出すため、
+ロギング設定も必要です。`alembic_init` が生成するテンプレートと同じ logging sections を含む例です。
+
 ```ini
 # mine-py/alembic.ini
 [alembic]
@@ -228,9 +267,41 @@ version_locations = %(here)s/alembic/versions
 
 # autogenerate から除外する別名前空間のバージョンテーブル（カンマ区切り）
 # autogenerate_exclude_tables = alembic_version_fast_domain
-```
 
-**最小限の設定**: 上記のみで動作します。ロギング設定は省略可能です。
+[loggers]
+keys = root,sqlalchemy,alembic
+
+[handlers]
+keys = console
+
+[formatters]
+keys = generic
+
+[logger_root]
+level = WARN
+handlers = console
+qualname =
+
+[logger_sqlalchemy]
+level = WARN
+handlers =
+qualname = sqlalchemy.engine
+
+[logger_alembic]
+level = INFO
+handlers =
+qualname = alembic
+
+[handler_console]
+class = StreamHandler
+args = (sys.stderr,)
+level = NOTSET
+formatter = generic
+
+[formatter_generic]
+format = %(levelname)-5.5s [%(name)s] %(message)s
+datefmt = %H:%M:%S
+```
 
 複数の独立したマイグレーション名前空間を使用する場合は、それぞれに異なる
 `script_location`、`version_locations`、`version_table` を設定します。
@@ -326,8 +397,10 @@ mine-py/
 ## セキュリティ上の注意
 
 `alembic.ini` はソースコードと同じ信頼レベルで扱う設定ファイルです。
-`pre_migration_hook` は `module:callable` をそのまま解決して呼び出すため、
-攻撃者が制御できる値が混入するとコード実行につながります。
+`pre_migration_hook` は `module:callable` を解決して呼び出し、ロギング handler の
+`class` と `args` は `fileConfig` が評価します。`script_location` は実行する `env.py` を選び、
+`prepend_sys_path` は import 解決に影響し、`[post_write_hooks]` はコードを実行できます。
+これらの設定に未信頼値を使わないでください。自動生成・編集した migration も適用前に内容を確認してください。
 `AlembicTemplates.generate_alembic_ini`（`AlembicSetup.create_alembic_ini`
 経由の呼び出しも含む）の `script_location`、`version_locations`、
 `version_table`、`version_table_schema`、`autogenerate_exclude_tables` には、
@@ -349,7 +422,7 @@ mine-py/
 # Alembic 環境を初期化（alembic.ini + versions/ 作成）
 uv run alembic_init
 
-# マイグレーション履歴をリセット（開発時のみ）
+# ガード付き CLI リセット（production は拒否され、実行前の確認が必要）
 uv run alembic_reset
 ```
 
@@ -482,15 +555,9 @@ print("Loaded models:", Base.metadata.tables.keys())
 
 ### 環境変数が反映されない
 
-**PowerShell の正しい書き方**:
-```powershell
-# 正しい
-$env:EXEC_ENV='prod'; uv run alembic upgrade head
-
-# 間違い（環境変数が残る）
-$env:EXEC_ENV='prod'
-uv run alembic upgrade head
-```
+PowerShell では、代入とコマンドを同じ行に書いても別々の行に書いても、
+`$env:EXEC_ENV` はセッションに残ります。実行後に元の値（未設定なら未設定）へ戻すには、
+前述の `try/finally` wrapper を使ってください。
 
 ### マイグレーションファイルが見つからない
 
