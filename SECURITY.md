@@ -78,41 +78,74 @@ reviewed revision. A listed control or existing test is not proof of enforcement
 
 ### Query scope and transactions
 
-- Data values must not become SQL syntax through string interpolation. Dynamic
-  identifiers must be resolved or quoted for their actual SQL context; bound
-  parameters alone do not protect identifiers. Custom SQL compilation and CLI
-  SQL generation deserve the same review as repository queries.
-- String ordering, including string entries in `order_by` sequences and sequence
-  `default_order_by` values, must respect `allowed_order_columns` and accepted
-  directions. Equality selectors must resolve mapped columns and respect
-  configured `allowed_filter_columns`. The latter defaults to no additional
-  allowlist; consumers exposing field names must configure one. Trusted
-  SQLAlchemy ordering expressions are a separate API from the string ordering
-  parser.
-- `get_or_create` lookups use the same mapped-column resolution and
-  `allowed_filter_columns` rules as equality selectors, and apply the default
-  soft-delete filter. A matching deleted row is treated as absent; creation is
-  attempted, and a conflicting unique constraint can raise `IntegrityError`.
-- Many-to-many target lookup fields and link field names must resolve to mapped
-  columns, and target lookup fields must not be empty.
-- Value-only equality and ID parameters must reject SQLAlchemy expressions.
-  This includes `get_by` values, `get_by_id`, soft-delete ID operations, and
-  `find_by_ids`.
-- Supplied filters and bulk-operation selections must retain their meaning.
-  The default filter builder must reject populated, unmapped `FilterParams`
-  fields rather than silently dropping them. Value-only bulk-delete IDs must
-  not accept SQL expressions as values. Check both repository implementations.
-- Operations with default soft-delete filtering must preserve it unless the
-  caller explicitly selects the documented deleted-record behavior. Soft delete
-  and `include_deleted` are not substitutes for application authorization.
-- Supplied `limit` and `offset` must satisfy their type/range checks and the
-  configured `max_limit`. An omitted limit is not automatically capped; `find()`
-  warns about unbounded retrieval. Resource-exhaustion analysis must account for
-  caller limits, collection sizes, parsing depth, and query cost.
-- Repositories must preserve transaction ownership: internally owned sessions
-  manage commit/rollback; operations using an external session leave that
-  transaction's commit/rollback to the caller. Check exceptional and asynchronous
-  cancellation paths for leaks or unintended partial persistence.
+Unless a difference is stated below, these contracts apply to both
+`BaseRepository` and `AsyncBaseRepository`.
+
+- SQL values must not become syntax through interpolation. Dynamic identifiers
+  and literals must be quoted for their actual, possibly nested SQL context,
+  including a literal inside a dollar-quoted PostgreSQL `DO` body. Bound
+  parameters do not protect identifiers. Review custom SQL compilation and CLI
+  SQL generation (`repom/postgres/` and `repom/alembic/reset.py`) alongside
+  repository queries.
+- String `order_by` and `default_order_by` values use `column[:asc|desc]` and
+  must pass the `allowed_order_columns` check (default: seven common names) and
+  the model class-attribute lookup. String elements inside list/tuple ordering
+  values are parsed and checked too. The lookup is not mapped-column
+  resolution. SQLAlchemy expressions and non-string elements in sequences are
+  trusted ordering inputs and bypass the string allowlist. Review
+  `virtual_order_columns` and their caller handling as well.
+- `get_by()`, `get_or_create()` lookups, and the `filter_by` arguments of
+  `bulk_update()`, `bulk_delete()` and `bulk_permanent_delete()` resolve mapped
+  columns and respect `allowed_filter_columns`; its default `None` permits every
+  mapped column. These equality paths reject SQLAlchemy expressions as values.
+  `filters` arguments are caller-supplied SQLAlchemy expressions and do not use
+  this name-based resolver.
+  `get_or_create()` also applies the default soft-delete filter, so a matching
+  deleted row is treated as absent and a conflicting unique constraint can
+  raise `IntegrityError`. `ManyToManyMixin` requires non-empty lookup fields and
+  resolves lookup/link names to mapped columns, but it does not use
+  `allowed_filter_columns` or check lookup values as plain values. The `id`
+  values in `bulk_update()` rows bypass the equality resolver when `filter_by`
+  is omitted. Its update keys have no allowlist and can update primary-key
+  columns when `filter_by` or `filters` supplies the row selection.
+- `get_by_id()` and the ID-based soft-delete methods validate IDs against
+  SQLAlchemy expressions. `find_by_ids()`, `bulk_delete()` and
+  `bulk_permanent_delete()` reject expression/ORM-attribute elements in their
+  `ids` sequences. The default `_build_filters()` rejects `FilterParams` fields
+  whose dumped value is non-`None` (including defaults) when no non-`None`
+  mapping exists; overriding `_build_filters()` disables that check. Mapped
+  non-string iterables become `IN` filters without a size cap. `MatchColumn`
+  supports range comparisons and prefix/contains `LIKE`; the LIKE length limit
+  defaults to 256 characters and can be configured per mapping.
+- For soft-deletable models, `find()`, `find_one()`, `get_by()`, `get_by_id()`,
+  `get_all()`, `find_by_ids()`, `count()`, `count_by_params()`, `bulk_update()`
+  and soft `bulk_delete()` exclude deleted rows by default; `include_deleted`
+  opts in where supported. `get_or_create()` also excludes deleted rows.
+  `find_deleted()` and `find_deleted_before()` select deleted rows;
+  `restore()` acts on deleted rows; `permanent_delete()`,
+  `bulk_permanent_delete()` and `remove()` physically delete. Many-to-many target
+  lookups and relationship/eager loads do not inherit repository soft-delete
+  filtering. There is no repository-wide scoping hook: overriding `find()` does
+  not constrain `get_by()`, `get_by_id()`, counts, bulk operations or
+  `get_or_create()`. Consumers must not expose `include_deleted` without
+  authorization.
+- `limit` and `offset` receive type/range checks, and an explicit `limit` is
+  checked against `max_limit` (default 1000, configurable to `None`). An omitted
+  limit is not capped. Only `find()` warns when its limit is omitted;
+  `get_all()`, `get_by(single=False)`, `find_by_ids()` and `find_deleted*()` do
+  not warn and can return all matches. Offsets, `IN` list sizes, the number of
+  per-row `bulk_update()` statements, and eager-loaded collection sizes from
+  `options`/`default_options` are not otherwise bounded. `listjson_filter()`
+  builds one correlated `EXISTS` per distinct requested value without a size cap.
+- With an external session, sync and async repositories do not commit or roll
+  back, but write paths flush. `remove()` may call `merge()`;
+  `get_or_create()` opens a SAVEPOINT and issues raw `BEGIN` on SQLite; sync
+  `bulk_update()` and `bulk_delete()` call `expire_all()` (the async methods do
+  not). Since `bulk_update()` checks NUL bytes row by row, failure partway
+  through can leave earlier statements in the caller's transaction. Async
+  cancellation is shielded for internally owned session rollback and close in
+  `DatabaseManager`; repository-level cancellation is not tested, and a cancel
+  during commit leaves the outcome unknown.
 
 ### Model mutation and output
 
