@@ -1,8 +1,10 @@
 """PostgreSQL integration tests - requires running PostgreSQL Docker container"""
 import gzip
 from repom.config import config
+from repom.database import safe_db_url
 import pytest
 import os
+from types import SimpleNamespace
 from uuid import uuid4
 from sqlalchemy import text
 from sqlalchemy import create_engine
@@ -383,19 +385,44 @@ def postgres_db_test(postgres_model_engine):
         connection.close()
 
 
-def print_test_info():
+def print_test_info(config_obj=config):
     """テスト情報を表示"""
     import os
-    from repom.config import config
 
     print("\n" + "="*60)
     print("PostgreSQL Integration Test Information")
     print("="*60)
     print(f"EXEC_ENV: {os.getenv('EXEC_ENV', 'not set')}")
-    print(f"Config DB Type: {config.db_type}")
-    print(f"Config DB URL: {config.db_url}")
-    print(f"PostgreSQL Database: {config.postgres_db}")
+    print(f"Config DB Type: {config_obj.db_type}")
+    print(f"Config DB URL: {safe_db_url(str(config_obj.db_url))}")
+    print(f"PostgreSQL Database: {config_obj.postgres_db}")
     print("="*60 + "\n")
+
+
+def test_print_test_info_masks_database_secrets(capsys):
+    config_obj = SimpleNamespace(
+        db_type='postgres',
+        db_url=(
+            'postgresql://test-user:raw%40userinfo%2Bsecret@db.example:5432/repom_test'
+            '?password=raw%2Bquery%2Fsecret'
+        ),
+        postgres_db='repom_test',
+    )
+
+    print_test_info(config_obj)
+
+    output = capsys.readouterr().out
+    for secret in (
+        'raw@userinfo+secret',
+        'raw%40userinfo%2Bsecret',
+        'raw+query/secret',
+        'raw%2Bquery%2Fsecret',
+    ):
+        assert secret not in output
+    assert 'Config DB Type: postgres' in output
+    assert 'db.example:5432/repom_test' in output
+    assert 'password=***' in output
+    assert 'PostgreSQL Database: repom_test' in output
 
 
 # テスト実行前に情報表示
