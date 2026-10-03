@@ -39,6 +39,10 @@ class ListModelRepository(BaseRepository[ListModel]):
         return super().find(filters=merged_filters, include_deleted=include_deleted, **kwargs)
 
 
+def test_listjson_python_type_is_list():
+    assert ListJSON().python_type is list
+
+
 def test_list_json_default_empty_list(db_test):
     log = ListModel()
     db_test.add(log)

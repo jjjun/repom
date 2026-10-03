@@ -121,6 +121,11 @@ string 保存型で、bind 時に `datetime.isoformat()` で serialize し、読
 `datetime.fromisoformat()` で parse します。text column が必要なら `ISO8601DateTimeStr`、
 native datetime column なら `ISO8601DateTime`（または `AutoDateTime`）を選んでください。
 
+`UTCDateTime`、`AutoDateTime`、`ISO8601DateTime`、
+`ISO8601DateTimeStr` の `python_type` は `datetime.datetime`、
+`ListJSON` は `list` です。`CustomJSON` は任意の JSON 値を扱い、
+値の形を限定しないため `python_type` を宣言しません。
+
 `ListJSON` の `listjson_filter(model_column, values)` は、「column に指定したすべての値が含まれる」
 query の filter condition を作ります。異なる各値は outer query に table-valued join を追加せず、
 `json_each` の展開に対する相関 `EXISTS` になります。そのため、array 内の重複値や複数の検索値で

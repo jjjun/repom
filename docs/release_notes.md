@@ -188,6 +188,11 @@
 
 ### Added
 
+- SQLAlchemy custom types now declare `python_type`: `UTCDateTime`, `AutoDateTime`,
+  `ISO8601DateTime`, and `ISO8601DateTimeStr` return `datetime`; `ListJSON` returns
+  `list`. `CustomJSON` remains undeclared because it supports arbitrary JSON values.
+  Schema generators that inspect `python_type`, such as fast-domain `BaseModelAuto`,
+  can emit concrete types instead of `Any`, making generated schemas stricter.
 - `RepomConfig.redis_connection_kwargs()` validates Redis connection settings in
   production, rejecting non-local hosts unless `REDIS_ALLOW_INSECURE_REMOTE=true` opts
   into transport protection outside repom. The `repom_info` Redis probe uses the new

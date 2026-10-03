@@ -16,6 +16,10 @@ class ListJSON(TypeDecorator):
     impl = JSON
     cache_ok = True
 
+    @property
+    def python_type(self):
+        return list
+
     def process_bind_param(self, value, dialect):
         # impl (JSON) が Python オブジェクトを自動でシリアライズするため、ここで
         # json.dumps() すると二重エンコードになり、json_each() など SQL 側で

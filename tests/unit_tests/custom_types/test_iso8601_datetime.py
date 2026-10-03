@@ -27,6 +27,14 @@ def setup_tables(setup_database_tables):
     pass
 
 
+def test_iso8601_datetime_python_type_is_datetime():
+    assert ISO8601DateTime().python_type is datetime
+
+
+def test_iso8601_datetime_str_python_type_is_datetime():
+    assert ISO8601DateTimeStr().python_type is datetime
+
+
 def test_iso8601_datetime_roundtrip_datetime(db_test):
     value = datetime(2026, 1, 1, 12, 30, 0)
     record = Iso8601DateTimeModel(value=value)

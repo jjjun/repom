@@ -21,6 +21,10 @@ def setup_tables(setup_database_tables):
     pass
 
 
+def test_autodatetime_python_type_is_datetime():
+    assert AutoDateTime().python_type is datetime
+
+
 def test_created_at_default_now(db_test):
     now_utc = datetime.now(timezone.utc)
     log = CreatedAtModel()

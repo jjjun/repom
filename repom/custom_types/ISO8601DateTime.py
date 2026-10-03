@@ -16,6 +16,10 @@ class ISO8601DateTime(TypeDecorator):
     impl = DateTime
     cache_ok = True  # SQLAlchemy 2.0+ でキャッシュを有効化
 
+    @property
+    def python_type(self):
+        return datetime
+
     def process_bind_param(self, value, dialect):
         if value is not None:
             if isinstance(value, datetime):

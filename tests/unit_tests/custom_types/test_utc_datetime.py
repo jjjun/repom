@@ -20,6 +20,10 @@ from repom.custom_types import UTCDateTime
 from repom.mixins import SoftDeletableMixin
 
 
+def test_utc_datetime_python_type_is_datetime():
+    assert UTCDateTime().python_type is datetime
+
+
 def _datetime_table(metadata):
     return Table(
         'utc_datetime_test_values',

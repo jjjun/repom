@@ -23,6 +23,11 @@ def setup_tables(setup_database_tables):
     pass
 
 
+def test_custom_json_python_type_is_undeclared():
+    with pytest.raises(NotImplementedError):
+        CustomJSON().python_type
+
+
 def test_custom_json_none_saved_as_null(db_test):
     """CustomJSON カラムに None を保存すると DB では NULL が保存されることを確認する。"""
     record = CustomJsonModel(payload=None)

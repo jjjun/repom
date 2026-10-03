@@ -9,6 +9,10 @@ class UTCDateTime(TypeDecorator):
     impl = DateTime(timezone=True)
     cache_ok = True
 
+    @property
+    def python_type(self):
+        return datetime
+
     def process_bind_param(self, value, dialect):
         if value is None:
             return None
