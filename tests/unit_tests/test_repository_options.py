@@ -260,27 +260,6 @@ def test_find_with_nested_joinedload(db_test, setup_test_data):
         assert review.book.author is not None
 
 
-def test_get_by_with_options(db_test, setup_test_data):
-    """
-    get_by メソッドの制限事項を確認
-
-    Note: get_by は内部で find を呼ぶが、**kwargs を渡していないため、
-    現状では options を使用できない。
-    options を使用する場合は find() メソッドを直接使用する必要がある。
-    """
-    repo = BookRepository(session=db_test)
-
-    # get_by は options をサポートしていない（設計上の制限）
-    # 代わりに find() を使用する
-    books = repo.find(
-        filters=[EagerBookModel.title == "Book 1"],
-        options=[joinedload(EagerBookModel.author)]
-    )
-
-    assert isinstance(books, list)
-    assert len(books) == 1
-    assert books[0].title == "Book 1"
-    assert books[0].author is not None
 
 
 def test_options_none_behavior(db_test, setup_test_data):
@@ -343,6 +322,7 @@ def test_get_by_with_options_single(db_test, setup_test_data):
 
     assert book is not None
     assert book.title == "Book 1"
+    db_test.expunge(book)
     # N+1 なしで author にアクセスできる
     assert book.author is not None
     assert book.author.name == "Author One"
@@ -365,6 +345,7 @@ def test_get_by_with_options_multiple(db_test, setup_test_data):
 
     assert isinstance(books, list)
     assert len(books) == 2
+    db_test.expunge_all()
     # N+1 なしで reviews にアクセスできる
     for book in books:
         assert isinstance(book.reviews, list)

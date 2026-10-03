@@ -8,6 +8,7 @@ save/saves/remove について tests/unit_tests/test_external_session_commit.py 
 """
 
 from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sqlalchemy import String, select
@@ -53,7 +54,7 @@ _external_async_transaction = asynccontextmanager(get_async_db_transaction)
 # ---------------------------------------------------------------------------
 
 
-def test_soft_delete_does_not_commit_external_session(db_test):
+def test_soft_delete_does_not_commit_external_session(db_test, monkeypatch):
     """外部セッション: soft_delete() が commit を実行しない"""
     prep_repo = ExternalSessionSoftDeleteRepository()
     item = prep_repo.save(ExternalSessionSoftDeleteModel(name="soft_delete_external_target"))
@@ -61,8 +62,11 @@ def test_soft_delete_does_not_commit_external_session(db_test):
 
     with get_reusable_sync_transaction() as session:
         repo = ExternalSessionSoftDeleteRepository(session)
+        commit = Mock(wraps=session.commit)
+        monkeypatch.setattr(session, "commit", commit)
 
         assert repo.soft_delete(item_id) is True
+        commit.assert_not_called()
 
         # 同じトランザクション内では反映されている
         stmt = select(ExternalSessionSoftDeleteModel).where(
@@ -79,7 +83,7 @@ def test_soft_delete_does_not_commit_external_session(db_test):
     assert deleted_item.is_deleted is True
 
 
-def test_restore_does_not_commit_external_session(db_test):
+def test_restore_does_not_commit_external_session(db_test, monkeypatch):
     """外部セッション: restore() が commit を実行しない"""
     prep_repo = ExternalSessionSoftDeleteRepository()
     item = prep_repo.save(ExternalSessionSoftDeleteModel(name="restore_external_target"))
@@ -88,8 +92,11 @@ def test_restore_does_not_commit_external_session(db_test):
 
     with get_reusable_sync_transaction() as session:
         repo = ExternalSessionSoftDeleteRepository(session)
+        commit = Mock(wraps=session.commit)
+        monkeypatch.setattr(session, "commit", commit)
 
         assert repo.restore(item_id) is True
+        commit.assert_not_called()
 
         stmt = select(ExternalSessionSoftDeleteModel).where(
             ExternalSessionSoftDeleteModel.id == item_id
@@ -103,7 +110,7 @@ def test_restore_does_not_commit_external_session(db_test):
     assert restored_item.is_deleted is False
 
 
-def test_permanent_delete_does_not_commit_external_session(db_test):
+def test_permanent_delete_does_not_commit_external_session(db_test, monkeypatch):
     """外部セッション: permanent_delete() が commit を実行しない"""
     prep_repo = ExternalSessionSoftDeleteRepository()
     item = prep_repo.save(ExternalSessionSoftDeleteModel(name="permanent_delete_external_target"))
@@ -111,8 +118,11 @@ def test_permanent_delete_does_not_commit_external_session(db_test):
 
     with get_reusable_sync_transaction() as session:
         repo = ExternalSessionSoftDeleteRepository(session)
+        commit = Mock(wraps=session.commit)
+        monkeypatch.setattr(session, "commit", commit)
 
         assert repo.permanent_delete(item_id) is True
+        commit.assert_not_called()
 
         stmt = select(ExternalSessionSoftDeleteModel).where(
             ExternalSessionSoftDeleteModel.id == item_id
@@ -127,6 +137,7 @@ def test_permanent_delete_does_not_commit_external_session(db_test):
 @pytest.mark.asyncio
 async def test_async_soft_delete_does_not_commit_external_session(
     isolated_async_database_manager,
+    monkeypatch,
 ):
     """外部セッション（非同期）: soft_delete() が commit を実行しない"""
     prep_repo = AsyncExternalSessionSoftDeleteRepository()
@@ -135,8 +146,11 @@ async def test_async_soft_delete_does_not_commit_external_session(
 
     async with _external_async_transaction() as session:
         repo = AsyncExternalSessionSoftDeleteRepository(session)
+        commit = AsyncMock(wraps=session.commit)
+        monkeypatch.setattr(session, "commit", commit)
 
         assert await repo.soft_delete(item_id) is True
+        commit.assert_not_called()
 
         stmt = select(ExternalSessionSoftDeleteModel).where(
             ExternalSessionSoftDeleteModel.id == item_id
@@ -155,6 +169,7 @@ async def test_async_soft_delete_does_not_commit_external_session(
 @pytest.mark.asyncio
 async def test_async_restore_does_not_commit_external_session(
     isolated_async_database_manager,
+    monkeypatch,
 ):
     """外部セッション（非同期）: restore() が commit を実行しない"""
     prep_repo = AsyncExternalSessionSoftDeleteRepository()
@@ -164,8 +179,11 @@ async def test_async_restore_does_not_commit_external_session(
 
     async with _external_async_transaction() as session:
         repo = AsyncExternalSessionSoftDeleteRepository(session)
+        commit = AsyncMock(wraps=session.commit)
+        monkeypatch.setattr(session, "commit", commit)
 
         assert await repo.restore(item_id) is True
+        commit.assert_not_called()
 
         stmt = select(ExternalSessionSoftDeleteModel).where(
             ExternalSessionSoftDeleteModel.id == item_id
@@ -183,6 +201,7 @@ async def test_async_restore_does_not_commit_external_session(
 @pytest.mark.asyncio
 async def test_async_permanent_delete_does_not_commit_external_session(
     isolated_async_database_manager,
+    monkeypatch,
 ):
     """外部セッション（非同期）: permanent_delete() が commit を実行しない"""
     prep_repo = AsyncExternalSessionSoftDeleteRepository()
@@ -191,8 +210,11 @@ async def test_async_permanent_delete_does_not_commit_external_session(
 
     async with _external_async_transaction() as session:
         repo = AsyncExternalSessionSoftDeleteRepository(session)
+        commit = AsyncMock(wraps=session.commit)
+        monkeypatch.setattr(session, "commit", commit)
 
         assert await repo.permanent_delete(item_id) is True
+        commit.assert_not_called()
 
         stmt = select(ExternalSessionSoftDeleteModel).where(
             ExternalSessionSoftDeleteModel.id == item_id

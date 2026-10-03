@@ -1,12 +1,8 @@
 import tomllib
 from pathlib import Path
-from runpy import run_path
 from types import SimpleNamespace
 
-
-_debug_logging_enabled = run_path(
-    str(Path(__file__).parents[1] / "conftest.py")
-)["_debug_logging_enabled"]
+from tests.pytest_helpers import _debug_logging_enabled
 
 
 def test_project_defaults_do_not_override_quiet_or_capture_options():

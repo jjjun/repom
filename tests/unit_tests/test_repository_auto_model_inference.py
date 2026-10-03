@@ -1,14 +1,14 @@
 """
 Test: Repository __init__ without model argument (auto inference)
 
-Issue: https://github.com/repom/repom/issues/XXX
-
 When a repository class inherits from BaseRepository[Model] and omits __init__,
-calling `repo_class(session)` passes `session` to the `model` parameter,
-causing ArgumentError in SQLAlchemy queries.
+calling `repo_class(session=session)` uses the inferred model and supplied session.
+The positional form `repo_class(session)` is rejected because the inherited
+constructor treats its first positional argument as `model`.
 
 Expected behavior:
-- repo_class(session) should work without defining __init__
+- repo_class(session=session) should work without defining __init__
+- repo_class(session) should raise TypeError with a clear message
 - BaseRepository should infer the model from type parameters
 """
 

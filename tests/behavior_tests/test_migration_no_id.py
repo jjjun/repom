@@ -97,18 +97,11 @@ def test_alembic_migration_without_id():
             alembic_cfg = setup.get_alembic_config()
 
             # マイグレーションファイルを生成
-            try:
-                command.revision(
-                    alembic_cfg,
-                    message="test migration",
-                    autogenerate=True
-                )
-            except Exception as e:
-                # マイグレーション生成に失敗した場合
-                print(f"Migration generation failed: {e}")
-                # このテストはスキップ（環境依存の可能性があるため）
-                import pytest
-                pytest.skip(f"Could not generate migration: {e}")
+            command.revision(
+                alembic_cfg,
+                message="test migration",
+                autogenerate=True
+            )
 
             # 生成されたマイグレーションファイルを確認
             script_dir = ScriptDirectory.from_config(alembic_cfg)

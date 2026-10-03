@@ -5,6 +5,8 @@ Repository が外部セッションと内部セッションを正しく区別し
 適切なタイミングで commit を実行することを確認します。
 """
 
+from unittest.mock import Mock
+
 from sqlalchemy import String, select
 from sqlalchemy.orm import Mapped, mapped_column
 import pytest
@@ -126,10 +128,12 @@ def test_internal_session_saves_with_commit(db_test):
     assert len(batch_items) == 3
 
 
-def test_external_session_saves_no_commit(db_test):
+def test_external_session_saves_no_commit(db_test, monkeypatch):
     """外部セッション: saves() が commit を実行しない"""
     with get_reusable_sync_transaction() as session:
         repo = ExternalSessionTestRepository(session)
+        commit = Mock(wraps=session.commit)
+        monkeypatch.setattr(session, "commit", commit)
 
         instances = [
             ExternalSessionTestModel(name="batch_external_1"),
@@ -137,6 +141,7 @@ def test_external_session_saves_no_commit(db_test):
         ]
 
         repo.saves(instances)
+        commit.assert_not_called()
 
         # トランザクション内では見える
         stmt = select(ExternalSessionTestModel).where(ExternalSessionTestModel.name.like("batch_external_%"))
@@ -171,7 +176,7 @@ def test_internal_session_remove_with_commit(db_test):
     assert found is None
 
 
-def test_external_session_remove_no_commit(db_test):
+def test_external_session_remove_no_commit(db_test, monkeypatch):
     """外部セッション: remove() が commit を実行しない"""
     # テストデータを準備
     prep_repo = ExternalSessionTestRepository()
@@ -181,6 +186,8 @@ def test_external_session_remove_no_commit(db_test):
 
     with get_reusable_sync_transaction() as session:
         repo = ExternalSessionTestRepository(session)
+        commit = Mock(wraps=session.commit)
+        monkeypatch.setattr(session, "commit", commit)
 
         # インスタンスを再取得して削除
         stmt = select(ExternalSessionTestModel).where(ExternalSessionTestModel.id == instance_id)
@@ -188,6 +195,7 @@ def test_external_session_remove_no_commit(db_test):
         to_delete = result.scalar_one()
 
         repo.remove(to_delete)
+        commit.assert_not_called()
 
         # トランザクション内では削除済み
         stmt2 = select(ExternalSessionTestModel).where(ExternalSessionTestModel.id == instance_id)

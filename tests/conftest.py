@@ -10,6 +10,7 @@ from pathlib import Path
 from tempfile import mkdtemp
 
 from dotenv import load_dotenv
+from tests.pytest_helpers import _debug_logging_enabled
 
 
 load_dotenv()
@@ -68,12 +69,6 @@ from repom.testing import create_test_fixtures, create_async_test_fixtures  # no
 
 def pytest_sessionfinish(session, exitstatus):
     shutil.rmtree(_TEST_SESSION_ROOT, ignore_errors=True)
-
-
-def _debug_logging_enabled(config):
-    """Return whether explicit verbose output should enable DEBUG logging."""
-    # pyproject.toml adds -q, so an explicit -vv produces effective verbosity 1.
-    return config.option.verbose >= 1
 
 
 def pytest_configure(config):

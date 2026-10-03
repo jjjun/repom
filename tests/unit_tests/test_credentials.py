@@ -1,5 +1,6 @@
 from io import StringIO
 import os
+import stat
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -139,7 +140,7 @@ def test_secret_env_file_yields_none_for_a_falsy_secret():
         assert path is None
 
 
-def test_secret_env_file_writes_a_0600_file_and_removes_it_afterward():
+def test_secret_env_file_writes_a_file_and_removes_it_afterward():
     with secret_env_file("PGPASSWORD", "sentinel-secret", prefix="repom-test-") as path:
         assert path is not None
         assert os.path.exists(path)
@@ -147,6 +148,14 @@ def test_secret_env_file_writes_a_0600_file_and_removes_it_afterward():
             assert handle.read() == "PGPASSWORD=sentinel-secret\n"
 
     assert not os.path.exists(path)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits do not verify Windows ACLs")
+def test_secret_env_file_creates_a_0600_file():
+    with patch("repom.credentials.os.chmod"):
+        with secret_env_file("PGPASSWORD", "sentinel-secret", prefix="repom-test-") as path:
+            assert path is not None
+            assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
 
 
 def test_run_masked_command_returns_completed_process_on_success():

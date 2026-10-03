@@ -192,14 +192,9 @@ class PriorityTestParamOverClass(BaseModel, use_id=False):
 def test_parameter_takes_priority_over_class_attribute():
     """パラメータ方式がクラス属性より優先される"""
     # パラメータで use_id=False を指定しているので、クラス属性の True は無視される
-    # ただし、__init_subclass__ でパラメータが先に設定されるため、
-    # その後クラス属性が再度上書きする可能性がある
-    # 実際の動作を確認
+    # use_id=False により id 列は生成されない。
     columns = [col.name for col in PriorityTestParamOverClass.__table__.columns]
-    # この場合、クラス属性が後から評価されるため、use_id=True が有効になる
-    # パラメータはクラス定義前に評価されるため
-    assert 'id' in columns or 'id' not in columns  # どちらでも実装次第
-    # 注: この動作は実装に依存するため、実際の結果を確認
+    assert columns == ['code']
 
 
 def test_multiple_styles_can_coexist():
