@@ -143,6 +143,11 @@ class UniqueLookupModel(BaseModel):
     label: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
+class UniqueSoftDeleteLookupModel(BaseModel, SoftDeletableMixin):
+    __tablename__ = 'unique_soft_delete_lookup_model'
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+
+
 class UniqueLookupRepository(BaseRepository[UniqueLookupModel]):
     def __init__(self, session):
         super().__init__(UniqueLookupModel, session)
@@ -1110,6 +1115,86 @@ def test_get_or_create_reraises_non_unique_integrity_errors(db_test):
 
     with pytest.raises(IntegrityError):
         repo.get_or_create({"key": "missing label"})
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_lookup_respects_allowed_filter_columns(repository_adapter):
+    repo = repository_adapter.repository_class(UniqueLookupModel, repository_adapter.session)
+    repo.allowed_filter_columns = ["key"]
+
+    created, was_created = await repository_adapter.call(
+        repo.get_or_create,
+        {"key": "allowed"},
+        {"label": "first"},
+    )
+
+    assert was_created is True
+    assert created.key == "allowed"
+    with pytest.raises(AttributeError):
+        await repository_adapter.call(repo.get_or_create, {"label": "first"})
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_lookup_rejects_non_column_attributes(repository_adapter):
+    repo = repository_adapter.repository_class(UniqueLookupModel, repository_adapter.session)
+
+    with pytest.raises(AttributeError):
+        await repository_adapter.call(repo.get_or_create, {"__tablename__": "unique_lookup_model"})
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_ignores_deleted_matches_by_default(repository_adapter):
+    repo = repository_adapter.repository_class(SoftDeleteCountModel, repository_adapter.session)
+    deleted = await repository_adapter.call(repo.save, SoftDeleteCountModel(name="same"))
+    await repository_adapter.call(repo.soft_delete, deleted.id)
+
+    created, was_created = await repository_adapter.call(
+        repo.get_or_create,
+        {"name": "same"},
+    )
+
+    assert was_created is True
+    assert created.id != deleted.id
+    assert await repository_adapter.call(repo.get_by_id, deleted.id) is None
+    assert await repository_adapter.call(repo.get_by_id, deleted.id, include_deleted=True) is not None
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_raises_when_deleted_match_conflicts_with_unique_constraint(repository_adapter):
+    repo = repository_adapter.repository_class(
+        UniqueSoftDeleteLookupModel,
+        repository_adapter.session,
+    )
+    deleted = await repository_adapter.call(
+        repo.save,
+        UniqueSoftDeleteLookupModel(key="same"),
+    )
+    await repository_adapter.call(repo.soft_delete, deleted.id)
+
+    with pytest.raises(IntegrityError):
+        await repository_adapter.call(repo.get_or_create, {"key": "same"})
+
+
+@pytest.mark.asyncio
+async def test_equality_and_id_lookups_reject_sql_expressions(repository_adapter):
+    repo = repository_adapter.repository_class(SimpleModel, repository_adapter.session)
+
+    with pytest.raises(TypeError, match="plain values"):
+        await repository_adapter.call(repo.get_by, "id", SimpleModel.id)
+    with pytest.raises(TypeError, match="plain values"):
+        await repository_adapter.call(repo.get_by_id, SimpleModel.id)
+
+
+@pytest.mark.asyncio
+async def test_equality_lookup_rejects_clause_element_protocol_objects(repository_adapter):
+    class ClauseElementValue:
+        def __clause_element__(self):
+            return SimpleModel.id
+
+    repo = repository_adapter.repository_class(SimpleModel, repository_adapter.session)
+
+    with pytest.raises(TypeError, match="plain values"):
+        await repository_adapter.call(repo.get_by, "id", ClauseElementValue())
 
 
 def test_count_by_params(db_test):

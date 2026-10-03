@@ -406,6 +406,20 @@ async def test_soft_delete_methods_reject_unsupported_model(repository_adapter):
         await repository_adapter.call(repo.restore, 1)
 
 
+@pytest.mark.asyncio
+async def test_id_based_methods_reject_sql_expressions(repository_adapter):
+    repo = repository_adapter.repository_class(SoftDeleteTestModel, repository_adapter.session)
+
+    with pytest.raises(TypeError, match="plain values"):
+        await repository_adapter.call(repo.get_by_id, SoftDeleteTestModel.id)
+    with pytest.raises(TypeError, match="plain values"):
+        await repository_adapter.call(repo.soft_delete, SoftDeleteTestModel.id)
+    with pytest.raises(TypeError, match="plain values"):
+        await repository_adapter.call(repo.restore, SoftDeleteTestModel.id)
+    with pytest.raises(TypeError, match="plain values"):
+        await repository_adapter.call(repo.permanent_delete, SoftDeleteTestModel.id)
+
+
 class TestFindDeleted:
     """find_deleted() と find_deleted_before() のテスト"""
 

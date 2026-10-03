@@ -99,6 +99,54 @@ def test_add_related_item_links_existing_unlinked_target(db_test):
     assert _link_count(db_test, owner.id, existing.id) == 1
 
 
+def test_add_related_item_rejects_non_column_lookup_fields(db_test):
+    owner = _create_owner(db_test)
+
+    with pytest.raises(AttributeError, match="Unknown column"):
+        owner.add_related_item(
+            data={"name": "Target", "slug": "target"},
+            target_model_class=ManyToManyTargetModel,
+            link_model_class=ManyToManyLinkModel,
+            self_foreign_key="owner_id",
+            target_foreign_key="target_id",
+            lookup_fields=["__tablename__"],
+        )
+
+    assert db_test.scalar(select(func.count()).select_from(ManyToManyTargetModel)) == 0
+
+
+def test_add_related_item_rejects_empty_lookup_fields(db_test):
+    owner = _create_owner(db_test)
+    existing = ManyToManyTargetModel(name="Existing", slug="existing")
+    db_test.add(existing)
+    db_test.flush()
+
+    with pytest.raises(ValueError, match="at least one lookup field"):
+        owner.add_related_item(
+            data={"name": "Target", "slug": "target"},
+            target_model_class=ManyToManyTargetModel,
+            link_model_class=ManyToManyLinkModel,
+            self_foreign_key="owner_id",
+            target_foreign_key="target_id",
+            lookup_fields=[],
+        )
+
+    assert _link_count(db_test, owner.id, existing.id) == 0
+
+
+def test_find_link_rejects_non_column_field_names(db_test):
+    owner = _create_owner(db_test)
+
+    with pytest.raises(AttributeError, match="Unknown column"):
+        owner._find_link(
+            link_model_class=ManyToManyLinkModel,
+            self_foreign_key="__tablename__",
+            self_id=owner.id,
+            target_foreign_key="target_id",
+            target_id=1,
+        )
+
+
 def test_add_related_item_returns_existing_target_when_already_linked(db_test):
     owner = _create_owner(db_test)
     existing = ManyToManyTargetModel(name="Existing", slug="existing")

@@ -43,6 +43,17 @@ repo = TaskRepository()
 tasks = repo.find(params=TaskFilterParams(status="active", priority="high"), limit=100)
 ```
 
+## 等価検索と `get_or_create`
+
+`get_by()` と `get_or_create()` の lookup key は、モデルのマップ済みカラム名である必要があります。
+`allowed_filter_columns` を設定したリポジトリでは、その許可リストにも含まれていなければなりません。
+未設定の場合はマップ済みカラムに追加の許可制限はありません。これらの値は通常の検索値として扱われ、
+SQLAlchemy 式は指定できません。
+
+論理削除対応モデルの `get_or_create()` は、既定で削除済み行を検索対象から除外します。削除済みの行
+だけが一致する場合は、その行を未登録として扱って作成を試みます。一意制約が既存の削除済み行と
+競合すると、`IntegrityError` が送出されます。`get_or_create()` は削除済み行を自動復元しません。
+
 ---
 
 ## カスタムリポジトリでの処理

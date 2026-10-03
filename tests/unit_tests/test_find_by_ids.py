@@ -13,6 +13,7 @@ N+1 問題を解決するための一括取得メソッドです。
 
 from sqlalchemy import String, event
 from sqlalchemy.orm import Mapped, mapped_column
+import pytest
 from repom.models.base_model import BaseModel
 from repom import BaseRepository
 from repom.mixins import SoftDeletableMixin
@@ -90,6 +91,21 @@ class TestFindByIdsBasic:
         assert len(results) == 1
         assert results[0].id == item.id
         assert results[0].name == "single"
+
+
+@pytest.mark.asyncio
+async def test_find_by_ids_rejects_sql_expressions(repository_adapter):
+    repo = repository_adapter.repository_class(FindByIdsTestModel, repository_adapter.session)
+
+    with pytest.raises(TypeError, match="plain values"):
+        await repository_adapter.call(repo.find_by_ids, [FindByIdsTestModel.id])
+
+    class ClauseElementValue:
+        def __clause_element__(self):
+            return FindByIdsTestModel.id
+
+    with pytest.raises(TypeError, match="plain values"):
+        await repository_adapter.call(repo.find_by_ids, [ClauseElementValue()])
 
 
 class TestFindByIdsEdgeCases:

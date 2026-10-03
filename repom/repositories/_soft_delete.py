@@ -22,6 +22,7 @@ class _SoftDeleteQueryBuilder(Generic[T]):
 
     def _get_by_id_query(self, id: int, include_deleted: bool = False):
         """ID 指定で 1 件取得するクエリを構築する。"""
+        self._validate_value_only(id, "id")
         filters = [self.model.id == id]
         self._append_soft_delete_filter(filters, include_deleted)
 

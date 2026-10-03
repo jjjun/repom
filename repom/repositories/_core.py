@@ -375,7 +375,18 @@ def set_find_option(
         pass
     elif isinstance(order_by, (list, tuple)):
         # Expressions supplied as a sequence define the complete ordering.
-        pass
+        # String entries still use the allowlisted ordering syntax.
+        order_by = [
+            parse_order_by(
+                model,
+                value,
+                allowed_order_columns,
+                virtual_order_columns,
+            )
+            if isinstance(value, str)
+            else value
+            for value in order_by
+        ]
     elif order_by is None and apply_order_by:
         # A primary-key order also covers models that do not have an ``id`` attribute.
         order_by = _primary_key_order(model)

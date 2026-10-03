@@ -222,14 +222,24 @@ class RepositoryBase(Generic[T]):
         例外にする。
         """
         column = self._resolve_column(column_name)
+        self._validate_value_only(value, "value")
         predicate = column == value
         if not isinstance(predicate, ColumnElement):
             raise AttributeError(f"Unknown column on {self.model.__name__}")
 
         return predicate
 
+    @staticmethod
+    def _validate_value_only(value: Any, parameter_name: str) -> None:
+        """Reject SQLAlchemy expression objects where a bound value is expected."""
+        if (
+            isinstance(value, (ClauseElement, QueryableAttribute))
+            or hasattr(value, "__clause_element__")
+        ):
+            raise TypeError(f"{parameter_name} must contain plain values, not SQL expressions.")
+
     def _resolve_ids_filter(self, ids: Sequence[Any]) -> ColumnElement:
-        """``bulk_delete`` の ``ids`` からマップされた ``id`` カラムの IN 条件を組み立てる。
+        """``ids`` からマップされた ``id`` カラムの IN 条件を組み立てる。
 
         ``Column.in_()`` は要素が ``ClauseElement``（SQL 式）や
         ``QueryableAttribute``（``Model.column`` のような ORM 属性、
@@ -249,7 +259,6 @@ class RepositoryBase(Generic[T]):
             raise AttributeError(f"Column 'id' does not exist on {self.model.__name__}")
 
         for value in ids:
-            if isinstance(value, (ClauseElement, QueryableAttribute)):
-                raise TypeError(f"ids must contain plain values, not SQL expressions: {value!r}")
+            self._validate_value_only(value, "ids")
 
         return self.model.id.in_(ids)

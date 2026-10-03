@@ -33,8 +33,9 @@ class TaskRepository(BaseRepository[Task]):
 
 - `allowed_order_columns`: ソート可能なカラムのホワイトリスト
 - `default_order_by`: `order_by` 未指定時の既定値。canonical form の文字列、SQLAlchemy 式、
-  または式のリスト / タプルを指定できます。SQLAlchemy 式はカラム名のホワイトリストを
-  通らないため、アプリケーション側で安全な式だけを指定してください。
+  または式のリスト / タプルを指定できます。リスト / タプル内の文字列も canonical form と
+  `allowed_order_columns` で検証され、SQLAlchemy 式はホワイトリストを通らないため、
+  アプリケーション側で安全な式だけを指定してください。
 
 `default_order_by` は通常の Python 属性検索順序で解決され、インスタンス属性がクラス属性を
 上書きします。`get_order_by_default_value()` は文字列の既定値だけを canonical string として
@@ -57,7 +58,8 @@ repom は並び替え候補を取得する introspection API を提供します�
 SQLAlchemy の並び替え式を `find()` または `set_find_option()` に指定すると、その内容が
 完全な並び順になります。式を直接渡した場合、自動で主キーのタイブレーカーは追加されない
 ため、ページングに使う場合は必要な一意キーを式に含めてください。複数の式を指定するには、
-リストまたはタプルを渡します。
+リストまたはタプルを渡します。シーケンス内の文字列は式に変換されますが、上位の文字列指定と
+異なり、シーケンス全体の順序がそのまま使われ、主キーのタイブレーカーは追加されません。
 
 ```python
 order_by=[Task.created_at.desc(), Task.id.desc()]

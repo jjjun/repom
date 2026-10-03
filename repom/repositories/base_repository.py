@@ -183,6 +183,7 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
         if not hasattr(self.model, 'id'):
             raise AttributeError(f"Column 'id' does not exist on {self.model.__name__}")
 
+        self._validate_value_only(id, "id")
         results = self._find_with_filters(
             [self.model.id == id],
             include_deleted=include_deleted,
@@ -471,7 +472,12 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
                 connection.exec_driver_sql("BEGIN")
 
     def _get_by_lookup_in_session(self, session: Session, lookup: dict) -> Optional[T]:
-        query = select(self.model).filter_by(**lookup).limit(1)
+        filters = [
+            self._resolve_equality_filter(column_name, value)
+            for column_name, value in lookup.items()
+        ]
+        self._append_soft_delete_filter(filters)
+        query = select(self.model).where(and_(*filters)).limit(1)
         return session.execute(query).scalars().first()
 
     def remove(self, instance: T) -> None:
@@ -640,5 +646,5 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             return []
 
         # ID フィルタ
-        filters = [self.model.id.in_(ids)]
+        filters = [self._resolve_ids_filter(ids)]
         return self._find_with_filters(filters, include_deleted=include_deleted, **kwargs)

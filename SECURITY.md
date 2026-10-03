@@ -76,11 +76,22 @@ reviewed revision. A listed control or existing test is not proof of enforcement
   identifiers must be resolved or quoted for their actual SQL context; bound
   parameters alone do not protect identifiers. Custom SQL compilation and CLI
   SQL generation deserve the same review as repository queries.
-- String ordering must respect `allowed_order_columns` and accepted directions.
-  Equality selectors must resolve mapped columns and respect configured
-  `allowed_filter_columns`. The latter defaults to no additional allowlist;
-  consumers exposing field names must configure one. Trusted SQLAlchemy ordering
-  expressions are a separate API from the string ordering parser.
+- String ordering, including string entries in `order_by` sequences and sequence
+  `default_order_by` values, must respect `allowed_order_columns` and accepted
+  directions. Equality selectors must resolve mapped columns and respect
+  configured `allowed_filter_columns`. The latter defaults to no additional
+  allowlist; consumers exposing field names must configure one. Trusted
+  SQLAlchemy ordering expressions are a separate API from the string ordering
+  parser.
+- `get_or_create` lookups use the same mapped-column resolution and
+  `allowed_filter_columns` rules as equality selectors, and apply the default
+  soft-delete filter. A matching deleted row is treated as absent; creation is
+  attempted, and a conflicting unique constraint can raise `IntegrityError`.
+- Many-to-many target lookup fields and link field names must resolve to mapped
+  columns, and target lookup fields must not be empty.
+- Value-only equality and ID parameters must reject SQLAlchemy expressions.
+  This includes `get_by` values, `get_by_id`, soft-delete ID operations, and
+  `find_by_ids`.
 - Supplied filters and bulk-operation selections must retain their meaning.
   The default filter builder must reject populated, unmapped `FilterParams`
   fields rather than silently dropping them. Value-only bulk-delete IDs must

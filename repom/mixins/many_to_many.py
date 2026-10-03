@@ -2,7 +2,7 @@
 
 from typing import Any, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import inspect as sa_inspect, select
 from sqlalchemy.orm import object_session
 
 TTarget = TypeVar("TTarget")
@@ -33,9 +33,13 @@ class ManyToManyMixin:
         self_id = getattr(self, "id", None)
         if self_id is None:
             raise ValueError("ManyToManyMixin requires self.id to be populated.")
+        if not lookup_fields:
+            raise ValueError("ManyToManyMixin requires at least one lookup field.")
 
+        self._resolve_mapped_column(link_model_class, self_foreign_key)
+        self._resolve_mapped_column(link_model_class, target_foreign_key)
         filters = [
-            getattr(target_model_class, field) == data[field]
+            self._resolve_mapped_column(target_model_class, field) == data[field]
             for field in lookup_fields
         ]
         target = session.scalars(select(target_model_class).where(*filters)).first()
@@ -109,7 +113,15 @@ class ManyToManyMixin:
 
         return session.scalars(
             select(link_model_class).where(
-                getattr(link_model_class, self_foreign_key) == self_id,
-                getattr(link_model_class, target_foreign_key) == target_id,
+                self._resolve_mapped_column(link_model_class, self_foreign_key) == self_id,
+                self._resolve_mapped_column(link_model_class, target_foreign_key) == target_id,
             )
         ).first()
+
+    @staticmethod
+    def _resolve_mapped_column(model_class: type[Any], field_name: str):
+        column_attribute = sa_inspect(model_class).column_attrs.get(field_name)
+        if column_attribute is None:
+            raise AttributeError(f"Unknown column on {model_class.__name__}")
+
+        return column_attribute.class_attribute

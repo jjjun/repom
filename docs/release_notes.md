@@ -4,6 +4,22 @@
 
 ### Breaking
 
+- BREAKING: String entries in `order_by` and sequence `default_order_by` values are
+  parsed as canonical `column:asc` or `column:desc` specifications and must name
+  columns in `allowed_order_columns`; invalid or non-allowlisted strings raise
+  `ValueError`. Sequence ordering is used as supplied and receives no primary-key
+  tiebreaker.
+- BREAKING: `get_or_create()` lookup keys must be mapped columns included in
+  `allowed_filter_columns`. Its default soft-delete filter excludes deleted rows. If a
+  deleted row matches the lookup, `get_or_create()` attempts creation; a conflicting
+  unique constraint raises `IntegrityError`.
+- BREAKING: `get_by()` values, `get_by_id()` IDs, IDs passed to `soft_delete()`,
+  `restore()`, and `permanent_delete()`, IDs passed to `find_by_ids()`, and values in
+  bulk `filter_by` mappings reject SQLAlchemy expressions and objects with a
+  `__clause_element__()` method with `TypeError`.
+- BREAKING: `ManyToManyMixin.add_related_item()` requires non-empty `lookup_fields`
+  and raises `ValueError` for an empty sequence. All field names used by the method
+  must identify mapped columns; otherwise it raises `AttributeError`.
 - BREAKING: `AutoDateTime` subclasses `UTCDateTime` and normalizes datetime values to
   UTC on bind and result. Timezone-aware values are converted to UTC before storage,
   preserving the represented instant on SQLite and in comparison filters, and read back

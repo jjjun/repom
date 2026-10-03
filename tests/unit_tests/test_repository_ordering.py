@@ -175,3 +175,37 @@ async def test_expression_ordering_defines_the_complete_order(repository_adapter
     )
     sequence_sql = str(sequence_statement.compile(dialect=sqlite.dialect()))
     assert "ORDER BY repository_ordering_items.sort_value ASC, repository_ordering_items.id DESC" in sequence_sql
+
+
+async def test_string_ordering_sequences_respect_allowlist(repository_adapter):
+    repository = _make_repository(repository_adapter)
+    repository.allowed_order_columns = ["id"]
+
+    with pytest.raises(ValueError, match="not allowed for sorting"):
+        repository.set_find_option(
+            select(RepositoryOrderingModel),
+            order_by=["sort_value:desc"],
+        )
+
+    repository.default_order_by = ("sort_value:desc",)
+    with pytest.raises(ValueError, match="not allowed for sorting"):
+        repository.set_find_option(select(RepositoryOrderingModel))
+
+
+async def test_string_entries_in_ordering_sequences_are_parsed(repository_adapter):
+    repository = _make_repository(repository_adapter)
+    order_by = ["sort_value:desc", "id:asc"]
+
+    statement = repository.set_find_option(
+        select(RepositoryOrderingModel),
+        order_by=order_by,
+    )
+    sql = str(statement.compile(dialect=sqlite.dialect()))
+
+    assert "ORDER BY repository_ordering_items.sort_value DESC, repository_ordering_items.id ASC" in sql
+
+    repository.default_order_by = order_by
+    default_statement = repository.set_find_option(select(RepositoryOrderingModel))
+    default_sql = str(default_statement.compile(dialect=sqlite.dialect()))
+
+    assert "ORDER BY repository_ordering_items.sort_value DESC, repository_ordering_items.id ASC" in default_sql
