@@ -140,9 +140,16 @@ def build_postgres_rotation_steps(
     steps: list[SqlStep] = []
 
     if plan.new_user and plan.new_user != plan.current_user:
+        dollar_tag = "repom_rotation"
+        while any(
+            f"${dollar_tag}$" in value
+            for value in (plan.new_user, plan.new_password)
+        ):
+            dollar_tag += "_"
+        dollar_quote = f"${dollar_tag}$"
         role_sql = "\n".join(
             [
-                "DO $$",
+                f"DO {dollar_quote}",
                 "BEGIN",
                 "  IF NOT EXISTS (",
                 "    SELECT FROM pg_catalog.pg_roles",
@@ -159,7 +166,7 @@ def build_postgres_rotation_steps(
                 ),
                 "  END IF;",
                 "END",
-                "$$;",
+                f"{dollar_quote};",
             ]
         )
         steps.append(SqlStep(database=plan.maintenance_database, sql=role_sql))
@@ -265,6 +272,12 @@ def rotate_postgres_credentials(
     )
 
     if not dry_run:
+        from repom.postgres.manage import _validate_generation
+
+        _validate_generation(
+            postgres_password=plan.new_password,
+            postgres_user=plan.new_user or config.postgres.user,
+        )
         with secret_env_file(
             "PGPASSWORD", plan.current_password, prefix="repom-postgres-auth-"
         ) as env_file:
@@ -283,7 +296,16 @@ def rotate_postgres_credentials(
         config.postgres.password = plan.new_password
         if plan.new_user:
             config.postgres.user = plan.new_user
-        _regenerate_compose_secrets()
+        try:
+            _regenerate_compose_secrets()
+        except Exception as exc:
+            recovery = (
+                "The live PostgreSQL credential was changed, but generated files "
+                "could not be updated. Run `postgres_generate --force-regenerate` "
+                "to persist the configured credential before restarting services."
+            )
+            print(f"Recovery required: {recovery}")
+            raise PostgresCredentialRotationError(recovery) from exc
     else:
         placeholder_env_file = "<postgres-auth-env-file>" if plan.current_password else None
         commands = tuple(

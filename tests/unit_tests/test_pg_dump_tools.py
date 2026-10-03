@@ -20,9 +20,10 @@ def _params(
     password: str | None = "secret",
     sslmode: str | None = None,
     sslrootcert: str | None = None,
+    host: str = "localhost",
 ) -> PgConnParams:
     return PgConnParams(
-        host="localhost",
+        host=host,
         port=5435,
         user="user",
         password=password,
@@ -56,7 +57,7 @@ def test_pg_conn_params_from_overridden_url():
 def test_pg_conn_params_from_config_keeps_structured_settings():
     config = RepomConfig()
     config.db_type = "postgres"
-    config.postgres.host = "configured-host"
+    config.postgres.host = "127.0.0.1"
     config.postgres.port = 5543
     config.postgres.user = "configured-user"
     config.postgres.password = "configured-password"
@@ -64,12 +65,41 @@ def test_pg_conn_params_from_config_keeps_structured_settings():
 
     params = PgConnParams.from_config(config)
 
-    assert params.host == "configured-host"
+    assert params.host == "127.0.0.1"
     assert params.port == 5543
     assert params.user == "configured-user"
     assert params.password == "configured-password"
     assert params.database == "configured-db"
     assert params.use_docker is True
+
+
+@pytest.mark.parametrize("host", ["", "/var/run/postgresql", "127.0.0.1", "localhost"])
+def test_pg_conn_params_enables_docker_for_local_configured_hosts(host):
+    config = RepomConfig()
+    config.db_type = "postgres"
+    config.postgres.host = host
+
+    assert PgConnParams.from_config(config).use_docker is True
+
+
+def test_pg_conn_params_disables_docker_for_remote_configured_host():
+    config = RepomConfig()
+    config.db_type = "postgres"
+    config.postgres.host = "db.example.internal"
+
+    assert PgConnParams.from_config(config).use_docker is False
+
+
+@pytest.mark.parametrize("destination_option", ["host", "hostaddr", "service", "dsn"])
+def test_pg_conn_params_rejects_url_destination_query_overrides(destination_option):
+    config = RepomConfig()
+    config.db_url = (
+        "postgresql://url_user@db.example.internal/url_db"
+        f"?{destination_option}=other.example.internal"
+    )
+
+    with pytest.raises(ValueError, match="destination overrides"):
+        PgConnParams.from_config(config)
 
 
 @pytest.mark.parametrize(
@@ -129,6 +159,10 @@ def test_pg_dump_custom_uses_docker_stdout_without_file(monkeypatch, tmp_path: P
     assert result.used_docker is True
     assert result.tool_version == "pg_dump (PostgreSQL) 16.3"
     assert dump_path.stat().st_size == 1024 * 1024
+    assert _backup_utils.verify_checksum(dump_path) is True
+    assert list(tmp_path.glob("*.partial")) == []
+    if os.name == "posix":
+        assert dump_path.stat().st_mode & 0o777 == 0o600
 
     tool, kwargs = build_calls[-1]
     assert tool == "pg_dump"
@@ -153,6 +187,7 @@ def test_pg_dump_custom_uses_host_file_when_container_stopped(monkeypatch, tmp_p
         if command == ["pg_dump", "--version"]:
             return subprocess.CompletedProcess(command, 0, "pg_dump (PostgreSQL) 16.3\n", "")
         assert kwargs["env"]["PGPASSWORD"] == "secret"
+        Path(command[-1]).write_bytes(b"CUSTOM-DUMP")
         return subprocess.CompletedProcess(command, 0, "", "")
 
     monkeypatch.setattr(pg_dump_tools.subprocess, "run", fake_run)
@@ -176,9 +211,87 @@ def test_pg_dump_custom_uses_host_file_when_container_stopped(monkeypatch, tmp_p
         "--no-owner",
         "--no-acl",
         "--file",
-        str(dump_path),
+        str(dump_path.with_name(f"{dump_path.name}.partial")),
     ]
     assert "secret" not in command
+    assert dump_path.read_bytes() == b"CUSTOM-DUMP"
+    assert _backup_utils.verify_checksum(dump_path) is True
+    assert not dump_path.with_name(f"{dump_path.name}.partial").exists()
+
+
+def test_pg_dump_custom_uses_host_tools_for_remote_host_even_if_docker_is_enabled(
+    monkeypatch, tmp_path
+):
+    dump_path = tmp_path / "db.dump"
+    params = _params(host="db.example.internal")
+    is_container_running = MagicMock(return_value=True)
+
+    def dump_via_host(_params, partial_path):
+        partial_path.write_bytes(b"CUSTOM-DUMP")
+        return pg_dump_tools.PgToolResult(0, False, None, "")
+
+    monkeypatch.setattr(_backup_utils, "is_container_running", is_container_running)
+    monkeypatch.setattr(pg_dump_tools, "_pg_dump_custom_via_host", dump_via_host)
+    docker_dump = MagicMock(side_effect=AssertionError("remote host must use host tools"))
+    monkeypatch.setattr(pg_dump_tools, "_pg_dump_custom_via_docker", docker_dump)
+
+    result = pg_dump_custom(params, dump_path)
+
+    assert result.returncode == 0
+    assert result.used_docker is False
+    assert dump_path.read_bytes() == b"CUSTOM-DUMP"
+    is_container_running.assert_not_called()
+    docker_dump.assert_not_called()
+
+
+def test_pg_dump_custom_checksum_partial_failure_preserves_existing_file(
+    monkeypatch, tmp_path
+):
+    dump_path = tmp_path / "db.dump"
+    checksum_partial_path = tmp_path / "db.dump.sha256.partial"
+    checksum_partial_path.write_bytes(b"stale checksum partial")
+
+    def dump_via_host(_params, partial_path):
+        partial_path.write_bytes(b"CUSTOM-DUMP")
+        return pg_dump_tools.PgToolResult(0, False, None, "")
+
+    monkeypatch.setattr(pg_dump_tools, "_pg_dump_custom_via_host", dump_via_host)
+
+    result = pg_dump_custom(_params(host="db.example.internal"), dump_path)
+
+    assert result.returncode == 1
+    assert "File exists" in result.stderr
+    assert checksum_partial_path.read_bytes() == b"stale checksum partial"
+    assert not dump_path.exists()
+    assert not dump_path.with_name(f"{dump_path.name}.partial").exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="symbolic-link behavior is POSIX-specific")
+def test_pg_dump_custom_replaces_symlink_without_following_it(monkeypatch, tmp_path):
+    dump_path = tmp_path / "db.dump"
+    victim_path = tmp_path / "victim.dump"
+    victim_path.write_bytes(b"keep this file")
+    dump_path.symlink_to(victim_path)
+
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=True))
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "exec_command",
+        _version_only_exec_command("pg_dump"),
+    )
+    monkeypatch.setattr(
+        pg_dump_tools,
+        "build_pg_client_command",
+        lambda tool, **kwargs: fake_client_command(),
+    )
+    monkeypatch.setenv("FAKE_CHILD_STDOUT_BYTES", "64")
+
+    result = pg_dump_custom(_params(), dump_path)
+
+    assert result.returncode == 0
+    assert not dump_path.is_symlink()
+    assert victim_path.read_bytes() == b"keep this file"
+    assert _backup_utils.verify_checksum(dump_path) is True
 
 
 def test_pg_restore_custom_streams_dump_bytes_to_docker(monkeypatch, tmp_path: Path):
@@ -347,6 +460,7 @@ def test_pg_dump_custom_via_docker_empty_output_removes_dump_file(monkeypatch, t
     assert result.returncode == 1
     assert "empty" in result.stderr
     assert not dump_path.exists()
+    assert not dump_path.with_name(f"{dump_path.name}.partial").exists()
 
 
 def test_pg_dump_custom_via_docker_failure_after_partial_output_removes_dump_file(
@@ -377,6 +491,7 @@ def test_pg_dump_custom_via_docker_failure_after_partial_output_removes_dump_fil
 
     assert result.returncode == 1
     assert not dump_path.exists()
+    assert not dump_path.with_name(f"{dump_path.name}.partial").exists()
 
 
 def test_pg_tools_available_returns_true_when_only_container_available(monkeypatch):
@@ -425,6 +540,7 @@ def test_pg_dump_custom_falls_back_to_host_when_docker_daemon_unavailable(
     def fake_run(command, **kwargs):
         if command == ["pg_dump", "--version"]:
             return subprocess.CompletedProcess(command, 0, "pg_dump (PostgreSQL) 16.3\n", "")
+        Path(command[-1]).write_bytes(b"CUSTOM-DUMP")
         return subprocess.CompletedProcess(command, 0, "", "")
 
     monkeypatch.setattr(pg_dump_tools.subprocess, "run", fake_run)
@@ -530,6 +646,7 @@ def test_pg_dump_custom_via_host_passes_tls_settings_in_env(monkeypatch, tmp_pat
         run_calls.append((command, kwargs))
         if command == ["pg_dump", "--version"]:
             return subprocess.CompletedProcess(command, 0, "pg_dump (PostgreSQL) 16.3\n", "")
+        Path(command[-1]).write_bytes(b"CUSTOM-DUMP")
         return subprocess.CompletedProcess(command, 0, "", "")
 
     monkeypatch.setattr(pg_dump_tools.subprocess, "run", fake_run)
@@ -561,6 +678,7 @@ def test_pg_dump_custom_via_host_leaves_inherited_sslmode_untouched_without_tls_
         run_calls.append((command, kwargs))
         if command == ["pg_dump", "--version"]:
             return subprocess.CompletedProcess(command, 0, "pg_dump (PostgreSQL) 16.3\n", "")
+        Path(command[-1]).write_bytes(b"CUSTOM-DUMP")
         return subprocess.CompletedProcess(command, 0, "", "")
 
     monkeypatch.setattr(pg_dump_tools.subprocess, "run", fake_run)

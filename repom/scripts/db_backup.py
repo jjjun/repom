@@ -20,6 +20,7 @@ from repom.scripts._backup_utils import (
     run_postgres_via_docker_or_host,
     run_streaming_command,
     snapshot_sqlite_database,
+    validate_backup_name_component,
 )
 
 # ロガーを取得
@@ -150,6 +151,7 @@ def _backup_postgresql(container_name: str | None) -> None:
     （repom#167）。
     """
     params = PgConnParams.from_config(config)
+    validate_backup_name_component(params.database)
     logger.debug(f"Backup directory: {config.db_backup_path}")
     logger.debug(f"Database: {params.database}")
 

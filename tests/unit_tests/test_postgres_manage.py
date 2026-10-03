@@ -1456,3 +1456,25 @@ class TestPostgresGenerationCLI:
             manage.main_start()
 
         start.assert_called_once_with(overwrite_secrets=True)
+
+
+@pytest.mark.parametrize(
+    ("attribute", "value", "field_name"),
+    [
+        ("image", "postgres:16\nservices:", "postgres.container.image"),
+        ("image", "-postgres", "postgres.container.image"),
+        ("volume_name", "host:/data", "postgres.container.volume_name"),
+        ("volume_name", "host/path", "postgres.container.volume_name"),
+        ("container_name", "-postgres", "postgres.container.container_name"),
+    ],
+)
+def test_postgres_compose_rejects_unsafe_names_and_images(
+    attribute, value, field_name
+):
+    with (
+        patch.object(manage.config.postgres, "password", "configured-password"),
+        patch.object(manage.config.pgadmin.container, "enabled", False),
+        patch.object(manage.config.postgres.container, attribute, value),
+    ):
+        with pytest.raises(ValueError, match=field_name):
+            manage.generate_docker_compose()

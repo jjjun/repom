@@ -10,15 +10,20 @@ from pathlib import Path
 from basekit.docker_manager import DockerCommandExecutor
 from sqlalchemy.engine import make_url
 
-from repom.config import RepomConfig, config
+from repom.config import RepomConfig, _is_local_postgres_host, config
 from repom.docker_service import DockerUnavailableError, is_container_running
 from repom.scripts._backup_utils import (
     ByteCountingWriter,
     build_host_pg_env,
     build_pg_client_command,
+    checksum_path,
+    compute_checksum,
     mask_password,
+    open_backup_temp_file,
     run_postgres_via_docker_or_host,
     run_streaming_command,
+    validate_client_database,
+    warn_if_checksum_missing,
 )
 
 VERSION_MISMATCH_HINT = (
@@ -71,6 +76,15 @@ class PgConnParams:
                     "PostgreSQL client tools require a URL with "
                     f"{', '.join(missing)}; Unix-socket URLs are not supported."
                 )
+            overridden_destination = {"host", "hostaddr", "service", "dsn"}.intersection(
+                url.query
+            )
+            if overridden_destination:
+                names = ", ".join(sorted(overridden_destination))
+                raise ValueError(
+                    "PostgreSQL client tools do not support URL destination "
+                    f"overrides: {names}"
+                )
 
             def query_value(name: str) -> str | None:
                 value = url.query.get(name)
@@ -78,7 +92,7 @@ class PgConnParams:
                     return value[-1] if value else None
                 return value
 
-            return cls(
+            params = cls(
                 host=url.host,
                 port=url.port if url.port is not None else 5432,
                 user=url.username,
@@ -89,9 +103,11 @@ class PgConnParams:
                 sslrootcert=query_value("sslrootcert"),
                 use_docker=False,
             )
+            validate_client_database(params.database)
+            return params
 
         tls = active_config.postgres_tls_settings()
-        return cls(
+        params = cls(
             host=active_config.postgres.host,
             port=active_config.postgres.port,
             user=active_config.postgres.user,
@@ -100,7 +116,10 @@ class PgConnParams:
             container_name=active_config.postgres.container.get_container_name(),
             sslmode=tls.sslmode,
             sslrootcert=tls.sslrootcert,
+            use_docker=_is_local_postgres_host(active_config.postgres.host),
         )
+        validate_client_database(params.database)
+        return params
 
 
 @dataclass(frozen=True)
@@ -118,21 +137,73 @@ def pg_dump_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
 
     dump_path = Path(dump_path)
     dump_path.parent.mkdir(parents=True, exist_ok=True)
-
-    return run_postgres_via_docker_or_host(
-        via_docker=lambda: _pg_dump_custom_via_docker(params, dump_path),
-        via_host=lambda: _pg_dump_custom_via_host(params, dump_path),
-        operation="custom-format dump",
-        host_tools="host pg_dump",
-        container_name=params.container_name,
-        allow_docker=params.use_docker,
+    partial_path = dump_path.with_name(f"{dump_path.name}.partial")
+    checksum_destination = checksum_path(dump_path)
+    checksum_partial_path = checksum_destination.with_name(
+        f"{checksum_destination.name}.partial"
     )
+
+    try:
+        with open_backup_temp_file(partial_path):
+            pass
+    except OSError as exc:
+        return PgToolResult(
+            returncode=1,
+            used_docker=False,
+            tool_version=None,
+            stderr=str(exc),
+        )
+
+    checksum_partial_created = False
+    try:
+        result = run_postgres_via_docker_or_host(
+            via_docker=lambda: _pg_dump_custom_via_docker(params, partial_path),
+            via_host=lambda: _pg_dump_custom_via_host(params, partial_path),
+            operation="custom-format dump",
+            host_tools="host pg_dump",
+            container_name=params.container_name,
+            allow_docker=_allow_docker(params),
+        )
+        if result.returncode != 0:
+            return result
+        if not partial_path.exists() or partial_path.stat().st_size == 0:
+            return PgToolResult(
+                returncode=1,
+                used_docker=result.used_docker,
+                tool_version=result.tool_version,
+                stderr="pg_dump produced empty custom-format output.",
+            )
+
+        try:
+            checksum_file = open_backup_temp_file(checksum_partial_path)
+            checksum_partial_created = True
+            with checksum_file:
+                checksum_file.write(
+                    f"{compute_checksum(partial_path)}  {dump_path.name}\n".encode(
+                        "utf-8"
+                    )
+                )
+        except OSError as exc:
+            return PgToolResult(
+                returncode=1,
+                used_docker=result.used_docker,
+                tool_version=result.tool_version,
+                stderr=str(exc),
+            )
+        partial_path.replace(dump_path)
+        checksum_partial_path.replace(checksum_destination)
+        return result
+    finally:
+        partial_path.unlink(missing_ok=True)
+        if checksum_partial_created:
+            checksum_partial_path.unlink(missing_ok=True)
 
 
 def pg_restore_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
     """Restore a custom-format PostgreSQL dump."""
 
     dump_path = Path(dump_path)
+    warn_if_checksum_missing(dump_path)
 
     return run_postgres_via_docker_or_host(
         via_docker=lambda: _pg_restore_custom_via_docker(params, dump_path),
@@ -140,14 +211,14 @@ def pg_restore_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
         operation="custom-format restore",
         host_tools="host pg_restore",
         container_name=params.container_name,
-        allow_docker=params.use_docker,
+        allow_docker=_allow_docker(params),
     )
 
 
 def pg_tools_available(params: PgConnParams) -> bool:
     """Return True when Docker client tools or both host tools are available."""
 
-    if params.use_docker:
+    if _allow_docker(params):
         container_name = params.container_name or config.postgres.container.get_container_name()
         try:
             if is_container_running(container_name):
@@ -156,6 +227,10 @@ def pg_tools_available(params: PgConnParams) -> bool:
             pass
 
     return shutil.which("pg_dump") is not None and shutil.which("pg_restore") is not None
+
+
+def _allow_docker(params: PgConnParams) -> bool:
+    return params.use_docker and _is_local_postgres_host(params.host)
 
 
 def _pg_dump_custom_via_docker(params: PgConnParams, dump_path: Path) -> PgToolResult:
@@ -176,7 +251,6 @@ def _pg_dump_custom_via_docker(params: PgConnParams, dump_path: Path) -> PgToolR
             writer = ByteCountingWriter(dump_file)
             result = run_streaming_command(command, stdout_file=writer, password=params.password)
     except FileNotFoundError as exc:
-        dump_path.unlink(missing_ok=True)
         return PgToolResult(
             returncode=127,
             used_docker=True,
@@ -185,7 +259,6 @@ def _pg_dump_custom_via_docker(params: PgConnParams, dump_path: Path) -> PgToolR
         )
 
     if result.returncode != 0:
-        dump_path.unlink(missing_ok=True)
         return PgToolResult(
             returncode=result.returncode,
             used_docker=True,
@@ -194,7 +267,6 @@ def _pg_dump_custom_via_docker(params: PgConnParams, dump_path: Path) -> PgToolR
         )
 
     if writer.bytes_written == 0:
-        dump_path.unlink(missing_ok=True)
         return PgToolResult(
             returncode=1,
             used_docker=True,

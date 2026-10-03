@@ -73,6 +73,20 @@ def test_backup_postgresql_via_host_names_backup_after_configured_database(monke
     assert re.fullmatch(r"repom_test_\d{8}_\d{6}\.sql\.gz", backups[0].name)
 
 
+@pytest.mark.parametrize("database", ["../outside", "db/name", r"db\name"])
+def test_backup_postgresql_rejects_unsafe_database_filename(
+    monkeypatch, tmp_path, database
+):
+    config = _mock_postgres_config(tmp_path / "backups")
+    config.postgres_db = database
+    monkeypatch.setattr(db_backup, "config", config)
+
+    with pytest.raises(ValueError, match="path separators"):
+        db_backup.backup_postgresql_via_host()
+
+    assert not (tmp_path / "backups").exists()
+
+
 @POSIX_ONLY
 def test_backup_directory_is_0700(monkeypatch, tmp_path):
     backup_dir = tmp_path / "backups"

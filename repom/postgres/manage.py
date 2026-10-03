@@ -20,6 +20,8 @@ from repom.docker_compose_safety import (
     format_env_file,
     quote_yaml_string,
     reject_control_characters,
+    validate_docker_image,
+    validate_docker_name,
     validate_stored_secret_values,
     validate_secret_file_overwrite,
     write_secret_file,
@@ -135,7 +137,10 @@ def generate_pgadmin_servers_json() -> dict:
 
 
 def generate_docker_compose(
-    *, validate_credentials: bool = True
+    *,
+    validate_credentials: bool = True,
+    postgres_password: str | None = None,
+    postgres_user: str | None = None,
 ) -> DockerComposeGenerator:
     """Generate a compose model for PostgreSQL and optional pgAdmin."""
 
@@ -144,20 +149,25 @@ def generate_docker_compose(
     container = pg.container
     init_dir = manager.get_init_dir()
 
-    user = reject_control_characters(pg.user, field_name="postgres.user")
+    user = reject_control_characters(
+        postgres_user if postgres_user is not None else pg.user,
+        field_name="postgres.user",
+    )
+    password = postgres_password if postgres_password is not None else pg.password
     if validate_credentials:
-        reject_default_credential(pg.password, env_var="POSTGRES_PASSWORD")
-        reject_control_characters(pg.password, field_name="postgres.password")
-    container_name = reject_control_characters(
+        reject_default_credential(password, env_var="POSTGRES_PASSWORD")
+        reject_control_characters(password, field_name="postgres.password")
+    container_name = validate_docker_name(
         container.get_container_name(), field_name="postgres.container.container_name"
     )
-    volume_name = reject_control_characters(
+    volume_name = validate_docker_name(
         container.get_volume_name(), field_name="postgres.container.volume_name"
     )
+    image = validate_docker_image(container.image, field_name="postgres.container.image")
 
     postgres_service = DockerService(
         name="postgres",
-        image=container.image,
+        image=image,
         container_name=container_name,
         environment={
             "POSTGRES_USER": quote_yaml_string(user),
@@ -195,19 +205,22 @@ def generate_docker_compose(
             reject_control_characters(
                 config.pgadmin.password, field_name="pgadmin.password"
             )
-        pgadmin_container_name = reject_control_characters(
+        pgadmin_container_name = validate_docker_name(
             pgadmin_container.get_container_name(),
             field_name="pgadmin.container.container_name",
         )
-        pgadmin_volume_name = reject_control_characters(
+        pgadmin_volume_name = validate_docker_name(
             pgadmin_container.get_volume_name(),
             field_name="pgadmin.container.volume_name",
+        )
+        pgadmin_image = validate_docker_image(
+            pgadmin_container.image, field_name="pgadmin.container.image"
         )
         servers_json_path = manager.get_compose_dir() / "servers.json"
 
         pgadmin_service = DockerService(
             name="pgadmin",
-            image=pgadmin_container.image,
+            image=pgadmin_image,
             container_name=pgadmin_container_name,
             environment={
                 "PGADMIN_DEFAULT_EMAIL": quote_yaml_string(pgadmin_email),
@@ -238,11 +251,14 @@ def generate_docker_compose(
     return generator
 
 
-def generate_init_sql() -> str:
+def generate_init_sql(*, postgres_user: str | None = None) -> str:
     """Generate SQL that creates the project PostgreSQL databases."""
 
     base = reject_control_characters(config.db_name, field_name="db_name")
-    user = reject_control_characters(config.postgres.user, field_name="postgres.user")
+    user = reject_control_characters(
+        postgres_user if postgres_user is not None else config.postgres.user,
+        field_name="postgres.user",
+    )
     databases = (base, f"{base}_dev", f"{base}_test")
     create_lines = []
     grant_lines = []
@@ -272,20 +288,29 @@ def generate_init_sql() -> str:
 """
 
 
-def generate(*, overwrite_secrets: bool = False):
-    """Write PostgreSQL files, refusing changed secrets unless overridden."""
-
+def _prepare_generation(
+    *,
+    overwrite_secrets: bool = False,
+    postgres_password: str | None = None,
+    postgres_user: str | None = None,
+):
+    """Validate generated values and prepare PostgreSQL artifacts without writing."""
     manager = PostgresManager()
-    generator = generate_docker_compose()
+    password = postgres_password if postgres_password is not None else config.postgres.password
+    user = postgres_user if postgres_user is not None else config.postgres.user
+    generator = generate_docker_compose(
+        postgres_password=password,
+        postgres_user=user,
+    )
 
     init_dir = manager.get_init_dir()
-    init_sql = generate_init_sql()
+    init_sql = generate_init_sql(postgres_user=user)
     init_sql_path = init_dir / "01_init_databases.sql"
 
     compose_dir = manager.get_compose_dir()
     output_path = compose_dir / COMPOSE_FILENAME
 
-    secrets = {"POSTGRES_PASSWORD": config.postgres.password}
+    secrets = {"POSTGRES_PASSWORD": password}
     if config.pgadmin.container.enabled:
         secrets["PGADMIN_DEFAULT_PASSWORD"] = config.pgadmin.password
     env_path = compose_dir / ".env"
@@ -299,6 +324,41 @@ def generate(*, overwrite_secrets: bool = False):
         overwrite_secrets=overwrite_secrets,
         rotation_commands=rotation_commands,
     )
+
+    return (
+        generator,
+        init_sql,
+        init_sql_path,
+        compose_dir,
+        output_path,
+        env_path,
+        env_content,
+    )
+
+
+def _validate_generation(
+    *, postgres_password: str, postgres_user: str
+) -> None:
+    """Validate the artifacts needed after a live PostgreSQL rotation."""
+    _prepare_generation(
+        overwrite_secrets=True,
+        postgres_password=postgres_password,
+        postgres_user=postgres_user,
+    )
+
+
+def generate(*, overwrite_secrets: bool = False):
+    """Write PostgreSQL files, refusing changed secrets unless overridden."""
+
+    (
+        generator,
+        init_sql,
+        init_sql_path,
+        compose_dir,
+        output_path,
+        env_path,
+        env_content,
+    ) = _prepare_generation(overwrite_secrets=overwrite_secrets)
 
     init_sql_path.write_text(init_sql, encoding="utf-8")
     generator.write_to_file(output_path)

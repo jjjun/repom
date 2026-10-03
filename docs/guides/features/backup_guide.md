@@ -62,6 +62,7 @@ URL override を使う PostgreSQL の host-side client tool も、prod 環境の
 有効 URL の値で接続します。remote host で `sslmode` が未指定なら `require` が補われ、
 設定済みの `sslrootcert` も有効 URL に追加されます。host がない URL は local 扱いです。
 prod の remote host で弱い `sslmode` を指定すると、client process の起動前に拒否されます。
+ただし、クライアントツールでは URL クエリの `host`、`hostaddr`、`service`、`dsn` による接続先の上書きを拒否し、URL authority の接続先を使います。`-d` に渡す DB 名も、libpq の接続文字列や URI として解釈される形式は拒否します。
 詳しくは [PostgreSQL 実行時設定の上書き](../postgresql/runtime_env_overrides.md) を参照してください。
 
 ## ローテーション

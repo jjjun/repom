@@ -113,19 +113,14 @@ class AlembicTemplates:
                 "# version_table_schema = migration_fast_domain\n\n"
             )
         )
-        if not autogenerate_exclude_tables:
+        if not exclude_table_names:
             exclude_tables_option = (
                 "# autogenerate_exclude_tables = alembic_version_fast_domain"
-            )
-        elif isinstance(autogenerate_exclude_tables, str):
-            exclude_tables_option = (
-                f"autogenerate_exclude_tables = "
-                f"{autogenerate_exclude_tables}"
             )
         else:
             exclude_tables_option = (
                 "autogenerate_exclude_tables = "
-                f"{', '.join(autogenerate_exclude_tables)}"
+                f"{', '.join(exclude_table_names)}"
             )
 
         return f"""# Alembic configuration

@@ -264,6 +264,23 @@ class TestGenerateDockerCompose:
             with pytest.raises(ValueError, match="redis.container.container_name"):
                 generate_docker_compose()
 
+    @pytest.mark.parametrize(
+        ("attribute", "value", "field_name"),
+        [
+            ("image", "redis:7\nservices:", "redis.container.image"),
+            ("image", "-redis", "redis.container.image"),
+            ("volume_name", "host:/data", "redis.container.volume_name"),
+            ("volume_name", "host/path", "redis.container.volume_name"),
+            ("container_name", "-redis", "redis.container.container_name"),
+        ],
+    )
+    def test_compose_rejects_unsafe_generated_names_and_images(
+        self, attribute, value, field_name
+    ):
+        with patch.object(config.redis.container, attribute, value):
+            with pytest.raises(ValueError, match=field_name):
+                generate_docker_compose()
+
     def test_compose_command_authenticates_via_requirepass_flag(self):
         """The command passes --requirepass with the environment-expanded
         password; it never inlines the actual value."""

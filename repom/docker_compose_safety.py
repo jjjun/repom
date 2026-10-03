@@ -25,6 +25,8 @@ _FORBIDDEN_CHARACTERS = {
     "\r": "a carriage return",
     "\x00": "a NUL byte",
 }
+_DOCKER_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_DOCKER_IMAGE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@${}-]*$")
 
 
 def reject_control_characters(value: str, *, field_name: str) -> str:
@@ -39,6 +41,28 @@ def reject_control_characters(value: str, *, field_name: str) -> str:
     for character, description in _FORBIDDEN_CHARACTERS.items():
         if character in value:
             raise ValueError(f"{field_name} must not contain {description}")
+    return value
+
+
+def validate_docker_name(value: str, *, field_name: str) -> str:
+    """Validate a container or named-volume scalar before Compose rendering."""
+    reject_control_characters(value, field_name=field_name)
+    if not _DOCKER_NAME_PATTERN.fullmatch(value):
+        raise ValueError(
+            f"{field_name} must be a Docker name containing only letters, "
+            "digits, '.', '_' or '-' and starting with a letter or digit"
+        )
+    return value
+
+
+def validate_docker_image(value: str, *, field_name: str) -> str:
+    """Reject image references that can break out of a plain Compose scalar."""
+    reject_control_characters(value, field_name=field_name)
+    if not _DOCKER_IMAGE_PATTERN.fullmatch(value):
+        raise ValueError(
+            f"{field_name} must be a single-line Docker image reference "
+            "starting with a letter or digit"
+        )
     return value
 
 
@@ -229,5 +253,7 @@ __all__ = [
     "backup_secret_file",
     "validate_secret_file_overwrite",
     "validate_stored_secret_values",
+    "validate_docker_image",
+    "validate_docker_name",
     "write_secret_file",
 ]

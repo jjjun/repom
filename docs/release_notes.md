@@ -106,6 +106,24 @@
 - BREAKING: `repom.logging.get_logger(name)` no longer adds another `repom.` prefix when
   `name` is `repom` or already starts with `repom.`. Internal logger names now match
   their module paths.
+- BREAKING: `PgConnParams.from_config()` rejects PostgreSQL URL query parameters
+  `host`, `hostaddr`, `service`, and `dsn` with `ValueError`. PostgreSQL client tools
+  reject database names containing `=` or written as `postgres://` or
+  `postgresql://` URIs. PostgreSQL backup names reject path separators and `..`.
+- BREAKING: PostgreSQL client tools use Docker exec only when the configured host is
+  local. Remote hosts use host client tools even when the managed container is running;
+  this check also applies to `PgConnParams` constructed directly by consumers.
+- BREAKING: `pg_dump_custom()` writes through a `.partial` file before publishing a
+  dump and adds a `.sha256` sidecar next to it. Consumers that prune dumps by glob must
+  prune the sidecars too. `pg_restore_custom()` raises `ChecksumError` on a mismatch and
+  only warns when the sidecar is missing.
+- BREAKING: Generated Compose image, container, and volume names are validated, and
+  volume names must match Docker's named-volume syntax. String-form
+  `autogenerate_exclude_tables` is written in normalized form.
+- BREAKING: PostgreSQL and Redis credential rotation pre-validates generated
+  configuration before changing live credentials. If persistence fails after the live
+  change, it raises `PostgresCredentialRotationError` or
+  `RedisCredentialRotationError`.
 
 ### Fixed
 

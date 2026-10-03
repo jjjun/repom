@@ -77,3 +77,15 @@ def test_generated_ini_roundtrips_through_configparser():
         "autogenerate_exclude_tables",
         "path_separator",
     }
+
+
+def test_string_exclude_tables_are_written_from_validated_entries():
+    content = AlembicTemplates.generate_alembic_ini(
+        **_base_kwargs(),
+        autogenerate_exclude_tables=(
+            "alembic_version_other,\r\nalembic_version_second"
+        ),
+    )
+
+    assert "autogenerate_exclude_tables = alembic_version_other, alembic_version_second" in content
+    assert "\r" not in content

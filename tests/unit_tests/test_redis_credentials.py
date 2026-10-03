@@ -274,6 +274,47 @@ def test_redis_rotate_password_rejects_empty_new_password():
         rotate_password("")
 
 
+def test_redis_rotation_validates_generated_values_before_live_change():
+    with patch.object(config.redis, "password", "old-secret"):
+        with patch.object(
+            redis_manage,
+            "_validate_generation",
+            side_effect=ValueError("invalid generated value"),
+        ):
+            with patch.object(redis_manage, "rotate_redis_password") as rotate:
+                with pytest.raises(ValueError, match="invalid generated value"):
+                    rotate_password(
+                        "new-secret", old_password="old-secret", dry_run=False
+                    )
+
+    rotate.assert_not_called()
+
+
+def test_redis_rotation_reports_recovery_if_file_persistence_fails(capsys):
+    result = RedisCredentialRotationResult(
+        dry_run=False,
+        command=("docker", "exec", "repom_redis", "redis-cli"),
+        input_text="CONFIG SET requirepass new-secret\n",
+        masked_command="docker exec repom_redis redis-cli",
+        masked_input="CONFIG SET requirepass ***",
+    )
+
+    with patch.object(config.redis, "password", "old-secret"):
+        with patch.object(redis_manage, "_validate_generation"):
+            with patch.object(redis_manage, "rotate_redis_password", return_value=result):
+                with patch.object(
+                    redis_manage, "generate", side_effect=OSError("disk unavailable")
+                ):
+                    with pytest.raises(
+                        RedisCredentialRotationError, match="force-regenerate"
+                    ):
+                        rotate_password(
+                            "new-secret", old_password="old-secret", dry_run=False
+                        )
+
+    assert "Recovery required" in capsys.readouterr().out
+
+
 def test_redis_main_reads_new_password_from_stdin_without_command_exposure(monkeypatch):
     monkeypatch.setattr(sys, "stdin", StringIO("new-secret\n"))
 

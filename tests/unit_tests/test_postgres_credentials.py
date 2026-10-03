@@ -74,8 +74,8 @@ def _configure_temp_secret_generation(monkeypatch, tmp_path):
         manage.PostgresManager, "get_compose_dir", lambda self: compose_dir
     )
     monkeypatch.setattr(manage.PostgresManager, "get_init_dir", lambda self: init_dir)
-    monkeypatch.setattr(manage, "generate_docker_compose", lambda: MagicMock())
-    monkeypatch.setattr(manage, "generate_init_sql", lambda: "-- test init\n")
+    monkeypatch.setattr(manage, "generate_docker_compose", lambda **kwargs: MagicMock())
+    monkeypatch.setattr(manage, "generate_init_sql", lambda **kwargs: "-- test init\n")
     monkeypatch.setattr(manage, "generate_pgadmin_servers_json", lambda: {})
     return mock_config, env_file, original_env
 
@@ -184,6 +184,79 @@ def test_replacement_user_plan_is_non_destructive_and_grants_access():
     assert 'GRANT USAGE, CREATE ON SCHEMA "public" TO "app_user";' in sql
     assert "ALTER DEFAULT PRIVILEGES" in sql
     assert "DROP ROLE" not in sql
+
+
+def test_replacement_user_sql_uses_a_dollar_tag_absent_from_credentials():
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        new_user="app$$user",
+        new_password="password $$ and $repom_rotation$",
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    sql = build_postgres_rotation_steps(plan)[0].sql
+    dollar_quote = sql.splitlines()[0].removeprefix("DO ")
+
+    assert dollar_quote != "$$"
+    assert dollar_quote not in plan.new_password
+    assert dollar_quote not in plan.new_user
+    assert sql.count(dollar_quote) == 2
+    assert "password $$ and $repom_rotation$" in sql
+
+
+def test_postgres_rotation_validates_generated_values_before_live_change(
+    monkeypatch, tmp_path
+):
+    from repom.postgres import manage
+
+    mock_config, _, _ = _configure_temp_secret_generation(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        manage,
+        "_validate_generation",
+        MagicMock(side_effect=ValueError("invalid pgAdmin credential")),
+    )
+    runner = MagicMock()
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="postgres-old-secret",
+        new_password="postgres-rotated-secret",
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    with pytest.raises(ValueError, match="invalid pgAdmin credential"):
+        rotate_postgres_credentials(plan, dry_run=False, runner=runner)
+
+    runner.assert_not_called()
+    assert mock_config.postgres.password == "postgres-config-secret"
+
+
+def test_postgres_rotation_reports_recovery_if_file_persistence_fails(
+    monkeypatch, tmp_path, capsys
+):
+    from repom.postgres import credentials, manage
+
+    mock_config, _, _ = _configure_temp_secret_generation(monkeypatch, tmp_path)
+    monkeypatch.setattr(manage, "_validate_generation", lambda **kwargs: None)
+    monkeypatch.setattr(
+        credentials,
+        "_regenerate_compose_secrets",
+        MagicMock(side_effect=OSError("disk unavailable")),
+    )
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="postgres-old-secret",
+        new_password="postgres-rotated-secret",
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    with pytest.raises(PostgresCredentialRotationError, match="force-regenerate"):
+        rotate_postgres_credentials(plan, dry_run=False, runner=_rotation_runner())
+
+    assert mock_config.postgres.password == "postgres-rotated-secret"
+    assert "Recovery required" in capsys.readouterr().out
 
 
 def test_postgres_rotation_executes_structured_commands_through_env_file(
@@ -337,7 +410,8 @@ def test_postgres_rotation_still_uses_stdin_and_env_file(monkeypatch, tmp_path):
     assert "sentinel-new-secret" in kwargs["input"]
 
 
-def test_postgres_rotation_failure_masks_password():
+def test_postgres_rotation_failure_masks_password(monkeypatch, tmp_path):
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
     runner = MagicMock()
     runner.return_value = MagicMock(
         returncode=1,

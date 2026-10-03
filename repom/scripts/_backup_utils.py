@@ -306,6 +306,27 @@ def backup_name_pattern(stem: str, suffix: str) -> re.Pattern[str]:
     return re.compile(re.escape(stem) + r"_\d{8}_\d{6}" + re.escape(suffix))
 
 
+def validate_backup_name_component(value: str) -> str:
+    """Reject database names that could escape the configured backup directory."""
+    if not value or "/" in value or "\\" in value or ".." in value:
+        raise ValueError("database name cannot contain path separators or '..'")
+    return value
+
+
+def validate_client_database(database: str) -> str:
+    """Require a plain database name so libpq cannot parse it as conninfo."""
+    if (
+        not database
+        or "=" in database
+        or database.lower().startswith(("postgres://", "postgresql://"))
+    ):
+        raise ValueError(
+            "PostgreSQL client tools require a plain database name without "
+            "connection-string syntax"
+        )
+    return database
+
+
 def parse_backup_source_database(name: str, suffix: str) -> Optional[str]:
     """Return the database name encoded in a backup file name, if any.
 
@@ -443,6 +464,7 @@ def build_pg_client_command(
     always carries stdin through subprocess.Popen directly, so ``stdin`` has
     no effect there.
     """
+    validate_client_database(database)
     if container_name is not None:
         command = ["docker", "exec"]
         if stdin:

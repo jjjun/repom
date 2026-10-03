@@ -135,6 +135,11 @@ reviewed revision. A listed control or existing test is not proof of enforcement
   alias must receive equivalent guards. `EXEC_ENV` is operator input, not proof
   of the real database's purpose; unknown environments currently warn and use
   development naming defaults.
+- PostgreSQL client tools reject URL `host`, `hostaddr`, `service`, and `dsn`
+  query overrides so their destination matches the parsed URL authority.
+  Docker execution is limited to empty, socket, loopback, and `localhost`
+  configured hosts; remote hosts use host client tools. Client-tool database
+  names must not use libpq connection-string syntax.
 - The current PostgreSQL policy requires TLS for non-local production targets.
   Review URL query overrides, `connect_args`, `host`/`hostaddr`, multiple hosts,
   asynchronous driver adaptation, migration connections, and host client tools
@@ -185,7 +190,10 @@ reviewed revision. A listed control or existing test is not proof of enforcement
 - Backup, restore, retention, and migration-file cleanup must act on the intended
   target. Assess path construction, existing files, links, failure cleanup, and
   backup naming against a concrete attacker capability. A failed backup must not
-  be presented as a completed recovery artifact.
+  be presented as a completed recovery artifact. PostgreSQL backup names reject
+  path separators and `..`; custom-format dumps are written to owner-only sibling
+  partial files, published after success, and checksummed. Restore verifies a
+  checksum when one is present and warns for older files without one.
 - Backup files and generated secret files, including temporary and backup copies,
   contain sensitive data. Preserve restrictive permissions where supported and
   verify actual access control on the target OS. POSIX mode bits alone are not
@@ -194,9 +202,15 @@ reviewed revision. A listed control or existing test is not proof of enforcement
   to inject additional directives or SQL. Published service ports default to
   loopback; LAN exposure requires explicit configuration. Generation must retain
   the missing/placeholder-credential checks for enabled services.
+- Generated Compose image references, container names, and named-volume names
+  are validated before they reach the shared writer. Volume names must match
+  Docker's named-volume syntax so they cannot become host bind mounts.
 - Existing secret files must not be silently replaced with different credentials.
   Intentional regeneration and credential rotation must preserve their explicit
   execution/overwrite controls and consistent persistent configuration.
+  PostgreSQL and Redis rotations validate generated configuration before changing
+  the live credential and print recovery steps if file persistence fails after a
+  successful live change.
 - Subprocess argument, environment, stdin, and secret-file channels must preserve
   data boundaries and avoid unintended credential exposure. An argv list by
   itself does not establish safety against the invoked program's option parsing.

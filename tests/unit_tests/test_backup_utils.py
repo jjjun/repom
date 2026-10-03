@@ -494,6 +494,18 @@ def test_build_pg_client_command_builds_host_argv():
     ]
 
 
+@pytest.mark.parametrize("database", ["app=host=remote", "postgresql://host/other"])
+def test_build_pg_client_command_rejects_libpq_database_connection_strings(database):
+    with pytest.raises(ValueError, match="plain database name"):
+        build_pg_client_command(
+            "pg_dump",
+            host="localhost",
+            port=5432,
+            user="postgres",
+            database=database,
+        )
+
+
 def test_build_pg_client_command_builds_docker_argv_without_host_flags():
     command = build_pg_client_command(
         "pg_dump",

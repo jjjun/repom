@@ -25,12 +25,15 @@ from repom.docker_compose_safety import (
     format_env_file,
     quote_yaml_string,
     reject_control_characters,
+    validate_docker_image,
+    validate_docker_name,
     validate_stored_secret_values,
     validate_secret_file_overwrite,
     write_secret_file,
 )
 from repom.redis.credentials import (
     RedisCredentialRotationPlan,
+    RedisCredentialRotationError,
     build_redis_ping_command,
     rotate_redis_password,
 )
@@ -163,24 +166,24 @@ loglevel notice
 
 
 def generate_docker_compose(
-    *, validate_credentials: bool = True
+    *, validate_credentials: bool = True, redis_password: str | None = None
 ) -> DockerComposeGenerator:
     """Generate a compose model for Redis."""
 
     manager = RedisManager()
     container = config.redis.container
     redis_port = config.redis.published_port
-    redis_password = config.redis.password
+    redis_password = config.redis.password if redis_password is None else redis_password
     if validate_credentials:
         reject_default_credential(redis_password, env_var="REDIS_PASSWORD")
         reject_control_characters(redis_password, field_name="redis.password")
-    container_name = reject_control_characters(
+    container_name = validate_docker_name(
         container.get_container_name(), field_name="redis.container.container_name"
     )
-    volume_name = reject_control_characters(
+    volume_name = validate_docker_name(
         container.get_volume_name(), field_name="redis.container.volume_name"
     )
-    image = container.image
+    image = validate_docker_image(container.image, field_name="redis.container.image")
     init_dir = manager.get_init_dir()
 
     redis_service = DockerService(
@@ -215,16 +218,16 @@ def generate_docker_compose(
     return generator
 
 
-def generate(*, overwrite_secrets: bool = False):
-    """Write Redis files, refusing changed secrets unless overridden."""
-
+def _prepare_generation(*, overwrite_secrets: bool = False, redis_password=None):
+    """Validate generated values and prepare Redis artifacts without writing."""
     manager = RedisManager()
-    redis_conf = generate_redis_conf()
+    password = config.redis.password if redis_password is None else redis_password
+    redis_conf = generate_redis_conf(password=password)
     init_dir = manager.get_init_dir()
     compose_dir = manager.get_compose_dir()
     output_path = compose_dir / COMPOSE_FILENAME
     env_path = compose_dir / ".env"
-    env_content = format_env_file({"REDIS_PASSWORD": config.redis.password})
+    env_content = format_env_file({"REDIS_PASSWORD": password})
     validate_secret_file_overwrite(
         env_path,
         env_content,
@@ -232,7 +235,27 @@ def generate(*, overwrite_secrets: bool = False):
         rotation_commands=("redis_rotate_password",),
     )
 
-    generator = generate_docker_compose()
+    generator = generate_docker_compose(redis_password=password)
+    return redis_conf, init_dir, output_path, env_path, env_content, generator
+
+
+def _validate_generation(*, redis_password: str) -> None:
+    """Validate the artifacts needed after a live Redis rotation."""
+    _prepare_generation(overwrite_secrets=True, redis_password=redis_password)
+
+
+def generate(*, overwrite_secrets: bool = False):
+    """Write Redis files, refusing changed secrets unless overridden."""
+
+    (
+        redis_conf,
+        init_dir,
+        output_path,
+        env_path,
+        env_content,
+        generator,
+    ) = _prepare_generation(overwrite_secrets=overwrite_secrets)
+
     (init_dir / "redis.conf").write_text(redis_conf, encoding="utf-8")
     generator.write_to_file(output_path)
 
@@ -365,6 +388,9 @@ def rotate_password(
     if not password:
         raise ValueError("new_password must not be empty for Redis rotation")
 
+    if not dry_run:
+        _validate_generation(redis_password=password)
+
     result = rotate_redis_password(
         plan=RedisCredentialRotationPlan.from_config(
             old_password=old_password,
@@ -374,7 +400,16 @@ def rotate_password(
     )
     if not dry_run:
         config.redis.password = password
-        generate(overwrite_secrets=True)
+        try:
+            generate(overwrite_secrets=True)
+        except Exception as exc:
+            recovery = (
+                "The live Redis password was changed, but generated files could "
+                "not be updated. Run `redis_generate --force-regenerate` to "
+                "persist the configured password before restarting services."
+            )
+            print(f"Recovery required: {recovery}")
+            raise RedisCredentialRotationError(recovery) from exc
     for line in (result.masked_command, result.masked_input.strip()):
         print(line)
     return result
