@@ -305,15 +305,18 @@ class TestRedisConnectionTest:
         since repom's Redis containers always run with requirepass set
         (repom#163).
         """
-        mock_config.redis.host = 'localhost'
-        mock_config.redis.port = 6379
-        mock_config.redis.password = 'secret'
-        mock_config.redis.database = 2
+        mock_config.redis_connection_kwargs.return_value = {
+            'host': 'localhost',
+            'port': 6379,
+            'password': 'secret',
+            'db': 2,
+        }
         mock_redis_cls.return_value = Mock()
 
         result = check_redis_connection()
 
         assert result == '[OK] Connected'
+        mock_config.redis_connection_kwargs.assert_called_once_with()
         _, kwargs = mock_redis_cls.call_args
         assert kwargs['password'] == 'secret'
         assert kwargs['db'] == 2
@@ -324,10 +327,12 @@ class TestRedisConnectionTest:
         """An empty-string password (the RepomConfig default) must be sent as
         None rather than as an empty-string credential.
         """
-        mock_config.redis.host = 'localhost'
-        mock_config.redis.port = 6379
-        mock_config.redis.password = ''
-        mock_config.redis.database = 0
+        mock_config.redis_connection_kwargs.return_value = {
+            'host': 'localhost',
+            'port': 6379,
+            'password': None,
+            'db': 0,
+        }
         mock_redis_cls.return_value = Mock()
 
         check_redis_connection()
@@ -343,10 +348,12 @@ class TestRedisConnectionTest:
         """
         import redis
 
-        mock_config.redis.host = 'localhost'
-        mock_config.redis.port = 6379
-        mock_config.redis.password = 'wrong'
-        mock_config.redis.database = 0
+        mock_config.redis_connection_kwargs.return_value = {
+            'host': 'localhost',
+            'port': 6379,
+            'password': 'wrong',
+            'db': 0,
+        }
         mock_redis = Mock()
         mock_redis.ping.side_effect = redis.AuthenticationError("NOAUTH Authentication required.")
         mock_redis_cls.return_value = mock_redis
@@ -361,10 +368,12 @@ class TestRedisConnectionTest:
         """A plain connection failure is still reported as connection refused."""
         import redis
 
-        mock_config.redis.host = 'localhost'
-        mock_config.redis.port = 6379
-        mock_config.redis.password = None
-        mock_config.redis.database = 0
+        mock_config.redis_connection_kwargs.return_value = {
+            'host': 'localhost',
+            'port': 6379,
+            'password': None,
+            'db': 0,
+        }
         mock_redis = Mock()
         mock_redis.ping.side_effect = redis.ConnectionError("Connection refused")
         mock_redis_cls.return_value = mock_redis
@@ -372,6 +381,21 @@ class TestRedisConnectionTest:
         result = check_redis_connection()
 
         assert result == '[NG] Connection refused'
+
+    @patch('redis.Redis')
+    @patch('repom.scripts.repom_info.config')
+    def test_redis_connection_does_not_probe_when_production_guard_rejects(
+        self, mock_config, mock_redis_cls
+    ):
+        mock_config.redis_connection_kwargs.side_effect = ValueError(
+            "remote Redis host rejected"
+        )
+
+        result = check_redis_connection()
+
+        assert result == '[NG] Error: ValueError'
+        mock_config.redis_connection_kwargs.assert_called_once_with()
+        mock_redis_cls.assert_not_called()
 
 
 class TestGetLoadedModels:

@@ -12,7 +12,7 @@ def apply_redis_env_overrides(config: Any) -> None:
     """Apply Redis runtime overrides from environment variables.
 
     Reads: REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB, REDIS_HOST_PORT,
-    REDIS_EXPOSE_TO_LAN.
+    REDIS_EXPOSE_TO_LAN, REDIS_ALLOW_INSECURE_REMOTE.
     """
     redis = getattr(config, "redis", None)
     if redis is None:
@@ -42,6 +42,13 @@ def apply_redis_env_overrides(config: Any) -> None:
         redis.container.expose_to_lan = parse_bool_env(
             "REDIS_EXPOSE_TO_LAN",
             raw_expose_to_lan,
+        )
+
+    raw_allow_insecure_remote = os.getenv("REDIS_ALLOW_INSECURE_REMOTE")
+    if raw_allow_insecure_remote is not None:
+        redis.allow_insecure_remote = parse_bool_env(
+            "REDIS_ALLOW_INSECURE_REMOTE",
+            raw_allow_insecure_remote,
         )
 
     raw_db = os.getenv("REDIS_DB")

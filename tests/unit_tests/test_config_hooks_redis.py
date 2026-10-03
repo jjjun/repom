@@ -13,6 +13,7 @@ REDIS_ENV_NAMES = (
     "REDIS_DB",
     "REDIS_HOST_PORT",
     "REDIS_EXPOSE_TO_LAN",
+    "REDIS_ALLOW_INSECURE_REMOTE",
 )
 
 
@@ -33,6 +34,7 @@ def test_apply_redis_env_overrides_does_nothing_when_unset():
     assert config.redis.database == 0
     assert config.redis.container.host_port is None
     assert config.redis.container.expose_to_lan is False
+    assert config.redis.allow_insecure_remote is False
 
 
 def test_apply_redis_env_overrides_keeps_existing_host_port_when_unset():
@@ -121,6 +123,32 @@ def test_apply_redis_env_overrides_rejects_invalid_expose_to_lan(monkeypatch):
     config = RepomConfig()
 
     with pytest.raises(ValueError, match="REDIS_EXPOSE_TO_LAN must be a boolean"):
+        apply_redis_env_overrides(config)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("true", True), ("false", False)],
+)
+def test_apply_redis_env_overrides_applies_insecure_remote_opt_in(
+    monkeypatch, value, expected
+):
+    monkeypatch.setenv("REDIS_ALLOW_INSECURE_REMOTE", value)
+    config = RepomConfig()
+
+    apply_redis_env_overrides(config)
+
+    assert config.redis.allow_insecure_remote is expected
+
+
+def test_apply_redis_env_overrides_rejects_invalid_insecure_remote_opt_in(monkeypatch):
+    monkeypatch.setenv("REDIS_ALLOW_INSECURE_REMOTE", "invalid")
+    config = RepomConfig()
+
+    with pytest.raises(
+        ValueError,
+        match="REDIS_ALLOW_INSECURE_REMOTE must be a boolean",
+    ):
         apply_redis_env_overrides(config)
 
 

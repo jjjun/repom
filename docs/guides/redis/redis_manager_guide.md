@@ -21,6 +21,7 @@ REDIS_PORT=6379
 REDIS_PASSWORD=CHANGE_ME
 REDIS_DB=0
 # REDIS_EXPOSE_TO_LAN=true
+# REDIS_ALLOW_INSECURE_REMOTE=false
 ```
 
 `REDIS_PASSWORD` が未設定、または `CHANGE_ME` のままだと `redis_generate` は
@@ -57,6 +58,14 @@ redis_config = RepomConfig().redis
 connection_kwargs = redis_config.connection_kwargs()
 safe_url = redis_config.safe_url()
 ```
+
+For application connections, `RepomConfig.redis_connection_kwargs()` returns the same
+Redis client settings and raises `ValueError` in `prod` for a non-local host, including
+Docker service names, unless `REDIS_ALLOW_INSECURE_REMOTE=true`. `localhost` and
+loopback IP addresses remain allowed. The opt-in is only for deployments where a
+tunnel or private network protects transport; Redis AUTH still crosses that path in
+plaintext. `RedisConfig.connection_kwargs()` and `url()` keep their existing behavior
+and do not apply this production guard.
 
 ## 生成と起動
 

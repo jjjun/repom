@@ -188,6 +188,10 @@
 
 ### Added
 
+- `RepomConfig.redis_connection_kwargs()` validates Redis connection settings in
+  production, rejecting non-local hosts unless `REDIS_ALLOW_INSECURE_REMOTE=true` opts
+  into transport protection outside repom. The `repom_info` Redis probe uses the new
+  accessor; `RedisConfig.connection_kwargs()` and `url()` retain their existing behavior.
 - The basekit source follows branch `main`; `uv.lock` is the effective dependency pin.
 - `RepomConfig` can configure Alembic `script_location`, `version_locations`,
   `version_table`, and `version_table_schema` when `alembic_init` creates an ini file.

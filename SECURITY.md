@@ -268,10 +268,12 @@ Unless a difference is stated below, these contracts apply to both
   values. `QueryAnalyzer` retains SQL and parameters, and SQL text can itself
   contain literals. No general redaction guarantee extends to every diagnostic
   artifact or application log.
-- Redis helpers support plaintext `redis://` only, with no TLS option or
-  production guard. Redis credentials travel in plaintext to the configured
-  host, including the `repom_info` connectivity probe. pgAdmin's generated
-  server entry uses `SSLMode: prefer`.
+- Redis helpers support plaintext `redis://` only, with no TLS option.
+  `RepomConfig.redis_connection_kwargs()` and the `repom_info` probe reject
+  non-local Redis hosts in production unless `REDIS_ALLOW_INSECURE_REMOTE=true`;
+  the opt-in assumes transport protection outside repom, while AUTH still travels
+  in plaintext. Existing `RedisConfig.connection_kwargs()` and `url()` remain
+  unguarded. pgAdmin's generated server entry uses `SSLMode: prefer`.
 
 ### Discovery and migrations
 

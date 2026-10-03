@@ -37,6 +37,7 @@ class RedisConfig:
     port: int = field(default=6379)
     password: Optional[str] = field(default=None, repr=False)
     database: int = field(default=0)
+    allow_insecure_remote: bool = field(default=False)
     container: RedisContainerConfig = field(default_factory=RedisContainerConfig)
 
     @property

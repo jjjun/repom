@@ -133,10 +133,7 @@ def test_redis_connection() -> str:
         # redis: connect and check the connection
         try:
             r = redis.Redis(
-                host=config.redis.host,
-                port=config.redis.port,
-                password=config.redis.password or None,
-                db=config.redis.database,
+                **config.redis_connection_kwargs(),
                 socket_connect_timeout=2,
                 socket_keepalive=True,
                 health_check_interval=1

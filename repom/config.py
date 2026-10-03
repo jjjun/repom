@@ -76,6 +76,24 @@ def _is_local_postgres_host(host) -> bool:
         return False
 
 
+def _is_local_redis_host(host: object) -> bool:
+    """Return whether a Redis host names localhost or a loopback IP address."""
+    if not isinstance(host, str):
+        return False
+
+    normalized = host.strip()
+    if normalized.startswith("[") and normalized.endswith("]"):
+        normalized = normalized[1:-1]
+    normalized = normalized.casefold().rstrip(".")
+    if normalized == "localhost":
+        return True
+
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
 def _postgres_connection_hosts(
     url: URL,
     connect_args=None,
@@ -422,6 +440,31 @@ class RepomConfig(Config):
                 未満（disable/allow/prefer）の場合。
         """
         return self._resolve_postgres_tls(self.postgres.host)
+
+    def redis_connection_kwargs(self) -> dict[str, str | int | None]:
+        """Return Redis client settings after checking the production host policy.
+
+        Remote production hosts require ``redis.allow_insecure_remote`` because
+        repom does not configure Redis TLS. Enable it only when a tunnel or
+        private network protects the transport; AUTH still crosses that path
+        in plaintext.
+
+        Raises:
+            ValueError: Production uses a non-local Redis host without the
+                explicit external-transport opt-in.
+        """
+        if (
+            is_prod_exec_env(self.exec_env)
+            and not _is_local_redis_host(self.redis.host)
+            and not self.redis.allow_insecure_remote
+        ):
+            raise ValueError(
+                "A non-local Redis host is not allowed in prod without setting "
+                "REDIS_ALLOW_INSECURE_REMOTE=true for transport protected outside "
+                "repom (for example, by a tunnel or private network)."
+            )
+
+        return self.redis.connection_kwargs()
 
     @property
     def db_url(self) -> Optional[str]:
