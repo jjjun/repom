@@ -11,6 +11,7 @@
 - 2026-10-03: Draft を作成。
 - 2026-10-03: ひな形レビューの指摘を取り込み、試行運用を開始。追跡先の明記、対象漏れの追加、
   確認範囲の軸の記録、動的検証に必要な環境、テスト対応表、項目の分担を反映。
+- 2026-10-03: V02 の advisory 監査範囲、PostgreSQL 実機検証の限界、§7 の保留事項追跡を明確化。
 
 この文書はレビューの観点と記録形式のひな形です。実施済みの監査結果でも、
 全項目が安全だという宣言でもありません。各項目の初期状態は **未確認** です。
@@ -156,7 +157,7 @@ driver に渡る引数と子プロセスの argv/env を比較します。libpq 
 | ID | 確認する問い | 調査の入口 |
 | --- | --- | --- |
 | V01 | テストが使う実際の DB・ファイルは隔離されているか。fixture gate や環境名だけに依存していないか | `repom/testing.py`, `tests/conftest.py`, `tests/session_config.py` |
-| V02 | lock と実行環境が一致するか。既知 advisory の確認と、git 依存のコードレビューを区別したか | `pyproject.toml`, `uv.lock`, dependency-audit workflow。監査ツールの失敗/未実行を0件としない。コマンドは §4 |
+| V02 | lock と実行環境が一致するか。実行環境と lock 全体の advisory 監査を区別し、platform marker と選択した extras/groups の範囲を記録したか。advisory 確認と git 依存の source review を区別したか | `pyproject.toml`, `uv.lock`, dependency-audit workflow。監査ツールの失敗/未実行、skip、未監査項目を0件としない。コマンドは §4 |
 | V03 | 修正前に失敗し修正後に成功する回帰テストと、正当な利用を維持するテストがあるか | 対象 issue の元の再現、変更した共通処理と各入口。修正前の確認方法は §4 |
 | V04 | sync/async、SQLite/PostgreSQL、CLI/Python API、host/Docker、Windows/POSIX の確認範囲を分けたか。skip と fake と実機の差を残したか | 対象テストと `.github/workflows/test.yml`。CI 定義と実行結果も区別 |
 | V05 | issue の完了理由に修正証拠があり、文書修正・改善提案・判断待ちを取り違えていないか | issuekit の原文、受け入れ条件、実装・独立レビュー記録、残件の追跡先 |
@@ -180,20 +181,41 @@ driver に渡る引数と子プロセスの argv/env を比較します。libpq 
 | A | `test_alembic_setup.py`, `test_alembic_templates.py`, `test_alembic_env.py`, `test_alembic_reset.py`, `test_alembic_reset_script.py`, `test_alembic_init_script.py`, `test_auto_import_models.py`, `test_list_models.py`, `test_db_create.py`, `test_db_sync_master.py`, `test_external_project_alembic.py`, `tests/behavior_tests/` |
 | O | `test_db_delete.py`, `test_db_backup.py`, `test_db_restore.py`, `test_backup_utils.py`, `test_pg_dump_tools.py`, `test_postgres_credentials.py`, `test_redis_credentials.py`, `test_postgres_manage.py`, `test_redis_manage.py`, `test_postgres_container_config.py`, `test_docker_service.py`, `test_docker_compose_safety.py` |
 | V | `test_create_test_fixtures_safety.py`, `test_testing_engine_settings.py`, `test_pytest_configuration.py`, `test_env_example.py` |
-| PostgreSQL 実機 | `tests/integration_tests/test_postgres_integration.py`, `tests/integration_tests/test_utc_datetime_postgres.py`（`DB_TYPE=postgres` と起動中の PostgreSQL がなければ skip） |
+| PostgreSQL 実機 | `tests/integration_tests/test_postgres_integration.py`（同期 psycopg）, `tests/integration_tests/test_utc_datetime_postgres.py`（UTCDateTime の同期/非同期 round trip。CI の PostgreSQL job は実行しない）。`DB_TYPE=postgres` と起動中の PostgreSQL がなければ skip |
 
 動的検証に必要な環境:
 
 | 環境 | 主な ID | 実行方法・注意 |
 | --- | --- | --- |
-| PostgreSQL | C01, C02, T01, T02, PostgreSQL 方言の Q | AGENTS.md の `docker run` で起動し、`CONFIG_HOOK=repom.config_hook:hook_config EXEC_ENV=test DB_TYPE=postgres POSTGRES_PASSWORD=<test password> uv run pytest tests/integration_tests/test_postgres_integration.py`。未設定だと全件 skip になり、確認済みの根拠にならない |
+| PostgreSQL | C01（同期 ORM の接続先のみ）, A02, M03, O03, Q04 | AGENTS.md の `docker run` で起動し、`CONFIG_HOOK=repom.config_hook:hook_config EXEC_ENV=test DB_TYPE=postgres POSTGRES_PASSWORD=<test password> uv run pytest tests/integration_tests/test_postgres_integration.py`。未設定だと全件 skip になり、確認済みの根拠にならない。このコマンドは同期 psycopg のみ |
 | Docker | O04, O05, O06, backup/restore の Docker 経路 | 実サービスの起動・資格情報変更・復元は依頼範囲に従う。fake の成功で代えない |
 | POSIX | O02, O06 | Windows では権限・symlink のテストが skip になる（2026-10-03 時点で 10 件）。CI（Ubuntu）の結果で補う場合は run を記録する |
 | Windows | O06 | repom は ACL を設定しない。実際の権限は `icacls <path>` で確認する |
-| ネットワーク・GitHub | V02, V04 | `uv run pip-audit`、`gh run list --branch main`（認証が必要） |
+| ネットワーク・GitHub | V02, V04 | V02 の audit run は §4 の手順で対象 lock 内容と日付を確認する。V04 の CI run 確認には `gh run list --branch main`（認証が必要）を使える |
 
-依存関係の確認（V02）: `uv lock --check`（lock と pyproject の一致）、
-`uv sync --locked --check`（実行環境と lock の一致）、`uv run pip-audit`。
+依存関係の確認（V02）では、整合性確認と advisory 監査を分けて記録します。
+`uv lock --check` は lock と `pyproject.toml` の一致を、
+`uv sync --locked --check` は現在の実行環境と lock の一致を確認するもので、どちらも advisory audit ではありません。
+
+- 実行環境の advisory: `uv run pip-audit` は現在インストールされている実行環境を監査します。
+  その成功を lock 全体の監査結果として扱いません。
+- lock-wide advisory: 正規の lock 全体監査手順は [`.github/workflows/dependency-audit.yml`](../../../.github/workflows/dependency-audit.yml) です。
+  完了した GitHub Actions の「Dependency audit」実行記録を開き、対象 revision で `uv.lock` を最後に変更した commit を確認します。
+  その lock 内容と一致する run を選び、commit と監査日を記録します。advisory database は時間とともに変わるため、同じ lock 内容でも監査日は必要です。
+  一致する run がなければ証拠なしと記録します。明示的に依頼されていない workflow の手動 dispatch は行いません。
+  workflow は `--all-extras --dev` で同期し、実行環境の監査に加え、marker を除去した export に対して
+  `uv run pip-audit -r requirements-audit.txt --no-deps --disable-pip` を実行します。
+  export の `basekit @ git+...@<sha>` と `-e .` は workflow の `==` 件数に含まれず、監査対象になったと推測しません。
+  skip された Git 依存を脆弱性なしと扱わず、監査した scope、未監査/skip package、失敗、取得できなかった証拠を記録します。
+  `basekit` の lock 済み commit に対するソースレビューは advisory 監査と別の証拠です。
+
+`tests/integration_tests/test_postgres_integration.py` は同期 psycopg の統合テストだけを含み、
+基本接続と CRUD、設定された database への同期 ORM の接続先確認（`test_config_url_matches_connection` と `test_database_name`、C01 の一部）、plain SQL restore の失敗時 rollback（O03）、custom type を含む revision の PostgreSQL 上での自動生成（A02）、
+JSON NUL escape の text extraction（M03）、PostgreSQL 上の `listjson_filter` の検索一致（Q04）を確認します。
+`.github/workflows/test.yml` の PostgreSQL job もこのファイルだけを実行します。
+C02 の TLS 証明書/hostname 検証による接続拒否、UTCDateTime round trip を超える asyncpg の接続挙動、session の並行共有、commit 中の cancellation（T02）は別の証拠が必要で、
+証拠がなければ未確認です。`test_utc_datetime_postgres.py` の非同期 UTCDateTime round trip はそのテスト範囲だけの証拠で、
+この CI job では実行されず、TLS identity や cancellation の証拠にもなりません。
 
 修正前の確認（V03）: `git worktree add <一時ディレクトリ> <基点 revision>` で隔離した checkout を作り、
 新しいテストだけを置いて実行します。共有 checkout で stash や checkout による巻き戻しはしません。
@@ -288,14 +310,16 @@ issue が completed でも、元の受け入れ条件と残件を照合します
 ## 7. 保留事項
 
 管理者の判断を待っている事項です。判断が出たら、この表と関連する節を更新します。
+issuekit に判断待ち専用 stage はなく、未割当 issue は claim 可能です。repom#241 と repom#243 の decision gate に従い、
+管理者が決める前に判断や実装を進めません。
 
 | 保留事項 | 決定者 | 追跡先 | 現在の扱い | 再確認の契機 |
 | --- | --- | --- | --- | --- |
-| レビュー結果の保存先と公開範囲（リポジトリは public） | 管理者 | 本表（issue 未作成） | 指摘は issuekit で管理し、リポジトリに結果ファイルを追加しない | public として運用する準備を始めるとき |
+| レビュー結果の保存先と公開範囲（リポジトリは public） | 管理者 | repom#243 | 指摘は issuekit で管理し、リポジトリに結果ファイルを追加しない | public として運用する準備を始めるとき、または issuekit 外に結果を保存または共有する必要が生じたとき |
 | 外部からの脆弱性報告窓口 | 管理者 | repom#241 | 未設定 | 上と同じ。または本チェックリストの次回見直し |
-| 動的検証の実行環境（PostgreSQL・Docker・POSIX） | 管理者 | 本表 | 実施できない検証は未確認として残す | 初回の全体レビュー後 |
-| 独立レビュアーの条件 | 管理者 | 本表 | issuekit の分離（実装者とレビュアーは別セッション）に従う。現状は実装 codex、レビュー claude | 初回利用後 |
-| 定期レビューの頻度と担当 | 管理者 | 本表 | §6 の案のまま | 初回利用後 |
+| 動的検証の実行環境（PostgreSQL・Docker・POSIX） | 管理者 | repom#243 | 実施できない検証は未確認として残す | 初回の全体レビュー後、または利用可能な live 環境が必要になったとき |
+| 独立レビュアーの条件 | 管理者 | repom#243 | issuekit の分離（実装者とレビュアーは別セッション）に従う。追加条件は未決定 | 初回利用後、または独立承認条件が必要になったとき |
+| 定期レビューの頻度と担当 | 管理者 | repom#243 | §6 は案のみ。頻度・担当・自動化は未設定 | 初回利用後、または定期実行を導入する前 |
 
 ## 8. 参照資料と更新
 
