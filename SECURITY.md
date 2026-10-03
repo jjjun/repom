@@ -200,10 +200,11 @@ Unless a difference is stated below, these contracts apply to both
 - Each entry point's actual destination must match the resolved configuration,
   including `db_url`, `REPOM_DATABASE_URL` / `DATABASE_URL` overrides, and URL
   query or SQLAlchemy `connect_args` values for `host`, `hostaddr`, `service`,
-  and `dsn`. `DatabaseManager` and `resolve_engine_settings()` resolve these
-  destination overrides; the shared `alembic/env.py` and `AlembicReset` build
-  engines from `db_url` only. Diagnostics probes and synchronous test fixtures
-  pass engine kwargs without the engine-policy resolver. Review backup/restore
+  and `dsn`. `DatabaseManager`, `resolve_engine_settings()`, and synchronous
+  diagnostics probes resolve these destination overrides; probes use the
+  config object being checked. The shared `alembic/env.py` and `AlembicReset`
+  build engines from `db_url` only. Synchronous test fixtures pass engine kwargs
+  without the resolver, and consumer-built engines must opt into it. Review backup/restore
   host-tool and `docker exec` paths separately: URL-overridden client tools use
   the URL authority/path and reject query overrides for `host`, `hostaddr`,
   `service`, `dsn`, `port`, `dbname`, `database`, `user`, and `password`,
@@ -226,11 +227,12 @@ Unless a difference is stated below, these contracts apply to both
   `require`. `RepomConfig.db_url` and `postgres_tls_settings_for_url()` enforce
   URL TLS policy, while `postgres_tls_settings()` applies it to the configured
   host. `_resolve_postgres_engine_policy()` also checks `connect_args` and
-  asyncpg's `ssl`, but only `DatabaseManager` and `resolve_engine_settings()`
-  use that resolver. The migration engine, `AlembicReset`, diagnostics probes,
-  synchronous test fixtures, and consumer-built engines get only URL-level
-  enforcement or none. repom writes its resolved `sslmode` into generated and
-  PostgreSQL override URLs, and into `PGSSLMODE` for host libpq client tools
+  asyncpg's `ssl`; `DatabaseManager`, `resolve_engine_settings()`, and
+  synchronous diagnostics probes use that resolver. The migration engine,
+  `AlembicReset`, synchronous test fixtures, and consumer-built engines get
+  only URL-level enforcement or none unless they call it. repom writes its
+  resolved `sslmode` into generated and PostgreSQL override URLs, and into
+  `PGSSLMODE` for host libpq client tools
   when a mode is resolved; `connect_args` TLS options override URL options.
   Loopback/socket and development defaults may permit plaintext.
 - `require` alone is not a guarantee of certificate/hostname verification.

@@ -13,7 +13,7 @@ from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import repom.config as config_module
-from repom.database import safe_db_url
+from repom.database import _resolve_postgres_engine_policy, safe_db_url
 
 
 @dataclass
@@ -90,18 +90,23 @@ def short_lived_postgres_engine(
 ) -> Iterator[Engine]:
     """Create a short-lived PostgreSQL engine for connectivity probes.
 
-    Uses ``config_obj.engine_kwargs`` so consumer overrides (application_name,
-    connect_args, etc.) still apply, but pins ``connect_args.connect_timeout``
-    to a short value so a probe against an unreachable host fails quickly
-    instead of waiting on the configured production timeout. The engine is
-    always disposed, even when the connection attempt raises.
+    Resolves the effective PostgreSQL settings from ``config_obj`` so probe
+    connections follow the same destination and TLS policy as normal engines.
+    Consumer overrides still apply, but ``connect_args.connect_timeout`` is
+    pinned to a short value so an unreachable host fails quickly. The engine
+    is always disposed, even when the connection attempt raises.
     """
-    engine_kwargs = dict(config_obj.engine_kwargs)
+    db_url, resolved_engine_kwargs, _, _ = _resolve_postgres_engine_policy(
+        str(config_obj.db_url),
+        config_obj.engine_kwargs,
+        config_obj=config_obj,
+    )
+    engine_kwargs = dict(resolved_engine_kwargs)
     connect_args = dict(engine_kwargs.get("connect_args") or {})
     connect_args["connect_timeout"] = connect_timeout
     engine_kwargs["connect_args"] = connect_args
 
-    engine = create_engine(config_obj.db_url, **engine_kwargs)
+    engine = create_engine(db_url, **engine_kwargs)
     try:
         yield engine
     finally:

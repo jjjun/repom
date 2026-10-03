@@ -56,21 +56,35 @@ PostgreSQL URL で `sslmode` が省略されると、`config.postgres.sslmode` �
 環境と接続先に応じた既定値が使われます。`EXEC_ENV` を正規化した値が `prod` または
 `production` alias の場合、リモート host は `require`、localhost 等のローカル host と
 host のない URL は `prefer` です。それ以外の環境では `prefer` です。URL override と
-通常の設定の両方に同じ policy が適用されます。
+通常の設定の両方に同じ URL-level policy が適用されます。
+
+接続先と TLS の検証範囲は entry point ごとに異なります。
+
+| Entry point | URL の設定 | `engine_kwargs.connect_args` |
+| --- | --- | --- |
+| `RepomConfig.db_url` | URL の host / query を検証します。 | 対象外です。 |
+| `DatabaseManager` / `resolve_engine_settings()` | URL と実効接続先を検証します。 | `host` / `hostaddr` / `dsn` と TLS を検証し、URL より優先します。 |
+| `repom_info` / 同期 `database_info` probe | probe に渡された config を使い、共有 resolver で検証します。 | `DatabaseManager` と同じ検証を行い、短い `connect_timeout` のみ上書きします。 |
+| Alembic engine / `AlembicReset` / 同期 test fixture / consumer-built engine | URL-level policy のみ、または検証なしです。 | 共有 resolver を呼ばない限り検証されません。 |
+| PostgreSQL client tools | client-tool 固有の URL / host policy を使い、destination query overrides を拒否します。 | SQLAlchemy engine kwargs の対象外です。 `sslmode` / `sslrootcert` query と configured-host の TLS policy は client-tool 側で適用します。 |
+
+独自の engine を作る場合は、URL-level policy だけでは `connect_args` による接続先変更を検証できません。
+実効設定の検証には `DatabaseManager.resolve_engine_settings()` を使ってください。
 
 `config.postgres.sslrootcert` があり、URL で `sslmode` を省略したとき、repom が補う URL に
 `sslrootcert` がなくてもその値を追加します。URL で `sslmode` を明示した場合は値を保持したうえで検証します。
 正規化後の環境が `prod` で接続先がリモート host のとき、`disable`、`allow`、`prefer` は
 `ValueError` になります。`require` または `verify-ca` / `verify-full` を指定してください。
-接続先の判定には URL authority の host に加えて、URL query の `host` / `hostaddr` と
-`engine_kwargs.connect_args` の `host` / `hostaddr` を使います。libpq が対応する
+共有 resolver を使う engine では、接続先の判定に URL authority の host に加えて、
+URL query の `host` / `hostaddr` と `engine_kwargs.connect_args` の `host` / `hostaddr` を使います。libpq が対応する
 カンマ区切りの複数 host では、リモート host が一つでも含まれるとリモートとして扱います。
 `hostaddr` がある場合は実際の接続先アドレスとして判定します。URL query または
-`connect_args` の `dsn` は prod で接続先と TLS 設定を安全に検証できないため使用できません。
+共有 resolver を使う engine entry point では、URL query または `connect_args` の `dsn` は
+prod で接続先と TLS 設定を安全に検証できないため使用できません。
 asyncpg は `host` を使えますが、
-`hostaddr` はサポートしないため URL または `connect_args` に指定すると engine 設定時に拒否されます。
+`hostaddr` はサポートしないため共有 resolver を使う engine 設定時に拒否されます。
 `host` が Unix socket path または loopback のみの場合はローカルとして扱います。
-engine 作成時の warning も connect args を含む実効接続先と TLS 設定を表示します。
+`DatabaseManager` の engine 作成時の warning は connect args を含む実効接続先と TLS 設定を表示します。
 
 URL override は `db_backup`、`db_restore`、`db_create`、`db_delete`、`db_sync_master` の対象にも
 なります。file-based SQLite の場合も override URL の path を使い、in-memory SQLite の backup / restore は

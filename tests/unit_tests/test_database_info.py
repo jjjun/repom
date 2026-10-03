@@ -6,12 +6,29 @@ from unittest.mock import Mock, patch
 import pytest
 
 from repom.diagnostics import database_info
+import repom.database as database_module
+from repom.config import RepomConfig
+from repom.database import DatabaseManager
 from repom.diagnostics.database_info import (
     collect_database_info_async,
     collect_database_info_sync,
     format_size,
     resolve_sqlite_db_path,
+    short_lived_postgres_engine,
 )
+
+
+def _postgres_probe_config(engine_kwargs, *, exec_env="dev", db_url=None):
+    policy_config = RepomConfig(exec_env=exec_env)
+    return SimpleNamespace(
+        db_type="postgres",
+        db_url=db_url or "postgresql://user:pass@localhost:5432/app",
+        db_name="app",
+        postgres_db="app_dev",
+        engine_kwargs=engine_kwargs,
+        exec_env=exec_env,
+        postgres_tls_settings_for_url=policy_config.postgres_tls_settings_for_url,
+    )
 
 
 def test_format_size_auto_units():
@@ -133,15 +150,11 @@ def test_collect_database_info_sync_postgres_skips_size_query():
 
 
 def test_collect_database_info_sync_postgres_reads_size():
-    mock_config = SimpleNamespace(
-        db_type="postgres",
-        db_url="postgresql://user:pass@localhost:5432/app",
-        db_name="app",
-        postgres_db="app_dev",
-        engine_kwargs={
+    mock_config = _postgres_probe_config(
+        {
             "pool_pre_ping": True,
             "connect_args": {"connect_timeout": 10, "application_name": "app"},
-        },
+        }
     )
     mock_engine = Mock()
     mock_conn = Mock()
@@ -171,18 +184,90 @@ def test_collect_database_info_sync_postgres_reads_size():
     assert kwargs["pool_pre_ping"] is True
 
 
+@pytest.mark.parametrize(
+    ("connect_args", "error_match", "secret"),
+    [
+        (
+            {"host": "remote.audit.invalid", "sslmode": "disable"},
+            "sslmode",
+            "probe_password",
+        ),
+        (
+            {"hostaddr": "198.51.100.5", "sslmode": "allow"},
+            "sslmode",
+            "probe_password",
+        ),
+        (
+            {"dsn": "host=remote.audit.invalid sslmode=disable password=dsn_secret"},
+            "DSN",
+            "dsn_secret",
+        ),
+    ],
+)
+def test_prod_normal_engine_and_database_info_probe_reject_unsafe_connect_args(
+    monkeypatch, connect_args, error_match, secret
+):
+    db_url = "postgresql://user:probe_password@127.0.0.1:5432/app?sslmode=require"
+    engine_kwargs = {"connect_args": connect_args}
+    probe_config = _postgres_probe_config(
+        engine_kwargs, exec_env="prod", db_url=db_url
+    )
+
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env="prod"))
+    with pytest.raises(ValueError, match=error_match):
+        DatabaseManager.resolve_engine_settings(db_url, engine_kwargs)
+
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env="dev"))
+    with patch.object(database_info.config_module, "config", probe_config), patch.object(
+        database_info, "create_engine"
+    ) as mock_create_engine:
+        info = collect_database_info_sync()
+
+    assert info.status == "unavailable"
+    assert error_match.lower() in info.error.lower()
+    assert secret not in info.error
+    assert "probe_password" not in info.error
+    mock_create_engine.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("connect_args", "expected_sslmode"),
+    [
+        ({"host": "localhost", "sslmode": "disable"}, "disable"),
+        ({"hostaddr": "198.51.100.5", "sslmode": "verify-full"}, "verify-full"),
+    ],
+)
+def test_postgres_probe_keeps_local_and_strong_tls_settings(
+    connect_args, expected_sslmode
+):
+    engine_kwargs = {"connect_args": connect_args}
+    config_obj = _postgres_probe_config(
+        engine_kwargs,
+        exec_env="prod",
+        db_url="postgresql://user:pass@localhost:5432/app?sslmode=require",
+    )
+    mock_engine = Mock()
+
+    with patch.object(
+        database_info, "create_engine", return_value=mock_engine
+    ) as mock_create_engine:
+        with short_lived_postgres_engine(config_obj):
+            pass
+
+    _, kwargs = mock_create_engine.call_args
+    assert kwargs["connect_args"]["sslmode"] == expected_sslmode
+    assert kwargs["connect_args"]["connect_timeout"] == 3
+    assert "connect_timeout" not in engine_kwargs["connect_args"]
+    assert engine_kwargs["connect_args"]["sslmode"] == expected_sslmode
+    mock_engine.dispose.assert_called_once()
+
+
 def test_collect_database_info_sync_postgres_disposes_engine_on_connect_error():
     """The engine must be disposed even when engine.connect() raises, not
     just when create_engine() raises - otherwise a failing check leaks the
     engine (repom#163).
     """
-    mock_config = SimpleNamespace(
-        db_type="postgres",
-        db_url="postgresql://user:pass@localhost:5432/app",
-        db_name="app",
-        postgres_db="app_dev",
-        engine_kwargs={"connect_args": {}},
-    )
+    mock_config = _postgres_probe_config({"connect_args": {}})
     mock_engine = Mock()
     mock_engine.connect.side_effect = RuntimeError("connection refused")
 

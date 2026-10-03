@@ -7,6 +7,8 @@ from importlib.metadata import entry_points
 
 from sqlalchemy.exc import OperationalError
 
+import repom.database as database_module
+from repom.config import RepomConfig
 from repom.scripts.repom_info import (
     display_config,
     format_size,
@@ -212,6 +214,40 @@ class TestPostgresConnectionTest:
         assert kwargs['connect_args']['application_name'] == 'myapp'
         assert kwargs['connect_args']['connect_timeout'] == 3
         assert kwargs['pool_pre_ping'] is True
+
+    @patch('repom.diagnostics.database_info.create_engine')
+    @patch('repom.scripts.repom_info.config')
+    def test_connection_test_rejects_weak_prod_connect_args_without_secrets(
+        self, mock_config, mock_create_engine, monkeypatch
+    ):
+        mock_postgres = Mock()
+        mock_postgres.host = 'localhost'
+        mock_config.postgres = mock_postgres
+        mock_config.postgres_db = 'test_db'
+        mock_config.db_url = (
+            'postgresql://test_user:probe_password@localhost:5432/test_db'
+            '?sslmode=require'
+        )
+        mock_config.engine_kwargs = {
+            'connect_args': {
+                'host': 'remote.audit.invalid',
+                'sslmode': 'disable',
+            }
+        }
+        policy_config = RepomConfig(exec_env='prod')
+        mock_config.exec_env = 'prod'
+        mock_config.postgres_tls_settings_for_url = (
+            policy_config.postgres_tls_settings_for_url
+        )
+        monkeypatch.setattr(database_module, 'config', RepomConfig(exec_env='dev'))
+
+        result = check_postgres_connection()
+
+        assert result.startswith('[NG] Error:')
+        assert len(result) <= len('[NG] Error: ') + 50
+        assert 'sslmode' in result
+        assert 'probe_password' not in result
+        mock_create_engine.assert_not_called()
 
     @patch('repom.diagnostics.database_info.create_engine')
     @patch('repom.scripts.repom_info.config')

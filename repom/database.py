@@ -200,9 +200,14 @@ def _asyncpg_sslmode(connect_args: Mapping) -> Optional[str]:
 
 
 def _resolve_postgres_engine_policy(
-    db_url: str, engine_kwargs: dict, *, asyncpg: bool = False
+    db_url: str,
+    engine_kwargs: dict,
+    *,
+    asyncpg: bool = False,
+    config_obj=None,
 ) -> tuple[str, dict, Optional[str], tuple[object, ...]]:
     """Resolve TLS mode from asyncpg ssl, connect_args sslmode, then URL sslmode."""
+    policy_config = config if config_obj is None else config_obj
     url = make_url(db_url)
     if url.get_backend_name() not in {"postgres", "postgresql"}:
         return db_url, engine_kwargs, None, ()
@@ -215,7 +220,7 @@ def _resolve_postgres_engine_policy(
     else:
         raise TypeError("connect_args must be a mapping for PostgreSQL")
 
-    if is_prod_exec_env(config.exec_env) and (
+    if is_prod_exec_env(policy_config.exec_env) and (
         "dsn" in url.query or "dsn" in connect_args
     ):
         raise ValueError(
@@ -232,7 +237,7 @@ def _resolve_postgres_engine_policy(
     )
 
     if (
-        is_prod_exec_env(config.exec_env)
+        is_prod_exec_env(policy_config.exec_env)
         and is_remote
         and not asyncpg
         and "sslmode" in connect_args
@@ -243,10 +248,12 @@ def _resolve_postgres_engine_policy(
             "destination in prod"
         )
 
-    tls = config.postgres_tls_settings_for_url(url, connect_args, sslmode=sslmode)
+    tls = policy_config.postgres_tls_settings_for_url(
+        url, connect_args, sslmode=sslmode
+    )
 
     if (
-        is_prod_exec_env(config.exec_env)
+        is_prod_exec_env(policy_config.exec_env)
         and is_remote
         and url.query.get("sslmode") is None
         and connect_args.get("sslmode") is None
