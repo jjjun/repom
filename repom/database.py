@@ -85,6 +85,7 @@ _SECRET_QUERY_PARAM_NAMES = frozenset(
         "password",
         "pgpassword",
         "sslpassword",
+        "dsn",
         "oauth_client_secret",
         "scram_client_key",
         "scram_server_key",

@@ -500,6 +500,22 @@ class TestGetAlembicConfig:
 
             assert config.get_main_option('sqlalchemy.url') == db_url
 
+    def test_get_alembic_config_escapes_percent_encoded_password(self):
+        encoded_password = "known%40password"
+        db_url = f"postgresql://user:{encoded_password}@localhost:5432/test_db"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            setup = AlembicSetup(tmpdir, db_url)
+            setup.create_alembic_ini()
+
+            try:
+                config = setup.get_alembic_config()
+            except ValueError as exc:
+                assert encoded_password not in str(exc)
+                assert "known@password" not in str(exc)
+                raise
+
+            assert config.get_main_option("sqlalchemy.url") == db_url
+
 
 class TestIntegration:
     """Integration tests for AlembicSetup"""

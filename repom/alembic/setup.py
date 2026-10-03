@@ -204,5 +204,5 @@ class AlembicSetup:
             )
 
         config = AlembicConfig(str(ini_path))
-        config.set_main_option("sqlalchemy.url", self.db_url)
+        config.set_main_option("sqlalchemy.url", self.db_url.replace("%", "%%"))
         return config

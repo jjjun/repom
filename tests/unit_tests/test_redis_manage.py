@@ -280,8 +280,15 @@ class TestGenerateDockerCompose:
         with patch.object(config.redis, "password", "s3cret"):
             generator = generate_docker_compose()
 
-        healthcheck_test = generator.services[0].healthcheck["test"]
-        assert "$$REDIS_PASSWORD" in healthcheck_test
+        service = generator.services[0]
+        healthcheck_test = service.healthcheck["test"]
+        assert "redis-cli ping" in healthcheck_test
+        assert "-a" not in healthcheck_test
+        assert "REDIS_PASSWORD" not in healthcheck_test
+        assert (
+            service.environment["REDISCLI_AUTH"]
+            == service.environment["REDIS_PASSWORD"]
+        )
         assert "s3cret" not in healthcheck_test
 
     def test_compose_rejects_unset_password(self):

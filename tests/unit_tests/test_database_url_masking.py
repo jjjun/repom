@@ -47,6 +47,20 @@ def test_safe_db_url_masks_query_string_password(query_param):
     assert f"{query_param}=***" in result
 
 
+def test_safe_db_url_masks_credentials_in_embedded_dsn():
+    secret = "known-dsn-password"
+    url = (
+        "postgresql://localhost:5432/app?"
+        "dsn=postgresql%3A%2F%2Fuser%3Aknown-dsn-password%40"
+        "db.example%3A5432%2Fapp"
+    )
+
+    result = database.safe_db_url(url)
+
+    assert secret not in result
+    assert "dsn=***" in result
+
+
 def test_safe_db_url_masks_query_string_password_alongside_userinfo_password():
     secret = "known-password"
     query_secret = "known-query-password"

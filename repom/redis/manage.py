@@ -187,7 +187,10 @@ def generate_docker_compose(
         name="redis",
         image=image,
         container_name=container_name,
-        environment={"REDIS_PASSWORD": quote_yaml_string("${REDIS_PASSWORD}")},
+        environment={
+            "REDIS_PASSWORD": quote_yaml_string("${REDIS_PASSWORD}"),
+            "REDISCLI_AUTH": quote_yaml_string("${REDIS_PASSWORD}"),
+        },
         ports=[format_bound_port(redis_port, 6379, expose_to_lan=container.expose_to_lan)],
         volumes=[
             f"{volume_name}:/data",
@@ -198,7 +201,7 @@ def generate_docker_compose(
             "--requirepass \"$$REDIS_PASSWORD\"'"
         ),
         healthcheck={
-            "test": '["CMD-SHELL", "redis-cli -a \\"$$REDIS_PASSWORD\\" ping"]',
+            "test": '["CMD-SHELL", "redis-cli ping"]',
             "interval": "5s",
             "timeout": "5s",
             "retries": 5,
