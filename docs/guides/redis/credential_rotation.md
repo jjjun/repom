@@ -84,6 +84,6 @@ runtime command は `--old-password`、`--old-password-stdin`、または TTY pr
 - port と `CHANGE_ME` password の設定規則は[設定ガイド](redis_manager_guide.md)を参照してください。
 - 生成する Redis は常に password を必要とします。`REDIS_PASSWORD` が未設定または `CHANGE_ME` の場合、
   `redis_generate` は停止します。
-- rotation の出力では password が mask されます。
+- Redis rotation は redacted な入力から表示用 payload を生成し、double quote / backslash の escaped form も表示・失敗 message に出しません。返却される `input_text` は実行 payload のため、secret として扱ってください。
 - 失敗時は raw subprocess traceback の代わりに password を mask した error が送出されます。
 - `CONFIG SET requirepass` は起動中 Redis にただちに反映されます。

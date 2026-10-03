@@ -104,7 +104,7 @@ secret が変わる場合は以前の file が `.env.bak` として残ります�
 
 ## 注意事項
 
-- rotation の出力では password が mask されます。
+- PostgreSQL rotation は redacted な plan から表示用 SQL を生成し、引用符を含む password の SQL 内表現も表示・失敗 message に出しません。
 - PostgreSQL の実行では現在の password の `PGPASSWORD` を `docker exec --env-file` で container に
   渡します。値は mode `0600` の一時 file に書かれ、rotation の終了時に削除されます。SQL は stdin
   経由で送るため、新しい password も `psql` の process argument に入りません。

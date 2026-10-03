@@ -264,6 +264,144 @@ def test_redis_rotation_failure_masks_password():
     assert "***" in str(excinfo.value)
 
 
+@pytest.mark.parametrize(
+    "new_password",
+    [
+        "dummy'quoted",
+        r"dummy\backslash",
+        'dummy"quoted',
+        "dummy password",
+        "dummy $repom_rotation$ tagged",
+    ],
+)
+def test_redis_rotation_redacts_display_input_before_escaping(
+    new_password, monkeypatch, capsys
+):
+    old_password = 'old "quoted"\\slash'
+    executed_inputs = []
+
+    def fake_runner(command, **kwargs):
+        executed_inputs.append(kwargs["input"])
+        return MagicMock(returncode=0, stdout="OK\n", stderr="")
+
+    def rotate_with_fake_runner(plan, *, dry_run):
+        return rotate_redis_password(plan, dry_run=dry_run, runner=fake_runner)
+
+    monkeypatch.setattr(redis_manage, "rotate_redis_password", rotate_with_fake_runner)
+    monkeypatch.setattr(redis_manage, "generate", lambda **kwargs: None)
+
+    with patch.object(config.redis, "password", old_password):
+        dry_result = rotate_redis_password_cli(
+            new_password=new_password,
+            old_password=old_password,
+            execute=False,
+        )
+        dry_output = capsys.readouterr().out
+        executed_result = rotate_redis_password_cli(
+            new_password=new_password,
+            old_password=old_password,
+            execute=True,
+        )
+        executed_output = capsys.readouterr().out
+
+    escaped_password = new_password.replace("\\", "\\\\").replace('"', '\\"')
+    escaped_old_password = old_password.replace("\\", "\\\\").replace('"', '\\"')
+    for display in (
+        dry_output,
+        executed_output,
+        dry_result.masked_command,
+        dry_result.masked_input,
+        executed_result.masked_command,
+        executed_result.masked_input,
+    ):
+        for secret in (
+            new_password,
+            escaped_password,
+            old_password,
+            escaped_old_password,
+        ):
+            assert secret not in display
+
+    expected_input = f'CONFIG SET requirepass "{escaped_password}"\n'
+    assert executed_result.input_text == expected_input
+    assert executed_inputs == [expected_input]
+    assert "--env-file" in executed_result.command
+
+
+@pytest.mark.parametrize("returncode", [0, 1])
+def test_redis_rotation_masks_escaped_passwords_from_failure_output(returncode):
+    old_password = 'old "quoted"\\slash'
+    new_password = 'new "quoted"\\slash'
+    escaped_old_password = old_password.replace("\\", "\\\\").replace('"', '\\"')
+    escaped_password = new_password.replace("\\", "\\\\").replace('"', '\\"')
+
+    def fake_runner(command, **kwargs):
+        if returncode:
+            return MagicMock(
+                returncode=returncode,
+                stdout="",
+                stderr=f"ERR context={kwargs['input']} old={escaped_old_password}",
+            )
+        return MagicMock(
+            returncode=returncode,
+            stdout=f"(error) rejected {escaped_password}",
+            stderr="",
+        )
+
+    plan = RedisCredentialRotationPlan(
+        old_password=old_password,
+        new_password=new_password,
+        container_name="repom_redis",
+    )
+
+    with pytest.raises(RedisCredentialRotationError) as excinfo:
+        rotate_redis_password(plan, dry_run=False, runner=fake_runner)
+
+    messages = []
+    pending = [excinfo.value]
+    seen = set()
+    while pending:
+        error = pending.pop()
+        if id(error) in seen:
+            continue
+        seen.add(id(error))
+        messages.append(str(error))
+        pending.extend(
+            cause for cause in (error.__cause__, error.__context__) if cause
+        )
+    combined_message = "\n".join(messages)
+    for secret in (
+        old_password,
+        escaped_old_password,
+        new_password,
+        escaped_password,
+    ):
+        assert secret not in combined_message
+    assert "***" in combined_message
+
+
+def test_redis_rotation_masks_escaped_trailing_backslash_from_failure_output():
+    new_password = "ending\\"
+    escaped_password = new_password.replace("\\", "\\\\").replace('"', '\\"')
+
+    def fake_runner(command, **kwargs):
+        return MagicMock(
+            returncode=1,
+            stdout="",
+            stderr=f"ERR password={escaped_password}",
+        )
+
+    plan = RedisCredentialRotationPlan(
+        new_password=new_password,
+        container_name="repom_redis",
+    )
+
+    with pytest.raises(RedisCredentialRotationError) as excinfo:
+        rotate_redis_password(plan, dry_run=False, runner=fake_runner)
+
+    assert str(excinfo.value).endswith("stderr=ERR password=***")
+
+
 def test_redis_rotate_password_requires_explicit_new_password():
     with pytest.raises(ValueError, match="new_password"):
         rotate_password()

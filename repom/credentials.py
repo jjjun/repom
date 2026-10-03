@@ -72,9 +72,8 @@ def mask_secret(text: str, secrets: Iterable[str | None]) -> str:
     """Mask all non-empty secrets in text."""
 
     masked = text
-    for secret in secrets:
-        if secret:
-            masked = masked.replace(secret, "***")
+    for secret in sorted(filter(None, secrets), key=len, reverse=True):
+        masked = masked.replace(secret, "***")
     return masked
 
 

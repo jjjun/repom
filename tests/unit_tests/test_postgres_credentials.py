@@ -434,6 +434,155 @@ def test_postgres_rotation_failure_masks_password(monkeypatch, tmp_path):
     assert "***" in str(excinfo.value)
 
 
+@pytest.mark.parametrize(
+    "new_password",
+    [
+        "dummy'quoted",
+        r"dummy\backslash",
+        'dummy"quoted',
+        "dummy password",
+        "dummy $repom_rotation$ tagged",
+    ],
+)
+def test_postgres_rotation_redacts_display_sql_before_escaping(
+    new_password, monkeypatch, tmp_path, capsys
+):
+    from repom.postgres import credentials, manage
+
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
+    monkeypatch.setattr(manage, "_validate_generation", lambda **kwargs: None)
+    monkeypatch.setattr(credentials, "_regenerate_compose_secrets", lambda: None)
+    current_password = "old'quoted\\password"
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        new_user="app_user",
+        current_password=current_password,
+        new_password=new_password,
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    dry_result = rotate_postgres_credentials(plan, dry_run=True)
+    credentials._print_result(dry_result)
+    dry_output = capsys.readouterr().out
+
+    executed_sql = []
+
+    def fake_runner(command, **kwargs):
+        executed_sql.append(kwargs["input"])
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    executed_result = rotate_postgres_credentials(
+        plan, dry_run=False, runner=fake_runner
+    )
+    credentials._print_result(executed_result)
+    executed_output = capsys.readouterr().out
+
+    escaped_password = quote_literal(new_password)[1:-1]
+    escaped_current_password = quote_literal(current_password)[1:-1]
+    for display in (
+        dry_output,
+        executed_output,
+        *dry_result.masked_output,
+        *executed_result.masked_output,
+    ):
+        for secret in (
+            new_password,
+            escaped_password,
+            current_password,
+            escaped_current_password,
+        ):
+            assert secret not in display
+
+    assert len(executed_sql) == 1
+    assert quote_literal(new_password) in executed_sql[0]
+    assert "--env-file" in executed_result.commands[0]
+    if "$repom_rotation$" in new_password:
+        assert "$repom_rotation_$" in executed_sql[0]
+
+
+def test_postgres_rotation_masks_escaped_passwords_from_server_errors(
+    monkeypatch, tmp_path
+):
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
+    current_password = "old'quoted"
+    new_password = "new'quoted"
+    escaped_current_password = quote_literal(current_password)[1:-1]
+    escaped_new_password = quote_literal(new_password)[1:-1]
+
+    def fake_runner(command, **kwargs):
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            stdout="",
+            stderr=(
+                f"ERROR CONTEXT statement={kwargs['input']} "
+                f"old={escaped_current_password}"
+            ),
+        )
+
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password=current_password,
+        new_password=new_password,
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    with pytest.raises(PostgresCredentialRotationError) as excinfo:
+        rotate_postgres_credentials(plan, dry_run=False, runner=fake_runner)
+
+    messages = []
+    pending = [excinfo.value]
+    seen = set()
+    while pending:
+        error = pending.pop()
+        if id(error) in seen:
+            continue
+        seen.add(id(error))
+        messages.append(str(error))
+        pending.extend(
+            cause for cause in (error.__cause__, error.__context__) if cause
+        )
+    combined_message = "\n".join(messages)
+    for secret in (
+        current_password,
+        escaped_current_password,
+        new_password,
+        escaped_new_password,
+    ):
+        assert secret not in combined_message
+    assert "***" in combined_message
+
+
+@pytest.mark.parametrize("new_password", ["ending'", "'starting"])
+def test_postgres_rotation_masks_escaped_boundary_apostrophes_from_server_errors(
+    new_password, monkeypatch, tmp_path
+):
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
+    escaped_password = quote_literal(new_password)[1:-1]
+
+    def fake_runner(command, **kwargs):
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            stdout="",
+            stderr=f"ERROR CONTEXT password={escaped_password}",
+        )
+
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        new_password=new_password,
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    with pytest.raises(PostgresCredentialRotationError) as excinfo:
+        rotate_postgres_credentials(plan, dry_run=False, runner=fake_runner)
+
+    assert str(excinfo.value).endswith("stderr=ERROR CONTEXT password=***")
+
+
 def test_postgres_dry_run_shows_env_file_placeholder_when_current_password_set():
     plan = PostgresCredentialRotationPlan(
         current_user="repom",

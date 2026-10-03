@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import argparse
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Iterable, Sequence
 
 from repom.config import config
@@ -266,9 +266,23 @@ def rotate_postgres_credentials(
     """Execute or dry-run a PostgreSQL credential rotation plan."""
 
     steps = build_postgres_rotation_steps(plan)
-    secrets = (plan.current_password, plan.new_password)
+    display_plan = replace(
+        plan,
+        current_password=None,
+        new_password="***",
+    )
+    display_steps = build_postgres_rotation_steps(display_plan)
+    secrets = (
+        plan.current_password,
+        quote_literal(plan.current_password)[1:-1]
+        if plan.current_password is not None
+        else None,
+        plan.new_password,
+        quote_literal(plan.new_password)[1:-1],
+    )
     masked_output = tuple(
-        mask_secret(f"{step.database}: {step.sql}", secrets) for step in steps
+        mask_secret(f"{step.database}: {step.sql}", secrets)
+        for step in display_steps
     )
 
     if not dry_run:

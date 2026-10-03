@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterator
 
 from repom.config import config
@@ -45,7 +45,11 @@ class RedisCredentialRotationPlan:
 
 @dataclass(frozen=True)
 class RedisCredentialRotationResult:
-    """Result returned by Redis password rotation."""
+    """Result returned by Redis password rotation.
+
+    ``input_text`` contains the unredacted execution payload and must be
+    treated as a secret.
+    """
 
     dry_run: bool
     command: tuple[str, ...]
@@ -122,7 +126,24 @@ def rotate_redis_password(
     )
     escaped_password = new_password.replace("\\", "\\\\").replace('"', '\\"')
     input_text = f'CONFIG SET requirepass "{escaped_password}"\n'
-    secrets = (plan.old_password, plan.new_password)
+    escaped_old_password = (
+        plan.old_password.replace("\\", "\\\\").replace('"', '\\"')
+        if plan.old_password is not None
+        else None
+    )
+    secrets = (
+        plan.old_password,
+        escaped_old_password,
+        plan.new_password,
+        escaped_password,
+    )
+    display_plan = replace(plan, old_password=None, new_password="***")
+    display_escaped_password = (
+        display_plan.new_password.replace("\\", "\\\\").replace('"', '\\"')
+    )
+    display_input_text = (
+        f'CONFIG SET requirepass "{display_escaped_password}"\n'
+    )
 
     if not dry_run:
         with _rediscli_auth_env_file(plan.old_password) as env_file:
@@ -149,7 +170,7 @@ def rotate_redis_password(
         command = build_redis_cli_command(container_name=container_name, env_file=placeholder_env_file)
 
     masked_command = mask_secret(" ".join(command), *secrets)
-    masked_input = mask_secret(input_text, *secrets)
+    masked_input = mask_secret(display_input_text, *secrets)
 
     return RedisCredentialRotationResult(
         dry_run=dry_run,

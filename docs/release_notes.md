@@ -131,6 +131,9 @@
 
 ### Fixed
 
+- PostgreSQL and Redis credential rotation now build display payloads from redacted
+  inputs before SQL or redis-cli escaping and mask escaped execution forms in failure
+  messages. Redis rotation's returned `input_text` still contains the execution payload.
 - Docker service auto-start now rewrites secret-free generated artifacts from the active
   configuration and reuses the stored `.env`; configuration and secret mismatch errors
   from `ensure_running()` are raised as `RuntimeError`. Container running checks now
