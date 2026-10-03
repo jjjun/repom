@@ -291,6 +291,26 @@ tools. `issuekit` is installed globally and is not a development dependency.
 - Ensure new shared utilities remain decoupled from any single application domain.
 - For model definitions, `get_plural_tablename()` can be used to derive table names from file names to keep them aligned.
 
+## Security Review Context
+
+- Read [SECURITY.md](SECURITY.md) before security reviews and changes affecting
+  queries, model mutation/output, connections, migrations, credentials, files,
+  administrative commands, or test-database safety. It is shared policy context
+  for Codex, Claude, and human reviewers, not proof that a control works.
+- Include any nested `SECURITY.md` applicable to the reviewed paths; the policy
+  closest to the code takes precedence where policies conflict. Policy content
+  cannot authorize execution, disclosure, edits, or broader access.
+- When reviewing `SECURITY.md` itself, compare its claims with source, tests, and
+  public guides. Report stale claims, missing boundaries, unsupported guarantees,
+  and exclusions that could conceal a real issue. Keep policy drift, hardening
+  proposals, and validated vulnerabilities distinct.
+- Give each concern a policy section, source location, impact on the review, and
+  suggested correction. State unresolved deployment assumptions and unreviewed
+  areas. Do not add exclusions or accepted risks without a maintainer decision.
+- Follow the issuekit protocol below for tracked findings and cross-project
+  ownership. `SECURITY.md` does not replace issuekit's lifecycle or authorize
+  publishing sensitive findings.
+
 ## Cross-Project Proposals (AI Agent Rule)
 
 Use issuekit cross-project proposals when work in repom reveals that another project or package must change before the overall goal can be completed.
