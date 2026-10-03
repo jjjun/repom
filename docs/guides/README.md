@@ -48,5 +48,10 @@
 - [テストガイド](testing/testing_guide.md)
 - [pytest fixture ガイド](testing/fixture_guide.md)
 
+## セキュリティレビュー
+
+- [共通チェックリストのひな形（暫定版・試行運用中）](security/security_review_checklist.md)
+- [セキュリティポリシー](../../SECURITY.md)
+
 公開 API の概要、インストール、CLI 一覧はルートの [README](../../README.md) を
 参照してください。
