@@ -3,7 +3,7 @@
 `repom.config_hooks.redis.apply_redis_env_overrides()` を呼ぶと、`REDIS_PASSWORD` は repom の Redis
 設定に反映されます。生成する Redis instance はその値を service environment 経由で container に渡し、
 `--requirepass` 付きで起動します。生成する `redis.conf` に password は入りません。health check は
-設定済み password で認証します。
+container 作成時の `REDISCLI_AUTH`（作成時の password）で認証します。
 
 ## 新規または再生成する設定
 
@@ -52,6 +52,13 @@ printf '%s\n%s\n' 'new-password' 'old-password' | uv run redis_rotate_password \
   --execute
 ```
 
+実行済みの rotation では、`.env` の更新後に Redis container を再作成してください。container の環境変数は
+作成時の値を保持するため、再作成前に container、Docker daemon、または host が再起動すると、以前の
+password で起動します。2026-09-14 より前に generator が作成した container は、再起動時に
+`redis.conf` の `requirepass` が失われ、password なしで起動することがあります。`redis_stop` の後に
+`redis_start` を実行すると、Compose `up -d` が環境変数の変更を検出して container を再作成します。
+新しい password を使う client の再起動と調整してください。
+
 標準入力が TTY の場合、new-password option を省略すると新しい password を prompt し、old-password
 option を省略すると現在の password を prompt します。`--new-password` と `--old-password` は互換性の
 ため引き続き使えますが、process argument に値が見えます。`--allow-config-password` は設定済み password
@@ -69,15 +76,27 @@ printf '%s\n%s\n' 'new-password' '' | uv run redis_rotate_password \
 ```
 
 実行前に設定値を先に更新してください。Redis が変更を確認した後に限り、repom は compose file と
-`.env` secrets file を新しい password で再生成します。変更後の `.env` には以前の file が
-`.env.bak` として残ります。library function `repom.redis.manage.rotate_password` も成功後に
+`.env` secrets file を新しい password で再生成します。
+以前の `.env` が存在し、その内容が変更された場合に限り、以前の file が `.env.bak` として残ります。
+`.env` 形式の導入前に生成した環境には backup がないため、rollback が必要なら古い password を別の
+場所に保管してください。library function `repom.redis.manage.rotate_password` も成功後に
 `.env` を更新するため、呼び出し側での追加保存は不要です。
 
 runtime command は `--old-password`、`--old-password-stdin`、または TTY prompt から得た旧 password を
 `REDISCLI_AUTH` 経由で渡し、新しい password は stdin から送ります。`REDISCLI_AUTH` は mode `0600` の
 一時 file に書かれ、`docker exec --env-file` で container に渡された後、command 終了時に削除されます。
-旧 password は process argument に入りません。Redis 起動時の readiness poll は認証情報を送らずに ping
-し、NOAUTH 応答を server 起動の確認として扱います。
+旧 password は process argument に入りません。`docker exec` は container environment の
+`REDISCLI_AUTH` を継承するため、readiness poll は container 作成時の password で認証します。rotation
+後は古い password による NOAUTH 応答も server 起動の確認として扱います。
+
+認証の確認には、container environment の `REDISCLI_AUTH` を外して次を実行してください。NOAUTH が
+返れば認証が有効です。
+
+```bash
+docker exec <container> env -u REDISCLI_AUTH redis-cli ping
+```
+
+`docker exec <container> redis-cli ping` は `REDISCLI_AUTH` を継承するため、認証の確認にはなりません。
 
 ## 注意事項
 

@@ -22,17 +22,15 @@ from repom.docker_compose_safety import (
     reject_control_characters,
     validate_docker_image,
     validate_docker_name,
+    validate_restart_policy,
     validate_stored_secret_values,
     validate_secret_file_overwrite,
     write_secret_file,
 )
 from repom.postgres.credentials import mask_secret, quote_identifier, quote_literal
-from basekit.docker_compose import (
-    DockerComposeGenerator,
-    DockerService,
-    DockerVolume,
-)
+from basekit.docker_compose import DockerVolume
 from basekit.docker_manager import DockerCommandExecutor, DockerManager
+from repom.docker_compose import RepomDockerComposeGenerator, RepomDockerService
 from repom.docker_service import (
     _force_regenerate_from_args,
     ensure_running as ensure_container_service_running,
@@ -141,7 +139,7 @@ def generate_docker_compose(
     validate_credentials: bool = True,
     postgres_password: str | None = None,
     postgres_user: str | None = None,
-) -> DockerComposeGenerator:
+) -> RepomDockerComposeGenerator:
     """Generate a compose model for PostgreSQL and optional pgAdmin."""
 
     manager = PostgresManager()
@@ -164,11 +162,16 @@ def generate_docker_compose(
         container.get_volume_name(), field_name="postgres.container.volume_name"
     )
     image = validate_docker_image(container.image, field_name="postgres.container.image")
+    restart_policy = validate_restart_policy(
+        container.restart_policy,
+        field_name="postgres.container.restart_policy",
+    )
 
-    postgres_service = DockerService(
+    postgres_service = RepomDockerService(
         name="postgres",
         image=image,
         container_name=container_name,
+        restart=restart_policy,
         environment={
             "POSTGRES_USER": quote_yaml_string(user),
             "POSTGRES_PASSWORD": quote_yaml_string("${POSTGRES_PASSWORD}"),
@@ -189,7 +192,7 @@ def generate_docker_compose(
         },
     )
 
-    generator = DockerComposeGenerator()
+    generator = RepomDockerComposeGenerator()
     generator.add_service(postgres_service)
     generator.add_volume(DockerVolume(name=volume_name))
 
@@ -216,12 +219,17 @@ def generate_docker_compose(
         pgadmin_image = validate_docker_image(
             pgadmin_container.image, field_name="pgadmin.container.image"
         )
+        pgadmin_restart_policy = validate_restart_policy(
+            pgadmin_container.restart_policy,
+            field_name="pgadmin.container.restart_policy",
+        )
         servers_json_path = manager.get_compose_dir() / "servers.json"
 
-        pgadmin_service = DockerService(
+        pgadmin_service = RepomDockerService(
             name="pgadmin",
             image=pgadmin_image,
             container_name=pgadmin_container_name,
+            restart=pgadmin_restart_policy,
             environment={
                 "PGADMIN_DEFAULT_EMAIL": quote_yaml_string(pgadmin_email),
                 "PGADMIN_DEFAULT_PASSWORD": quote_yaml_string(

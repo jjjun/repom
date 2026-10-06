@@ -27,6 +27,7 @@ _FORBIDDEN_CHARACTERS = {
 }
 _DOCKER_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _DOCKER_IMAGE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@${}-]*$")
+_RESTART_POLICY_PATTERN = re.compile(r"on-failure:([0-9]+)")
 
 
 def reject_control_characters(value: str, *, field_name: str) -> str:
@@ -53,6 +54,25 @@ def validate_docker_name(value: str, *, field_name: str) -> str:
             "digits, '.', '_' or '-' and starting with a letter or digit"
         )
     return value
+
+
+def validate_restart_policy(value: str, *, field_name: str) -> str:
+    """Validate a Docker container restart policy before Compose rendering."""
+
+    if isinstance(value, str) and value in {
+        "no",
+        "always",
+        "unless-stopped",
+        "on-failure",
+    }:
+        return value
+    match = _RESTART_POLICY_PATTERN.fullmatch(value) if isinstance(value, str) else None
+    if match is not None and int(match.group(1)) > 0:
+        return value
+    raise ValueError(
+        f"{field_name} must be 'no', 'always', 'unless-stopped', 'on-failure', "
+        "or 'on-failure:<positive integer>'"
+    )
 
 
 def validate_docker_image(value: str, *, field_name: str) -> str:
@@ -286,5 +306,6 @@ __all__ = [
     "validate_stored_secret_values",
     "validate_docker_image",
     "validate_docker_name",
+    "validate_restart_policy",
     "write_secret_file",
 ]

@@ -11,6 +11,7 @@ from repom.docker_compose_safety import (
     parse_env_file,
     quote_yaml_string,
     reject_control_characters,
+    validate_restart_policy,
     validate_secret_file_overwrite,
     validate_stored_secret_values,
     write_secret_file,
@@ -63,6 +64,25 @@ class TestQuoteYamlString:
             '      POSTGRES_PASSWORD: '
             '"hostile\\nPOSTGRES_HOST_AUTH_METHOD: trust"'
         )
+
+
+class TestValidateRestartPolicy:
+    @pytest.mark.parametrize(
+        "value",
+        ["no", "always", "unless-stopped", "on-failure", "on-failure:3"],
+    )
+    def test_accepts_supported_policies(self, value):
+        assert validate_restart_policy(
+            value, field_name="redis.container.restart_policy"
+        ) == value
+
+    @pytest.mark.parametrize(
+        "value",
+        ["sometimes", "on-failure:0", "on-failure:x", "on failure", "always\n"],
+    )
+    def test_rejects_unsupported_policies_with_field_name(self, value):
+        with pytest.raises(ValueError, match="redis.container.restart_policy"):
+            validate_restart_policy(value, field_name="redis.container.restart_policy")
 
 
 class TestFormatBoundPort:

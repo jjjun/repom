@@ -45,6 +45,13 @@ PGADMIN_HOST_PORT=5050
 `0.0.0.0` へ公開して LAN 上の他ホストからも到達可能になります。LAN 公開が
 本当に必要なプロジェクトでのみ有効にしてください。
 
+container の再起動方針は environment variable ではなく consumer の config hook で設定します。既定値は
+`unless-stopped` です。値には `no`、`always`、`unless-stopped`、`on-failure`、または
+`on-failure:<正の整数>` を指定できます。以前と同じ挙動にする場合は
+`config.postgres.container.restart_policy = "no"`、または pgAdmin に対して
+`config.pgadmin.container.restart_policy = "no"` を設定してください。`postgres_stop` は Compose の
+`stop` を使うため、明示的に停止した container は次の `postgres_start` まで停止状態を保ちます。
+
 `POSTGRES_PORT` はアプリケーションの接続先 port、
 `POSTGRES_HOST_PORT` は生成する container の host mapping です。両者を変更する
 構成では同じ値に揃えてください。すべての override は

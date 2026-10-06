@@ -27,6 +27,7 @@ from repom.docker_compose_safety import (
     reject_control_characters,
     validate_docker_image,
     validate_docker_name,
+    validate_restart_policy,
     validate_stored_secret_values,
     validate_secret_file_overwrite,
     write_secret_file,
@@ -37,12 +38,9 @@ from repom.redis.credentials import (
     build_redis_ping_command,
     rotate_redis_password,
 )
-from basekit.docker_compose import (
-    DockerComposeGenerator,
-    DockerService,
-    DockerVolume,
-)
+from basekit.docker_compose import DockerVolume
 from basekit.docker_manager import DockerCommandExecutor, DockerManager
+from repom.docker_compose import RepomDockerComposeGenerator, RepomDockerService
 from repom.docker_service import (
     _force_regenerate_from_args,
     ensure_running as ensure_container_service_running,
@@ -73,9 +71,10 @@ class RedisManager(DockerManager):
     def wait_for_service(self, max_retries: int = 30) -> None:
         """Wait until redis-cli ping succeeds inside the Redis container.
 
-        The ping is unauthenticated: a password-protected instance answers
-        with a NOAUTH error once it is up, which is enough to confirm
-        readiness without ever placing the password in the poll's argv.
+        docker exec inherits REDISCLI_AUTH from the container environment, so
+        the ping authenticates with the creation-time password. After an
+        in-place rotation that password is stale, and NOAUTH is accepted as a
+        readiness signal.
         """
 
         container_name = self.get_container_name()
@@ -167,7 +166,7 @@ loglevel notice
 
 def generate_docker_compose(
     *, validate_credentials: bool = True, redis_password: str | None = None
-) -> DockerComposeGenerator:
+) -> RepomDockerComposeGenerator:
     """Generate a compose model for Redis."""
 
     manager = RedisManager()
@@ -184,12 +183,17 @@ def generate_docker_compose(
         container.get_volume_name(), field_name="redis.container.volume_name"
     )
     image = validate_docker_image(container.image, field_name="redis.container.image")
+    restart_policy = validate_restart_policy(
+        container.restart_policy,
+        field_name="redis.container.restart_policy",
+    )
     init_dir = manager.get_init_dir()
 
-    redis_service = DockerService(
+    redis_service = RepomDockerService(
         name="redis",
         image=image,
         container_name=container_name,
+        restart=restart_policy,
         environment={
             "REDIS_PASSWORD": quote_yaml_string("${REDIS_PASSWORD}"),
             "REDISCLI_AUTH": quote_yaml_string("${REDIS_PASSWORD}"),
@@ -211,7 +215,7 @@ def generate_docker_compose(
         },
     )
 
-    generator = DockerComposeGenerator()
+    generator = RepomDockerComposeGenerator()
     generator.add_service(redis_service)
     generator.add_volume(DockerVolume(name=volume_name))
 
@@ -412,6 +416,22 @@ def rotate_password(
             raise RedisCredentialRotationError(recovery) from exc
     for line in (result.masked_command, result.masked_input.strip()):
         print(line)
+    if result.recreate_required:
+        print(
+            "\nACTION REQUIRED: the running Redis container keeps its "
+            "creation-time settings. Until it is recreated, any restart "
+            "(docker restart, daemon restart, or host reboot) restores the "
+            "previous password, or no password for containers generated "
+            "before 2026-09-14 (requirepass in redis.conf). Recreate it now "
+            "with `redis_stop` then `redis_start`; Compose `up -d` recreates "
+            "the container because its interpolated environment changed. "
+            "Coordinate this with restarting clients that use the new password."
+        )
+    elif result.dry_run:
+        print(
+            "Planning note: an executed Redis password rotation requires a "
+            "container recreate with `redis_stop` then `redis_start`."
+        )
     return result
 
 

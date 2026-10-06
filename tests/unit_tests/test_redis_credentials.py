@@ -64,6 +64,7 @@ def test_redis_rotation_masks_passwords_and_keeps_input_for_execution():
     result = rotate_redis_password(plan, dry_run=True)
 
     assert result.dry_run is True
+    assert result.recreate_required is False
     assert "old-secret" not in " ".join(result.command)
     assert "new-secret" in result.input_text
     assert "old-secret" not in result.masked_command
@@ -80,7 +81,8 @@ def test_redis_rotation_executes_with_stdin():
         container_name="repom_redis",
     )
 
-    rotate_redis_password(plan, dry_run=False, runner=runner)
+    result = rotate_redis_password(plan, dry_run=False, runner=runner)
+    assert result.recreate_required is True
 
     command = runner.call_args.args[0]
     kwargs = runner.call_args.kwargs
@@ -162,13 +164,14 @@ def test_redis_rotate_does_not_regenerate_env_after_error_reply(tmp_path):
     assert env_file.read_text(encoding="utf-8") == original_env
 
 
-def test_redis_rotate_rewrites_generated_env_after_success():
+def test_redis_rotate_rewrites_generated_env_after_success(capsys):
     result = RedisCredentialRotationResult(
         dry_run=False,
         command=("docker", "exec", "repom_redis", "redis-cli"),
         input_text="CONFIG SET requirepass new-secret\n",
         masked_command="docker exec repom_redis redis-cli",
         masked_input="CONFIG SET requirepass ***",
+        recreate_required=True,
     )
 
     with patch.object(config.redis, "password", "old-secret"):
@@ -178,6 +181,25 @@ def test_redis_rotate_rewrites_generated_env_after_success():
 
                 assert config.redis.password == "new-secret"
                 generate.assert_called_once_with(overwrite_secrets=True)
+
+    output = capsys.readouterr().out
+    assert "ACTION REQUIRED" in output
+    assert "redis_stop" in output
+    assert "redis_start" in output
+    assert "new-secret" not in output
+
+
+def test_redis_rotation_dry_run_prints_recreate_planning_note(capsys):
+    result = rotate_password(
+        "new-secret", old_password="old-secret", dry_run=True
+    )
+
+    assert result.recreate_required is False
+    output = capsys.readouterr().out
+    assert "executed Redis password rotation requires a container recreate" in output
+    assert "redis_stop" in output
+    assert "redis_start" in output
+    assert "new-secret" not in output
 
 
 def test_redis_plan_from_config_does_not_infer_old_password():

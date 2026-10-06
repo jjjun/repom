@@ -96,7 +96,9 @@ uv run postgres_start
 成功した rotation または確認済みの volume 再作成の後、repom は生成済み `.env` を設定済み password
 で更新します。library function `rotate_postgres_credentials`、`rotate_pgadmin_password`、
 `recreate_pgadmin_volume` も成功後の `.env` 更新を行うため、呼び出し側での追加保存は不要です。
-secret が変わる場合は以前の file が `.env.bak` として残ります。
+以前の generated `.env` が存在し、その内容が変更された場合に限り、以前の file が `.env.bak` として
+残ります。`.env` 形式の導入前に生成した環境には backup がないため、rollback が必要なら古い password
+を別の場所に保管してください。
 
 生成 compose file と `.env` の再生成や `--force-regenerate` の挙動は
 [Docker manager ガイド](../features/docker_manager_guide.md)を参照してください。既存 volume の認証情報と

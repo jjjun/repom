@@ -20,6 +20,8 @@ class PostgresContainerConfig:
     # this for a project that genuinely needs LAN access to this container;
     # the default keeps it reachable from the developer machine only.
     expose_to_lan: bool = field(default=False)
+    # Restart after daemon restarts, unless the container was explicitly stopped.
+    restart_policy: str = field(default="unless-stopped")
 
     def get_container_name(self) -> str:
         """Return the container name."""
@@ -72,6 +74,8 @@ class PgAdminContainerConfig:
     # this for a project that genuinely needs LAN access to this container;
     # the default keeps it reachable from the developer machine only.
     expose_to_lan: bool = field(default=False)
+    # Restart after daemon restarts, unless the container was explicitly stopped.
+    restart_policy: str = field(default="unless-stopped")
 
     def get_container_name(self) -> str:
         """Return the container name."""

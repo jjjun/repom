@@ -56,6 +56,7 @@ class RedisCredentialRotationResult:
     input_text: str
     masked_command: str
     masked_input: str
+    recreate_required: bool = False
 
 
 def mask_secret(text: str, *secrets: str | None) -> str:
@@ -88,11 +89,12 @@ def build_redis_ping_command(
     *,
     container_name: str,
 ) -> tuple[str, ...]:
-    """Build an unauthenticated redis-cli PING command for readiness checks.
+    """Build a redis-cli PING command for readiness checks.
 
-    Readiness polling never needs the password: a password-protected instance
-    still responds with a NOAUTH error once it is up, which is enough to tell
-    the caller the server is reachable.
+    docker exec inherits REDISCLI_AUTH from the container environment, so the
+    ping authenticates with the creation-time password. After an in-place
+    rotation that password is stale, and NOAUTH is accepted as a readiness
+    signal.
     """
 
     command = list(build_redis_cli_command(container_name=container_name))
@@ -178,4 +180,5 @@ def rotate_redis_password(
         input_text=input_text,
         masked_command=masked_command,
         masked_input=masked_input,
+        recreate_required=not dry_run,
     )

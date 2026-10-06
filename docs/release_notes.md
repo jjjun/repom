@@ -233,6 +233,19 @@
 
 ### Changed
 
+- Generated PostgreSQL, pgAdmin, and Redis services now declare
+  `restart: "unless-stopped"` by default. Set `restart_policy = "no"` on a
+  container config to keep the previous behavior. The next `postgres_start` or
+  `redis_start` recreates existing containers once because the service
+  definition changed; named volumes are kept. `ensure_running` does not
+  recreate a container that is already running.
+- After an executed `redis_rotate_password` or `repom.redis.manage.rotate_password`,
+  repom prints an `ACTION REQUIRED` notice to recreate the Redis container with
+  `redis_stop` then `redis_start`. A restart before recreation brings Redis back
+  with the creation-time password, or with no password for containers generated
+  before 2026-09-14. A dry run prints a planning note. `RedisCredentialRotationResult`
+  gains `recreate_required`, which is `True` after an executed rotation. Consumers
+  should update their runbooks.
 - Generated `.env` and `.env.bak` secret files are written through exclusive
   sibling temporary files created with POSIX mode `0600` before content is written,
   then atomically replaced. Existing `.env` symlinks remain accepted, but are

@@ -24,6 +24,12 @@ REDIS_DB=0
 # REDIS_ALLOW_INSECURE_REMOTE=false
 ```
 
+container の再起動方針は environment variable ではなく consumer の config hook で設定します。既定値は
+`unless-stopped` です。値には `no`、`always`、`unless-stopped`、`on-failure`、または
+`on-failure:<正の整数>` を指定できます。以前と同じく Docker daemon 再起動後に自動起動させない場合は、
+config hook で `config.redis.container.restart_policy = "no"` を設定してください。`redis_stop` は Compose
+の `stop` を使うため、明示的に停止した container は次の `redis_start` まで停止状態を保ちます。
+
 `REDIS_PASSWORD` が未設定、または `CHANGE_ME` のままだと `redis_generate` は
 エラーで停止します。
 

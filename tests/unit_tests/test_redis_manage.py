@@ -174,6 +174,7 @@ class TestGenerateDockerCompose:
 
         service = generator.services[0]
         assert service.ports == [f"127.0.0.1:{config.redis.published_port}:6379"]
+        assert 'restart: "unless-stopped"' in generator.generate()
 
     def test_compose_uses_config_container_name(self):
         """docker-compose が config.redis.container.get_container_name() を使用"""
@@ -195,6 +196,28 @@ class TestGenerateDockerCompose:
         generator = generate_docker_compose()
 
         assert generator.services[0].image == expected_image
+
+    def test_compose_emits_quoted_restart_policy(self):
+        with patch.object(config.redis.container, "restart_policy", "no"):
+            generator = generate_docker_compose()
+
+        assert 'restart: "no"' in generator.generate()
+
+        with patch.object(
+            config.redis.container, "restart_policy", "on-failure:3"
+        ):
+            generator = generate_docker_compose()
+
+        assert 'restart: "on-failure:3"' in generator.generate()
+
+    @pytest.mark.parametrize(
+        "restart_policy",
+        ["sometimes", "on-failure:0", "on-failure:x", "with space", "bad\npolicy"],
+    )
+    def test_compose_rejects_invalid_restart_policy(self, restart_policy):
+        with patch.object(config.redis.container, "restart_policy", restart_policy):
+            with pytest.raises(ValueError, match="redis.container.restart_policy"):
+                generate_docker_compose()
 
     def test_compose_ports_bind_loopback_by_default(self):
         """Published ports bind to 127.0.0.1 unless expose_to_lan is set."""
@@ -804,6 +827,7 @@ class TestRedisAutoStartArtifactRefresh:
             compose = compose_file.read_text(encoding="utf-8")
             assert "redis_b" in compose
             assert "redis_a" not in compose
+            assert 'restart: "unless-stopped"' in compose
 
         lifecycle_method = "stop" if entrypoint is manage.stop else "remove"
         getattr(manager, lifecycle_method).side_effect = assert_current_compose

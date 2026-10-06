@@ -39,6 +39,7 @@ class TestGenerateDockerComposePostgresOnly:
         mock_container_config.image = "postgres:16-alpine"
         mock_container_config.host_port = 5432
         mock_container_config.expose_to_lan = False
+        mock_container_config.restart_policy = "unless-stopped"
 
         mock_pg_config.container = mock_container_config
 
@@ -86,6 +87,7 @@ class TestGenerateDockerComposePgAdminEnabled:
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5433
         mock_pg_container.expose_to_lan = False
+        mock_pg_container.restart_policy = "unless-stopped"
 
         mock_pg_config.container = mock_pg_container
 
@@ -96,6 +98,7 @@ class TestGenerateDockerComposePgAdminEnabled:
         mock_pgadmin_container.image = "dpage/pgadmin4:latest"
         mock_pgadmin_container.host_port = 5051
         mock_pgadmin_container.expose_to_lan = False
+        mock_pgadmin_container.restart_policy = "unless-stopped"
 
         mock_pgadmin_config = MagicMock()
         mock_pgadmin_config.email = "admin@myproject.local"
@@ -142,6 +145,7 @@ class TestGenerateDockerComposePgAdminEnabled:
         mock_pg_container.host_port = 5432
         mock_pg_container.healthcheck = None
         mock_pg_container.expose_to_lan = False
+        mock_pg_container.restart_policy = "unless-stopped"
 
         mock_pg_config.container = mock_pg_container
 
@@ -152,6 +156,7 @@ class TestGenerateDockerComposePgAdminEnabled:
         mock_pgadmin_container.image = "dpage/pgadmin4:latest"
         mock_pgadmin_container.host_port = 5050
         mock_pgadmin_container.expose_to_lan = False
+        mock_pgadmin_container.restart_policy = "unless-stopped"
 
         mock_pgadmin_config = MagicMock()
         mock_pgadmin_config.email = "admin@localhost"
@@ -295,6 +300,7 @@ class TestDockerComposeFileGeneration:
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
         mock_pg_container.expose_to_lan = False
+        mock_pg_container.restart_policy = "unless-stopped"
 
         mock_pg_config.container = mock_pg_container
 
@@ -344,6 +350,7 @@ class TestDockerComposeFileGeneration:
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
         mock_pg_container.expose_to_lan = False
+        mock_pg_container.restart_policy = "unless-stopped"
 
         mock_pg_config.container = mock_pg_container
 
@@ -382,6 +389,7 @@ class TestDockerComposeFileGeneration:
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
         mock_pg_container.expose_to_lan = False
+        mock_pg_container.restart_policy = "unless-stopped"
 
         mock_pg_config.container = mock_pg_container
 
@@ -417,6 +425,7 @@ class TestDockerComposeFileGeneration:
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
         mock_pg_container.expose_to_lan = False
+        mock_pg_container.restart_policy = "unless-stopped"
 
         mock_pg_config.container = mock_pg_container
 
@@ -455,6 +464,7 @@ class TestDockerComposeFileGeneration:
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
         mock_pg_container.expose_to_lan = False
+        mock_pg_container.restart_policy = "unless-stopped"
 
         mock_pg_config.container = mock_pg_container
 
@@ -492,6 +502,7 @@ class TestDockerComposeFileGeneration:
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
         mock_pg_container.expose_to_lan = True
+        mock_pg_container.restart_policy = "unless-stopped"
 
         mock_pg_config.container = mock_pg_container
 
@@ -530,6 +541,7 @@ class TestDockerComposeFileGeneration:
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
         mock_pg_container.expose_to_lan = False
+        mock_pg_container.restart_policy = "unless-stopped"
         mock_pg_config.container = mock_pg_container
         mock_config.postgres = mock_pg_config
 
@@ -574,6 +586,7 @@ class TestDockerComposeFileGeneration:
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
         mock_pg_container.expose_to_lan = False
+        mock_pg_container.restart_policy = "unless-stopped"
         mock_pg_config.container = mock_pg_container
 
         mock_pgadmin_container = MagicMock()
@@ -583,6 +596,7 @@ class TestDockerComposeFileGeneration:
         mock_pgadmin_container.image = "dpage/pgadmin4:latest"
         mock_pgadmin_container.host_port = 5050
         mock_pgadmin_container.expose_to_lan = False
+        mock_pgadmin_container.restart_policy = "unless-stopped"
         mock_pgadmin_config = MagicMock()
         mock_pgadmin_config.email = "admin@example.com"
         mock_pgadmin_config.password = "pgadmin-secret"
@@ -629,6 +643,7 @@ class TestDockerComposeFileGeneration:
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
         mock_pg_container.expose_to_lan = False
+        mock_pg_container.restart_policy = "unless-stopped"
         mock_pg_config.container = mock_pg_container
 
         mock_pgadmin_config = MagicMock()
@@ -681,6 +696,7 @@ class TestDockerComposeFileGeneration:
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
         mock_pg_container.expose_to_lan = False
+        mock_pg_container.restart_policy = "unless-stopped"
         mock_pg_config.container = mock_pg_container
 
         mock_pgadmin_config = MagicMock()
@@ -1063,6 +1079,85 @@ class TestPostgresAutoStartArtifactRefresh:
         manager.get_init_dir.return_value = init_dir
         return manager, compose_dir, init_dir
 
+    def test_generated_services_include_restart_policies(self, tmp_path):
+        manager, _, _ = self._make_manager(tmp_path)
+        test_config = self._make_config(
+            tmp_path,
+            postgres_name="postgres_test",
+            postgres_port=5432,
+            postgres_volume="postgres_test_data",
+            postgres_password="postgres-secret",
+            pgadmin_enabled=True,
+        )
+
+        with patch.object(manage, "config", test_config):
+            with patch.object(manage, "PostgresManager", return_value=manager):
+                compose = manage.generate_docker_compose().generate()
+
+        assert compose.count('restart: "unless-stopped"') == 2
+
+    def test_generated_services_quote_custom_restart_policies(self, tmp_path):
+        manager, _, _ = self._make_manager(tmp_path)
+        test_config = self._make_config(
+            tmp_path,
+            postgres_name="postgres_test",
+            postgres_port=5432,
+            postgres_volume="postgres_test_data",
+            postgres_password="postgres-secret",
+            pgadmin_enabled=True,
+        )
+        test_config.postgres.container.restart_policy = "no"
+        test_config.pgadmin.container.restart_policy = "on-failure:3"
+
+        with patch.object(manage, "config", test_config):
+            with patch.object(manage, "PostgresManager", return_value=manager):
+                compose = manage.generate_docker_compose().generate()
+
+        assert 'restart: "no"' in compose
+        assert 'restart: "on-failure:3"' in compose
+
+    @pytest.mark.parametrize(
+        "restart_policy",
+        ["sometimes", "on-failure:0", "on-failure:x", "with space", "bad\npolicy"],
+    )
+    def test_invalid_postgres_restart_policy_names_field(self, tmp_path, restart_policy):
+        manager, _, _ = self._make_manager(tmp_path)
+        test_config = self._make_config(
+            tmp_path,
+            postgres_name="postgres_test",
+            postgres_port=5432,
+            postgres_volume="postgres_test_data",
+            postgres_password="postgres-secret",
+            pgadmin_enabled=False,
+        )
+        test_config.postgres.container.restart_policy = restart_policy
+
+        with patch.object(manage, "config", test_config):
+            with patch.object(manage, "PostgresManager", return_value=manager):
+                with pytest.raises(
+                    ValueError, match="postgres.container.restart_policy"
+                ):
+                    manage.generate_docker_compose()
+
+    def test_invalid_pgadmin_restart_policy_names_field(self, tmp_path):
+        manager, _, _ = self._make_manager(tmp_path)
+        test_config = self._make_config(
+            tmp_path,
+            postgres_name="postgres_test",
+            postgres_port=5432,
+            postgres_volume="postgres_test_data",
+            postgres_password="postgres-secret",
+            pgadmin_enabled=True,
+        )
+        test_config.pgadmin.container.restart_policy = "sometimes"
+
+        with patch.object(manage, "config", test_config):
+            with patch.object(manage, "PostgresManager", return_value=manager):
+                with pytest.raises(
+                    ValueError, match="pgadmin.container.restart_policy"
+                ):
+                    manage.generate_docker_compose()
+
     def test_auto_start_rewrites_postgres_and_pgadmin_for_current_environment(
         self, tmp_path
     ):
@@ -1233,6 +1328,7 @@ class TestPostgresAutoStartArtifactRefresh:
             compose = compose_file.read_text(encoding="utf-8")
             assert "postgres_b" in compose
             assert "postgres_a" not in compose
+            assert 'restart: "unless-stopped"' in compose
 
         lifecycle_method = "stop" if entrypoint is manage.stop else "remove"
         getattr(manager, lifecycle_method).side_effect = assert_current_compose
@@ -1419,6 +1515,7 @@ class TestGenerateFailsClosedOnDefaultCredentials:
         mock_pg_container.image = "postgres:16-alpine"
         mock_pg_container.host_port = 5432
         mock_pg_container.expose_to_lan = False
+        mock_pg_container.restart_policy = "unless-stopped"
         mock_pg_config.container = mock_pg_container
 
         mock_pgadmin_config = MagicMock()
