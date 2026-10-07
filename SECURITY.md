@@ -24,7 +24,7 @@ Repository-wide reviews include these surfaces and their supporting code:
 | Models and queries | `repom/models/`, `repom/repositories/`, `repom/mixins/`, `repom/custom_types/`, `repom/nul_bytes.py`, `repom/exceptions.py`, `repom/__init__.py`, `repom/examples/` | Stored records, query scope, writable and serializable fields |
 | Configuration and connections | `repom/config.py`, `repom/config_hook.py`, `repom/config_hooks/`, `repom/database.py`, `repom/exec_env.py`, `repom/postgres/config.py`, `repom/sqlite/`, `repom/redis/config.py` | Credentials, effective destination, TLS, session ownership |
 | Discovery and migrations | `repom/utility.py`, `repom/scripts/db_sync_master.py`, `repom/scripts/debug_repository_queries.py`, `master_data_path` (default `data_master/`), `repom/examples/`, `alembic/`, `repom/alembic/`, `alembic.ini` | Python imports and file execution, schema/data integrity, migration namespaces and files |
-| Administration and services | `repom/scripts/`, `repom/credentials.py`, `repom/postgres/`, `repom/postgres/docker-compose.template.yml`, `repom/redis/`, `repom/redis/docker-compose.template.yml`, `repom/docker_service.py`, `repom/docker_compose_safety.py` | Backup contents, subprocesses, secrets, containers, volumes, generated files |
+| Administration and services | `repom/scripts/`, `repom/credentials.py`, `repom/postgres/`, `repom/postgres/docker-compose.template.yml`, `repom/redis/`, `repom/redis/docker-compose.template.yml`, `repom/docker_service.py`, `repom/docker_compose.py`, `repom/docker_compose_safety.py` | Backup contents, subprocesses, secrets, containers, volumes, generated files |
 | Logging, diagnostics, testing, and delivery | `repom/logging.py`, `repom/diagnostics/`, `repom/testing.py`, `tests/`, `.github/`, `.claude/hooks/session-start.sh`, `.claude/settings.json`, `.codex/config.toml`, `.mcp.json`, `.pre-commit-config.yaml`, `.vscode/tasks.json`, `scripts/`, `pyproject.toml`, `uv.lock` | Sensitive output, test isolation, dependency and build integrity |
 
 SQLite and PostgreSQL, including the asynchronous drivers, are primary database
@@ -154,6 +154,14 @@ Unless a difference is stated below, these contracts apply to both
   cancellation is shielded for internally owned session rollback and close in
   `DatabaseManager`; repository-level cancellation is not tested, and a cancel
   during commit leaves the outcome unknown.
+- `_session_scope()` stores an internally opened session in a `ContextVar`.
+  Independently started contexts receive separate internal sessions, but a child
+  task or copied context created while an internal scope is active can inherit
+  that scope's session. Do not use an inherited session concurrently. A child
+  write can commit before the parent scope exits. Thread context inheritance
+  depends on Python version and configuration. Existing sibling-context
+  isolation tests do not establish child-task or copied-context isolation. This
+  is a consumer-use limitation, not a confirmed cross-request vulnerability.
 
 ### Model mutation and output
 
@@ -363,6 +371,12 @@ Unless a difference is stated below, these contracts apply to both
   `allow_destructive=True`, evaluated when the factory is called.
   `EXEC_ENV=test` permits any URL. These checks cannot prove a URL names
   disposable data; consumers must select a dedicated database.
+- `bind_global_manager=True` temporarily binds the fixture engine to the
+  corresponding manager; it does not bind every manager operation to the fixture
+  transaction. The synchronous and asynchronous factories bind only their
+  corresponding manager engine. Rollback-dependent operations must receive
+  `db_test` or `async_db_test` explicitly. Writes through other sessions or
+  connections are not guaranteed to roll back with the fixture.
 - Backup, restore, retention, and migration-file cleanup must act on the intended
   target. Assess path construction, existing files, links, failure cleanup, and
   backup naming against a concrete attacker capability. `db_backup` and

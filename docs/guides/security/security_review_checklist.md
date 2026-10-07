@@ -15,6 +15,7 @@
 - 2026-10-03: repom#243 の判断に基づき、結果の保存・開示、検証環境、独立レビュー、レビュー契機の扱いを更新。
 - 2026-10-03: 初回の全件試行を反映し、秘密の表示表現、独立 context と継承 context、
   fixture engine binding と rollback の境界、platform skip の内訳、既知制限の追跡を明確化。
+- 2026-10-07: O04 の調査入口に `repom/docker_compose.py` を追加。
 
 この文書はレビューの観点と記録形式のひな形です。実施済みの監査結果でも、
 全項目が安全だという宣言でもありません。各項目の初期状態は **未確認** です。
@@ -152,7 +153,7 @@ driver に渡る引数と子プロセスの argv/env を比較します。libpq 
 | O01 | 破壊的操作ごとの確認・環境制限・対象選択を確認したか。CLI の guard を Python API にまで一般化していないか | `db_delete`, `alembic_reset`, `db_restore`, `db_sync_master`, service remove、credential rotation、`pg_restore_custom` |
 | O02 | バックアップ名と出力パス、symlink、partial file、失敗時 cleanup、既存ファイル、保持世代が対象範囲を逸脱しないか | `_backup_utils.py`, `db_backup.py`, `db_restore.py`, `pg_dump_tools.py`; Windows と POSIX を分ける |
 | O03 | checksum 不一致/欠落と真正性の違い、SQL backup の実行権限、復元先を確認したか | backup/restore。checksum を署名や安全な SQL の証明と扱わない |
-| O04 | Compose・env・argv の生成値が別の設定やオプションにならないか。image/name/volume/bind path と subprocess の option 解釈も確認したか（SQL は Q01、INI は A03） | `docker_compose_safety.py`, PostgreSQL/Redis manage、credential helpers |
+| O04 | Compose・env・argv の生成値が別の設定やオプションにならないか。image/name/volume/bind path と subprocess の option 解釈も確認したか（SQL は Q01、INI は A03） | `repom/docker_compose.py`, `docker_compose_safety.py`, PostgreSQL/Redis manage、credential helpers |
 | O05 | rotation の事前検証、live 変更後の保存失敗、復旧手順、上書き指定、backup copy の秘密保護を確認したか | PostgreSQL/Redis/pgAdmin の各経路。fake の成功だけで実サービスの復旧を検証済みにしない |
 | O06 | 公開 port、DB role、生成 secret の初期/最終権限と Windows ACL の範囲が適切か（クライアント側 TLS は C02） | PostgreSQL/Redis/pgAdmin 設定、生成物、配布 template; 資料 R4。利用側の運用が不明ならそのまま記録 |
 
