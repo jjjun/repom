@@ -333,8 +333,12 @@ def test_redis_rotation_redacts_display_input_before_escaping(
         executed_output,
         dry_result.masked_command,
         dry_result.masked_input,
+        repr(dry_result),
+        str(dry_result),
         executed_result.masked_command,
         executed_result.masked_input,
+        repr(executed_result),
+        str(executed_result),
     ):
         for secret in (
             new_password,

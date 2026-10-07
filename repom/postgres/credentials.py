@@ -30,7 +30,7 @@ class SqlStep:
     """One SQL statement to run against one database."""
 
     database: str
-    sql: str
+    sql: str = field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -38,8 +38,8 @@ class PostgresCredentialRotationPlan:
     """Non-destructive PostgreSQL credential rotation plan."""
 
     current_user: str
-    new_password: str
-    current_password: str | None = None
+    new_password: str = field(repr=False)
+    current_password: str | None = field(default=None, repr=False)
     new_user: str | None = None
     databases: Sequence[str] = field(default_factory=tuple)
     schemas: Sequence[str] = field(default_factory=lambda: ("public",))
@@ -74,7 +74,7 @@ class PgAdminCredentialRotationPlan:
     """pgAdmin administrator password rotation plan."""
 
     email: str
-    new_password: str
+    new_password: str = field(repr=False)
     container_name: str | None = None
     volume_name: str | None = None
     python_path: str = "/venv/bin/python"

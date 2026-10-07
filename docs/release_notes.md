@@ -157,6 +157,11 @@
 - PostgreSQL and Redis credential rotation now build display payloads from redacted
   inputs before SQL or redis-cli escaping and mask escaped execution forms in failure
   messages. Redis rotation's returned `input_text` still contains the execution payload.
+- The password fields of PostgreSQL, pgAdmin, and Redis credential rotation plans,
+  PostgreSQL `SqlStep.sql`, and Redis rotation result `input_text` are now excluded
+  from `repr()` and `str()`. These
+  fields remain directly accessible; `dataclasses.asdict()` and explicit attribute
+  access still return the raw values.
 - Docker service auto-start now rewrites secret-free generated artifacts from the active
   configuration and reuses the stored `.env`; configuration and secret mismatch errors
   from `ensure_running()` are raised as `RuntimeError`. Container running checks now

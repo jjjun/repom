@@ -14,7 +14,13 @@ scope here; code that must serialize config for logging should render it via
 
 from repom.config import RepomConfig
 from repom.postgres.config import PgAdminConfig, PostgresConfig
+from repom.postgres.credentials import (
+    PgAdminCredentialRotationPlan,
+    PostgresCredentialRotationPlan,
+    build_postgres_rotation_steps,
+)
 from repom.redis.config import RedisConfig
+from repom.redis.credentials import RedisCredentialRotationPlan
 from repom.scripts.pg_dump_tools import PgConnParams
 
 
@@ -105,3 +111,71 @@ def test_pg_conn_params_repr_shows_none_when_unset():
 
     assert "password=None" in repr(params)
     assert "***" not in repr(params)
+
+
+def test_rotation_plan_representations_hide_password_fields():
+    plans_and_secrets = (
+        (
+            PostgresCredentialRotationPlan(
+                current_user="repom",
+                current_password="current-password-sentinel",
+                new_password="new-password-sentinel",
+            ),
+            ("current-password-sentinel", "new-password-sentinel"),
+        ),
+        (
+            PgAdminCredentialRotationPlan(
+                email="admin@example.com",
+                new_password="new-password-sentinel",
+            ),
+            ("new-password-sentinel",),
+        ),
+        (
+            RedisCredentialRotationPlan(
+                old_password="old-password-sentinel",
+                new_password="new-password-sentinel",
+            ),
+            ("old-password-sentinel", "new-password-sentinel"),
+        ),
+    )
+
+    for plan, secrets in plans_and_secrets:
+        for representation in (repr(plan), str(plan)):
+            for secret in secrets:
+                assert secret not in representation
+
+
+def test_rotation_plan_password_fields_remain_accessible():
+    postgres_plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="current-password-sentinel",
+        new_password="new-password-sentinel",
+    )
+    pgadmin_plan = PgAdminCredentialRotationPlan(
+        email="admin@example.com",
+        new_password="new-password-sentinel",
+    )
+    redis_plan = RedisCredentialRotationPlan(
+        old_password="old-password-sentinel",
+        new_password="new-password-sentinel",
+    )
+
+    assert postgres_plan.current_password == "current-password-sentinel"
+    assert postgres_plan.new_password == "new-password-sentinel"
+    assert pgadmin_plan.new_password == "new-password-sentinel"
+    assert redis_plan.old_password == "old-password-sentinel"
+    assert redis_plan.new_password == "new-password-sentinel"
+
+
+def test_postgres_rotation_sql_step_repr_hides_password_but_preserves_sql():
+    password = "new-password-sentinel"
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        new_user="repom_new",
+        new_password=password,
+    )
+    step = build_postgres_rotation_steps(plan)[0]
+
+    assert password in step.sql
+    assert password not in repr(step)
+    assert password not in str(step)

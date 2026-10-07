@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Iterator
 
 from repom.config import config
@@ -25,8 +25,8 @@ class RedisCredentialRotationError(RuntimeError):
 class RedisCredentialRotationPlan:
     """Redis password rotation plan."""
 
-    new_password: str
-    old_password: str | None = None
+    new_password: str = field(repr=False)
+    old_password: str | None = field(default=None, repr=False)
     container_name: str | None = None
 
     @classmethod
@@ -53,7 +53,7 @@ class RedisCredentialRotationResult:
 
     dry_run: bool
     command: tuple[str, ...]
-    input_text: str
+    input_text: str = field(repr=False)
     masked_command: str
     masked_input: str
     recreate_required: bool = False
