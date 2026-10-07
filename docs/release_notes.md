@@ -283,8 +283,9 @@
   persist successful new secrets into the compose directory `.env`. PostgreSQL grants
   are applied before changing the current role password; replacement-user rotation
   updates both configured username and password. pgAdmin rotation can recreate its own
-  volume without removing PostgreSQL data. Docker service auto-start reuses existing
-  compose files and `.env` when available. Explicit generation/start commands refuse to
+  volume without removing PostgreSQL data. Docker service auto-start regenerates
+  secret-free Compose/init artifacts from the active configuration and reuses an existing
+  `.env` when available. Explicit generation/start commands refuse to
   replace a differing `.env` unless `--force-regenerate` is supplied; changed content
   keeps the old file as `.env.bak` with mode `0600`.
 - PostgreSQL backup and restore share host and Docker command construction and stream
