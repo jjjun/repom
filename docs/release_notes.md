@@ -4,6 +4,11 @@
 
 ### Breaking
 
+- BREAKING: Outside normalized `EXEC_ENV=test`, test fixture factories accept only
+  query-free `sqlite://` / `sqlite:///:memory:` URLs and SQLite `file:` URIs with
+  `uri=true` and either `mode=memory` or the `file::memory:` filename, with only
+  `cache=private` or `cache=shared` as an additional URI option; other forms require
+  `EXEC_ENV=test` or `allow_destructive=True`.
 - BREAKING: SQLite backup, restore, and diagnostics now resolve file URLs against
   the process working directory, matching SQLAlchemy. The exported
   `resolve_sqlite_db_path()` no longer accepts `root_path`. SQLite in-memory URLs

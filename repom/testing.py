@@ -23,6 +23,8 @@ from contextlib import nullcontext
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm import sessionmaker, scoped_session
 from typing import Callable, Optional
 from repom.database import Base, DatabaseManager, _db_manager, safe_db_url
@@ -33,7 +35,40 @@ from repom.utility import load_models
 
 
 def _is_in_memory_sqlite_url(db_url: str) -> bool:
-    return db_url.startswith("sqlite") and ":memory:" in db_url
+    try:
+        url = make_url(db_url)
+        port = url.port
+    except (ArgumentError, TypeError, ValueError):
+        return False
+
+    if url.drivername not in {"sqlite", "sqlite+pysqlite", "sqlite+aiosqlite"}:
+        return False
+    if (
+        url.username is not None
+        or url.password is not None
+        or url.host is not None
+        or port is not None
+    ):
+        return False
+
+    query = url.query
+    if any(not isinstance(value, str) for value in query.values()):
+        return False
+
+    if url.database in {None, "", ":memory:"}:
+        return not query
+
+    if not url.database.startswith("file:") or query.get("uri", "").lower() != "true":
+        return False
+    if not set(query).issubset({"uri", "mode", "cache"}):
+        return False
+    if query.get("cache", "shared") not in {"private", "shared"}:
+        return False
+
+    if url.database == "file::memory:":
+        return query.get("mode", "memory") == "memory"
+
+    return len(url.database) > len("file:") and query.get("mode") == "memory"
 
 
 def _require_test_database(db_url: str, allow_destructive: bool) -> None:

@@ -122,10 +122,19 @@ db_engine, db_test = create_test_fixtures(
 )
 ```
 
-- `db_url` 未指定時は in-memory SQLite（`sqlite:///:memory:`）を使う。正規化後の `EXEC_ENV` が
-  `test` でなく、かつ in-memory SQLite でもない `db_url` を渡すと、テスト終了時の
-  `drop_all` が実データベースを壊さないよう `RuntimeError` を送出する。実際にその
-  データベースへ向けたい場合は `allow_destructive=True` を明示する。
+- `db_url` 未指定時は in-memory SQLite（`sqlite:///:memory:`）を使う。`sqlite://` と
+  `sqlite:///:memory:` はクエリパラメーターがない場合に限り in-memory として扱う
+  （組み込みの同期・非同期ドライバーを含む）。
+  SQLite の `file:` URI は `uri=true` と `mode=memory` の組み合わせ、または
+  `file::memory:` のファイル名を指定した場合に限り in-memory として扱い、URI オプションには
+  `cache=private` または `cache=shared` だけを追加できる。URL の解析に失敗した場合、URI
+  オプションが重複・未対応の場合、ファイル名や無関係なクエリ値に `:memory:` が含まれる場合は
+  in-memory と判定しない。正規化後の `EXEC_ENV` が `test` でなく、in-memory と判定されない
+  `db_url` を渡すと、テスト終了時の `drop_all` が実データベースを壊さないよう
+  `RuntimeError` を送出する。実際にそのデータベースへ向けたい場合は
+  `allow_destructive=True` を明示する。これは URL が破棄可能なデータを指す保証ではない。
+- 正規化後の `EXEC_ENV=test` は引き続き任意の URL を許可する。`allow_destructive=True` も
+  任意の URL への明示的なオプトインであり、対象が破棄可能かどうかは呼び出し側が判断する。
 - `model_loader` 未指定時は `repom.utility.load_models()` を使う。
 - `load_models()` は `config.model_locations` を読み、全 import 後に mapper を構成する。
 

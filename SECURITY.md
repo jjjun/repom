@@ -365,12 +365,18 @@ Unless a difference is stated below, these contracts apply to both
   configured `version_locations` directory, including absolute paths. A failure
   partway through leaves a partial reset. The `AlembicSetup.reset_migrations`
   and `AlembicReset` Python APIs have no CLI confirmation guard.
-- Test fixture factories accept normalized `EXEC_ENV=test`, an in-memory
-  SQLite URL detected by the current `startswith("sqlite")` and
-  `":memory:" in url` substring heuristic, or explicit
-  `allow_destructive=True`, evaluated when the factory is called.
-  `EXEC_ENV=test` permits any URL. These checks cannot prove a URL names
-  disposable data; consumers must select a dedicated database.
+- Test fixture factories accept normalized `EXEC_ENV=test`, an unambiguous
+  in-memory SQLite URL, or explicit `allow_destructive=True`, evaluated when
+  the factory is called. The memory check parses the SQLAlchemy URL and
+  supports the built-in `sqlite`, `sqlite+pysqlite`, and `sqlite+aiosqlite`
+  schemes. It accepts `sqlite://` and `sqlite:///:memory:` only without query
+  parameters, and SQLite `file:` URIs with `uri=true` and either `mode=memory` or
+  the `file::memory:` filename;
+  only `cache=private` or `cache=shared` may accompany the URI options.
+  Malformed URLs, repeated or unsupported URI options, and `:memory:` in a
+  filename or unrelated query value do not qualify. `EXEC_ENV=test` permits
+  any URL. These checks cannot prove a URL names disposable data; consumers
+  must select a dedicated database.
 - `bind_global_manager=True` temporarily binds the fixture engine to the
   corresponding manager; it does not bind every manager operation to the fixture
   transaction. The synchronous and asynchronous factories bind only their
