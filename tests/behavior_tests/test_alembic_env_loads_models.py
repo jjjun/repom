@@ -16,6 +16,8 @@ import os
 import shutil
 import re
 
+from tests.pytest_helpers import CHILD_PROCESS_TIMEOUT_SEC
+
 
 def alembic_test_env(test_root: Path):
     env = os.environ.copy()
@@ -53,7 +55,7 @@ def test_alembic_env_loads_without_error(tmp_path):
         cwd=project_root,
         capture_output=True,
         text=True,
-        timeout=10,
+        timeout=CHILD_PROCESS_TIMEOUT_SEC,
         env=alembic_test_env(tmp_path),
     )
 
@@ -147,7 +149,7 @@ def test_alembic_revision_autogenerate_works(tmp_path):
             cwd=project_root,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=CHILD_PROCESS_TIMEOUT_SEC,
             env=test_env
         )
 
@@ -175,7 +177,7 @@ def test_alembic_revision_autogenerate_works(tmp_path):
             cwd=project_root,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=CHILD_PROCESS_TIMEOUT_SEC,
             env=test_env
         )
 
@@ -257,7 +259,7 @@ def test_alembic_upgrade_head_works(tmp_path):
         cwd=project_root,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=CHILD_PROCESS_TIMEOUT_SEC,
         env=alembic_test_env(tmp_path),
     )
 

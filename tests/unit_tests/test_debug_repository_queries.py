@@ -14,6 +14,7 @@ import pytest
 
 from repom.examples.repositories.sample import SampleRepository
 from repom.scripts import debug_repository_queries as query_script
+from tests.pytest_helpers import CHILD_PROCESS_TIMEOUT_SEC
 
 def test_importing_module_does_not_register_samples_table():
     code = (
@@ -28,7 +29,7 @@ def test_importing_module_does_not_register_samples_table():
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
-        timeout=10,
+        timeout=CHILD_PROCESS_TIMEOUT_SEC,
     )
 
     assert result.returncode == 0, result.stdout + result.stderr

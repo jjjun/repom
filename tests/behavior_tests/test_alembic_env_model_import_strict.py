@@ -14,6 +14,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+from tests.pytest_helpers import CHILD_PROCESS_TIMEOUT_SEC
+
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
@@ -56,7 +58,7 @@ def _run_alembic(env: dict, *command: str) -> subprocess.CompletedProcess:
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=CHILD_PROCESS_TIMEOUT_SEC,
         env=env,
     )
 

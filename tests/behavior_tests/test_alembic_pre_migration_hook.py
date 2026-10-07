@@ -9,6 +9,8 @@ import sys
 
 import pytest
 
+from tests.pytest_helpers import CHILD_PROCESS_TIMEOUT_SEC
+
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
@@ -88,7 +90,7 @@ def _run_alembic(
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=CHILD_PROCESS_TIMEOUT_SEC,
         env=env,
     )
 

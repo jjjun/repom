@@ -10,6 +10,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.schema import CreateSchema, DropSchema
 
+from tests.pytest_helpers import CHILD_PROCESS_TIMEOUT_SEC
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -142,7 +144,7 @@ def configure_database(config):
             cwd=PROJECT_ROOT,
             capture_output=True,
             text=True,
-            timeout=45,
+            timeout=CHILD_PROCESS_TIMEOUT_SEC,
             env=env,
         )
         assert revision_result.returncode == 0, (
@@ -163,7 +165,7 @@ def configure_database(config):
                 cwd=PROJECT_ROOT,
                 capture_output=True,
                 text=True,
-                timeout=45,
+                timeout=CHILD_PROCESS_TIMEOUT_SEC,
                 env=env,
             )
             assert result.returncode == 0, (
