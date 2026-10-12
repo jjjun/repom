@@ -1,7 +1,7 @@
 """Unit tests for AlembicTemplates.generate_alembic_ini input validation.
 
 A newline in an interpolated value ends the current ini key and starts a
-new one; the shared alembic/env.py trusts keys it reads from this file,
+new one; the shared repom/alembic/env.py trusts keys it reads from this file,
 including pre_migration_hook, which resolves and calls a module:callable
 target unconditionally. These tests confirm generate_alembic_ini rejects
 values that could inject a key rather than silently writing them.

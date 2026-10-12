@@ -69,10 +69,9 @@ def test_alembic_migration_without_id():
         # 一時ディレクトリを作成
         with tempfile.TemporaryDirectory() as tmpdir:
             # Use repom's alembic directory (env.py, script.py.mako)
-            # alembic/ is in the project root, not inside repom/ package
-            import repom
-            repom_root = Path(repom.__file__).parent.parent  # Go up one level to project root
-            script_location = str((repom_root / 'alembic').resolve())
+            from repom.alembic import SCRIPT_LOCATION
+
+            script_location = SCRIPT_LOCATION
 
             # AlembicSetup to generate alembic.ini and version directory
             db_path = Path(tmpdir) / 'test.db'

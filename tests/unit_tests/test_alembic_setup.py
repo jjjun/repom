@@ -8,7 +8,12 @@ import os
 import tempfile
 from pathlib import Path
 
-from repom.alembic import AlembicSetup, AlembicTemplates
+from repom.alembic import (
+    AlembicSetup,
+    AlembicTemplates,
+    SCRIPT_LOCATION,
+    script_location_path,
+)
 
 
 class TestAlembicSetupInit:
@@ -24,7 +29,7 @@ class TestAlembicSetupInit:
 
             assert setup.project_root == Path(tmpdir)
             assert setup.db_url == 'sqlite:///test.db'
-            assert setup.script_location == 'alembic'
+            assert setup.script_location == 'repom:alembic'
             assert setup.version_table is None
             assert setup.version_table_schema is None
             assert setup.autogenerate_exclude_tables is None
@@ -101,9 +106,24 @@ class TestFromIni:
 
         assert setup.version_table == "alembic_version"
         assert setup.version_table_schema is None
-        assert setup.script_location == "alembic"
-        assert setup.versions_dir == tmp_path / "alembic" / "versions"
-        assert setup.versions_dirs == [tmp_path / "alembic" / "versions"]
+        assert setup.script_location == SCRIPT_LOCATION
+        expected = script_location_path() / "versions"
+        assert setup.versions_dir == expected
+        assert setup.versions_dirs == [expected]
+
+    def test_from_ini_defaults_to_packaged_script_location(self, tmp_path):
+        ini_path = tmp_path / "alembic.ini"
+        ini_path.write_text(
+            "[alembic]\n"
+            f"script_location = {SCRIPT_LOCATION}\n"
+        )
+
+        setup = AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+
+        expected = script_location_path() / "versions"
+        assert setup.script_location == SCRIPT_LOCATION
+        assert setup.versions_dir == expected
+        assert setup.versions_dirs == [expected]
 
     def test_from_ini_defaults_to_script_location_versions_when_absent(
         self, tmp_path
@@ -114,12 +134,12 @@ class TestFromIni:
         ini_path = tmp_path / "alembic.ini"
         ini_path.write_text(
             "[alembic]\n"
-            "script_location = submod/repom/alembic\n"
+            "script_location = migrations/alembic\n"
         )
 
         setup = AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
 
-        expected = tmp_path / "submod" / "repom" / "alembic" / "versions"
+        expected = tmp_path / "migrations" / "alembic" / "versions"
         assert setup.versions_dir == expected
         assert setup.versions_dirs == [expected]
 

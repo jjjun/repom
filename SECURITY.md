@@ -210,7 +210,7 @@ Unless a difference is stated below, these contracts apply to both
   query or SQLAlchemy `connect_args` values for `host`, `hostaddr`, `service`,
   and `dsn`. `DatabaseManager`, `resolve_engine_settings()`, and synchronous
   diagnostics probes resolve these destination overrides; probes use the
-  config object being checked. The shared `alembic/env.py` and `AlembicReset`
+  config object being checked. The shared `repom/alembic/env.py` and `AlembicReset`
   build engines from `db_url` only. Synchronous test fixtures pass engine kwargs
   without the resolver, and consumer-built engines must opt into it. Review backup/restore
   host-tool and `docker exec` paths separately: URL-overridden client tools use

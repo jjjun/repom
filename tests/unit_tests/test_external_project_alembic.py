@@ -11,8 +11,13 @@ Expected behavior:
 import pytest
 import tempfile
 from pathlib import Path
+import shutil
+import subprocess
+from zipfile import ZipFile
+from alembic import command
 from alembic.config import Config
-from repom.config import RepomConfig
+from repom.alembic import AlembicSetup, SCRIPT_LOCATION, script_location_path
+from repom.config import RepomConfig, config as repom_config
 
 
 def test_alembic_versions_path_isolation():
@@ -28,7 +33,7 @@ def test_alembic_versions_path_isolation():
         alembic_ini.write_text(
             "\n".join([
                 "[alembic]",
-                f"script_location = {Path(__file__).resolve().parents[2] / 'alembic'}",
+                f"script_location = {SCRIPT_LOCATION}",
                 f"version_locations = {external_versions_path}",
                 "",
                 "[loggers]",
@@ -67,7 +72,7 @@ def test_alembic_versions_path_isolation():
 
 
 def test_repom_has_no_migration_files():
-    """Verify that repom/alembic/versions/ is empty (library should not have migrations)"""
+    """Verify that the repository's alembic/versions/ has no migration files."""
     repom_root = Path(__file__).resolve().parents[2]
     repom_versions_dir = repom_root / 'alembic' / 'versions'
 
@@ -83,7 +88,7 @@ def test_repom_has_no_migration_files():
             "\n\nrepom is a library and should not contain its own migrations."
         )
 
-        print("\n[OK] repom/alembic/versions/ is empty (correct)")
+        print("\n[OK] repository alembic/versions/ is empty (correct)")
 
         # .gitkeep should exist to preserve the directory
         gitkeep = repom_versions_dir / '.gitkeep'
@@ -94,8 +99,7 @@ def test_env_py_uses_version_locations_in_context():
     """Verify that env.py defers version_locations control to alembic.ini"""
 
     # Read env.py to check implementation
-    repom_root = Path(__file__).resolve().parents[2]
-    env_py_path = repom_root / 'alembic' / 'env.py'
+    env_py_path = script_location_path() / 'env.py'
 
     env_py_content = env_py_path.read_text()
 
@@ -110,11 +114,66 @@ def test_mock_external_project_migration_paths_resolve_from_alembic_ini():
     fixture_root = repository_root / "tests" / "integration_tests" / "mock_external_project"
     alembic_config = Config(str(fixture_root / "alembic.ini"))
 
-    script_location = Path(alembic_config.get_main_option("script_location")).resolve()
+    script_location = alembic_config.get_main_option("script_location")
     version_locations = Path(alembic_config.get_main_option("version_locations")).resolve()
 
-    assert script_location == repository_root / "alembic"
+    assert script_location == SCRIPT_LOCATION
     assert version_locations == fixture_root / "alembic" / "versions"
+
+
+def test_default_script_location_runs_real_alembic_commands(tmp_path, monkeypatch):
+    database_path = tmp_path / "migrations.sqlite3"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    monkeypatch.setattr(repom_config, "root_path", str(tmp_path))
+    monkeypatch.setattr(repom_config, "db_url", database_url)
+    monkeypatch.setattr(repom_config, "model_locations", [])
+    monkeypatch.setattr(repom_config, "allowed_package_prefixes", {"repom."})
+
+    setup = AlembicSetup(project_root=tmp_path, db_url=database_url)
+    assert setup.script_location == SCRIPT_LOCATION
+    assert RepomConfig().alembic_script_location == SCRIPT_LOCATION
+
+    setup.create_alembic_ini()
+    setup.create_version_directory()
+    alembic_config = setup.get_alembic_config()
+
+    assert alembic_config.get_main_option("script_location") == SCRIPT_LOCATION
+    assert (script_location_path() / "env.py").is_file()
+    assert (script_location_path() / "script.py.mako").is_file()
+
+    command.revision(alembic_config, message="package resource", autogenerate=False)
+    revisions = [
+        revision
+        for revision in setup.versions_dir.glob("*.py")
+        if revision.name != "__init__.py"
+    ]
+    assert len(revisions) == 1
+
+    command.upgrade(alembic_config, "head")
+    command.downgrade(alembic_config, "base")
+
+
+def test_built_wheel_contains_alembic_environment(tmp_path):
+    uv = shutil.which("uv")
+    if uv is None:
+        pytest.skip("uv is unavailable")
+
+    repository_root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [uv, "build", "--wheel", "--out-dir", str(tmp_path)],
+        cwd=repository_root,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, f"uv build failed:\n{result.stderr}\n{result.stdout}"
+
+    wheel_path = next(tmp_path.glob("*.whl"))
+    with ZipFile(wheel_path) as wheel:
+        wheel_files = set(wheel.namelist())
+
+    assert "repom/alembic/env.py" in wheel_files
+    assert "repom/alembic/script.py.mako" in wheel_files
 
 
 if __name__ == '__main__':

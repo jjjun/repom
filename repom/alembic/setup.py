@@ -3,6 +3,8 @@
 from collections.abc import Sequence
 from pathlib import Path
 from alembic.config import Config as AlembicConfig
+from alembic.util.pyfiles import coerce_resource_to_filename
+from repom.alembic.constants import SCRIPT_LOCATION
 from repom.alembic.templates import AlembicTemplates
 from repom.alembic.reset import AlembicReset
 
@@ -18,7 +20,7 @@ class AlembicSetup:
         self,
         project_root: str | Path,
         db_url: str,
-        script_location: str = "alembic",
+        script_location: str = SCRIPT_LOCATION,
         version_locations: str = "%(here)s/alembic/versions",
         version_table: str | None = None,
         autogenerate_exclude_tables: str | Sequence[str] | None = None,
@@ -28,10 +30,8 @@ class AlembicSetup:
         Args:
             project_root: プロジェクトルートディレクトリ（alembic.ini を配置する場所）
             db_url: データベース URL（必須）
-            script_location: repom の alembic への相対パス（プロジェクトルートから）
-                           repom standalone: 'alembic'
-                           外部プロジェクト: 'submod/fast-domain/submod/repom/alembic'
-                           （デフォルト: 'alembic'）
+            script_location: repom の alembic 環境への指定
+                           （デフォルト: 'repom:alembic'）
             version_locations: マイグレーションファイルの保存場所
                              %(here)s は alembic.ini の場所（プロジェクトルート）を指す
                              例: '%(here)s/alembic/versions'
@@ -43,7 +43,7 @@ class AlembicSetup:
         Note:
             - db_url や各パスのデフォルト値は scripts/ 側で config から取得して渡す
             - %(here)s により、alembic.ini の配置場所に依存しない相対パス指定が可能
-            - script_location: env.py を含む repom の alembic ディレクトリへのパス
+            - script_location: repom の alembic 環境への指定
         """
         self.project_root = Path(project_root)
         self.db_url = db_url
@@ -80,7 +80,7 @@ class AlembicSetup:
         alembic_config = AlembicConfig(str(ini_path))
 
         script_location = alembic_config.get_main_option(
-            "script_location", "alembic"
+            "script_location", SCRIPT_LOCATION
         )
         version_table = alembic_config.get_main_option(
             "version_table", "alembic_version"
@@ -103,7 +103,13 @@ class AlembicSetup:
             # Matches alembic.script.ScriptDirectory.from_config: when
             # version_locations is absent, Alembic itself falls back to
             # "<script_location>/versions", not a hard-coded "alembic/versions".
-            default_versions_dir = _resolve(script_location) / "versions"
+            script_path = (
+                Path(coerce_resource_to_filename(script_location))
+                if ":" in script_location
+                and not Path(script_location).is_absolute()
+                else _resolve(script_location)
+            )
+            default_versions_dir = script_path / "versions"
             versions_dirs = [default_versions_dir]
             version_locations = default_versions_dir.as_posix()
 

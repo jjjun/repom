@@ -1,11 +1,15 @@
 """Alembic utilities for setup and migration management."""
 
+from repom.alembic.constants import SCRIPT_LOCATION, script_location_path
 from repom.alembic.setup import AlembicSetup
 from repom.alembic.reset import AlembicReset
 from repom.alembic.templates import AlembicTemplates
 from repom.alembic.render import render_repom_type
 
+
 __all__ = [
+    'SCRIPT_LOCATION',
+    'script_location_path',
     'AlembicSetup',
     'AlembicReset',
     'AlembicTemplates',

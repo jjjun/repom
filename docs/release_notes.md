@@ -4,6 +4,7 @@
 
 ### Breaking
 
+- BREAKING: The shared Alembic environment is now packaged at `repom:alembic`. Replace `script_location = submod/repom/alembic` with `script_location = repom:alembic` and keep consumer revisions in `version_locations = %(here)s/alembic/versions`.
 - BREAKING: Outside normalized `EXEC_ENV=test`, test fixture factories accept only
   query-free `sqlite://` / `sqlite:///:memory:` URLs and SQLite `file:` URIs with
   `uri=true` and either `mode=memory` or the `file::memory:` filename, with only

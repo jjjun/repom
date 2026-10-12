@@ -4,7 +4,7 @@
 alembic current コマンドを実行して、env.py のロード処理が成功することを検証します。
 
 目的:
-- alembic/env.py の load_models() 呼び出しが正しく動作すること
+- repom/alembic/env.py の load_models() 呼び出しが正しく動作すること
 - Alembic コマンド実行時にモデルが正しく読み込まれること
 - NameError などの実行時エラーが発生しないこと
 """
@@ -68,7 +68,7 @@ def test_alembic_env_loads_without_error(tmp_path):
         f"STDERR: {result.stderr}\n"
         f"STDOUT: {result.stdout}\n"
         f"Return Code: {result.returncode}\n\n"
-        f"原因: alembic/env.py で存在しない関数が呼び出されている可能性があります。"
+        f"原因: repom/alembic/env.py で存在しない関数が呼び出されている可能性があります。"
     )
 
     # ImportError も発生してはいけない
@@ -77,7 +77,7 @@ def test_alembic_env_loads_without_error(tmp_path):
         f"STDERR: {result.stderr}\n"
         f"STDOUT: {result.stdout}\n"
         f"Return Code: {result.returncode}\n\n"
-        f"原因: alembic/env.py のインポート文が間違っている可能性があります。"
+        f"原因: repom/alembic/env.py のインポート文が間違っている可能性があります。"
     )
 
     # AttributeError も発生してはいけない
@@ -122,11 +122,6 @@ def test_alembic_revision_autogenerate_works(tmp_path):
     versions_dir.mkdir(parents=True)
     ini_path = tmp_path / "alembic.ini"
     ini_content = (project_root / "alembic.ini").read_text(encoding="utf-8")
-    ini_content = ini_content.replace(
-        "script_location = alembic",
-        f"script_location = {project_root / 'alembic'}",
-        1,
-    )
     ini_content = ini_content.replace(
         "version_locations = alembic/versions",
         "version_locations = %(here)s/alembic/versions",

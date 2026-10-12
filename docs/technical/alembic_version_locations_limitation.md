@@ -14,13 +14,16 @@ For a consumer that reuses repom's migration environment:
 
 ```ini
 [alembic]
-script_location = submod/repom/alembic
+script_location = repom:alembic
 version_locations = %(here)s/alembic/versions
 ```
 
 `%(here)s` resolves to the directory containing the consumer's
 `alembic.ini`. A portable test fixture can use a relative `script_location` as
 well.
+
+Consumers must set `version_locations` explicitly. If it is omitted, Alembic
+falls back to a `versions` directory under the packaged script location.
 
 For `version_table`, `version_table_schema`, `autogenerate_exclude_tables`, and
 `pre_migration_hook`, see the [Alembic migration guide](../guides/features/alembic_migration_guide.md).

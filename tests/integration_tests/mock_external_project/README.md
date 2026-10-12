@@ -7,7 +7,7 @@ storing its own revisions.
 
 ```ini
 [alembic]
-script_location = %(here)s/../../../alembic
+script_location = repom:alembic
 version_locations = %(here)s/alembic/versions
 ```
 

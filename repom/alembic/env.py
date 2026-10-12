@@ -32,8 +32,7 @@ config.set_main_option("sqlalchemy.url", db_config.db_url.replace("%", "%%"))
 #   - external project: version_locations = %(here)s/alembic/versions
 #
 # script_location should also be set in alembic.ini:
-#   - repom standalone: script_location = alembic
-#   - external project: script_location = submod/repom/alembic
+#   - repom standalone and external projects: script_location = repom:alembic
 #
 # version_table is read from alembic.ini and defaults to alembic_version.
 # version_table_schema is also read from alembic.ini and defaults to None.

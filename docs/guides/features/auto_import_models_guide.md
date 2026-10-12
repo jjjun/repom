@@ -31,7 +31,7 @@ def hook_config(config):
 `allowed_package_prefixes` は動的 import の境界です。利用側 package と、必要な場合だけ
 `repom.` を明示してください。
 
-`alembic/env.py` と `db_create` は `model_import_strict` の値に関わらず常に strict
+`repom/alembic/env.py` と `db_create` は `model_import_strict` の値に関わらず常に strict
 （`load_models(strict=True)`）で読み込みます。partial な `Base.metadata` のまま
 autogenerate や `create_all` を実行するのは、テーブルの誤 drop や作成漏れに直結する
 ためです。`model_import_strict = False` はそれ以外の呼び出し元（`list_models` など）
@@ -103,7 +103,7 @@ db_engine, db_test = create_test_fixtures(
 - security error: 対象 package が `allowed_package_prefixes` に含まれるか確認。
 - import failure は `model_import_strict` の値に関わらず常に ERROR ログへ module 名と
   例外内容が出力される。`uv run repom_info` の "Model Import Failures" にも一覧表示される。
-- Alembic が table を検出しない: `alembic/env.py` が `load_models()` を呼んでいるか確認。
+- Alembic が table を検出しない: `repom/alembic/env.py` が `load_models()` を呼んでいるか確認。
 
 関連資料:
 

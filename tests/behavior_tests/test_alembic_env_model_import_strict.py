@@ -1,7 +1,7 @@
-"""Behavior tests for the strict model-import guards in alembic/env.py.
+"""Behavior tests for the strict model-import guards in repom/alembic/env.py.
 
 load_models() now returns the DiscoveryFailure list instead of discarding it
-(repom#138). alembic/env.py passes strict=True unconditionally, so a model
+(repom#138). repom/alembic/env.py passes strict=True unconditionally, so a model
 module that fails to import must abort the migration run rather than letting
 autogenerate compare the database against a partial Base.metadata - a
 partial metadata makes autogenerate propose dropping tables that still exist.

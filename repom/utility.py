@@ -109,7 +109,7 @@ def load_models(
 
     Note:
         This function is typically called by:
-        - Alembic migrations (alembic/env.py)
+        - Alembic migrations (repom/alembic/env.py)
         - Database scripts (db_create.py, db_delete.py, etc.)
         - Test fixtures (tests/conftest.py)
 

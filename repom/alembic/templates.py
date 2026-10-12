@@ -4,7 +4,7 @@ import re
 from collections.abc import Sequence
 
 # alembic.ini is ini syntax and line-oriented: a newline in an interpolated
-# value ends the current key and starts a new one. The shared alembic/env.py
+# value ends the current key and starts a new one. The shared repom/alembic/env.py
 # trusts keys it reads from this file - including pre_migration_hook, which
 # resolves and calls a module:callable target unconditionally - so a value
 # that can inject a key is a code-execution vector, not just a formatting bug.
@@ -53,8 +53,7 @@ class AlembicTemplates:
 
         Args:
             script_location: repom が提供する alembic への相対パス（プロジェクトルートから）
-                           repom standalone: 'alembic'
-                           外部プロジェクト: 'submod/fast-domain/submod/repom/alembic'
+                           repom standalone and external projects: 'repom:alembic'
             version_locations: マイグレーションファイルの保存場所
                              %(here)s は alembic.ini の場所（プロジェクトルート）を指す
                              例: '%(here)s/alembic/versions'
@@ -127,8 +126,8 @@ class AlembicTemplates:
 # Uses repom's env.py for migration execution
 
 [alembic]
-# Path to migration scripts (uses repom's env.py)
-# This should point to repom's alembic directory from project root
+# Alembic script directory or package resource (uses repom's env.py)
+# The packaged environment is available as repom:alembic
 script_location = {script_location}
 
 # Location where migration files are stored

@@ -98,11 +98,6 @@ def configure_database(config):
 
     alembic_ini = (PROJECT_ROOT / "alembic.ini").read_text(encoding="utf-8")
     alembic_ini = alembic_ini.replace(
-        "script_location = alembic",
-        f"script_location = {PROJECT_ROOT / 'alembic'}",
-        1,
-    )
-    alembic_ini = alembic_ini.replace(
         "version_locations = alembic/versions",
         "version_locations = %(here)s/alembic/versions",
         1,

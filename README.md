@@ -34,10 +34,9 @@ PostgreSQL や Redis の機能が必要な場合は、利用する extras を指
 uv add "repom[postgres,postgres-async,redis] @ git+https://github.com/jjjun/repom.git"
 ```
 
-配布 wheel には `repom` パッケージのみが含まれ、リポジトリ直下の `alembic/`
-（`env.py`、`script.py.mako`）はインストールされません。repom の Alembic 環境を
-使う場合は、mine-py や fast-domain と同様に Git submodule などで repom の checkout
-を用意し、`script_location` をその checkout 内の `alembic/` に設定してください。
+配布 wheel には `repom/alembic/` の共有環境（`env.py`、`script.py.mako`）も含まれます。
+`script_location = repom:alembic` で利用できます。revision ファイルは利用側プロジェクトに
+保存するため、`alembic.ini` には `version_locations = %(here)s/alembic/versions` を設定してください。
 詳細は [Alembic migration ガイド](docs/guides/features/alembic_migration_guide.md)を参照してください。
 
 ## 基本的な使い方
@@ -225,7 +224,7 @@ def hook_config(config):
 | セッション | `get_db_session`, `get_db_transaction`, `get_reusable_sync_session`, `get_reusable_async_session`, `get_reusable_*_transaction`, `get_standalone_*_transaction`, `get_lifespan_manager`, `dispose_engines`, `safe_db_url` | [セッション管理ガイド](docs/guides/repository/repository_session_patterns.md) |
 | 設定 hook | `repom.config_hooks.apply_repom_env_overrides`, `repom.config_hooks.parsing` | [CONFIG_HOOK ガイド](docs/guides/features/config_hook_guide.md)、[実行時環境変数ガイド](docs/guides/postgresql/runtime_env_overrides.md) |
 | Redis 設定 | `RedisConfig.connection_kwargs()`, `url()`, `safe_url()` | [Redis 設定ガイド](docs/guides/redis/redis_manager_guide.md) |
-| Alembic | `AlembicSetup`, `AlembicReset`, `AlembicTemplates` | [Alembic ガイド](docs/guides/features/alembic_migration_guide.md) |
+| Alembic | `AlembicSetup`, `AlembicReset`, `AlembicTemplates`, `SCRIPT_LOCATION`, `script_location_path()` | [Alembic ガイド](docs/guides/features/alembic_migration_guide.md) |
 | テスト | `create_test_fixtures`, `create_async_test_fixtures` (`bind_global_manager`) | [テストガイド](docs/guides/testing/testing_guide.md) |
 | 宣言的基底クラス | `repom.database.Base` | [システムカラムとカスタム型ガイド](docs/guides/model/system_columns_and_custom_types.md) |
 | Repository 拡張 | `QueryBuilderMixin`, `create_repository_instance`, `get_model_from_repository_class` | [検索とフィルタガイド](docs/guides/repository/repository_advanced_guide.md) |

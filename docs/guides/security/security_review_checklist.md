@@ -115,7 +115,7 @@ OS/driver・実DBか fake かを記録します。静的証拠だけで結論を
 
 | ID | 確認する問い | 調査の入口 |
 | --- | --- | --- |
-| C01 | 同じ設定から ORM・Alembic・診断・backup/restore が実際にどこへ接続するか。host だけでなく port・database・user の上書きと優先順位も比較したか。`EXEC_ENV` の正規化（`prod`/`production`、大文字小文字・空白、未知の値の dev 扱い）が TLS・破壊的操作・命名・fixture の guard で一致するか | `repom/config.py`, `repom/exec_env.py`, `database.py`, `alembic/env.py`, `repom/scripts/pg_dump_tools.py`; 下の比較表を使う |
+| C01 | 同じ設定から ORM・Alembic・診断・backup/restore が実際にどこへ接続するか。host だけでなく port・database・user の上書きと優先順位も比較したか。`EXEC_ENV` の正規化（`prod`/`production`、大文字小文字・空白、未知の値の dev 扱い）が TLS・破壊的操作・命名・fixture の guard で一致するか | `repom/config.py`, `repom/exec_env.py`, `database.py`, `repom/alembic/env.py`, `repom/scripts/pg_dump_tools.py`; 下の比較表を使う |
 | C02 | TLS の要求が URL・connect_args・環境変数・driver 変換後も保たれるか。暗号化と相手の証明書/hostname 検証を区別したか | `database.py`, `config.py`, `_backup_utils.py`; SQLite / PostgreSQL / Redis / pgAdmin の適用差を記録。サービス側の公開範囲は O06 |
 | C03 | 正常時と失敗時の repr・ログ・例外・例外 chain・CLI 出力に秘密が出ないか。SQL、Redis command、URL などへの escaping/encoding 後の表示表現も確認し、raw 値が見つからないだけで秘匿済みとせず、秘密を可逆に復元できる形で残っていないか調べたか。不正 URL、percent encoding、query 内 DSN、子プロセス stderr も確認したか | `safe_db_url`, Alembic setup、`repom_info`, backup/restore、credential helpers |
 | C04 | SQL ログ、結果行、QueryAnalyzer、デバッグ出力の保存内容と閲覧者を確認したか。hide_parameters を万能な秘匿処理と扱っていないか | `repom/logging.py`, `repom/diagnostics/`, `debug_repository_queries.py` |
@@ -147,8 +147,8 @@ driver に渡る引数と子プロセスの argv/env を比較します。libpq 
 
 | ID | 確認する問い | 調査の入口 |
 | --- | --- | --- |
-| A01 | import、CONFIG_HOOK、migration hook、master-data、INI のコード実行設定に低信頼の入力が入らないか。prefix 検査の実効範囲は何か | `repom/utility.py`, `alembic/env.py`, `db_sync_master.py`, `db_create.py`, `list_models.py`, `repom_info.py`, `debug_repository_queries.py`, `basekit` の lock 対象。prefix を sandbox と扱わない |
-| A02 | import 失敗・metadata 欠落・namespace/exclusion 設定が意図しない drop を生まないか。生成 migration を人が確認する手順があるか | `alembic/env.py`, Alembic setup/templates、`alembic.ini`; 資料 R3 |
+| A01 | import、CONFIG_HOOK、migration hook、master-data、INI のコード実行設定に低信頼の入力が入らないか。prefix 検査の実効範囲は何か | `repom/utility.py`, `repom/alembic/env.py`, `db_sync_master.py`, `db_create.py`, `list_models.py`, `repom_info.py`, `debug_repository_queries.py`, `basekit` の lock 対象。prefix を sandbox と扱わない |
+| A02 | import 失敗・metadata 欠落・namespace/exclusion 設定が意図しない drop を生まないか。生成 migration を人が確認する手順があるか | `repom/alembic/env.py`, Alembic setup/templates、`alembic.ini`; 資料 R3 |
 | A03 | 生成 INI に検証済みの値を出力しているか。migration の対象 DB、version table/schema、version_locations と削除対象が一致するか | `repom/alembic/templates.py`, `setup.py`, `reset.py` |
 | O01 | 破壊的操作ごとの確認・環境制限・対象選択を確認したか。CLI の guard を Python API にまで一般化していないか | `db_delete`, `alembic_reset`, `db_restore`, `db_sync_master`, service remove、credential rotation、`pg_restore_custom` |
 | O02 | バックアップ名と出力パス、symlink、partial file、失敗時 cleanup、既存ファイル、保持世代が対象範囲を逸脱しないか | `_backup_utils.py`, `db_backup.py`, `db_restore.py`, `pg_dump_tools.py`; Windows と POSIX を分ける |

@@ -13,7 +13,7 @@ from basekit.config_hook import ConfigHookLoadError
 
 import repom.config
 import repom.utility
-from repom.alembic import render_repom_type
+from repom.alembic import render_repom_type, script_location_path
 
 
 def test_env_keeps_preexisting_loggers_enabled(monkeypatch):
@@ -30,7 +30,7 @@ def test_env_keeps_preexisting_loggers_enabled(monkeypatch):
     monkeypatch.setattr(context, "run_migrations", lambda: None)
     monkeypatch.setattr(repom.utility, "load_models", lambda **kwargs: None)
 
-    env_path = Path(__file__).parents[2] / "alembic" / "env.py"
+    env_path = script_location_path() / "env.py"
     try:
         runpy.run_path(env_path)
         assert logger.disabled is False
@@ -103,7 +103,7 @@ def test_env_configures_version_table(
         lambda *args, **kwargs: connectable,
     )
 
-    env_path = Path(__file__).parents[2] / "alembic" / "env.py"
+    env_path = script_location_path() / "env.py"
     env_globals = runpy.run_path(env_path)
 
     assert configured_options["version_table"] == expected_version_table
@@ -156,7 +156,7 @@ def test_env_configures_version_table_schema(
         lambda *args, **kwargs: connectable,
     )
 
-    env_path = Path(__file__).parents[2] / "alembic" / "env.py"
+    env_path = script_location_path() / "env.py"
     runpy.run_path(env_path)
 
     assert (
@@ -221,7 +221,7 @@ def test_env_configures_autogenerate_table_exclusions(
         lambda *args, **kwargs: connectable,
     )
 
-    env_path = Path(__file__).parents[2] / "alembic" / "env.py"
+    env_path = script_location_path() / "env.py"
     env_globals = runpy.run_path(env_path)
 
     assert (
@@ -271,7 +271,7 @@ def test_env_escapes_percent_signs_in_db_url_for_configparser(monkeypatch):
     )
     monkeypatch.setattr(repom.config.config, "db_url", raw_url)
 
-    env_path = Path(__file__).parents[2] / "alembic" / "env.py"
+    env_path = script_location_path() / "env.py"
     # Must not raise: an unescaped '%' would make ConfigParser embed the
     # raw DSN (password included) in a ValueError here.
     runpy.run_path(env_path)
@@ -297,7 +297,7 @@ def _run_env_with_pre_migration_hook(monkeypatch, hook_path):
         lambda *args, **kwargs: connectable,
     )
 
-    env_path = Path(__file__).parents[2] / "alembic" / "env.py"
+    env_path = script_location_path() / "env.py"
     return runpy.run_path(env_path)
 
 

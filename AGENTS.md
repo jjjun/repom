@@ -28,7 +28,7 @@ repom/
 │   ├── postgres/              # PostgreSQL / pgAdmin configuration and Docker management
 │   ├── redis/                 # Redis configuration and Docker management
 │   ├── sqlite/                # SQLite configuration
-│   ├── alembic/               # Alembic setup/reset helpers and alembic.ini templates
+│   ├── alembic/               # Shared Alembic environment, templates, setup, and reset helpers
 │   ├── diagnostics/           # Database diagnostics and QueryAnalyzer
 │   ├── examples/              # Example models and repositories
 │   ├── config_hooks/          # Runtime environment override helpers
@@ -61,10 +61,8 @@ repom/
 │   ├── workflows/dependency-audit.yml
 │   └── dependabot.yml
 ├── scripts/                  # Development helper scripts
-├── alembic/                  # Shared migration environment referenced via script_location
+├── alembic/                  # Standalone version_locations directory; consumers keep their own revisions
 │   ├── README
-│   ├── script.py.mako
-│   ├── env.py
 │   └── versions/              # Empty (.gitkeep); consumers keep their own versions
 ├── data/                     # SQLite databases for each environment
 ├── data_master/              # Master data files
@@ -129,7 +127,7 @@ which can be set in `CONFIG_HOOK`. After creation, runtime commands read only
 
 ### Migration Version Table Control
 
-`alembic/env.py` reads `version_table` and `version_table_schema` from
+`repom/alembic/env.py` reads `version_table` and `version_table_schema` from
 `alembic.ini`. They default to `alembic_version` and no explicit schema,
 respectively. A consuming project with independent migration namespaces should
 configure a distinct `script_location`, `version_locations`, and `version_table`
@@ -156,7 +154,7 @@ should account for read-only commands when deciding whether their hook should
 reject a configuration.
 
 The hook's module component must sit under the consuming project's configured
-`allowed_package_prefixes`; `alembic/env.py` validates this before importing
+`allowed_package_prefixes`; `repom/alembic/env.py` validates this before importing
 the module.
 
 ### Trust Boundary
@@ -291,7 +289,7 @@ tools. `issuekit` is installed globally and is not a development dependency.
 
 - **Database Config**: `repom/config.py`
 - **Database Connection**: `repom/database.py`
-- **Alembic Config**: `alembic.ini` and `alembic/env.py`
+- **Alembic Config**: `alembic.ini` and `repom/alembic/env.py`
 - **Test Config**: `pyproject.toml` (`[tool.pytest.ini_options]`) and `tests/conftest.py`
 
 ## Notes for AI Assistants

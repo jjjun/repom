@@ -48,7 +48,7 @@ alembic_cfg = setup.get_alembic_config()
 setup = AlembicSetup(
     project_root='<consumer-root>',
     db_url='sqlite:///data/mine_py/db.sqlite3',
-    script_location='<consumer-root>/submod/repom/alembic',  # repom の alembic ディレクトリ
+    script_location='repom:alembic',  # repom の共有 Alembic 環境
     version_locations='%(here)s/alembic/versions'  # プロジェクト内の versions
 )
 
@@ -57,11 +57,13 @@ setup.create_version_directory()
 ```
 
 **オプション**:
-- `script_location`: env.py と script.py.mako の場所（デフォルト: `alembic`）
+- `script_location`: env.py と script.py.mako の場所（デフォルト: `repom:alembic`）
 - `version_locations`: マイグレーションファイルの保存場所（デフォルト: `%(here)s/alembic/versions`）
 - `version_table`: Alembic のバージョンテーブル名（デフォルト: `alembic_version`）
 - `version_table_schema`: Alembic のバージョンテーブルを配置するスキーマ（デフォルト: 明示的なスキーマなし）
 - `autogenerate_exclude_tables`: 除外する兄弟名前空間のバージョンテーブル名（文字列またはシーケンス）
+
+`version_locations` は利用側プロジェクトの revision 保存先として明示してください。省略すると Alembic は共有環境内の `versions` を使います。
 
 既存の `alembic.ini` を上書きするには、`AlembicSetup(...)` の constructor ではなく
 `setup.create_alembic_ini(overwrite=True)` を呼び出します（デフォルト: `False`）。
@@ -92,7 +94,7 @@ uv run alembic_init
 
 ```python
 def get_repom_config(config):
-    config.alembic_script_location = "submod/repom/alembic"
+    config.alembic_script_location = "repom:alembic"
     config.alembic_version_locations = "%(here)s/alembic/versions"
     config.alembic_version_table = "alembic_version_mine_py"
     config.alembic_version_table_schema = "migration"
@@ -244,14 +246,14 @@ in-memory SQLite を使用するため、通常はファイルを作成しませ
 
 **重要**: マイグレーションファイルの保存場所を制御するには `alembic.ini` が**必須**です。
 
-共有 `alembic/env.py` は設定ファイルがあると `logging.config.fileConfig()` を呼び出すため、
+共有 `repom/alembic/env.py` は設定ファイルがあると `logging.config.fileConfig()` を呼び出すため、
 ロギング設定も必要です。`alembic_init` が生成するテンプレートと同じ logging sections を含む例です。
 
 ```ini
 # mine-py/alembic.ini
 [alembic]
 # repom の alembic ディレクトリを参照
-script_location = submod/repom/alembic
+script_location = repom:alembic
 
 # マイグレーションファイルの保存場所（プロジェクト内）
 # %(here)s は alembic.ini のあるディレクトリ
@@ -409,7 +411,7 @@ mine-py/
 `version_table` / `version_table_schema` / `autogenerate_exclude_tables` の
 各要素は `[A-Za-z_][A-Za-z0-9_]*` の識別子パターンのみ許可されます。
 `pre_migration_hook` が指すモジュールは `allowed_package_prefixes` で
-許可した prefix 配下である必要があり、`alembic/env.py` がインポート前に
+許可した prefix 配下である必要があり、`repom/alembic/env.py` がインポート前に
 これを検証します。
 
 ---
@@ -548,7 +550,7 @@ class User(BaseModel):
     __tablename__ = 'users'  # 必須
 ```
 
-**デバッグ方法**: `alembic/env.py` で確認
+**デバッグ方法**: `repom/alembic/env.py` で確認
 ```python
 print("Loaded models:", Base.metadata.tables.keys())
 ```
