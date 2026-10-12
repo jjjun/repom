@@ -154,7 +154,6 @@ def test_sync_test_fixture_binds_global_manager_for_reusable_transactions(monkey
     manager = DatabaseManager()
     previous_engine = create_engine("sqlite:///:memory:")
     monkeypatch.setattr(database_module, "_db_manager", manager)
-    monkeypatch.setattr(testing_module, "_db_manager", manager)
     db_engine_fixture, _ = create_test_fixtures(
         db_url="sqlite:///:memory:",
         model_loader=lambda: None,
@@ -182,7 +181,6 @@ async def test_async_test_fixture_binds_global_manager_for_reusable_transactions
     manager = DatabaseManager()
     previous_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     monkeypatch.setattr(database_module, "_db_manager", manager)
-    monkeypatch.setattr(testing_module, "_db_manager", manager)
     async_db_engine_fixture, _ = create_async_test_fixtures(
         db_url="sqlite:///:memory:",
         model_loader=lambda: None,

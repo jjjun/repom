@@ -65,10 +65,12 @@ import ssl
 import threading
 
 from sqlalchemy import create_engine, Engine, inspect
+from sqlalchemy.engine import Connection
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
     AsyncEngine,
+    AsyncConnection,
     AsyncSession,
     async_sessionmaker
 )
@@ -451,6 +453,50 @@ class DatabaseManager:
                     self._sync_session_factory = previous_factory
         else:
             raise TypeError("engine must be a SQLAlchemy Engine or AsyncEngine")
+
+    @contextmanager
+    def bind_connection_for_tests(self, connection: Connection | AsyncConnection):
+        """Temporarily bind sessions to a test-owned connection and restore state."""
+        if isinstance(connection, AsyncConnection):
+            with self._lock:
+                previous_engine = self._async_engine
+                previous_factory = self._async_session_factory
+                self._async_engine = connection.engine
+                self._async_session_factory = async_sessionmaker(
+                    bind=connection,
+                    class_=AsyncSession,
+                    expire_on_commit=False,
+                    autocommit=False,
+                    autoflush=config.autoflush,
+                    join_transaction_mode="create_savepoint",
+                )
+            try:
+                yield connection
+            finally:
+                with self._lock:
+                    self._async_engine = previous_engine
+                    self._async_session_factory = previous_factory
+        elif isinstance(connection, Connection):
+            with self._lock:
+                previous_engine = self._sync_engine
+                previous_factory = self._sync_session_factory
+                self._sync_engine = connection.engine
+                self._sync_session_factory = sessionmaker(
+                    bind=connection,
+                    autocommit=False,
+                    autoflush=config.autoflush,
+                    join_transaction_mode="create_savepoint",
+                )
+            try:
+                yield connection
+            finally:
+                with self._lock:
+                    self._sync_engine = previous_engine
+                    self._sync_session_factory = previous_factory
+        else:
+            raise TypeError(
+                "connection must be a SQLAlchemy Connection or AsyncConnection"
+            )
 
     # ========================================
     # Sync Engine/Session Management
@@ -1274,6 +1320,16 @@ _db_manager = DatabaseManager()
 """Global DatabaseManager instance for the application."""
 
 
+def get_db_manager() -> DatabaseManager:
+    """Return the global manager for test wiring and lifecycle hooks.
+
+    Test fixtures can temporarily bind manager sessions to their transaction
+    connection. Lifecycle hooks can use the manager to inspect or manage the
+    application's database resources.
+    """
+    return _db_manager
+
+
 # ========================================
 # Public Utility Functions
 # ========================================
@@ -1627,6 +1683,7 @@ __all__ = [
     'safe_db_url',
     # Manager
     'DatabaseManager',
+    'get_db_manager',
     # Sync API
     'get_sync_engine',
     'get_db_session',

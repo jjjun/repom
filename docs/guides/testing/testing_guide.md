@@ -42,6 +42,13 @@ from repom.testing import create_test_fixtures
 db_engine, db_test = create_test_fixtures()
 ```
 
+SQLite fixture engine には、SAVEPOINT を外側の test transaction 内に保つため、
+`isolation_level=None` と transaction 開始時に `BEGIN` を発行する event が設定されています
+（`BEGIN` が重複するため、fixture engine に独自の `connect` / `begin` event を登録しないでください）。
+この設定は両 factory が作るすべての SQLite engine に適用されるため、DDL も transaction 対象となり、
+test 中に同じ file-based SQLite database を別 connection から書き込むと `database is locked` が
+起きる場合があります。
+
 - `db_engine`: session scope の SQLAlchemy Engine
 - `db_test`: function scope の `scoped_session`
 
@@ -49,11 +56,14 @@ db_engine, db_test = create_test_fixtures()
 
 `bind_global_manager=True` は fixture engine を `DatabaseManager` に一時的に bind します。
 同期 factory は同期 engine だけを、非同期 factory は非同期 engine だけを bind し、反対側の engine は変わりません。
-これは engine routing の設定であり、manager API が返す session を `db_test` / `async_db_test` の
-session や transaction に参加させるものではありません。in-memory SQLite の `StaticPool` のように pool が
-DBAPI connection を共有する場合、fixture session の未 commit 行が見えることはありますが、fixture の rollback は
-manager session からの書き込みを取り消す保証をしません。rollback を必要とする書き込みには、fixture の session を
-明示して使ってください。fixture 終了時には以前の engine と session factory が復元されます。
+各 test 中は manager session factory も `db_test` / `async_db_test` が使う connection に bind されるため、
+manager API の transaction は fixture の外側の transaction に参加します。manager session の commit は
+savepoint を解放しますが、外側の transaction は commit しません。test 終了時の fixture rollback で書き込みが戻ります。
+fixture session と manager session は同じ connection を使うため、同時ではなく順番に使用してください。複数 thread からの
+並行使用には対応していません。fixture 終了時には以前の engine と session factory が復元されます。
+
+`get_db_manager()` は共有 `DatabaseManager` を返します。test fixture の wiring や lifecycle hook から manager を
+参照する場合に使えます。
 
 `get_standalone_sync_transaction()` と `get_standalone_async_transaction()` は終了時に対応する manager engine を
 dispose して cached slot を消去します。global manager の binding 中にこれらを使うと fixture engine を dispose し、
@@ -85,9 +95,9 @@ from repom.testing import create_async_test_fixtures
 async_db_engine, async_db_test = create_async_test_fixtures()
 ```
 
-非同期用ファクトリーにも `bind_global_manager=True` を指定できます。manager の非同期 engine だけが
-一時的に fixture engine に bind されます。`async_db_test` 以外の session による書き込みが fixture rollback に
-含まれる保証はないため、rollback を必要とするコードには `async_db_test` を明示して渡してください。
+非同期用ファクトリーにも `bind_global_manager=True` を指定できます。manager の非同期 engine と各 test の
+connection が一時的に bind されるため、manager transaction の書き込みは fixture rollback に含まれます。
+fixture session と manager session は同じ connection を使うため順番に使用し、複数 thread から並行して使わないでください。
 
 ```python
 import pytest

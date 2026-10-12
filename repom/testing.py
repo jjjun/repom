@@ -22,12 +22,12 @@ Testing utilities for repom-based projects.
 from contextlib import nullcontext
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm import sessionmaker, scoped_session
 from typing import Callable, Optional
-from repom.database import Base, DatabaseManager, _db_manager, safe_db_url
+from repom.database import Base, DatabaseManager, get_db_manager, safe_db_url
 from repom.database import convert_to_async_uri  # noqa: F401 - re-exported, see below
 from repom.config import config
 from repom.exec_env import normalize_exec_env
@@ -69,6 +69,20 @@ def _is_in_memory_sqlite_url(db_url: str) -> bool:
         return query.get("mode", "memory") == "memory"
 
     return len(url.database) > len("file:") and query.get("mode") == "memory"
+
+
+def _configure_sqlite_transaction_control(engine) -> None:
+    """Make SQLite begin DBAPI transactions before issuing SAVEPOINTs."""
+    if engine.dialect.name != "sqlite":
+        return
+
+    @event.listens_for(engine, "connect")
+    def disable_legacy_transaction_control(dbapi_connection, connection_record):
+        dbapi_connection.isolation_level = None
+
+    @event.listens_for(engine, "begin")
+    def emit_begin(connection):
+        connection.exec_driver_sql("BEGIN")
 
 
 def _require_test_database(db_url: str, allow_destructive: bool) -> None:
@@ -119,7 +133,8 @@ def create_test_fixtures(
         （リアルな dev/prod データベースを誤って drop_all しないための安全策、
         repom#135）
     bind_global_manager : bool, optional
-        フィクスチャの有効期間中、グローバルの DatabaseManager をこのフィクスチャのエンジンに結び付ける。
+        フィクスチャの有効期間中、グローバルの DatabaseManager をこのフィクスチャに結び付ける。
+        各テストでは manager の session も fixture の transaction に参加します。
 
     Returns
     -------
@@ -183,9 +198,10 @@ def create_test_fixtures(
         kwargs = config.engine_kwargs_for_url(_db_url)
 
         engine = create_engine(_db_url, **kwargs)
+        _configure_sqlite_transaction_control(engine)
 
         manager_binding = (
-            _db_manager.bind_engine_for_tests(engine)
+            get_db_manager().bind_engine_for_tests(engine)
             if bind_global_manager
             else nullcontext()
         )
@@ -224,7 +240,13 @@ def create_test_fixtures(
             sessionmaker(autocommit=False, autoflush=config.autoflush, bind=connection)
         )
 
-        yield session
+        manager_connection_binding = (
+            get_db_manager().bind_connection_for_tests(connection)
+            if bind_global_manager
+            else nullcontext()
+        )
+        with manager_connection_binding:
+            yield session
 
         # クリーンアップ（確実にロールバック）
         session.close()
@@ -266,7 +288,8 @@ def create_async_test_fixtures(
     allow_destructive : bool, optional
         create_test_fixtures と同じ安全策（repom#135）。既定は False
     bind_global_manager : bool, optional
-        フィクスチャの有効期間中、グローバルの DatabaseManager をこのフィクスチャのエンジンに結び付ける。
+        フィクスチャの有効期間中、グローバルの DatabaseManager をこのフィクスチャに結び付ける。
+        各テストでは manager の session も fixture の transaction に参加します。
 
     Returns
     -------
@@ -356,9 +379,10 @@ def create_async_test_fixtures(
         _, (async_url, kwargs) = DatabaseManager.resolve_engine_settings(_db_url, base_kwargs)
 
         engine = create_async_engine(async_url, **kwargs)
+        _configure_sqlite_transaction_control(engine.sync_engine)
 
         manager_binding = (
-            _db_manager.bind_engine_for_tests(engine)
+            get_db_manager().bind_engine_for_tests(engine)
             if bind_global_manager
             else nullcontext()
         )
@@ -403,7 +427,13 @@ def create_async_test_fixtures(
 
         session = AsyncSessionLocal()
 
-        yield session
+        manager_connection_binding = (
+            get_db_manager().bind_connection_for_tests(connection)
+            if bind_global_manager
+            else nullcontext()
+        )
+        with manager_connection_binding:
+            yield session
 
         # クリーンアップ（確実にロールバック）
         await session.close()

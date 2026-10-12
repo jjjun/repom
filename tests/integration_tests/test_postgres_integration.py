@@ -385,6 +385,42 @@ def postgres_db_test(postgres_model_engine):
         connection.close()
 
 
+@pytest.mark.skipif(
+    not POSTGRES_INTEGRATION_ENABLED,
+    reason="PostgreSQL integration tests require DB_TYPE=postgres"
+)
+def test_manager_transaction_joins_postgres_fixture_connection(
+    postgres_db_test, monkeypatch
+):
+    from contextlib import contextmanager
+
+    from sqlalchemy import select
+
+    import repom.database as database_module
+    from repom.database import DatabaseManager
+    from repom.examples.models import SampleModel
+
+    fixture_session = postgres_db_test()
+    connection = fixture_session.connection()
+    transaction = connection.get_transaction()
+    assert transaction is not None
+
+    manager = DatabaseManager()
+    monkeypatch.setattr(database_module, "_db_manager", manager)
+    value = f"connection-binding-{uuid4().hex}"
+
+    with manager.bind_connection_for_tests(connection):
+        assert database_module.get_sync_engine() is connection.engine
+        with contextmanager(database_module.get_db_transaction)() as session:
+            session.add(SampleModel(value=value))
+
+        assert transaction.is_active
+        rows = fixture_session.execute(
+            select(SampleModel).where(SampleModel.value == value)
+        ).scalars().all()
+        assert len(rows) == 1
+
+
 def print_test_info(config_obj=config):
     """テスト情報を表示"""
     import os

@@ -219,7 +219,10 @@
   `debug_repository_queries_cli` are also available as reusable functions.
 - Test fixture factories can bind and restore the global database manager with
   `DatabaseManager.bind_engine_for_tests()` through `bind_global_manager=True`. This
-  behavior is separate from the factory's transaction rollback fixtures.
+  also enables `DatabaseManager.bind_connection_for_tests()` to bind sync or async
+  manager sessions to each test's connection with savepoint joining.
+- `get_db_manager()` exposes the shared `DatabaseManager` for test wiring and lifecycle
+  hooks.
 - Shared environment override helpers include `apply_repom_env_overrides()` and the
   public parsers in `repom.config_hooks.parsing` (also available through the `_parsing`
   alias). `RedisConfig` provides `connection_kwargs()`, `url()`, and `safe_url()` for
@@ -243,6 +246,13 @@
 
 ### Changed
 
+- With `bind_global_manager=True`, test fixtures now bind manager sessions to each
+  test's connection, so manager writes participate in the fixture rollback.
+- SQLite fixture engines created by either test fixture factory now use explicit
+  transaction control (`isolation_level=None` and `BEGIN` on transaction start) so
+  SAVEPOINTs stay inside the outer test transaction. DDL is transactional, and a test
+  writing to the same file-backed SQLite database through a second connection may now
+  encounter `database is locked`.
 - `FilterParams` raises `ValidationError` when undeclared `limit`, `offset`, or
   `order_by` values are passed in params. Callers that relied on these values being
   silently ignored must pass them as `find()` options or declare them and handle
