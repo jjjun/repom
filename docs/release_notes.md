@@ -198,6 +198,12 @@
 
 ### Added
 
+- Repository subclasses may rely on `_session_scope()`, `_commit_or_flush(session)`,
+  `_uses_internal_session(session)`, `_has_soft_delete()`,
+  `_append_soft_delete_filter(filters, include_deleted)`, `_base_select()`, and
+  `set_find_option()` as a protected API. Custom methods can use the same session-aware
+  behavior for caller-owned and internally opened sessions. Future signature changes to
+  these helpers will be documented under Breaking.
 - Sync and async repositories now provide `iter_pages()` and `find_all()` for bounded,
   primary-key-based full loads. Consumers can replace private keyset paging loops with
   these helpers.

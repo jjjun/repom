@@ -77,7 +77,13 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
 
     @asynccontextmanager
     async def _session_scope(self) -> AsyncSession:
-        """セッション取得を一元化し、None の場合は get_async_db_session() で補完"""
+        """サブクラスのメソッドから利用できるセッションスコープ。
+
+        ``session=`` で渡された外部セッションをそのまま返し、所有権は呼び出し元に
+        保つ。未指定の場合は内部セッションを開き、スコープ終了時にクリーンアップする。
+        書き込みでは ``_commit_or_flush()`` と併用する。内部セッションは commit、
+        外部セッションは flush され、SQLAlchemyError 時に rollback するのは内部セッションのみ。
+        """
         if self.session is not None:
             yield self.session
             return

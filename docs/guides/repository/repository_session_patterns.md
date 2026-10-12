@@ -204,7 +204,7 @@ session object を引き継ぐことがあります。例として、`asyncio.cr
 session を同時利用する可能性があり、子側の書き込みが親 scope の終了前にその内部 session を
 commit することもあります。通常の `threading.Thread` と `executor.submit()` は Python 3.12.8
 では context を継承しませんが、Python 3.14 では thread context 継承が有効になる場合があります。
-継承の有無を前提にせず、consumer code がこの private scope 内で子処理を開始しないでください。
+継承の有無を前提にせず、consumer code がこの protected scope 内で子処理を開始しないでください。
 これは利用上の制約であり、request 間の脆弱性が確認されたという意味ではありません。
 
 明示的な `session=` を渡して作成したインスタンスは、その呼び出し側所有の session に

@@ -687,6 +687,67 @@ class TaskRepository(AsyncBaseRepository[Task]):
 
 **同期版**: `AsyncBaseRepository` → `BaseRepository`、`async def` → `def`、`await` を削除してください。
 
+### サブクラス向け保護 API
+
+サブクラスのメソッドでセッションの指定有無に対応するには、`self.session` ではなく
+`_session_scope()` を使います。次のメンバーをサブクラス向けの保護 API として扱います。
+
+- `_session_scope()`
+- `_commit_or_flush(session)`
+- `_uses_internal_session(session)`
+- `_has_soft_delete()`
+- `_append_soft_delete_filter(filters, include_deleted)`
+- `_base_select()`
+- `set_find_option()`
+
+これらのシグネチャを変更する場合は、Breaking リリースノートに記載します。
+
+```python
+from sqlalchemy import select
+from repom import AsyncBaseRepository
+
+class TaskRepository(AsyncBaseRepository[Task]):
+    async def find_by_status(self, status: str) -> list[Task]:
+        filters = [Task.status == status]
+        self._append_soft_delete_filter(filters)
+        query = self._base_select().where(*filters)
+        query = self.set_find_option(query, limit=100)
+
+        async with self._session_scope() as session:
+            result = await session.execute(query)
+            return result.scalars().unique().all()
+
+    async def create_task(self, title: str) -> Task:
+        task = Task(title=title)
+        async with self._session_scope() as session:
+            async with self._commit_or_flush(session) as using_internal_session:
+                session.add(task)
+            if using_internal_session:
+                await session.refresh(task)
+        return task
+```
+
+同期版では `AsyncBaseRepository` を `BaseRepository` に、`async with` を `with` に、
+`await session.execute(...)` を `session.execute(...)` に置き換えます。
+
+`_session_scope()` は `session=` で渡された外部セッションをそのまま使い、所有権を呼び出し元に
+残します。`_commit_or_flush()` は内部セッションを commit し、外部セッションは flush します。
+`SQLAlchemyError` が発生した場合に rollback するのは内部セッションだけです。外部セッションの
+commit と rollback は呼び出し元が管理します。
+
+内部セッションの scope 中に開始した子処理は、親の context をコピーして同じ `ContextVar` の session を
+引き継ぐことがあります。例として、`asyncio.create_task()`、`asyncio.gather()` で task 化する coroutine、
+`asyncio.TaskGroup` 内の task、`asyncio.to_thread()`、`contextvars.copy_context().run()` があります。
+子 task や thread から同じ Repository を使うと session を同時利用する可能性があり、子側の書き込みが
+親 scope の終了前に内部 session を commit することもあります。通常の `threading.Thread` と
+`executor.submit()` は Python 3.12.8 では context を継承しませんが、Python 3.14 では継承が有効に
+なる場合があります。継承の有無を前提にせず、この scope 内から子処理を開始しないでください。
+
+`find()` など標準メソッドを使うと、通常のフィルタや soft-delete 条件、検索オプションが適用されます。
+独自の `session.execute()` を使うとクエリを細かく組み立てられますが、必要な soft-delete 条件や取得上限を
+自分で適用する必要があります。`self.session.execute()` を直接使うメソッドは、明示的な `session=` が
+あるリポジトリに限られます。
+
 ### 複雑な検索ロジック
 
 ```python
@@ -722,7 +783,7 @@ class TaskRepository(AsyncBaseRepository[Task]):
         return result.scalars().unique().all()
 ```
 
-`find_overdue_tasks()` のように `self.session.execute()` を使うメソッドは、`TaskRepository(session=session)` のように外部セッションを明示して使ってください。`_base_select()` と `set_find_option()` を使い、論理削除フィルタも適用します。
+この `find_overdue_tasks()` は `self.session.execute()` を直接使うため、`TaskRepository(session=session)` のように外部セッションを明示して使います。`_base_select()` と `set_find_option()` を使い、論理削除フィルタも適用しています。外部セッションと内部セッションの両方を使えるカスタムメソッドでは、上の例のように `_session_scope()` で取得してください。標準の `find()` は標準フィルタや検索オプションを適用しますが、独自の `session.execute()` では必要な条件と取得上限を自分で適用します。
 
 ### 関連モデルの操作
 
