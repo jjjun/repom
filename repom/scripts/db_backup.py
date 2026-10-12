@@ -1,5 +1,5 @@
 from repom.config import config
-from repom.logging import get_logger
+from repom.logging import ensure_logging_configured, get_logger
 from repom.diagnostics import resolve_sqlite_db_path
 from repom.scripts.pg_dump_tools import PgConnParams
 import os
@@ -279,6 +279,7 @@ def backup_postgresql():
 
 
 def main():
+    ensure_logging_configured()
     logger.info("Starting database backup process")
 
     if config.db_type not in ("sqlite", "postgres"):

@@ -18,6 +18,7 @@ import inspect
 from repom.diagnostics.query_analyzer import QueryAnalyzer
 from repom.database import _db_manager
 from repom import BaseRepository
+from repom.logging import ensure_logging_configured
 
 
 def debug_repository_queries(repo_class: Type[BaseRepository]) -> None:
@@ -156,6 +157,7 @@ def debug_repository_queries_cli(*, target: str | None = None) -> None:
 
 def main(argv: list[str] | None = None):
     """エントリーポイント"""
+    ensure_logging_configured()
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)

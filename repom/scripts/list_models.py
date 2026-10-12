@@ -7,6 +7,7 @@ from typing import List
 from basekit.discovery import DiscoveryFailure
 
 from repom.utility import ModelInfo, describe_loaded_models
+from repom.logging import ensure_logging_configured
 
 
 def _display(models: List[ModelInfo], failures: List[DiscoveryFailure]) -> None:
@@ -50,6 +51,7 @@ def main():
     Returns:
         0 on success, 1 if any model module failed to import.
     """
+    ensure_logging_configured()
     models, failures = describe_loaded_models()
     _display(models, failures)
     return 1 if failures else 0

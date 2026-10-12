@@ -11,7 +11,7 @@ Usage:
 """
 
 from repom.config import config
-from repom.logging import get_logger
+from repom.logging import ensure_logging_configured, get_logger
 from repom.diagnostics import resolve_sqlite_db_path
 import gzip
 import os
@@ -317,6 +317,7 @@ def target_database_name() -> str:
 
 
 def main():
+    ensure_logging_configured()
     logger.info("Starting database restore process")
 
     if config.db_type not in ("sqlite", "postgres"):

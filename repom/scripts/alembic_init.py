@@ -8,9 +8,11 @@ from pathlib import Path
 
 from repom.alembic.setup import AlembicSetup
 from repom.config import config
+from repom.logging import ensure_logging_configured
 
 
 def main():
+    ensure_logging_configured()
     ini_path = Path(config.root_path) / "alembic.ini"
 
     if ini_path.exists():

@@ -17,6 +17,7 @@ from repom.diagnostics.database_info import (
     short_lived_postgres_engine,
 )
 from repom.utility import describe_loaded_models
+from repom.logging import ensure_logging_configured
 
 
 def format_size(size_bytes: int) -> str:
@@ -305,6 +306,7 @@ def display_config():
 
 def main():
     """Main entry point for the script."""
+    ensure_logging_configured()
     try:
         display_config()
         return 0

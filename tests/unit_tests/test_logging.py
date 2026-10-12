@@ -2,13 +2,17 @@
 repom/logging.py のテスト（ハイブリッドアプローチ）
 """
 
+import os
 import logging
+import subprocess
+import sys
 from datetime import date
 from pathlib import Path
 import pytest
 
 from repom.config import RepomConfig
-from repom.logging import get_logger
+from repom.logging import ensure_logging_configured, get_logger
+from tests.pytest_helpers import CHILD_PROCESS_TIMEOUT_SEC
 
 
 @pytest.fixture(autouse=True)
@@ -51,6 +55,7 @@ class TestGetLogger:
         logger = get_logger('test')
         assert isinstance(logger, logging.Logger)
         assert logger.name == 'repom.test'
+        assert not logging.getLogger('repom').handlers
 
     def test_get_logger_with_basicConfig(self, tmp_path, monkeypatch, request):
         """
@@ -98,6 +103,7 @@ class TestGetLogger:
         from repom.config import config
         monkeypatch.setattr(config.__class__, 'log_file_path', property(lambda self: log_file))
 
+        ensure_logging_configured()
         logger = get_logger('test')
 
         # repom のルートロガーにハンドラーが追加されているか確認
@@ -123,14 +129,14 @@ class TestGetLogger:
         from repom.config import config
         monkeypatch.setattr(config.__class__, 'log_file_path', property(lambda self: None))
 
-        get_logger('test')
+        ensure_logging_configured()
 
         # ハンドラーが追加されていないことを確認
         assert len(repom_root_logger.handlers) == 0
 
     def test_logger_initialization_once(self, tmp_path, monkeypatch):
         """
-        get_logger() を複数回呼んでも、ハンドラーは1回だけ追加される
+        ensure_logging_configured() を複数回呼んでも、ハンドラーは1回だけ追加される
         """
         repom_root_logger = logging.getLogger('repom')
 
@@ -140,11 +146,11 @@ class TestGetLogger:
         monkeypatch.setattr(config.__class__, 'log_file_path', property(lambda self: log_file))
 
         # 1回目の呼び出し
-        get_logger('test1')
+        ensure_logging_configured()
         handler_count_1 = len(repom_root_logger.handlers)
 
         # 2回目の呼び出し
-        get_logger('test2')
+        ensure_logging_configured()
         handler_count_2 = len(repom_root_logger.handlers)
 
         # ハンドラー数が変わらないことを確認
@@ -162,6 +168,7 @@ class TestGetLogger:
         from repom.config import config
         monkeypatch.setattr(config.__class__, 'log_file_path', property(lambda self: log_file))
 
+        ensure_logging_configured()
         logger = get_logger('test')
         logger.debug("Test message")
 
@@ -212,6 +219,7 @@ def test_prod_logging_uses_info_level_for_file_handler(tmp_path, monkeypatch):
     config.log_file = "prod"
     monkeypatch.setattr("repom.config.config", config)
 
+    ensure_logging_configured()
     logger = get_logger("prod_level")
     logger.debug("debug message")
     logger.info("info message")
@@ -236,6 +244,7 @@ def test_non_prod_logging_keeps_debug_file_level(tmp_path, monkeypatch):
     config.log_file = "dev"
     monkeypatch.setattr("repom.config.config", config)
 
+    ensure_logging_configured()
     logger = get_logger("dev_level")
     logger.debug("debug message")
 
@@ -255,3 +264,61 @@ def test_non_prod_logging_keeps_debug_file_level(tmp_path, monkeypatch):
     assert file_handler.level == logging.DEBUG
     assert console_handler.level == logging.INFO
     assert "debug message" in Path(file_handler.baseFilename).read_text(encoding="utf-8")
+
+
+def _run_logging_import_probe(tmp_path, *, side_effects_disabled):
+    project_root = Path(__file__).resolve().parents[2]
+    env = os.environ.copy()
+    env.pop("BASEKIT_NO_SIDE_EFFECTS", None)
+    if side_effects_disabled:
+        env["BASEKIT_NO_SIDE_EFFECTS"] = "1"
+    env["CONFIG_HOOK"] = "tests.logging_test_config:hook_config"
+    env["REPOM_LOGGING_TEST_ROOT"] = str(tmp_path)
+    env["EXEC_ENV"] = "test"
+    env["PYTHONPATH"] = os.pathsep.join(
+        filter(None, (str(project_root), env.get("PYTHONPATH")))
+    )
+
+    script = """
+import logging
+import os
+from pathlib import Path
+
+import repom.database
+from repom.config import config
+
+log_directory = Path(config.log_path)
+assert not log_directory.exists()
+assert not logging.getLogger("repom").handlers
+
+repom.database.get_sync_engine()
+if os.environ.get("BASEKIT_NO_SIDE_EFFECTS") == "1":
+    assert not log_directory.exists()
+    assert not logging.getLogger("repom").handlers
+else:
+    assert log_directory.is_dir()
+    assert any(
+        isinstance(handler, logging.FileHandler)
+        for handler in logging.getLogger("repom").handlers
+    )
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        timeout=CHILD_PROCESS_TIMEOUT_SEC,
+        env=env,
+    )
+    assert result.returncode == 0, (
+        f"Child process failed with exit code {result.returncode}:\n"
+        f"STDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+    )
+
+
+def test_database_import_defers_logging_setup_until_engine_creation(tmp_path):
+    _run_logging_import_probe(tmp_path, side_effects_disabled=False)
+
+
+def test_no_side_effects_flag_suppresses_engine_logging_and_directories(tmp_path):
+    _run_logging_import_probe(tmp_path, side_effects_disabled=True)

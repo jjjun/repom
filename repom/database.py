@@ -78,7 +78,7 @@ from sqlalchemy.orm import Session, sessionmaker, declarative_base
 
 from repom.config import _is_local_postgres_host, _postgres_connection_hosts, config
 from repom.exec_env import is_prod_exec_env
-from repom.logging import get_logger
+from repom.logging import ensure_logging_configured, get_logger
 
 logger = get_logger(__name__)
 
@@ -522,6 +522,7 @@ class DatabaseManager:
                     sync_url, sync_kwargs, _, _ = _resolve_postgres_engine_policy(
                         config.db_url, config.engine_kwargs
                     )
+                    ensure_logging_configured()
                     self._sync_engine = create_engine(
                         sync_url,
                         **sync_kwargs
@@ -717,6 +718,7 @@ class DatabaseManager:
                     _, (async_url, async_engine_kwargs) = self.resolve_engine_settings(
                         sync_url, config.engine_kwargs
                     )
+                    ensure_logging_configured()
                     self._async_engine = create_async_engine(
                         async_url,
                         **async_engine_kwargs

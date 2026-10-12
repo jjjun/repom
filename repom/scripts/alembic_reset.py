@@ -10,6 +10,7 @@ from pathlib import Path
 from repom.alembic.setup import AlembicSetup
 from repom.config import config
 from repom.database import safe_db_url
+from repom.logging import ensure_logging_configured
 from repom.scripts._destructive import confirm_destructive_operation
 
 
@@ -65,6 +66,7 @@ def reset_alembic_migrations(
 
 
 def main(argv: list[str] | None = None):
+    ensure_logging_configured()
     parser = argparse.ArgumentParser(
         description="Drop the Alembic version table and delete migration files."
     )

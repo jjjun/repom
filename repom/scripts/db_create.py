@@ -1,12 +1,13 @@
 from repom.database import Base, get_sync_engine, safe_db_url
 from repom.utility import load_models
-from repom.logging import get_logger
+from repom.logging import ensure_logging_configured, get_logger
 from repom.config import config
 
 logger = get_logger(__name__)
 
 
 def main():
+    ensure_logging_configured()
     # Strict regardless of config.model_import_strict: create_all against a
     # partial Base.metadata would silently skip creating whichever tables
     # failed to import.

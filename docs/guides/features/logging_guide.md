@@ -3,6 +3,22 @@
 repom は Python 標準の `logging` を使います。汎用 handler と設定関数は
 `basekit.logging` が所有し、repom は package 名と `RepomConfig` を接続します。
 
+## Import-time side effects
+
+`repom.config` は import 時に module-level の `RepomConfig` を読み込みます。
+`auto_create_dirs` が有効な場合、設定済みの data、log、backup、master-data directory
+が作成されます。`get_logger()` は標準 logger を返すだけで、handler は設定しません。
+
+repom の既定 handler は、database engine が初めて作成されるとき、または各 CLI の
+entry point が始まるときに設定されます。handler を使う設定では log directory と
+日次 log file がその時点で作成されます。アプリケーション独自の logging 設定は、
+最初の engine 作成または CLI 実行より前に行ってください。
+
+設定の読み込み時に basekit が directory や handler を作成する動作は、プロセス起動前に
+`BASEKIT_NO_SIDE_EFFECTS=1` を設定すると無効になります。`1`、`true`、`yes`、`on` が
+有効値です。この設定では `auto_create_dirs` が既定で無効になり、basekit の default
+logging 設定も handler を作成しません。repom を import する前に環境変数を設定してください。
+
 ## 基本
 
 repom 内部では次のように logger を取得します。
@@ -14,13 +30,10 @@ logger = get_logger(__name__)
 logger.info("operation completed")
 ```
 
-`repom.database` は import 時に `get_logger(__name__)` を呼びます。そのため
-`import repom` だけで、repom root logger に handler がなければ `config.log_file_path`
-を使った既定の file / console handler が設定されます。アプリケーションが先に
-`logging.basicConfig()` や `dictConfig()` で handler を設定している場合は、その設定を
-優先します。
-
-利用側アプリケーションは、repom を import する前に logging を設定してください。
+`repom.database` は import 時に `get_logger(__name__)` を呼びますが、handler は設定しません。
+repom の logging setup は最初の engine 作成または CLI entry point の実行時に行われます。
+directory 作成と `BASEKIT_NO_SIDE_EFFECTS` の動作は
+[Import-time side effects](#import-time-side-effects) を参照してください。
 
 ログレベルは `EXEC_ENV` から決まり、`prod` では `INFO`、それ以外では `DEBUG` です。
 `production` も `prod` と同じ扱いになり、環境名の大文字小文字や前後の空白は区別されません。
@@ -29,8 +42,8 @@ logger.info("operation completed")
 設定されます。そのため、本番環境で `DEBUG` のファイル出力を必要とする場合は、
 `LOG_LEVEL=DEBUG` を設定してください。
 
-`LOG_LEVEL` には有効な logging level 名を指定してください。無効な値を指定すると、最初に
-logger を使用した時点で `ValueError` が発生します。
+`LOG_LEVEL` には有効な logging level 名を指定してください。無効な値を指定すると、repom
+の logging を初期化した時点で `ValueError` が発生します。
 
 既定の log file は `<data_path>/logs/main_YYYY-MM-DD.log` に作成され、
 `EXEC_ENV=test` では `test_...` の名前になります。file の mode は `0600` です。

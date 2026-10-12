@@ -23,6 +23,17 @@ hook は必ず1個の config 引数を受け取り、設定オブジェクトを
 import した時点で新しい `RepomConfig` を作ったり、引数なし関数を登録したりしないで
 ください。
 
+## Import-time side effects
+
+`repom.config` は import 時に設定を読み込みます。`auto_create_dirs` が有効な場合は
+data、log、backup、master-data directory が作成されます。`get_logger()` は logger を
+返すだけで、既定 handler は database engine の初回作成時または CLI entry point の開始時に
+設定されます。詳しくは[ロギングガイド](logging_guide.md#import-time-side-effects)を参照してください。
+
+プロセス起動前に `BASEKIT_NO_SIDE_EFFECTS=1` を設定すると、basekit による directory の
+自動作成と default logging handler の設定を抑止できます。有効値は `1`、`true`、`yes`、
+`on` です。この設定は config の import より前に行ってください。
+
 ## 実行環境名
 
 `EXEC_ENV=production` は `prod` と同じ扱いです。大文字小文字と前後の空白は区別されません。

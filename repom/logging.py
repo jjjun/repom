@@ -24,21 +24,22 @@ _PACKAGE_LOGGER_NAME = "repom"
 
 def get_logger(name: str) -> logging.Logger:
     """
-    repom 用のロガーを取得（ハイブリッドアプローチ）
-
-    デフォルト動作:
-        - config.log_file_path に基づいてログを設定
-        - repom のルートロガーにハンドラーがない場合のみ設定
+    repom 用のロガーを取得します。取得時に handler は設定しません。
 
     name が既に "repom" または "repom." で始まる場合（呼び出し側が
     __name__ を渡す通常のケース）は、二重に "repom." を付けない。
     """
-    global _logger_initialized
-
     if name == _PACKAGE_LOGGER_NAME or name.startswith(f"{_PACKAGE_LOGGER_NAME}."):
         logger = logging.getLogger(name)
     else:
         logger = logging.getLogger(f"{_PACKAGE_LOGGER_NAME}.{name}")
+
+    return logger
+
+
+def ensure_logging_configured() -> None:
+    """Configure repom's default and SQLAlchemy logging once."""
+    global _logger_initialized
 
     if not _logger_initialized:
         _logger_initialized = True
@@ -48,11 +49,9 @@ def get_logger(name: str) -> logging.Logger:
         configure_default_logging("repom", config.log_file_path, config.log_level)
         _setup_sqlalchemy_logging()
 
-    return logger
-
 
 def _setup_sqlalchemy_logging():
-    """SQLAlchemy のクエリログを設定する（import 時に一度だけ実行）。"""
+    """SQLAlchemy のクエリログを設定時に一度だけ構成する。"""
     global _sqlalchemy_logging_initialized
 
     if _sqlalchemy_logging_initialized:
@@ -96,6 +95,7 @@ def apply_sqlalchemy_echo_state(
 
 __all__ = [
     "get_logger",
+    "ensure_logging_configured",
     "apply_sqlalchemy_echo_state",
     "make_timed_rotating_handler",
     "DateNamedDailyFileHandler",

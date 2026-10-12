@@ -25,6 +25,7 @@ from repom.scripts._backup_utils import (
     validate_client_database,
     warn_if_checksum_missing,
 )
+from repom.logging import ensure_logging_configured
 
 VERSION_MISMATCH_HINT = (
     "Hint: PostgreSQL client/server versions appear to differ. Start the "
@@ -147,6 +148,7 @@ class PgToolResult:
 def pg_dump_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
     """Create a custom-format PostgreSQL dump."""
 
+    ensure_logging_configured()
     dump_path = Path(dump_path)
     dump_path.parent.mkdir(parents=True, exist_ok=True)
     partial_path = dump_path.with_name(f"{dump_path.name}.partial")
@@ -214,6 +216,7 @@ def pg_dump_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
 def pg_restore_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
     """Restore a custom-format PostgreSQL dump."""
 
+    ensure_logging_configured()
     dump_path = Path(dump_path)
     warn_if_checksum_missing(dump_path)
 
@@ -230,6 +233,7 @@ def pg_restore_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
 def pg_tools_available(params: PgConnParams) -> bool:
     """Return True when Docker client tools or both host tools are available."""
 
+    ensure_logging_configured()
     if _allow_docker(params):
         container_name = params.container_name or config.postgres.container.get_container_name()
         try:

@@ -19,6 +19,7 @@ from typing import Generator, Tuple, Type, List, Dict, Any
 from repom.utility import load_models
 from repom.config import config
 from repom.database import get_standalone_sync_transaction
+from repom.logging import ensure_logging_configured
 
 
 def load_master_data_files(directory: str) -> Generator[Tuple[Type, List[Dict[str, Any]]], None, None]:
@@ -106,6 +107,7 @@ def sync_master_data(model_class: Type, data_list: List[Dict[str, Any]], session
 
 def main():
     """メイン処理"""
+    ensure_logging_configured()
     print("=" * 60)
     print("マスターデータ同期開始")
     print("=" * 60)

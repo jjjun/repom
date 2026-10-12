@@ -255,6 +255,10 @@
 
 ### Changed
 
+- `get_logger()` no longer configures logging handlers during import. Default logging is
+  configured when a database engine is first created or a CLI entry point starts;
+  set `BASEKIT_NO_SIDE_EFFECTS=1` before import to suppress basekit directory and
+  default handler creation.
 - With `bind_global_manager=True`, test fixtures now bind manager sessions to each
   test's connection, so manager writes participate in the fixture rollback.
 - SQLite fixture engines created by either test fixture factory now use explicit
