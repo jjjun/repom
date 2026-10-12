@@ -280,6 +280,8 @@ class TaskFilterParams(FilterParams):
 `find(limit=..., offset=...)` に渡してください。マッピング値が `None` のエントリも未マッピングと
 同じ扱いです。ページング値を params に含める必要がある場合は `_build_filters()` を
 オーバーライドし、検索フィールドは `super()._build_filters(params)` に委ねてください。
+`limit`、`offset`、`order_by` を subclass のフィールドに宣言せずに params へ渡すと、
+`ValidationError` が発生します。これらは `find(limit=..., offset=..., order_by=...)` に指定してください。
 
 ---
 

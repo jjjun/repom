@@ -3,11 +3,11 @@
 このモジュールは、同期版・非同期版リポジトリで共有されるロジックを提供します。
 """
 
-from collections.abc import Iterable, Sequence
-from typing import Optional, List, Mapping, Any
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Optional, List, Any
 from enum import Enum
 from sqlalchemy import ColumnElement, UnaryExpression, asc, desc, inspect as sqlalchemy_inspect
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from repom.repositories._order_by import normalize_order_by_value, VirtualColumnError
 
 
@@ -26,6 +26,26 @@ class FilterParams(BaseModel):
         filters = MyFilterParams(name="foo")
         items = repo.find(params=filters)
     """
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_undeclared_find_options(cls, value: Any) -> Any:
+        if not isinstance(value, Mapping):
+            return value
+
+        reserved_options = ("limit", "offset", "order_by")
+        undeclared_options = [
+            option
+            for option in reserved_options
+            if option in value and option not in cls.model_fields
+        ]
+        if undeclared_options:
+            raise ValueError(
+                f"Reserved find() options in FilterParams: {', '.join(undeclared_options)}. "
+                "Pass them to find(limit=..., offset=..., order_by=...) instead."
+            )
+
+        return value
 
 
 class MatchMode(str, Enum):

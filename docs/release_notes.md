@@ -243,6 +243,10 @@
 
 ### Changed
 
+- `FilterParams` raises `ValidationError` when undeclared `limit`, `offset`, or
+  `order_by` values are passed in params. Callers that relied on these values being
+  silently ignored must pass them as `find()` options or declare them and handle
+  them in `_build_filters()`.
 - Generated PostgreSQL, pgAdmin, and Redis services now declare
   `restart: "unless-stopped"` by default. Set `restart_policy = "no"` on a
   container config to keep the previous behavior. The next `postgres_start` or
