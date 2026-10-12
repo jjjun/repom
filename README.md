@@ -228,6 +228,7 @@ def hook_config(config):
 | テスト | `create_test_fixtures`, `create_async_test_fixtures` (`bind_global_manager`) | [テストガイド](docs/guides/testing/testing_guide.md) |
 | 宣言的基底クラス | `repom.database.Base` | [システムカラムとカスタム型ガイド](docs/guides/model/system_columns_and_custom_types.md) |
 | Repository 拡張 | `QueryBuilderMixin`, `create_repository_instance`, `get_model_from_repository_class` | [検索とフィルタガイド](docs/guides/repository/repository_advanced_guide.md) |
+| Upsert | `insert_for_dialect` | [検索とフィルタガイド](docs/guides/repository/repository_advanced_guide.md#データベース方言ごとのアップサートと行ロック) |
 | バリデーション | `NulByteError` | [NUL byte validation ガイド](docs/guides/features/nul_byte_validation.md) |
 | 診断 | `QueryAnalyzer` | [QueryAnalyzer ガイド](docs/guides/features/query_analyzer_guide.md) |
 | ロギング | `make_timed_rotating_handler`, `DateNamedDailyFileHandler` | [ロギングガイド](docs/guides/features/logging_guide.md) |

@@ -19,6 +19,7 @@
 2. [Eager Loading（N+1問題の解決）](#eager-loadingn1問題の解決)
 3. [カスタムリポジトリ](#カスタムリポジトリ)
 4. [実装パターン：ビジネスロジックとの統合](#実装パターンビジネスロジックとの統合)
+5. [データベース方言ごとのアップサートと行ロック](#データベース方言ごとのアップサートと行ロック)
 
 ---
 
@@ -894,6 +895,28 @@ class OrderRepository(AsyncBaseRepository[Order]):
 **同期版**: `AsyncBaseRepository` → `BaseRepository`、`async def` → `def`、`await` を削除してください。
 
 ---
+
+## データベース方言ごとのアップサートと行ロック
+
+PostgreSQL と SQLite の upsert には、それぞれの SQLAlchemy dialect が提供する `INSERT` を使います。`insert_for_dialect()` は dialect 名、engine、connection、または session から適切な statement を作成します。
+
+```python
+from repom import insert_for_dialect
+
+statement = insert_for_dialect(session, Task).values(
+    external_id=external_id,
+    title=title,
+)
+statement = statement.on_conflict_do_update(
+    index_elements=[Task.external_id],
+    set_={"title": statement.excluded.title},
+)
+await session.execute(statement)
+```
+
+`on_conflict_do_update()` と `on_conflict_do_nothing()` は、両 dialect で同じ引数を使えます。MySQL / MariaDB の `ON DUPLICATE KEY UPDATE` は別 API のため、この helper の対象外です。
+
+SQLite では `SELECT ... FOR UPDATE` と `SKIP LOCKED` による行ロックはサポートされず、SQLAlchemy はその句を生成しません。SQLite での同時実行時の正しさは、unique constraint と conflict clause で保証してください。
 
 ## 次のステップ
 

@@ -32,6 +32,7 @@ from repom.repositories import (
     get_order_by_default_value,
     get_order_by_values,
     VirtualColumnError,
+    insert_for_dialect,
 )
 
 # Mixins
@@ -63,6 +64,7 @@ __all__ = [
     'get_order_by_default_value',
     'get_order_by_values',
     'VirtualColumnError',
+    'insert_for_dialect',
     # Mixins
     'SoftDeletableMixin',
     # Query Analysis
