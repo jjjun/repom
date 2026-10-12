@@ -198,6 +198,9 @@
 
 ### Added
 
+- Sync and async repositories now provide `iter_pages()` and `find_all()` for bounded,
+  primary-key-based full loads. Consumers can replace private keyset paging loops with
+  these helpers.
 - SQLAlchemy custom types now declare `python_type`: `UTCDateTime`, `AutoDateTime`,
   `ISO8601DateTime`, and `ISO8601DateTimeStr` return `datetime`; `ListJSON` returns
   `list`. `CustomJSON` remains undeclared because it supports arbitrary JSON values.

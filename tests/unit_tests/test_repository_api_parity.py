@@ -6,6 +6,7 @@ from repom.repositories import AsyncBaseRepository, BaseRepository
 # Add a method name here only when its public API intentionally differs.
 INTENTIONAL_API_DIFFERENCES: set[str] = set()
 ASYNC_SYNC_HELPERS = {"parse_order_by", "set_find_option"}
+ASYNC_GENERATOR_METHODS = {"iter_pages"}
 
 
 def _public_callables(repository_class):
@@ -41,8 +42,11 @@ def test_async_repository_io_methods_are_coroutines():
     async_methods = _public_callables(AsyncBaseRepository)
 
     assert ASYNC_SYNC_HELPERS <= async_methods.keys()
+    assert ASYNC_GENERATOR_METHODS <= async_methods.keys()
     for name, method in async_methods.items():
         if name in ASYNC_SYNC_HELPERS:
             assert not inspect.iscoroutinefunction(method)
+        elif name in ASYNC_GENERATOR_METHODS:
+            assert inspect.isasyncgenfunction(method)
         else:
             assert inspect.iscoroutinefunction(method)

@@ -23,9 +23,9 @@ Example:
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from collections.abc import Sequence
+from collections.abc import Sequence, AsyncIterator
 from typing import Any, Callable, TypeVar, Generic, Optional, List, Dict, Union
-from sqlalchemy import ColumnElement, and_, delete, select, true, update
+from sqlalchemy import ColumnElement, and_, delete, select, true, update, inspect
 from sqlalchemy.ext.asyncio import AsyncSession, async_scoped_session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from repom.database import get_async_db_session
@@ -228,6 +228,8 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
 
     async def get_all(self, include_deleted: bool = False) -> List[T]:
         """全てのインスタンスを取得
+
+        全件を分割して取得する場合は、代わりに find_all() を使用してください。
 
         Args:
             include_deleted (bool): 削除済みレコードも含めるか（デフォルト: False）
@@ -578,6 +580,78 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
 
         base_filters = [*(filters or []), *self._build_filters(params)]
         return await self._find_with_filters(base_filters, include_deleted=include_deleted, **kwargs)
+
+    async def iter_pages(
+        self,
+        filters: Optional[List[Callable]] = None,
+        params: Optional[FilterParams] = None,
+        *,
+        include_deleted: bool = False,
+        options: Any = None,
+        page_size: Optional[int] = None,
+    ) -> AsyncIterator[List[T]]:
+        """Yield bounded keyset pages ordered by the primary key.
+
+        Each page is a separate query, not part of a single snapshot. Inserts
+        after the current key may appear in later pages, and updates or deletes
+        between page queries may affect the results.
+        """
+        primary_keys = inspect(self.model).primary_key
+        if len(primary_keys) != 1:
+            raise ValueError("iter_pages() requires a single-column primary key")
+
+        primary_key = primary_keys[0]
+        if page_size is None:
+            page_size = self.max_limit if self.max_limit is not None else 1000
+        if (
+            isinstance(page_size, int)
+            and not isinstance(page_size, bool)
+            and page_size == 0
+        ):
+            raise ValueError("page_size must be greater than zero")
+
+        base_filters = [*(filters or []), *self._build_filters(params)]
+        last_primary_key = None
+        while True:
+            page_filters = list(base_filters)
+            if last_primary_key is not None:
+                page_filters.append(primary_key > last_primary_key)
+
+            page = await self._find_with_filters(
+                page_filters,
+                include_deleted=include_deleted,
+                options=options,
+                order_by=primary_key.asc(),
+                limit=page_size,
+            )
+            if not page:
+                break
+
+            yield page
+            if len(page) < page_size:
+                break
+            last_primary_key = inspect(page[-1]).identity[0]
+
+    async def find_all(
+        self,
+        filters: Optional[List[Callable]] = None,
+        params: Optional[FilterParams] = None,
+        *,
+        include_deleted: bool = False,
+        options: Any = None,
+        page_size: Optional[int] = None,
+    ) -> List[T]:
+        """Return all matching rows using bounded primary-key queries."""
+        records = []
+        async for page in self.iter_pages(
+            filters=filters,
+            params=params,
+            include_deleted=include_deleted,
+            options=options,
+            page_size=page_size,
+        ):
+            records.extend(page)
+        return records
 
     async def _find_with_filters(
         self,

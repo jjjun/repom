@@ -141,6 +141,27 @@ class TaskRepository(AsyncBaseRepository[Task]):
 - ページングには一意な並び順を指定してください。非一意な式で並べると、同じ値を持つ行が
   ページ間で重複または欠落する可能性があります。
 
+#### 全件を分割して取得する
+
+`iter_pages()` を使うと、結果全体を上限付きのバッチに分けて処理できます。同期・非同期のどちらの
+リポジトリも、単一列の主キーの昇順でページを取得します。`filters`、`params`、`include_deleted`、
+`options` を指定できます。
+
+```python
+for page in repo.iter_pages(page_size=500):
+    process(page)
+
+async for page in async_repo.iter_pages(page_size=500):
+    await process(page)
+
+records = await async_repo.find_all(page_size=500)
+```
+
+`find_all()` はすべてのページを1つのリストにまとめます。利用側にある主キーを使ったページング処理は、
+これらのメソッドに置き換えられます。ページごとに別のクエリを実行するため、全件取得は単一のスナップ
+ショットではありません。後から追加された行が結果に含まれることがあり、ページ間の更新や削除によって
+結果が変わる場合があります。複合主キーには対応していません。
+
 ### ソート
 
 ```python
