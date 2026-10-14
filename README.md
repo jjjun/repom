@@ -60,9 +60,6 @@ class Task(BaseModel, use_id=True, use_created_at=True, use_updated_at=True):
     )
 ```
 
-FastAPI 向けの Pydantic スキーマ自動生成（旧 `BaseModelAuto`）は利用側フレーム
-ワーク（fast-domain）に移管されました。
-
 ### Repository
 
 ```python
