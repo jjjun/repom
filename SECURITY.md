@@ -139,6 +139,10 @@ Unless a difference is stated below, these contracts apply to both
   not constrain `get_by()`, `get_by_id()`, counts, bulk operations,
   `get_or_create()` or `update_or_create()`. Consumers must not expose
   `include_deleted` without authorization.
+  `upsert()`, `insert_ignore()`, `build_upsert()`, and `build_insert_ignore()`
+  do not apply this filter. A conflicting soft-deleted row is updated by
+  `upsert()` or skipped by `insert_ignore()` and remains deleted unless the
+  caller explicitly writes `deleted_at`.
 - `limit` and `offset` receive type/range checks, and an explicit `limit` is
   checked against `max_limit` (default 1000, configurable to `None`). An omitted
   limit is not capped. Only `find()` warns when its limit is omitted;
@@ -182,7 +186,10 @@ Unless a difference is stated below, these contracts apply to both
   `ManyToManyMixin.add_related_item()`, or `bulk_update()` in either
   repository implementation. `bulk_update()` can write any mapped column,
   including timestamps, `deleted_at`, and primary keys when `filter_by` or
-  `filters` is used. `update_or_create()` does not enforce `updatable_fields` for
+  `filters` is used. `upsert()`, `insert_ignore()`, `build_upsert()`, and
+  `build_insert_ignore()` also accept any mapped column and do not enforce
+  `updatable_fields`; consumers must filter request data before these APIs.
+  `update_or_create()` does not enforce `updatable_fields` for
   `defaults`; consumers must filter request data before these APIs. The
   inherited `BaseModel.__init__()` raises `TypeError` for `sensitive_fields`,
   `serializable_fields`, `updatable_fields`, and any keyword that is not a
@@ -198,14 +205,18 @@ Unless a difference is stated below, these contracts apply to both
 - NUL-byte validation runs from `BaseModel` mapper `before_insert` and
   `before_update` listeners during SQLAlchemy unit-of-work flushes, for sync and
   async sessions. Sync and async repository `bulk_update()` also validate plain
-  values. Validation walks `str`, `dict`, `list`, and `tuple` values before
-  binding. It does not cover `session.execute(insert(...)/update(...))`,
-  including ORM bulk parameter lists, `bulk_insert_mappings()`,
+  values. `upsert()`, `insert_ignore()`, `build_upsert()`, and
+  `build_insert_ignore()` validate each row before creating a statement.
+  Validation walks `str`, `dict`, `list`, and `tuple` values before binding.
+  These statement helpers bypass model `before_insert`, `before_update`, and
+  `after_*` listeners. NUL validation does not cover direct
+  `session.execute(insert(...)/update(...))`, including ORM bulk parameter
+  lists, `insert_for_dialect()` statements, `bulk_insert_mappings()`,
   `bulk_save_objects()`, SQL-expression values in `bulk_update()`, or models
   based on plain `repom.database.Base`. Values written through other paths may
-  contain NUL. A String-typed expression `column_property()` currently causes
-  `_string_columns()` to raise `AttributeError` during each flush of that model;
-  this fails closed.
+  contain NUL. A String-typed expression `column_property()` currently
+  causes `_string_columns()` to raise `AttributeError` during each flush of
+  that model; this fails closed.
 
 ### Connections and secret handling
 

@@ -901,18 +901,52 @@ class OrderRepository(AsyncBaseRepository[Order]):
 PostgreSQL と SQLite の upsert には、それぞれの SQLAlchemy dialect が提供する `INSERT` を使います。`insert_for_dialect()` は dialect 名、engine、connection、または session から適切な statement を作成します。
 
 ```python
+from datetime import datetime, timezone
+
 from repom import insert_for_dialect
 
+now = datetime.now(timezone.utc)
 statement = insert_for_dialect(session, Task).values(
     external_id=external_id,
     title=title,
+    created_at=now,
+    updated_at=now,
 )
 statement = statement.on_conflict_do_update(
     index_elements=[Task.external_id],
-    set_={"title": statement.excluded.title},
+    set_={
+        "title": statement.excluded.title,
+        "updated_at": statement.excluded.updated_at,
+    },
 )
 await session.execute(statement)
 ```
+
+この raw statement では、`created_at` と `updated_at` を呼び出し側が渡します。`insert_for_dialect()` は NUL byte 検証や競合時の `updated_at` 更新を行わず、ORM の model listener も実行しません。
+
+### upsert ヘルパー
+
+`build_upsert()` と `build_insert_ignore()` は、PostgreSQL または SQLite 向けの conflict statement を組み立てます。statement の実行や `RETURNING` は追加しないため、同期・非同期 session や mapper event の flush `Connection` から利用できます。builder は mapped column を検証し、各 row の NUL byte も検証します。
+
+```python
+from repom import build_upsert
+
+statement = build_upsert(
+    session,
+    Task,
+    {"external_id": external_id, "title": title},
+    conflict_columns=["external_id"],
+)
+result = await session.execute(statement.returning(Task))
+```
+
+これらの builder と repository method は、model の `before_insert` / `after_insert` / `before_update` / `after_update` listener を実行しません。
+
+`BaseRepository.upsert()` と `AsyncBaseRepository.upsert()` は statement を実行し、挿入または更新された model instance を返します。既定では conflict key、primary key、`created_at` を除く入力列を更新し、`update_columns` で対象を指定できます。`created_at` は競合時に変更しません。AutoDateTime 型の `created_at` / `updated_at` が入力されていない場合は、同じ UTC 時刻を補います。競合更新では `updated_at` を毎回更新するため、値に変化がない場合にも時刻が進みます。`where=` を指定すると条件に合わない row は更新されず、戻り値にも含まれません。
+
+`insert_ignore()` は競合 row を変更せず、今回挿入された model instance だけを返します。どちらの repository method も `RETURNING` を使うため、結果の順序は保証されません。SQLite では 3.35 以降が必要です。`index_where=` は部分 unique index の predicate、`where=` は `upsert()` の競合更新条件です。
+
+これらの helper は soft-delete filter を適用しません。soft-deleted row が conflict すると `upsert()` はその row を更新し、`insert_ignore()` は挿入をスキップします。`deleted_at` を入力に含めた場合を除き、row は削除状態のままです。request data を渡す前に、consumer 側で書き込み可能な field を絞り込んでください。
 
 `on_conflict_do_update()` と `on_conflict_do_nothing()` は、両 dialect で同じ引数を使えます。MySQL / MariaDB の `ON DUPLICATE KEY UPDATE` は別 API のため、この helper の対象外です。
 

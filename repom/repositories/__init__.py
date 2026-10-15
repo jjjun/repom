@@ -36,7 +36,7 @@ from repom.repositories._order_by import (
     get_order_by_values,
     VirtualColumnError,
 )
-from repom.repositories._dialect import insert_for_dialect
+from repom.repositories._dialect import build_insert_ignore, build_upsert, insert_for_dialect
 from repom.repositories._query_builder import QueryBuilderMixin
 from repom.repositories.base_repository import BaseRepository
 from repom.repositories.async_base_repository import AsyncBaseRepository
@@ -59,6 +59,8 @@ __all__ = [
     'get_order_by_values',
     'VirtualColumnError',
     'insert_for_dialect',
+    'build_upsert',
+    'build_insert_ignore',
     'create_repository_instance',
     'get_model_from_repository_class',
 ]

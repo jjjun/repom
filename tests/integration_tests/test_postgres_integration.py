@@ -6,7 +6,7 @@ import pytest
 import os
 from types import SimpleNamespace
 from uuid import uuid4
-from sqlalchemy import String, text
+from sqlalchemy import Boolean, Index, String, text
 from sqlalchemy import create_engine
 from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Mapped, mapped_column, scoped_session, sessionmaker
@@ -39,6 +39,24 @@ class RacingUpdateOrCreatePostgresRepository(BaseRepository[UpdateOrCreatePostgr
             session.flush()
             return None
         return super()._get_by_lookup_in_session(session, lookup)
+
+
+class DialectUpsertPostgresModel(BaseModel, use_created_at=True, use_updated_at=True):
+    __tablename__ = "dialect_upsert_postgres_integration"
+
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    partial_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "uq_dialect_upsert_postgres_integration_partial_key_active",
+            "partial_key",
+            unique=True,
+            postgresql_where=text("active IS TRUE"),
+        ),
+    )
 
 
 @pytest.mark.skipif(
@@ -119,6 +137,83 @@ class TestPostgreSQLIntegration:
                 assert updated.label == "updated"
                 assert recovered.key == race_key
                 assert recovered.label == "updated after race"
+        finally:
+            table.drop(engine, checkfirst=True)
+
+    def test_upsert_insert_ignore_and_partial_index_conflict(self):
+        from repom.database import get_sync_engine
+
+        engine = get_sync_engine()
+        table = DialectUpsertPostgresModel.__table__
+        table.create(engine, checkfirst=True)
+        key = uuid4().hex
+        partial_key = uuid4().hex
+        inserted_key = uuid4().hex
+
+        try:
+            with sessionmaker(bind=engine)() as session:
+                repo = BaseRepository(DialectUpsertPostgresModel, session)
+                inserted = repo.upsert(
+                    {
+                        "key": key,
+                        "partial_key": uuid4().hex,
+                        "active": True,
+                        "label": "inserted",
+                    },
+                    conflict_columns=["key"],
+                )
+                updated = repo.upsert(
+                    {
+                        "key": key,
+                        "partial_key": uuid4().hex,
+                        "active": True,
+                        "label": "updated",
+                    },
+                    conflict_columns=["key"],
+                )
+                ignored = repo.insert_ignore(
+                    [
+                        {
+                            "key": key,
+                            "partial_key": uuid4().hex,
+                            "active": True,
+                            "label": "ignored",
+                        },
+                        {
+                            "key": inserted_key,
+                            "partial_key": uuid4().hex,
+                            "active": True,
+                            "label": "new row",
+                        },
+                    ],
+                    conflict_columns=["key"],
+                )
+                partial_insert = repo.upsert(
+                    {
+                        "key": uuid4().hex,
+                        "partial_key": partial_key,
+                        "active": True,
+                        "label": "partial first",
+                    },
+                    conflict_columns=["partial_key"],
+                    index_where=text("active IS TRUE"),
+                )
+                partial_update = repo.upsert(
+                    {
+                        "key": uuid4().hex,
+                        "partial_key": partial_key,
+                        "active": True,
+                        "label": "partial updated",
+                    },
+                    conflict_columns=["partial_key"],
+                    index_where=text("active IS TRUE"),
+                )
+
+                assert inserted[0].id == updated[0].id
+                assert updated[0].label == "updated"
+                assert [row.key for row in ignored] == [inserted_key]
+                assert partial_insert[0].id == partial_update[0].id
+                assert partial_update[0].label == "partial updated"
         finally:
             table.drop(engine, checkfirst=True)
 

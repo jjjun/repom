@@ -12,6 +12,7 @@ from repom.repositories._core import FilterParams, _primary_key_order
 from repom.repositories._repository_base import RepositoryBase
 from repom.repositories._soft_delete import SoftDeleteRepositoryMixin
 from repom.repositories._query_builder import QueryBuilderMixin
+from repom.repositories._dialect import build_insert_ignore, build_upsert
 import logging
 import warnings
 
@@ -286,6 +287,70 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
         with self._session_scope() as session:
             with self._commit_or_flush(session) as using_internal_session:
                 session.add_all(instances)
+            if using_internal_session:
+                for instance in instances:
+                    session.refresh(instance)
+        return instances
+
+    def upsert(
+        self,
+        values: dict | Sequence[dict],
+        *,
+        conflict_columns: Sequence[Any],
+        update_columns: Sequence[Any] | None = None,
+        index_where: Any = None,
+        where: Any = None,
+    ) -> list[T]:
+        """Insert rows or update conflicts, returning inserted and updated models."""
+        if isinstance(values, Sequence) and not isinstance(values, (str, bytes, bytearray)) and not values:
+            return []
+
+        with self._session_scope() as session:
+            if not session.get_bind().dialect.insert_returning:
+                raise NotImplementedError(
+                    'upsert() requires INSERT RETURNING support; SQLite 3.35 or later is required.'
+                )
+            statement = build_upsert(
+                session.get_bind().dialect,
+                self.model,
+                values,
+                conflict_columns=conflict_columns,
+                update_columns=update_columns,
+                index_where=index_where,
+                where=where,
+            ).returning(self.model).execution_options(populate_existing=True)
+            with self._commit_or_flush(session) as using_internal_session:
+                instances = session.execute(statement).scalars().all()
+            if using_internal_session:
+                for instance in instances:
+                    session.refresh(instance)
+        return instances
+
+    def insert_ignore(
+        self,
+        values: dict | Sequence[dict],
+        *,
+        conflict_columns: Sequence[Any],
+        index_where: Any = None,
+    ) -> list[T]:
+        """Insert rows and skip conflicts, returning only newly inserted models."""
+        if isinstance(values, Sequence) and not isinstance(values, (str, bytes, bytearray)) and not values:
+            return []
+
+        with self._session_scope() as session:
+            if not session.get_bind().dialect.insert_returning:
+                raise NotImplementedError(
+                    'insert_ignore() requires INSERT RETURNING support; SQLite 3.35 or later is required.'
+                )
+            statement = build_insert_ignore(
+                session.get_bind().dialect,
+                self.model,
+                values,
+                conflict_columns=conflict_columns,
+                index_where=index_where,
+            ).returning(self.model).execution_options(populate_existing=True)
+            with self._commit_or_flush(session) as using_internal_session:
+                instances = session.execute(statement).scalars().all()
             if using_internal_session:
                 for instance in instances:
                     session.refresh(instance)

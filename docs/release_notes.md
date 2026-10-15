@@ -207,6 +207,8 @@
 - `insert_for_dialect()` selects the PostgreSQL or SQLite `INSERT` construct for
   dialect-aware upserts. The repository advanced guide documents SQLite row-locking
   limitations and conflict-clause handling.
+- Sync and async repositories now provide `upsert()` and `insert_ignore()`, with
+  dialect-specific statement builders for PostgreSQL and SQLite.
 - Repository subclasses may rely on `_session_scope()`, `_commit_or_flush(session)`,
   `_uses_internal_session(session)`, `_has_soft_delete()`,
   `_append_soft_delete_filter(filters, include_deleted)`, `_base_select()`, and
