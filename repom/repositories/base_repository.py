@@ -448,26 +448,30 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
             raise ValueError("get_or_create() requires a non-empty lookup.")
 
         with self._session_scope() as session:
-            with self._commit_or_flush(session):
+            with self._commit_or_flush(session) as using_internal_session:
                 existing = self._get_by_lookup_in_session(session, lookup)
                 if existing is not None:
-                    return existing, False
+                    instance, created = existing, False
+                else:
+                    instance = self.model(**(dict(defaults or {}) | lookup))
+                    self._ensure_savepoint_transaction(session)
+                    try:
+                        with session.begin_nested():
+                            session.add(instance)
+                            session.flush()
+                    except IntegrityError as exc:
+                        if not is_unique_violation(exc):
+                            raise
+                        existing = self._get_by_lookup_in_session(session, lookup)
+                        if existing is None:
+                            raise
+                        instance, created = existing, False
+                    else:
+                        created = True
+            if using_internal_session:
+                session.refresh(instance)
 
-                instance = self.model(**(dict(defaults or {}) | lookup))
-                self._ensure_savepoint_transaction(session)
-                try:
-                    with session.begin_nested():
-                        session.add(instance)
-                        session.flush()
-                except IntegrityError as exc:
-                    if not is_unique_violation(exc):
-                        raise
-                    existing = self._get_by_lookup_in_session(session, lookup)
-                    if existing is None:
-                        raise
-                    return existing, False
-
-                return instance, True
+        return instance, created
 
     @staticmethod
     def _ensure_savepoint_transaction(session) -> None:

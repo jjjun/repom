@@ -2,9 +2,11 @@ import inspect
 import warnings
 
 from sqlalchemy import ForeignKey, Integer, String, desc, event, select
+from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship, sessionmaker
+from sqlalchemy.pool import StaticPool
 import pytest
 from typing import Optional, List
 from repom.models.base_model import BaseModel
@@ -143,6 +145,13 @@ class UniqueLookupModel(BaseModel):
     label: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
+class InternalSessionLookupModel(BaseModel):
+    __tablename__ = 'internal_session_lookup_model'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False, server_default='database default')
+
+
 class UniqueSoftDeleteLookupModel(BaseModel, SoftDeletableMixin):
     __tablename__ = 'unique_soft_delete_lookup_model'
     key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
@@ -178,6 +187,20 @@ class RacingUniqueLookupRepository(UniqueLookupRepository):
         if not self._inserted_race_row:
             self._inserted_race_row = True
             session.add(UniqueLookupModel(key=lookup["key"], label="racing insert"))
+            session.flush()
+            return None
+        return super()._get_by_lookup_in_session(session, lookup)
+
+
+class RacingInternalSessionLookupRepository(BaseRepository[InternalSessionLookupModel]):
+    def __init__(self, session=None):
+        super().__init__(InternalSessionLookupModel, session)
+        self._inserted_race_row = False
+
+    def _get_by_lookup_in_session(self, session, lookup):
+        if not self._inserted_race_row:
+            self._inserted_race_row = True
+            session.add(InternalSessionLookupModel(key=lookup['key']))
             session.flush()
             return None
         return super()._get_by_lookup_in_session(session, lookup)
@@ -1084,6 +1107,46 @@ def test_get_or_create_creates_and_reuses_unique_lookup(db_test):
     assert was_created_again is False
     assert existing.id == created.id
     assert existing.label == "first"
+
+
+@pytest.fixture
+def internal_session_engine(monkeypatch):
+    engine = create_engine('sqlite://', poolclass=StaticPool)
+    session_factory = sessionmaker(bind=engine, expire_on_commit=True)
+
+    def get_db_session():
+        with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr('repom.repositories.base_repository.get_db_session', get_db_session)
+    yield engine
+    engine.dispose()
+
+
+def test_get_or_create_internal_session_returns_readable_created_and_existing_rows(internal_session_engine):
+    InternalSessionLookupModel.__table__.create(internal_session_engine)
+    repo = BaseRepository(InternalSessionLookupModel)
+
+    created, was_created = repo.get_or_create({'key': 'same'})
+    existing, was_created_again = repo.get_or_create({'key': 'same'})
+
+    assert was_created is True
+    assert was_created_again is False
+    assert created.id is not None
+    assert created.label == 'database default'
+    assert existing.id == created.id
+    assert existing.label == 'database default'
+
+
+def test_get_or_create_internal_session_refreshes_unique_violation_recovery(internal_session_engine):
+    InternalSessionLookupModel.__table__.create(internal_session_engine)
+    repo = RacingInternalSessionLookupRepository()
+
+    item, was_created = repo.get_or_create({'key': 'race'})
+
+    assert was_created is False
+    assert item.id is not None
+    assert item.label == 'database default'
 
 
 @pytest.mark.parametrize(

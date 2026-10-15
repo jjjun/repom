@@ -155,6 +155,7 @@
 
 ### Fixed
 
+- Sync `get_or_create()` now refreshes internally managed results after commit so created, existing, and unique-conflict recovery rows remain readable after the session closes.
 - PostgreSQL and Redis credential rotation now build display payloads from redacted
   inputs before SQL or redis-cli escaping and mask escaped execution forms in failure
   messages. Redis rotation's returned `input_text` still contains the execution payload.
