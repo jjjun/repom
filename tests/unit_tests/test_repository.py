@@ -1,7 +1,8 @@
 import inspect
 import warnings
+from datetime import datetime, timezone
 
-from sqlalchemy import ForeignKey, Integer, String, desc, event, select
+from sqlalchemy import ForeignKey, Index, Integer, String, desc, event, select, text
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -155,6 +156,31 @@ class InternalSessionLookupModel(BaseModel):
 class UniqueSoftDeleteLookupModel(BaseModel, SoftDeletableMixin):
     __tablename__ = 'unique_soft_delete_lookup_model'
     key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+
+
+class UpdateOrCreateTimeModel(BaseModel):
+    __tablename__ = 'update_or_create_time_model'
+    use_updated_at = True
+
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    value: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class NullableUniqueLookupModel(BaseModel):
+    __tablename__ = 'nullable_unique_lookup_model'
+
+    channel_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    youtube_channel_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    __table_args__ = (
+        Index(
+            'uq_nullable_unique_lookup_channel_key',
+            'channel_key',
+            unique=True,
+            sqlite_where=text('youtube_channel_id IS NULL'),
+        ),
+    )
 
 
 class UniqueLookupRepository(BaseRepository[UniqueLookupModel]):
@@ -1149,6 +1175,23 @@ def test_get_or_create_internal_session_refreshes_unique_violation_recovery(inte
     assert item.label == 'database default'
 
 
+def test_update_or_create_internal_session_returns_readable_rows(internal_session_engine):
+    InternalSessionLookupModel.__table__.create(internal_session_engine)
+    repo = BaseRepository(InternalSessionLookupModel)
+
+    created, was_created = repo.update_or_create({'key': 'same'})
+    updated, was_created_again = repo.update_or_create(
+        {'key': 'same'},
+        {'label': 'updated'},
+    )
+
+    assert was_created is True
+    assert was_created_again is False
+    assert created.id == updated.id
+    assert created.label == 'database default'
+    assert updated.label == 'updated'
+
+
 @pytest.mark.parametrize(
     'control_field',
     ['sensitive_fields', 'serializable_fields', 'updatable_fields'],
@@ -1173,11 +1216,32 @@ def test_get_or_create_recovers_when_unique_row_is_inserted_after_select(db_test
     assert repo.count() == 1
 
 
+def test_update_or_create_applies_defaults_after_unique_conflict_recovery(db_test):
+    repo = RacingUniqueLookupRepository(session=db_test)
+
+    item, was_created = repo.update_or_create(
+        {"key": "race"},
+        {"label": "updated after race"},
+    )
+
+    assert was_created is False
+    assert item.label == "updated after race"
+    assert repo.count() == 1
+
+
 def test_get_or_create_reraises_non_unique_integrity_errors(db_test):
     repo = UniqueLookupRepository(session=db_test)
 
     with pytest.raises(IntegrityError):
         repo.get_or_create({"key": "missing label"})
+
+
+@pytest.mark.asyncio
+async def test_update_or_create_reraises_non_unique_integrity_errors(repository_adapter):
+    repo = repository_adapter.repository_class(UniqueLookupModel, repository_adapter.session)
+
+    with pytest.raises(IntegrityError):
+        await repository_adapter.call(repo.update_or_create, {"key": "missing label"})
 
 
 @pytest.mark.asyncio
@@ -1236,6 +1300,242 @@ async def test_get_or_create_raises_when_deleted_match_conflicts_with_unique_con
 
     with pytest.raises(IntegrityError):
         await repository_adapter.call(repo.get_or_create, {"key": "same"})
+
+
+@pytest.mark.asyncio
+async def test_update_or_create_creates_with_create_defaults_and_updates_defaults(repository_adapter):
+    repo = repository_adapter.repository_class(UniqueLookupModel, repository_adapter.session)
+
+    created, was_created = await repository_adapter.call(
+        repo.update_or_create,
+        {"key": "same"},
+        {"label": "updated"},
+        create_defaults={"key": "overridden", "label": "created"},
+    )
+    updated, was_updated_created = await repository_adapter.call(
+        repo.update_or_create,
+        {"key": "same"},
+        {"label": "updated"},
+        create_defaults={"label": "ignored"},
+    )
+
+    assert was_created is True
+    assert was_updated_created is False
+    assert created.id == updated.id
+    assert created.key == updated.key == "same"
+    assert created.label == "updated"
+
+
+@pytest.mark.asyncio
+async def test_update_or_create_uses_defaults_for_create_when_create_defaults_is_omitted(repository_adapter):
+    repo = repository_adapter.repository_class(UniqueLookupModel, repository_adapter.session)
+
+    created, was_created = await repository_adapter.call(
+        repo.update_or_create,
+        {"key": "defaults-create"},
+        {"label": "from defaults"},
+    )
+
+    assert was_created is True
+    assert created.key == "defaults-create"
+    assert created.label == "from defaults"
+
+
+@pytest.mark.asyncio
+async def test_update_or_create_uses_create_defaults_without_applying_them_to_updates(repository_adapter):
+    repo = repository_adapter.repository_class(UniqueLookupModel, repository_adapter.session)
+
+    created, was_created = await repository_adapter.call(
+        repo.update_or_create,
+        {"key": "create-defaults"},
+        {"label": "update value"},
+        create_defaults={"label": "create value"},
+    )
+    created_label = created.label
+    existing, was_created_again = await repository_adapter.call(
+        repo.update_or_create,
+        {"key": "create-defaults"},
+        {"label": "update value"},
+        create_defaults={"label": "ignored create value"},
+    )
+
+    assert was_created is True
+    assert was_created_again is False
+    assert created_label == "create value"
+    assert existing.label == "update value"
+
+
+@pytest.mark.asyncio
+async def test_update_or_create_lookup_respects_allowed_filter_columns(repository_adapter):
+    repo = repository_adapter.repository_class(UniqueLookupModel, repository_adapter.session)
+    repo.allowed_filter_columns = ["key"]
+
+    created, was_created = await repository_adapter.call(
+        repo.update_or_create,
+        {"key": "allowed"},
+        create_defaults={"label": "first"},
+    )
+
+    assert was_created is True
+    assert created.key == "allowed"
+    with pytest.raises(AttributeError):
+        await repository_adapter.call(repo.update_or_create, {"label": "first"})
+
+
+@pytest.mark.asyncio
+async def test_update_or_create_ignores_deleted_matches_by_default(repository_adapter):
+    repo = repository_adapter.repository_class(SoftDeleteCountModel, repository_adapter.session)
+    deleted = await repository_adapter.call(repo.save, SoftDeleteCountModel(name="same"))
+    await repository_adapter.call(repo.soft_delete, deleted.id)
+
+    created, was_created = await repository_adapter.call(
+        repo.update_or_create,
+        {"name": "same"},
+    )
+
+    assert was_created is True
+    assert created.id != deleted.id
+    assert await repository_adapter.call(repo.get_by_id, deleted.id) is None
+    assert await repository_adapter.call(repo.get_by_id, deleted.id, include_deleted=True) is not None
+
+
+@pytest.mark.asyncio
+async def test_update_or_create_raises_when_deleted_match_conflicts_with_unique_constraint(repository_adapter):
+    repo = repository_adapter.repository_class(
+        UniqueSoftDeleteLookupModel,
+        repository_adapter.session,
+    )
+    deleted = await repository_adapter.call(
+        repo.save,
+        UniqueSoftDeleteLookupModel(key="same"),
+    )
+    await repository_adapter.call(repo.soft_delete, deleted.id)
+
+    with pytest.raises(IntegrityError):
+        await repository_adapter.call(repo.update_or_create, {"key": "same"})
+
+
+@pytest.mark.asyncio
+async def test_update_or_create_uses_is_null_for_partial_unique_lookup(repository_adapter):
+    repo = repository_adapter.repository_class(NullableUniqueLookupModel, repository_adapter.session)
+
+    created, was_created = await repository_adapter.call(
+        repo.update_or_create,
+        {"channel_key": "same", "youtube_channel_id": None},
+        {"label": "first"},
+    )
+    updated, was_created_again = await repository_adapter.call(
+        repo.update_or_create,
+        {"channel_key": "same", "youtube_channel_id": None},
+        {"label": "updated"},
+    )
+
+    assert was_created is True
+    assert was_created_again is False
+    assert updated.id == created.id
+    assert updated.label == "updated"
+
+
+@pytest.mark.asyncio
+async def test_update_or_create_refreshes_updated_at_only_when_values_change(repository_adapter):
+    repo = repository_adapter.repository_class(UpdateOrCreateTimeModel, repository_adapter.session)
+    initial_updated_at = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    created, was_created = await repository_adapter.call(
+        repo.update_or_create,
+        {"key": "time"},
+        {"value": "before"},
+        create_defaults={"value": "before", "updated_at": initial_updated_at},
+    )
+    original_updated_at = created.updated_at
+
+    updated, was_created_again = await repository_adapter.call(
+        repo.update_or_create,
+        {"key": "time"},
+        {"value": "after"},
+    )
+    changed_updated_at = updated.updated_at
+    explicit_updated_at = datetime(2001, 1, 1, tzinfo=timezone.utc)
+    manually_updated, was_created_third = await repository_adapter.call(
+        repo.update_or_create,
+        {"key": "time"},
+        {"value": "manual", "updated_at": explicit_updated_at},
+    )
+    session = repository_adapter.session
+    if repository_adapter.mode == "async":
+        session = session.sync_session
+    update_statements = []
+
+    def record_update_statement(connection, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("UPDATE "):
+            update_statements.append(statement)
+
+    event.listen(session.get_bind(), "before_cursor_execute", record_update_statement)
+    try:
+        unchanged, was_created_fourth = await repository_adapter.call(
+            repo.update_or_create,
+            {"key": "time"},
+            {"value": "manual", "updated_at": explicit_updated_at},
+        )
+    finally:
+        event.remove(session.get_bind(), "before_cursor_execute", record_update_statement)
+
+    assert was_created is True
+    assert was_created_again is False
+    assert was_created_third is False
+    assert was_created_fourth is False
+    assert changed_updated_at > original_updated_at
+    assert manually_updated.updated_at == explicit_updated_at
+    assert unchanged.updated_at == explicit_updated_at
+    assert update_statements == []
+
+
+@pytest.mark.asyncio
+async def test_update_or_create_rejects_invalid_inputs_before_writing(repository_adapter):
+    repo = repository_adapter.repository_class(UniqueLookupModel, repository_adapter.session)
+
+    with pytest.raises(ValueError, match="non-empty lookup"):
+        await repository_adapter.call(repo.update_or_create, {})
+    with pytest.raises(TypeError, match="mapped column"):
+        await repository_adapter.call(repo.update_or_create, {"key": "unknown"}, {"missing": "value"})
+    with pytest.raises(ValueError, match="lookup keys"):
+        await repository_adapter.call(repo.update_or_create, {"key": "overlap"}, {"key": "new"})
+    with pytest.raises(ValueError, match="primary-key"):
+        await repository_adapter.call(repo.update_or_create, {"key": "primary"}, {"id": 10})
+    with pytest.raises(TypeError, match="plain values"):
+        await repository_adapter.call(
+            repo.update_or_create,
+            {"key": "expression"},
+            {"label": UniqueLookupModel.label + "!"},
+        )
+    with pytest.raises(TypeError, match="plain values"):
+        await repository_adapter.call(
+            repo.update_or_create,
+            {"key": UniqueLookupModel.key},
+        )
+    with pytest.raises(TypeError, match="class-level model controls"):
+        await repository_adapter.call(
+            repo.update_or_create,
+            {"key": "invalid create defaults"},
+            create_defaults={"updatable_fields": set()},
+        )
+
+    assert await repository_adapter.call(repo.count) == 0
+
+
+@pytest.mark.parametrize(
+    "control_field",
+    ["sensitive_fields", "serializable_fields", "updatable_fields"],
+)
+@pytest.mark.asyncio
+async def test_update_or_create_rejects_model_control_fields(repository_adapter, control_field):
+    repo = repository_adapter.repository_class(ProtectedLookupModel, repository_adapter.session)
+
+    with pytest.raises(TypeError, match="class-level model controls"):
+        await repository_adapter.call(
+            repo.update_or_create,
+            {"key": "protected"},
+            {"label": "value", control_field: set()},
+        )
 
 
 @pytest.mark.asyncio

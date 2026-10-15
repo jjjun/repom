@@ -8,6 +8,8 @@ from sqlalchemy import ForeignKey, Integer, desc, event, String, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 import pytest
 from typing import Optional, List
 from repom.models.base_model import BaseModel
@@ -141,6 +143,13 @@ class AsyncUniqueLookupModel(BaseModel):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     label: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class AsyncInternalSessionLookupModel(BaseModel):
+    __tablename__ = 'async_internal_session_lookup_model'
+
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False, server_default='database default')
 
 
 class AsyncUniqueLookupRepository(AsyncBaseRepository[AsyncUniqueLookupModel]):
@@ -992,6 +1001,42 @@ async def test_get_or_create_creates_and_reuses_unique_lookup(async_db_test):
 
 
 @pytest.mark.asyncio
+async def test_internal_async_session_refreshes_get_or_create_and_update_or_create(monkeypatch):
+    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
+    async with engine.begin() as connection:
+        await connection.run_sync(AsyncInternalSessionLookupModel.__table__.create)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=True)
+
+    async def get_async_db_session():
+        async with session_factory() as session:
+            yield session
+
+    monkeypatch.setattr(
+        "repom.repositories.async_base_repository.get_async_db_session",
+        get_async_db_session,
+    )
+    repo = AsyncBaseRepository(AsyncInternalSessionLookupModel)
+
+    try:
+        created, was_created = await repo.update_or_create({"key": "same"})
+        updated, was_created_again = await repo.update_or_create(
+            {"key": "same"},
+            {"label": "updated"},
+        )
+        existing, was_created_third = await repo.get_or_create({"key": "same"})
+
+        assert was_created is True
+        assert was_created_again is False
+        assert was_created_third is False
+        assert created.label == "database default"
+        assert updated.label == "updated"
+        assert existing.label == "updated"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'control_field',
     ['sensitive_fields', 'serializable_fields', 'updatable_fields'],
@@ -1014,6 +1059,20 @@ async def test_get_or_create_recovers_when_unique_row_is_inserted_after_select(a
 
     assert was_created is False
     assert item.label == "racing insert"
+    assert await repo.count() == 1
+
+
+@pytest.mark.asyncio
+async def test_update_or_create_applies_defaults_after_unique_conflict_recovery(async_db_test):
+    repo = RacingAsyncUniqueLookupRepository(session=async_db_test)
+
+    item, was_created = await repo.update_or_create(
+        {"key": "race"},
+        {"label": "updated after race"},
+    )
+
+    assert was_created is False
+    assert item.label == "updated after race"
     assert await repo.count() == 1
 
 

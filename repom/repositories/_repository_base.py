@@ -244,6 +244,44 @@ class RepositoryBase(Generic[T]):
         ):
             raise TypeError(f"{parameter_name} must contain plain values, not SQL expressions.")
 
+    def _prepare_update_or_create(self, lookup: dict, defaults: dict | None, create_defaults: dict | None):
+        if not lookup:
+            raise ValueError("update_or_create() requires a non-empty lookup.")
+
+        lookup = dict(lookup)
+        defaults = dict(defaults or {})
+        create_values = dict(defaults if create_defaults is None else create_defaults)
+
+        for column_name, value in lookup.items():
+            self._resolve_equality_filter(column_name, value)
+
+        mapper = sa_inspect(self.model)
+        column_keys = {column.key for column in mapper.column_attrs}
+        primary_key_keys = {
+            mapper.get_property_by_column(column).key for column in mapper.primary_key
+        }
+        model_control_fields = {"sensitive_fields", "serializable_fields", "updatable_fields"}
+
+        for key, value in defaults.items():
+            if key in model_control_fields:
+                raise TypeError("defaults cannot set class-level model controls.")
+            if key not in column_keys:
+                raise TypeError(f"defaults key {key!r} is not a mapped column attribute.")
+            if key in lookup:
+                raise ValueError("defaults cannot update lookup keys.")
+            if key in primary_key_keys:
+                raise ValueError("defaults cannot update primary-key attributes.")
+            self._validate_value_only(value, "defaults")
+
+        instance = self.model(**(create_values | lookup))
+        return lookup, defaults, instance
+
+    @staticmethod
+    def _apply_update_or_create_defaults(instance: T, defaults: dict) -> None:
+        for key, value in defaults.items():
+            if getattr(instance, key) != value:
+                setattr(instance, key, value)
+
     def _resolve_ids_filter(self, ids: Sequence[Any]) -> ColumnElement:
         """``ids`` からマップされた ``id`` カラムの IN 条件を組み立てる。
 

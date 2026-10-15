@@ -211,7 +211,7 @@ def hook_config(config):
 
 | 分野 | 名前 | ガイド |
 | --- | --- | --- |
-| リポジトリ | `BaseRepository`, `AsyncBaseRepository` | 一括操作と `get_or_create()` は [BaseRepository ガイド](docs/guides/repository/base_repository_guide.md)を参照してください |
+| リポジトリ | `BaseRepository`, `AsyncBaseRepository` | 一括操作、`get_or_create()`、`update_or_create()` は [BaseRepository ガイド](docs/guides/repository/base_repository_guide.md)を参照してください |
 | 検索パラメータ | `FilterParams`, `MatchMode`, `MatchColumn`, `contains_column`, `prefix_column` | [検索パラメータガイド](docs/guides/repository/repository_filter_params_guide.md) |
 | 範囲検索 | `gte_column`, `gt_column`, `lte_column`, `lt_column` | [検索パラメータガイド](docs/guides/repository/repository_filter_params_guide.md) |
 | 並び順 | `get_order_by_columns`, `get_order_by_default_value`, `get_order_by_values`, `VirtualColumnError` | [並び順ガイド](docs/guides/repository/order_by_guide.md) |

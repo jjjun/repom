@@ -139,6 +139,15 @@ count = await repo.count(params=params, filters=[Task.priority == "high"])
 `bulk_permanent_delete()` は、論理削除対応モデルも含め、常に一致する行を物理削除します。
 `get_or_create(lookup, defaults=None)` は `(instance, created)` を返し、一意キーへの同時挿入で
 別の処理が先行した場合は、その行を再検索して返します。
+`update_or_create()` は `(instance, created)` を返します。
+行があれば `defaults` を適用し、なければ `create_defaults`（省略時は
+`defaults`）と `lookup` から作成します。更新できるのは `defaults` の
+マップ済みカラムで、lookup キーと主キーは変更できません。
+lookup が一意制約または一意インデックスで保証される場合に、競合を
+安全に処理できます。
+更新時は値が異なる項目だけを適用し、値に変更がなければ `UPDATE` は発行されず、
+`updated_at` も変更されません。`defaults` の `updated_at` は指定値を使用します。
+既存行への同時更新は最終書き込みが優先され、行ロックは行いません。
 
 ```python
 updated = await repo.bulk_update([{"status": "expired"}], filters=[Task.created_at < cutoff])

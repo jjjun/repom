@@ -482,26 +482,68 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
             raise ValueError("get_or_create() requires a non-empty lookup.")
 
         async with self._session_scope() as session:
-            async with self._commit_or_flush(session):
+            async with self._commit_or_flush(session) as using_internal_session:
                 existing = await self._get_by_lookup_in_session(session, lookup)
                 if existing is not None:
-                    return existing, False
+                    instance, created = existing, False
+                else:
+                    instance = self.model(**(dict(defaults or {}) | lookup))
+                    instance, created = await self._insert_or_get_by_lookup_in_session(
+                        session, lookup, instance
+                    )
 
-                instance = self.model(**(dict(defaults or {}) | lookup))
-                await self._ensure_savepoint_transaction(session)
-                try:
-                    async with session.begin_nested():
-                        session.add(instance)
-                        await session.flush()
-                except IntegrityError as exc:
-                    if not is_unique_violation(exc):
-                        raise
-                    existing = await self._get_by_lookup_in_session(session, lookup)
-                    if existing is None:
-                        raise
-                    return existing, False
+            if using_internal_session:
+                await session.refresh(instance)
 
-                return instance, True
+        return instance, created
+
+    async def update_or_create(
+        self,
+        lookup: dict,
+        defaults: dict | None = None,
+        *,
+        create_defaults: dict | None = None,
+    ) -> tuple[T, bool]:
+        """lookup の行を返し、なければ作成し、既存行には ``defaults`` を適用します。"""
+        lookup, defaults, instance = self._prepare_update_or_create(
+            lookup, defaults, create_defaults
+        )
+
+        async with self._session_scope() as session:
+            async with self._commit_or_flush(session) as using_internal_session:
+                existing = await self._get_by_lookup_in_session(session, lookup)
+                if existing is not None:
+                    instance, created = existing, False
+                else:
+                    instance, created = await self._insert_or_get_by_lookup_in_session(
+                        session, lookup, instance
+                    )
+
+                if not created:
+                    self._apply_update_or_create_defaults(instance, defaults)
+
+            if using_internal_session:
+                await session.refresh(instance)
+
+        return instance, created
+
+    async def _insert_or_get_by_lookup_in_session(
+        self, session: AsyncSession, lookup: dict, instance: T
+    ) -> tuple[T, bool]:
+        await self._ensure_savepoint_transaction(session)
+        try:
+            async with session.begin_nested():
+                session.add(instance)
+                await session.flush()
+        except IntegrityError as exc:
+            if not is_unique_violation(exc):
+                raise
+            existing = await self._get_by_lookup_in_session(session, lookup)
+            if existing is None:
+                raise
+            return existing, False
+
+        return instance, True
 
     @staticmethod
     async def _ensure_savepoint_transaction(session: AsyncSession) -> None:

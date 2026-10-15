@@ -102,20 +102,21 @@ Unless a difference is stated below, these contracts apply to both
   resolution. SQLAlchemy expressions and non-string elements in sequences are
   trusted ordering inputs and bypass the string allowlist. Review
   `virtual_order_columns` and their caller handling as well.
-- `get_by()`, `get_or_create()` lookups, and the `filter_by` arguments of
-  `bulk_update()`, `bulk_delete()` and `bulk_permanent_delete()` resolve mapped
-  columns and respect `allowed_filter_columns`; its default `None` permits every
-  mapped column. These equality paths reject SQLAlchemy expressions as values.
+- `get_by()`, `get_or_create()` and `update_or_create()` lookups, and the
+  `filter_by` arguments of `bulk_update()`, `bulk_delete()` and
+  `bulk_permanent_delete()` resolve mapped columns and respect
+  `allowed_filter_columns`; its default `None` permits every mapped column.
+  These equality paths reject SQLAlchemy expressions as values.
   `filters` arguments are caller-supplied SQLAlchemy expressions and do not use
   this name-based resolver.
-  `get_or_create()` also applies the default soft-delete filter, so a matching
-  deleted row is treated as absent and a conflicting unique constraint can
-  raise `IntegrityError`. `ManyToManyMixin` requires non-empty lookup fields and
-  resolves lookup/link names to mapped columns, but it does not use
-  `allowed_filter_columns` or check lookup values as plain values. The `id`
-  values in `bulk_update()` rows bypass the equality resolver when `filter_by`
-  is omitted. Its update keys have no allowlist and can update primary-key
-  columns when `filter_by` or `filters` supplies the row selection.
+  `get_or_create()` and `update_or_create()` also apply the default soft-delete
+  filter, so a matching deleted row is treated as absent and a conflicting
+  unique constraint can raise `IntegrityError`. `ManyToManyMixin` requires
+  non-empty lookup fields and resolves lookup/link names to mapped columns,
+  but it does not use `allowed_filter_columns` or check lookup values as plain
+  values. The `id` values in `bulk_update()` rows bypass the equality resolver
+  when `filter_by` is omitted. Its update keys have no allowlist and can update
+  primary-key columns when `filter_by` or `filters` supplies the row selection.
 - `get_by_id()` and the ID-based soft-delete methods validate IDs against
   SQLAlchemy expressions. `find_by_ids()`, `bulk_delete()` and
   `bulk_permanent_delete()` reject expression/ORM-attribute elements in their
@@ -128,15 +129,16 @@ Unless a difference is stated below, these contracts apply to both
 - For soft-deletable models, `find()`, `find_one()`, `get_by()`, `get_by_id()`,
   `get_all()`, `find_by_ids()`, `count()`, `count_by_params()`, `bulk_update()`
   and soft `bulk_delete()` exclude deleted rows by default; `include_deleted`
-  opts in where supported. `get_or_create()` also excludes deleted rows.
+  opts in where supported. `get_or_create()` and `update_or_create()` also
+  exclude deleted rows.
   `find_deleted()` and `find_deleted_before()` select deleted rows;
   `restore()` acts on deleted rows; `permanent_delete()`,
   `bulk_permanent_delete()` and `remove()` physically delete. Many-to-many target
   lookups and relationship/eager loads do not inherit repository soft-delete
   filtering. There is no repository-wide scoping hook: overriding `find()` does
-  not constrain `get_by()`, `get_by_id()`, counts, bulk operations or
-  `get_or_create()`. Consumers must not expose `include_deleted` without
-  authorization.
+  not constrain `get_by()`, `get_by_id()`, counts, bulk operations,
+  `get_or_create()` or `update_or_create()`. Consumers must not expose
+  `include_deleted` without authorization.
 - `limit` and `offset` receive type/range checks, and an explicit `limit` is
   checked against `max_limit` (default 1000, configurable to `None`). An omitted
   limit is not capped. Only `find()` warns when its limit is omitted;
@@ -147,13 +149,13 @@ Unless a difference is stated below, these contracts apply to both
   builds one correlated `EXISTS` per distinct requested value without a size cap.
 - With an external session, sync and async repositories do not commit or roll
   back, but write paths flush. `remove()` may call `merge()`;
-  `get_or_create()` opens a SAVEPOINT and issues raw `BEGIN` on SQLite; sync
-  `bulk_update()` and `bulk_delete()` call `expire_all()` (the async methods do
-  not). Since `bulk_update()` checks NUL bytes row by row, failure partway
-  through can leave earlier statements in the caller's transaction. Async
-  cancellation is shielded for internally owned session rollback and close in
-  `DatabaseManager`; repository-level cancellation is not tested, and a cancel
-  during commit leaves the outcome unknown.
+  `get_or_create()` and `update_or_create()` open a SAVEPOINT and issue raw
+  `BEGIN` on SQLite; sync `bulk_update()` and `bulk_delete()` call `expire_all()`
+  (the async methods do not). Since `bulk_update()` checks NUL bytes row by
+  row, failure partway through can leave earlier statements in the caller's
+  transaction. Async cancellation is shielded for internally owned session
+  rollback and close in `DatabaseManager`; repository-level cancellation is
+  not tested, and a cancel during commit leaves the outcome unknown.
 - `_session_scope()` stores an internally opened session in a `ContextVar`.
   Independently started contexts receive separate internal sessions, but a child
   task or copied context created while an internal scope is active can inherit
@@ -176,10 +178,12 @@ Unless a difference is stated below, these contracts apply to both
   silently. The method does no type or NUL validation itself.
 - These field-allowlist guarantees do not apply to model constructors, direct
   assignment, `dict_save()`, `dict_saves()`, `get_or_create()` lookup and
-  defaults, `ManyToManyMixin.add_related_item()`, or `bulk_update()` in either
+  defaults, `update_or_create()` lookup, `defaults`, and `create_defaults`,
+  `ManyToManyMixin.add_related_item()`, or `bulk_update()` in either
   repository implementation. `bulk_update()` can write any mapped column,
   including timestamps, `deleted_at`, and primary keys when `filter_by` or
-  `filters` is used. Consumers must filter request data before these APIs. The
+  `filters` is used. `update_or_create()` does not enforce `updatable_fields` for
+  `defaults`; consumers must filter request data before these APIs. The
   inherited `BaseModel.__init__()` raises `TypeError` for `sensitive_fields`,
   `serializable_fields`, `updatable_fields`, and any keyword that is not a
   mapped attribute; it accepts every mapped attribute, so it is not a field

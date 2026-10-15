@@ -155,7 +155,9 @@
 
 ### Fixed
 
-- Sync `get_or_create()` now refreshes internally managed results after commit so created, existing, and unique-conflict recovery rows remain readable after the session closes.
+- Sync `get_or_create()` now refreshes internally managed results after commit
+  so created, existing, and unique-conflict recovery rows remain readable after
+  the session closes.
 - PostgreSQL and Redis credential rotation now build display payloads from redacted
   inputs before SQL or redis-cli escaping and mask escaped execution forms in failure
   messages. Redis rotation's returned `input_text` still contains the execution payload.
@@ -200,6 +202,8 @@
 
 ### Added
 
+- Sync and async repositories now provide `update_or_create()` with
+  SAVEPOINT-backed insert recovery and separate create defaults.
 - `insert_for_dialect()` selects the PostgreSQL or SQLite `INSERT` construct for
   dialect-aware upserts. The repository advanced guide documents SQLite row-locking
   limitations and conflict-clause handling.
@@ -260,6 +264,9 @@
 
 ### Changed
 
+- Async `get_or_create()` now refreshes internally managed results after commit
+  so created, existing, and unique-conflict recovery rows remain readable after
+  the session closes.
 - `get_logger()` no longer configures logging handlers during import. Default logging is
   configured when a database engine is first created or a CLI entry point starts;
   set `BASEKIT_NO_SIDE_EFFECTS=1` before import to suppress basekit directory and

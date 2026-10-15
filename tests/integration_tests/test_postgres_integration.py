@@ -6,16 +6,39 @@ import pytest
 import os
 from types import SimpleNamespace
 from uuid import uuid4
-from sqlalchemy import text
+from sqlalchemy import String, text
 from sqlalchemy import create_engine
 from sqlalchemy.exc import DataError
-from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy.orm import Mapped, mapped_column, scoped_session, sessionmaker
 from sqlalchemy.schema import CreateSchema, DropSchema
 from tests.alembic_custom_type_migration_support import run_custom_type_migration
+from repom.models.base_model import BaseModel
+from repom.repositories import BaseRepository
 
 # PostgreSQL 統合テスト用に db_type を設定
 # EXEC_ENV='test' のまま（repom_test データベースに接続）
 POSTGRES_INTEGRATION_ENABLED = os.getenv('DB_TYPE') == 'postgres'
+
+
+class UpdateOrCreatePostgresModel(BaseModel):
+    __tablename__ = "update_or_create_postgres_integration"
+
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class RacingUpdateOrCreatePostgresRepository(BaseRepository[UpdateOrCreatePostgresModel]):
+    def __init__(self, session):
+        super().__init__(UpdateOrCreatePostgresModel, session)
+        self._inserted_race_row = False
+
+    def _get_by_lookup_in_session(self, session, lookup):
+        if not self._inserted_race_row:
+            self._inserted_race_row = True
+            session.add(UpdateOrCreatePostgresModel(key=lookup["key"], label="racing insert"))
+            session.flush()
+            return None
+        return super()._get_by_lookup_in_session(session, lookup)
 
 
 @pytest.mark.skipif(
@@ -61,6 +84,43 @@ class TestPostgreSQLIntegration:
             # config の postgres_db と一致するか確認
             assert db_name == config.postgres_db
             print(f"\nConnected to database: {db_name}")
+
+    def test_update_or_create_create_update_and_unique_violation_recovery(self):
+        from repom.database import get_sync_engine
+
+        engine = get_sync_engine()
+        table = UpdateOrCreatePostgresModel.__table__
+        table.create(engine, checkfirst=True)
+        key = uuid4().hex
+        race_key = uuid4().hex
+
+        try:
+            with sessionmaker(bind=engine)() as session:
+                repo = BaseRepository(UpdateOrCreatePostgresModel, session)
+                created, was_created = repo.update_or_create(
+                    {"key": key},
+                    {"label": "created"},
+                )
+                updated, was_created_again = repo.update_or_create(
+                    {"key": key},
+                    {"label": "updated"},
+                )
+                recovered, was_created_after_race = RacingUpdateOrCreatePostgresRepository(
+                    session
+                ).update_or_create(
+                    {"key": race_key},
+                    {"label": "updated after race"},
+                )
+
+                assert was_created is True
+                assert was_created_again is False
+                assert was_created_after_race is False
+                assert created.id == updated.id
+                assert updated.label == "updated"
+                assert recovered.key == race_key
+                assert recovered.label == "updated after race"
+        finally:
+            table.drop(engine, checkfirst=True)
 
     def test_plain_sql_restore_failure_rolls_back_dropped_table(self, tmp_path):
         from repom.database import get_sync_engine

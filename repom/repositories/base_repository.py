@@ -454,24 +454,59 @@ class BaseRepository(RepositoryBase[T], SoftDeleteRepositoryMixin[T], QueryBuild
                     instance, created = existing, False
                 else:
                     instance = self.model(**(dict(defaults or {}) | lookup))
-                    self._ensure_savepoint_transaction(session)
-                    try:
-                        with session.begin_nested():
-                            session.add(instance)
-                            session.flush()
-                    except IntegrityError as exc:
-                        if not is_unique_violation(exc):
-                            raise
-                        existing = self._get_by_lookup_in_session(session, lookup)
-                        if existing is None:
-                            raise
-                        instance, created = existing, False
-                    else:
-                        created = True
+                    instance, created = self._insert_or_get_by_lookup_in_session(
+                        session, lookup, instance
+                    )
             if using_internal_session:
                 session.refresh(instance)
 
         return instance, created
+
+    def update_or_create(
+        self,
+        lookup: dict,
+        defaults: dict | None = None,
+        *,
+        create_defaults: dict | None = None,
+    ) -> tuple[T, bool]:
+        """lookup の行を返し、なければ作成し、既存行には ``defaults`` を適用します。"""
+        lookup, defaults, instance = self._prepare_update_or_create(
+            lookup, defaults, create_defaults
+        )
+
+        with self._session_scope() as session:
+            with self._commit_or_flush(session) as using_internal_session:
+                existing = self._get_by_lookup_in_session(session, lookup)
+                if existing is not None:
+                    instance, created = existing, False
+                else:
+                    instance, created = self._insert_or_get_by_lookup_in_session(
+                        session, lookup, instance
+                    )
+
+                if not created:
+                    self._apply_update_or_create_defaults(instance, defaults)
+
+            if using_internal_session:
+                session.refresh(instance)
+
+        return instance, created
+
+    def _insert_or_get_by_lookup_in_session(self, session, lookup: dict, instance: T) -> tuple[T, bool]:
+        self._ensure_savepoint_transaction(session)
+        try:
+            with session.begin_nested():
+                session.add(instance)
+                session.flush()
+        except IntegrityError as exc:
+            if not is_unique_violation(exc):
+                raise
+            existing = self._get_by_lookup_in_session(session, lookup)
+            if existing is None:
+                raise
+            return existing, False
+
+        return instance, True
 
     @staticmethod
     def _ensure_savepoint_transaction(session) -> None:

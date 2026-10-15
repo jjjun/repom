@@ -77,6 +77,7 @@ with get_reusable_sync_transaction() as session:
 | `bulk_delete(filter_by=None, ids=None, filters=None, allow_unfiltered=False)` | 一括削除 | `int` |
 | `bulk_permanent_delete(filter_by=None, ids=None, filters=None, allow_unfiltered=False)` | 物理一括削除 | `int` |
 | `get_or_create(lookup, defaults=None)` | 一意キーで取得または作成 | `tuple[T, bool]` |
+| `update_or_create(lookup, defaults=None, *, create_defaults=None)` | 一意キーで取得、作成または更新 | `tuple[T, bool]` |
 | `remove(instance)` | 削除 | `None` |
 | `soft_delete` / `restore` / `permanent_delete` / `find_deleted` / `find_deleted_before` | 論理削除 API | [Soft Delete ガイド](../model/soft_delete_guide.md)を参照 |
 
@@ -91,6 +92,15 @@ with get_reusable_sync_transaction() as session:
 `bulk_permanent_delete()` は、論理削除対応モデルも含め、常に物理削除を実行します。
 `get_or_create(lookup, defaults=None)` は `(instance, created)` を返し、同時挿入で別の処理が
 一意キーの行を先に作成した場合は、その行を再検索して返します。
+`update_or_create()` は `(instance, created)` を返します。
+行があれば `defaults` を適用し、なければ `create_defaults`（省略時は
+`defaults`）と `lookup` から作成します。更新できるのは `defaults` の
+マップ済みカラムで、lookup キーと主キーは変更できません。
+lookup が一意制約または一意インデックスで保証される場合に、競合を
+安全に処理できます。
+更新時は値が異なる項目だけを適用し、値に変更がなければ `UPDATE` は発行されず、
+`updated_at` も変更されません。`defaults` の `updated_at` は指定値を使用します。
+既存行への同時更新は最終書き込みが優先され、行ロックは行いません。
 
 `find()` の `filters=` はキーワードで指定してください。位置引数は `params` として解釈されます。
 `find(params=...)` で使う各フィールドは `field_to_column` にマッピングするか、
