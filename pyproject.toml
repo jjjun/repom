@@ -84,7 +84,7 @@ markers = [
 ]
 
 [tool.issuekit]
-disabled_agents = ["kimi"]
+disabled_agents = ["kimi", "codex"]
 worker_accept_directed = true
 project = "repom"
 recent_count = 30
@@ -92,5 +92,5 @@ ascii_id_threshold = 76
 default_reviewer = "auto"
 
 [tool.issuekit.triage]
-author_agent = "codex"
+author_agent = "claude"
 trusted_origins = ["fast-domain"]
