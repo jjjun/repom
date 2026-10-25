@@ -25,6 +25,8 @@ from repom.scripts._backup_utils import (
     build_host_pg_env,
     build_pg_client_command,
     cleanup_stale_decompressed_files,
+    describe_postgres_endpoint,
+    format_postgres_endpoint,
     format_size,
     get_backups,
     gzip_decompress_to_temp_file,
@@ -227,6 +229,10 @@ def _restore_postgresql(backup_file: Path, container_name: str | None) -> None:
     logger.info(f"Starting PostgreSQL restore from {backup_file.name}")
 
     params = PgConnParams.from_config(config)
+    logger.info(
+        f"Restore endpoint: {format_postgres_endpoint(params.host, params.port, container_name)}"
+        f" (database {params.database})"
+    )
     env = None
     if container_name is None:
         # sslmode / sslrootcert を解決・検証する（db_url と同じロジックを共有）。
@@ -340,6 +346,23 @@ def target_database_name() -> str:
     return sqlite_database_path().stem
 
 
+def target_endpoint() -> Optional[str]:
+    """Return where a PostgreSQL restore would connect now, or None for SQLite.
+
+    ``container <name>`` when the restore would run through docker exec,
+    ``host:port`` for host psql; the password is never included.
+    """
+    if config.db_type != "postgres":
+        return None
+    params = PgConnParams.from_config(config)
+    return describe_postgres_endpoint(
+        host=params.host,
+        port=params.port,
+        container_name=params.container_name,
+        allow_docker=params.use_docker,
+    )
+
+
 def main():
     ensure_logging_configured()
     logger.info("Starting database restore process")
@@ -397,6 +420,9 @@ def main():
     print(f"\nSelected: {selected.name}")
     print(f"  Source database: {source if source is not None else 'unknown (legacy backup)'}")
     print(f"  Target database: {target}")
+    endpoint = target_endpoint()
+    if endpoint is not None:
+        print(f"  Target endpoint: {endpoint}")
 
     if source == target:
         confirm = input(f"Confirm restore from {selected.name}? [y/N]: ").strip().lower()

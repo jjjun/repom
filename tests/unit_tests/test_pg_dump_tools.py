@@ -64,6 +64,7 @@ def test_pg_conn_params_from_config_keeps_structured_settings():
     config.db_type = "postgres"
     config.postgres.host = "127.0.0.1"
     config.postgres.port = 5543
+    config.postgres.container.host_port = 5543
     config.postgres.user = "configured-user"
     config.postgres.password = "configured-password"
     config.postgres.database = "configured-db"
@@ -93,6 +94,101 @@ def test_pg_conn_params_disables_docker_for_remote_configured_host():
     config.postgres.host = "db.example.internal"
 
     assert PgConnParams.from_config(config).use_docker is False
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "/var/run/postgresql"])
+def test_pg_conn_params_disables_docker_when_port_differs_from_container_host_port(host):
+    """A native server on the configured port must not be replaced by the
+    managed container, whose docker exec carries no -h / -p."""
+    config = RepomConfig()
+    config.db_type = "postgres"
+    config.postgres.host = host
+    config.postgres.port = 5432
+    config.postgres.container.host_port = 5433
+
+    params = PgConnParams.from_config(config)
+
+    assert params.use_docker is False
+    assert params.host == host
+    assert params.port == 5432
+
+
+def test_pg_conn_params_overridden_url_never_uses_docker_even_on_the_container_port():
+    config = RepomConfig()
+    config.db_url = "postgresql://url_user:url_password@127.0.0.1:5433/url_db"
+    config.postgres.container.host_port = 5433
+
+    assert PgConnParams.from_config(config).use_docker is False
+
+
+@pytest.mark.parametrize("operation", ["dump", "restore"])
+def test_port_mismatch_uses_host_tools_even_when_the_container_is_running(
+    monkeypatch, tmp_path: Path, operation
+):
+    config = RepomConfig()
+    config.db_type = "postgres"
+    config.postgres.host = "127.0.0.1"
+    config.postgres.port = 5432
+    config.postgres.container.host_port = 5433
+    params = PgConnParams.from_config(config)
+    run_calls = []
+
+    monkeypatch.setattr(
+        _backup_utils,
+        "is_container_running",
+        MagicMock(side_effect=AssertionError("Docker must not be probed")),
+    )
+    monkeypatch.setattr(
+        pg_dump_tools,
+        "is_container_running",
+        MagicMock(side_effect=AssertionError("Docker must not be probed")),
+    )
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "exec_command",
+        MagicMock(side_effect=AssertionError("docker exec must not be used")),
+    )
+
+    def fake_run(command, **kwargs):
+        run_calls.append((command, kwargs))
+        if command[1:] == ["--version"]:
+            return subprocess.CompletedProcess(command, 0, "tool (PostgreSQL) 16.3\n", "")
+        if operation == "dump":
+            Path(command[-1]).write_bytes(b"CUSTOM-DUMP")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(pg_dump_tools.subprocess, "run", fake_run)
+
+    if operation == "dump":
+        result = pg_dump_custom(params, tmp_path / "db.dump")
+    else:
+        dump_path = tmp_path / "db.dump"
+        dump_path.write_bytes(b"CUSTOM-DUMP")
+        result = pg_restore_custom(params, dump_path)
+
+    assert result.returncode == 0
+    assert result.used_docker is False
+    command, _ = run_calls[-1]
+    assert command[command.index("-h") + 1] == "127.0.0.1"
+    assert command[command.index("-p") + 1] == "5432"
+
+
+def test_pg_tools_available_skips_docker_probe_when_port_differs_from_container_host_port(
+    monkeypatch,
+):
+    config = RepomConfig()
+    config.db_type = "postgres"
+    config.postgres.port = 5432
+    config.postgres.container.host_port = 5433
+    params = PgConnParams.from_config(config)
+    monkeypatch.setattr(
+        pg_dump_tools,
+        "is_container_running",
+        MagicMock(side_effect=AssertionError("Docker must not be probed")),
+    )
+    monkeypatch.setattr(pg_dump_tools.shutil, "which", lambda name: None)
+
+    assert pg_tools_available(params) is False
 
 
 @pytest.mark.parametrize(

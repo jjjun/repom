@@ -25,6 +25,7 @@ def _mock_postgres_config(backup_dir, sslmode="prefer", sslrootcert=None):
     config.db_backup_path = str(backup_dir)
     config.postgres.host = "localhost"
     config.postgres.port = 5432
+    config.postgres.container.host_port = 5432
     config.postgres.user = "postgres"
     config.postgres.password = "test-password"
     config.postgres_db = "repom_test"
@@ -800,6 +801,63 @@ def test_main_returns_normally_on_successful_backup(monkeypatch, tmp_path):
 
     db_backup.main()
 
+    assert len(list(tmp_path.glob("*.sql.gz"))) == 1
+
+
+def test_backup_postgresql_uses_host_pg_dump_when_port_differs_from_container_host_port(
+    monkeypatch, tmp_path
+):
+    """A native server on the configured port must not be replaced by the
+    running managed container, which docker exec would always reach."""
+    config = _mock_postgres_config_for_main(tmp_path)
+    config.postgres.container.host_port = 5433
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.setattr(
+        _backup_utils,
+        "is_container_running",
+        MagicMock(side_effect=AssertionError("Docker must not be probed")),
+    )
+    container_names = []
+
+    def record_command(container_name):
+        container_names.append(container_name)
+        return fake_client_command()
+
+    monkeypatch.setattr(db_backup, "_pg_dump_command", record_command)
+    monkeypatch.setenv("FAKE_CHILD_STDOUT_BYTES", "10")
+    logger = MagicMock()
+    monkeypatch.setattr(db_backup, "logger", logger)
+
+    db_backup.backup_postgresql()
+
+    assert container_names == [None]
+    logger.info.assert_any_call("Backup endpoint: localhost:5432 (database repom_test)")
+    assert "test-password" not in str(logger.mock_calls)
+    assert len(list(tmp_path.glob("*.sql.gz"))) == 1
+
+
+def test_backup_postgresql_logs_container_endpoint_when_port_matches_container_host_port(
+    monkeypatch, tmp_path
+):
+    config = _mock_postgres_config_for_main(tmp_path)
+    config.postgres.container.get_container_name.return_value = "repom_postgres"
+    monkeypatch.setattr(db_backup, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=True))
+    container_names = []
+
+    def record_command(container_name):
+        container_names.append(container_name)
+        return fake_client_command()
+
+    monkeypatch.setattr(db_backup, "_pg_dump_command", record_command)
+    monkeypatch.setenv("FAKE_CHILD_STDOUT_BYTES", "10")
+    logger = MagicMock()
+    monkeypatch.setattr(db_backup, "logger", logger)
+
+    db_backup.backup_postgresql()
+
+    assert container_names == ["repom_postgres"]
+    logger.info.assert_any_call("Backup endpoint: container repom_postgres (database repom_test)")
     assert len(list(tmp_path.glob("*.sql.gz"))) == 1
 
 

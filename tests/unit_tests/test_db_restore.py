@@ -20,6 +20,7 @@ def _mock_postgres_config(backup_dir, sslmode="prefer", sslrootcert=None):
     config.db_backup_path = str(backup_dir)
     config.postgres.host = "localhost"
     config.postgres.port = 5432
+    config.postgres.container.host_port = 5432
     config.postgres.user = "postgres"
     config.postgres.password = "test-password"
     config.postgres_db = "repom_test"
@@ -935,6 +936,7 @@ def test_main_returns_normally_when_restore_cancelled_at_confirmation(monkeypatc
     _make_backup_file(tmp_path)
     config = _mock_postgres_config_for_main(tmp_path)
     monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=False))
     psql_command = MagicMock()
     monkeypatch.setattr(db_restore, "_psql_command", psql_command)
     monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "n"]))
@@ -990,6 +992,88 @@ def test_main_cancels_legacy_backup_restore_when_target_name_not_typed(monkeypat
     db_restore.main()
 
     psql_command.assert_not_called()
+
+
+def test_main_confirmation_names_host_endpoint_when_port_differs_from_container_host_port(
+    monkeypatch, tmp_path, capsys
+):
+    """The container is running, but the configured port is not the one it
+    publishes, so the prompt must name host:port and the restore must use host psql."""
+    backup_file = _make_backup_file(tmp_path)
+    config = _mock_postgres_config_for_main(tmp_path)
+    config.postgres.container.host_port = 5433
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(
+        _backup_utils,
+        "is_container_running",
+        MagicMock(side_effect=AssertionError("Docker must not be probed")),
+    )
+    container_names = []
+
+    def record_command(container_name):
+        container_names.append(container_name)
+        return fake_client_command()
+
+    monkeypatch.setattr(db_restore, "_psql_command", record_command)
+    psql_stdin = tmp_path / "psql.stdin"
+    monkeypatch.setenv("FAKE_CHILD_STDIN_SINK", str(psql_stdin))
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "y"]))
+
+    db_restore.main()
+
+    output = capsys.readouterr().out
+    assert "  Target database: repom_test\n  Target endpoint: localhost:5432\n" in output
+    assert "test-password" not in output
+    assert container_names == [None]
+    with gzip.open(backup_file, "rb") as backup:
+        assert psql_stdin.read_bytes() == backup.read()
+
+
+def test_main_confirmation_names_container_endpoint_when_port_matches_container_host_port(
+    monkeypatch, tmp_path, capsys
+):
+    _make_backup_file(tmp_path)
+    config = _mock_postgres_config_for_main(tmp_path)
+    config.postgres.container.get_container_name.return_value = "repom_postgres"
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=True))
+    psql_command = MagicMock()
+    monkeypatch.setattr(db_restore, "_psql_command", psql_command)
+    monkeypatch.setattr("builtins.input", MagicMock(side_effect=["1", "n"]))
+
+    db_restore.main()
+
+    output = capsys.readouterr().out
+    assert "  Target database: repom_test\n  Target endpoint: container repom_postgres\n" in output
+    psql_command.assert_not_called()
+
+
+def test_restore_postgresql_uses_host_psql_when_port_differs_from_container_host_port(
+    monkeypatch, tmp_path
+):
+    backup_file = _make_backup_file(tmp_path)
+    config = _mock_postgres_config_for_main(tmp_path)
+    config.postgres.container.host_port = 5433
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(
+        _backup_utils,
+        "is_container_running",
+        MagicMock(side_effect=AssertionError("Docker must not be probed")),
+    )
+    container_names = []
+
+    def record_command(container_name):
+        container_names.append(container_name)
+        return fake_client_command()
+
+    monkeypatch.setattr(db_restore, "_psql_command", record_command)
+    logger = MagicMock()
+    monkeypatch.setattr(db_restore, "logger", logger)
+
+    db_restore.restore_postgresql(backup_file)
+
+    assert container_names == [None]
+    logger.info.assert_any_call("Restore endpoint: localhost:5432 (database repom_test)")
 
 
 def _mock_sqlite_config_for_main(backup_dir, db_file_path):

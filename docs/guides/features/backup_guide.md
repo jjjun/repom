@@ -74,10 +74,20 @@ SQLAlchemy と同じくプロセスの作業ディレクトリを基準に解決
 から実行しても同じ DB を参照できるよう、絶対パスを推奨します。インメモリ SQLite と
 `uri=true` を含む SQLite URI URL は拒否します。
 
-URL の上書きがない場合、PostgreSQL の設定 host が local なら、管理対象コンテナが起動中のとき
+URL の上書きがない場合、PostgreSQL の設定 host が local で、かつ `postgres.port` が管理対象コンテナの
+公開 port（`postgres.container.host_port`）と一致するときに限り、管理対象コンテナが起動中なら
 `docker exec` を使い、起動していなければ host 上の `pg_dump` / `psql` に fallback します。
-remote host の場合は host 上の client tool を使います。SQLite は URL override の有無にかかわらず
+`docker exec` は `-h` / `-p` を持たず常にコンテナ自身のサーバーへ接続するため、port が一致しない場合
+（例: ネイティブ PostgreSQL が 5432、コンテナが 5433 を公開）は、コンテナが起動中でも host 上の
+client tool で設定された `host:port` に接続します。この場合は host に PostgreSQL client tool が必要です。
+remote host の場合も host 上の client tool を使います。SQLite は URL override の有無にかかわらず
 `config.db_url` を対象にします。
+
+実際の接続先は `db_backup` がログ（`Backup endpoint:`）に、`db_restore` が確認画面の
+`Target endpoint:` に表示します。表示は `container <name>`（`docker exec`）または `host:port`
+（host 上の client tool）で、パスワードは含みません。`db_restore` の表示は確認時点の判定で、
+実行時にコンテナの状態を再度確認します。`pg_dump_custom()` / `pg_restore_custom()` も同じ規則で
+`docker exec` か host 上の client tool かを選びます。
 
 `config.db_url_overridden` が真の場合、PostgreSQL のバックアップ stem は URL の database 名、
 SQLite の stem は URL が示すファイル名になります。URL の backend が SQLite / PostgreSQL

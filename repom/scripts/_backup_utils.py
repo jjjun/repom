@@ -765,3 +765,40 @@ def run_postgres_via_docker_or_host(
         f"Consider running 'uv run postgres_start' first."
     )
     return via_host()
+
+
+def format_postgres_endpoint(host: str, port: int, container_name: str | None = None) -> str:
+    """Name where a PostgreSQL client tool connects, for logs and prompts.
+
+    ``container <name>`` for the docker exec path (which carries no ``-h`` /
+    ``-p``), ``host:port`` for host tools. Never includes a password.
+    """
+    if container_name is not None:
+        return f"container {container_name}"
+    if ":" in host:
+        host = f"[{host}]"
+    return f"{host}:{port}"
+
+
+def describe_postgres_endpoint(
+    *,
+    host: str,
+    port: int,
+    container_name: str | None = None,
+    allow_docker: bool = True,
+) -> str:
+    """Return the endpoint run_postgres_via_docker_or_host would choose now.
+
+    Applies the same decision as run_postgres_via_docker_or_host (Docker exec
+    only when allowed and the container is running) without running anything
+    or logging, so a confirmation prompt can name the target before the
+    operation starts.
+    """
+    if allow_docker:
+        resolved_container_name = container_name or config.postgres.container.get_container_name()
+        try:
+            if is_container_running(resolved_container_name):
+                return format_postgres_endpoint(host, port, resolved_container_name)
+        except DockerUnavailableError:
+            pass
+    return format_postgres_endpoint(host, port)

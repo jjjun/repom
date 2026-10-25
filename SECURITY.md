@@ -269,8 +269,14 @@ Unless a difference is stated below, these contracts apply to both
   like the destination keys, naming the key and never the value. Query keys
   outside these lists are neither forwarded nor rejected. Rejection occurs
   before backup/restore Docker probes or client processes. The configured
-  local-host path may target the managed container through `docker exec`;
-  configured remote hosts use host client tools. Client-tool database names,
+  local-host path may target the managed container through `docker exec` only
+  when `config.postgres.port` equals `config.postgres.container.host_port`;
+  `docker exec` carries no host or port, so a different configured port and
+  configured remote hosts use host client tools against `host:port`, even while
+  the container is running. `db_backup` logs and the `db_restore` confirmation
+  shows the resolved endpoint (`container <name>` or `host:port`, never the
+  password); the restore display is decided when the prompt is printed and the
+  container is probed again when the restore runs. Client-tool database names,
   including PostgreSQL credential rotation's databases and maintenance database,
   must not use libpq connection-string syntax. `database_info`
   reports configured `postgres_db` even when a URL override selects another

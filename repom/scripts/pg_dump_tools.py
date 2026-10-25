@@ -176,6 +176,14 @@ class PgConnParams:
             return params
 
         tls = active_config.postgres_tls_settings()
+        # docker exec carries no -h / -p, so it always reaches the managed
+        # container's own server. Take it only when the configured endpoint is
+        # that container's published port; otherwise a native server on another
+        # port would silently be replaced by the container's database.
+        targets_managed_container = (
+            _is_local_postgres_host(active_config.postgres.host)
+            and active_config.postgres.port == active_config.postgres.container.host_port
+        )
         params = cls(
             host=active_config.postgres.host,
             port=active_config.postgres.port,
@@ -185,7 +193,7 @@ class PgConnParams:
             container_name=active_config.postgres.container.get_container_name(),
             sslmode=tls.sslmode,
             sslrootcert=tls.sslrootcert,
-            use_docker=_is_local_postgres_host(active_config.postgres.host),
+            use_docker=targets_managed_container,
         )
         validate_client_database(params.database)
         return params

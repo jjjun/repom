@@ -20,7 +20,9 @@ from repom.scripts._backup_utils import (
     cleanup_incomplete_backups,
     cleanup_stale_decompressed_files,
     compute_checksum,
+    describe_postgres_endpoint,
     ensure_backup_dir,
+    format_postgres_endpoint,
     format_size,
     get_backups,
     gzip_decompress_to_temp_file,
@@ -485,6 +487,62 @@ def test_run_postgres_via_docker_or_host_skips_docker_when_disallowed(monkeypatc
     is_running.assert_not_called()
     via_docker.assert_not_called()
     via_host.assert_called_once_with()
+
+
+def test_format_postgres_endpoint_names_container_or_host_and_port():
+    assert format_postgres_endpoint("127.0.0.1", 5432, "repom_postgres") == (
+        "container repom_postgres"
+    )
+    assert format_postgres_endpoint("127.0.0.1", 5432) == "127.0.0.1:5432"
+    assert format_postgres_endpoint("::1", 5432) == "[::1]:5432"
+
+
+def test_describe_postgres_endpoint_names_running_container(monkeypatch):
+    is_running = MagicMock(return_value=True)
+    monkeypatch.setattr(_backup_utils, "is_container_running", is_running)
+
+    endpoint = describe_postgres_endpoint(
+        host="127.0.0.1", port=5432, container_name="custom-postgres"
+    )
+
+    assert endpoint == "container custom-postgres"
+    is_running.assert_called_once_with("custom-postgres")
+
+
+@pytest.mark.parametrize(
+    "probe",
+    [
+        MagicMock(return_value=False),
+        MagicMock(side_effect=DockerUnavailableError("docker command not found")),
+    ],
+)
+def test_describe_postgres_endpoint_names_host_when_container_is_not_usable(
+    monkeypatch, probe
+):
+    monkeypatch.setattr(_backup_utils, "is_container_running", probe)
+
+    endpoint = describe_postgres_endpoint(
+        host="127.0.0.1", port=5432, container_name="custom-postgres"
+    )
+
+    assert endpoint == "127.0.0.1:5432"
+
+
+def test_describe_postgres_endpoint_names_host_without_probing_when_docker_disallowed(
+    monkeypatch,
+):
+    is_running = MagicMock(side_effect=AssertionError("Docker must not be probed"))
+    monkeypatch.setattr(_backup_utils, "is_container_running", is_running)
+
+    endpoint = describe_postgres_endpoint(
+        host="127.0.0.1",
+        port=5432,
+        container_name="custom-postgres",
+        allow_docker=False,
+    )
+
+    assert endpoint == "127.0.0.1:5432"
+    is_running.assert_not_called()
 
 
 @POSIX_ONLY

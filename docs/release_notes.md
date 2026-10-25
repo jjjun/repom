@@ -49,6 +49,18 @@
   gains the matching fields and a `tls_options` property, and
   `build_host_pg_env()` accepts `tls_options`. Forwarded options always select host
   client tools instead of `docker exec`.
+- BREAKING: `PgConnParams.from_config()` now selects `docker exec` only when the
+  configured host is local and `config.postgres.port` equals
+  `config.postgres.container.host_port`. `docker exec` carries no `-h` / `-p` and
+  always reaches the managed container's own server, so a native server on another
+  port (for example `POSTGRES_PORT=5432` with the container published on
+  `POSTGRES_HOST_PORT=5433`) was silently replaced by the container database in
+  `db_backup`, `db_restore`, `pg_dump_custom()`, and `pg_restore_custom()`. When the
+  ports differ these now use the host client tools against `host:port` even while the
+  container is running, so host `pg_dump` / `psql` / `pg_restore` must be installed;
+  a backup or restore that previously ran through Docker may now use host tools.
+  `db_backup` logs, and the `db_restore` confirmation shows, the resolved endpoint
+  (`container <name>` or `host:port`, never the password).
 - BREAKING: The shared PostgreSQL engine resolver now rejects `connect_args` keys
   outside the libpq, psycopg, and asyncpg-adapter keywords with `ValueError` in every
   `EXEC_ENV`. psycopg `conninfo` and libpq `requiressl` can no longer carry a

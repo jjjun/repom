@@ -16,6 +16,7 @@ from repom.scripts._backup_utils import (
     checksum_path,
     cleanup_incomplete_backups,
     ensure_backup_dir,
+    format_postgres_endpoint,
     open_backup_temp_file,
     publish_backup,
     require_path_in_dir,
@@ -183,6 +184,10 @@ def _backup_postgresql(container_name: str | None) -> None:
     cleanup_stale_backups(backup_dir, backup_pattern, name_pattern)
 
     command = _pg_dump_command(container_name)
+    logger.info(
+        f"Backup endpoint: {format_postgres_endpoint(params.host, params.port, container_name)}"
+        f" (database {params.database})"
+    )
     logger.info("Starting pg_dump via Docker exec" if container_name else "Starting pg_dump process")
     logger.debug(f"Executing: {' '.join(command)} (PGPASSWORD hidden)")
 
