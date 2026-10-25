@@ -453,6 +453,35 @@ def test_prod_environment_destination_fallbacks_require_tls(
     assert hosts == expected_hosts
 
 
+def test_prod_asyncpg_policy_applies_pghostaddr_although_asyncpg_ignores_it():
+    # Known conservative false positive (repom#287): asyncpg does not read
+    # PGHOSTADDR, but the shared resolver still treats it as the destination.
+    # Change this deliberately, together with SECURITY.md.
+    environment = {"PGHOSTADDR": "198.51.100.5"}
+    policy_config = RepomConfig(exec_env="prod")
+
+    resolved_url, _, sslmode, hosts = database_module._resolve_postgres_engine_policy(
+        "postgresql+psycopg://localhost/app",
+        {},
+        asyncpg=True,
+        config_obj=policy_config,
+        environ=environment,
+    )
+
+    assert make_url(resolved_url).query["sslmode"] == "require"
+    assert sslmode == "require"
+    assert hosts == ("198.51.100.5",)
+
+    with pytest.raises(ValueError, match="198.51.100.5"):
+        database_module._resolve_postgres_engine_policy(
+            "postgresql+psycopg://localhost/app?sslmode=prefer",
+            {},
+            asyncpg=True,
+            config_obj=policy_config,
+            environ=environment,
+        )
+
+
 def test_prod_pgsslmode_is_validated_and_adapted_for_both_drivers():
     environment = {
         "PGHOST": "db.example.invalid",

@@ -88,6 +88,10 @@ URL にない `sslrootcert` を URL に書き込みます。それ以外では U
 共有 resolver を使う engine では、接続先の判定に URL authority の host に加えて、
 URL query、`engine_kwargs.connect_args`、および `PGHOST` / `PGHOSTADDR` の fallback を使います。
 `PGHOSTADDR` は URL host が明示されている場合も候補に含め、実際の接続先アドレスとして判定します。
+asyncpg は `PGHOSTADDR` を読みませんが、共有 resolver は psycopg と asyncpg の両方の engine に
+同じように適用します。そのため、リモートの `PGHOSTADDR` があると、実際には URL host へ接続する
+asyncpg でも `require` 以上が必要になったり `ValueError` になったりし、そのアドレスが警告やエラー
+メッセージに表示されることがあります。これは既知の保守的な誤検知であり、脆弱性ではありません。
 libpq が対応するカンマ区切りの複数 host では、リモート host が一つでも含まれるとリモートとして扱います。
 `PGSERVICE`、URL query の `service`、または `connect_args` の `service` が選択されていて
 host と hostaddr の両方を明示していない場合は、`pg_service.conf` を解析せず接続先を未解決として扱います。

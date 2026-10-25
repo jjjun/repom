@@ -256,8 +256,12 @@ Unless a difference is stated below, these contracts apply to both
   must not use libpq connection-string syntax. `database_info`
   reports configured `postgres_db` even when a URL override selects another
   database. In `prod`, destination resolution includes `PGHOST` and
-  `PGHOSTADDR`, including `PGHOSTADDR` alongside an explicit URL host. A
-  selected `PGSERVICE` or `service` setting is unresolved unless both `host`
+  `PGHOSTADDR`, including `PGHOSTADDR` alongside an explicit URL host. The
+  resolver applies `PGHOSTADDR` to both the psycopg and the asyncpg engine even
+  though asyncpg ignores it, so a remote `PGHOSTADDR` can require TLS or raise
+  for an asyncpg connection that actually goes to the URL host, and that address
+  may appear in warnings and errors. This is a known conservative false
+  positive, not a vulnerability. A selected `PGSERVICE` or `service` setting is unresolved unless both `host`
   and `hostaddr` are explicit, so it requires strong TLS without parsing
   `pg_service.conf`. A host-less URL with no destination fallback remains
   local. Host client-tool subprocesses remove inherited `PGHOSTADDR` and
