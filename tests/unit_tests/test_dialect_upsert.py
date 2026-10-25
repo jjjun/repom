@@ -9,6 +9,7 @@ import repom
 from repom import NulByteError, build_insert_ignore, build_upsert
 from repom.mixins import SoftDeletableMixin
 from repom.models.base_model import BaseModel
+from repom.repositories import _dialect as dialect_module
 from repom.repositories import (
     build_insert_ignore as repository_build_insert_ignore,
     build_upsert as repository_build_upsert,
@@ -130,7 +131,17 @@ def test_build_upsert_accepts_connection_and_uses_supplied_updated_at(db_engine)
 
 
 @pytest.mark.asyncio
-async def test_upsert_refreshes_loaded_model_and_advances_timestamps(repository_adapter):
+async def test_upsert_refreshes_loaded_model_and_advances_timestamps(repository_adapter, monkeypatch):
+    first_stamp = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+    second_stamp = datetime(2026, 1, 2, 3, 4, 6, tzinfo=timezone.utc)
+    stamps = iter([first_stamp, second_stamp])
+
+    class _SteppedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return next(stamps)
+
+    monkeypatch.setattr(dialect_module, 'datetime', _SteppedDatetime)
     repo = repository_adapter.repository_class(DialectUpsertModel, repository_adapter.session)
     inserted = await repository_adapter.call(
         repo.upsert,
@@ -143,6 +154,8 @@ async def test_upsert_refreshes_loaded_model_and_advances_timestamps(repository_
     )
     created_at = loaded.created_at
     first_updated_at = loaded.updated_at
+    assert created_at == first_stamp
+    assert first_updated_at == first_stamp
 
     updated = await repository_adapter.call(
         repo.upsert,
@@ -154,6 +167,7 @@ async def test_upsert_refreshes_loaded_model_and_advances_timestamps(repository_
     assert updated == [loaded]
     assert loaded.value == 'second'
     assert loaded.created_at == created_at
+    assert loaded.updated_at == second_stamp
     assert loaded.updated_at > first_updated_at
 
 
