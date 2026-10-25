@@ -13,7 +13,9 @@ import pytest
 import yaml
 from basekit.docker_manager import DockerCommandExecutor
 from repom.postgres import manage
+from repom.postgres.credentials import STANDARD_CONFORMING_STRINGS_SQL
 from repom.postgres.manage import PostgresManager
+from tests.pytest_helpers import read_standard_sql_literal
 
 class TestGenerateDockerComposePostgresOnly:
     """generate_docker_compose() - PostgreSQL のみ（pgAdmin 無効）"""
@@ -270,6 +272,33 @@ class TestGenerateInitSql:
             in sql
         )
         assert "-- app-db'oops" not in sql
+
+    @pytest.mark.parametrize("base", [r"app\db", r"app\'db", "app\\", "\\'\\'"])
+    @patch('repom.postgres.manage.config')
+    def test_backslash_database_names_parse_with_standard_conforming_strings(
+        self, mock_config, base, tmp_path
+    ):
+        """The init SQL sets standard_conforming_strings before any literal."""
+        mock_config.data_path = tmp_path / "data" / "repom"
+        mock_config.db_name = base
+        mock_config.postgres.user = "repom"
+
+        from repom.postgres.manage import generate_init_sql
+
+        sql = generate_init_sql()
+
+        assert sql.startswith(f"{STANDARD_CONFORMING_STRINGS_SQL}\n")
+        create_lines = [line for line in sql.splitlines() if line.startswith("SELECT ")]
+        databases = (base, f"{base}_dev", f"{base}_test")
+        assert len(create_lines) == len(databases)
+        for line, database in zip(create_lines, databases):
+            create_sql, end = read_standard_sql_literal(line, len("SELECT "))
+            assert create_sql == f'CREATE DATABASE "{database}"'
+            assert line[end:].startswith(" WHERE NOT EXISTS ")
+            datname_start = line.index("datname = ") + len("datname = ")
+            datname, datname_end = read_standard_sql_literal(line, datname_start)
+            assert datname == database
+            assert line[datname_end:] == ")\\gexec"
 
 
 class TestDockerComposeFileGeneration:

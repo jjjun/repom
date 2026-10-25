@@ -116,6 +116,8 @@ uv run postgres_start
 - PostgreSQL の実行では現在の password の `PGPASSWORD` を `docker exec --env-file` で container に
   渡します。値は mode `0600` の一時 file に書かれ、rotation の終了時に削除されます。SQL は stdin
   経由で送るため、新しい password も `psql` の process argument に入りません。
+- 各 `psql` に送る SQL（dry-run の表示も同じ）は `SET standard_conforming_strings = on;` で始まります。
+  サーバーの設定が `off` でも、password や role 名に含まれる backslash は通常の文字として扱われます。
 - pgAdmin の `update-user` argv に関するものも含め、失敗時は raw subprocess traceback の代わりに
   password を mask した error が送出されます。
 - `--execute` を指定する前に dry-run の内容を確認してください。

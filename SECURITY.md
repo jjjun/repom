@@ -92,9 +92,15 @@ Unless a difference is stated below, these contracts apply to both
 - SQL values must not become syntax through interpolation. Dynamic identifiers
   and literals must be quoted for their actual, possibly nested SQL context,
   including a literal inside a dollar-quoted PostgreSQL `DO` body. Bound
-  parameters do not protect identifiers. Review custom SQL compilation and CLI
-  SQL generation (`repom/postgres/` and `repom/alembic/reset.py`) alongside
-  repository queries.
+  parameters do not protect identifiers. `quote_literal()` doubles only the
+  single quote, so it assumes `standard_conforming_strings = on`; every
+  generated PostgreSQL rotation step and the generated init SQL start with
+  `SET standard_conforming_strings = on;` so a backslash in a password,
+  database name, or role name stays an ordinary character whatever the server
+  default is. Other callers of `quote_literal()` must establish that setting
+  themselves. Review custom SQL compilation and CLI SQL generation
+  (`repom/postgres/` and `repom/alembic/reset.py`) alongside repository
+  queries.
 - String `order_by` and `default_order_by` values use `column[:asc|desc]` and
   must pass the `allowed_order_columns` check (default: seven common names) and
   the model class-attribute lookup. String elements inside list/tuple ordering

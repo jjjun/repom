@@ -190,6 +190,13 @@
 
 ### Fixed
 
+- PostgreSQL credential rotation and the generated init SQL no longer depend on the
+  server's `standard_conforming_strings` default. Every rotation `psql` step payload
+  (also shown in the dry-run output) and the generated `01_init_databases.sql` now
+  start with `SET standard_conforming_strings = on;`, so a backslash in a password,
+  database name, or role name cannot change literal boundaries on a server where the
+  setting is `off`. `quote_literal()` output is unchanged. `SqlStep.sql` and the
+  `masked_output` entries of `CredentialRotationResult` therefore gain that first line.
 - `write_checksum()` now writes the `.sha256` sidecar to an exclusive 0600
   `.sha256.partial` sibling and publishes it with `os.replace`, so a symlink planted
   at the sidecar path is replaced instead of followed and a reader never sees a

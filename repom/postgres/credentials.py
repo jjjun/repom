@@ -20,6 +20,9 @@ from repom.docker_compose_safety import reject_control_characters
 from repom.scripts._backup_utils import validate_client_database
 
 
+STANDARD_CONFORMING_STRINGS_SQL = "SET standard_conforming_strings = on;"
+
+
 class PostgresCredentialRotationError(RuntimeError):
     """Raised when a PostgreSQL rotation psql command fails."""
 
@@ -123,7 +126,12 @@ def quote_identifier(value: str) -> str:
 
 
 def quote_literal(value: str) -> str:
-    """Quote a PostgreSQL string literal."""
+    """Quote a PostgreSQL string literal.
+
+    Only the single quote is doubled, so the result is correct only while
+    ``standard_conforming_strings`` is ``on``. SQL that embeds this literal must
+    start with :data:`STANDARD_CONFORMING_STRINGS_SQL`.
+    """
 
     return "'" + value.replace("'", "''") + "'"
 
@@ -137,7 +145,12 @@ def mask_secret(text: str, secrets: Iterable[str]) -> str:
 def build_postgres_rotation_steps(
     plan: PostgresCredentialRotationPlan,
 ) -> tuple[SqlStep, ...]:
-    """Build the SQL steps for a PostgreSQL rotation plan."""
+    """Build the SQL steps for a PostgreSQL rotation plan.
+
+    Each step runs in its own psql session, so each ``sql`` starts with
+    ``STANDARD_CONFORMING_STRINGS_SQL``. psql sends the statements of a stdin
+    script one at a time, so the setting applies to the literals that follow.
+    """
 
     validate_client_database(plan.maintenance_database)
     for database in plan.databases:
@@ -227,7 +240,10 @@ def build_postgres_rotation_steps(
             )
         )
 
-    return tuple(steps)
+    return tuple(
+        replace(step, sql=f"{STANDARD_CONFORMING_STRINGS_SQL}\n{step.sql}")
+        for step in steps
+    )
 
 
 def build_postgres_psql_command(

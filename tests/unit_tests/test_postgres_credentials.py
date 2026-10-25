@@ -14,6 +14,7 @@ from repom.postgres.credentials import (
     PgAdminCredentialRotationPlan,
     PostgresCredentialRotationError,
     PostgresCredentialRotationPlan,
+    STANDARD_CONFORMING_STRINGS_SQL,
     SqlStep,
     build_pgadmin_update_password_command,
     build_postgres_psql_command,
@@ -29,6 +30,7 @@ from repom.postgres.credentials import (
     main_pgadmin,
     main_postgres,
 )
+from tests.pytest_helpers import read_standard_sql_literal
 
 
 def _configure_temp_secret_generation(monkeypatch, tmp_path):
@@ -132,6 +134,101 @@ def test_quote_literal_escapes_single_quotes():
     assert quote_literal("pa'ss") == "'pa''ss'"
 
 
+BACKSLASH_LITERALS = [
+    r"pa\ss",
+    r"pa\'ss",
+    "pa\\",
+    "\\'\\'",
+]
+
+
+def _literal_after(sql, marker):
+    start = sql.index(marker) + len(marker)
+    return read_standard_sql_literal(sql, start)
+
+
+@pytest.mark.parametrize("value", BACKSLASH_LITERALS)
+def test_quote_literal_leaves_backslashes_for_standard_conforming_strings(value):
+    quoted = quote_literal(value)
+
+    assert quoted == "'" + value.replace("'", "''") + "'"
+    assert read_standard_sql_literal(quoted, 0) == (value, len(quoted))
+
+
+@pytest.mark.parametrize("value", BACKSLASH_LITERALS)
+def test_postgres_rotation_sql_starts_with_standard_conforming_strings(
+    value, monkeypatch, tmp_path
+):
+    from repom.postgres import credentials, manage
+
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
+    monkeypatch.setattr(manage, "_validate_generation", lambda **kwargs: None)
+    monkeypatch.setattr(credentials, "_regenerate_compose_secrets", lambda: None)
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        new_user=value,
+        current_password="old-secret",
+        new_password=value,
+        databases=("app",),
+        schemas=("public",),
+        container_name="repom_postgres",
+    )
+    executed_sql = []
+
+    def fake_runner(command, **kwargs):
+        executed_sql.append(kwargs["input"])
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    rotate_postgres_credentials(plan, dry_run=False, runner=fake_runner)
+
+    assert executed_sql == [step.sql for step in build_postgres_rotation_steps(plan)]
+    assert len(executed_sql) > 1
+    for sql in executed_sql:
+        assert sql.startswith(f"{STANDARD_CONFORMING_STRINGS_SQL}\n")
+    role_sql = executed_sql[0]
+    assert _literal_after(role_sql, "rolname = ")[0] == value
+    for marker in ("LOGIN PASSWORD ", "WITH LOGIN PASSWORD "):
+        literal, end = _literal_after(role_sql, marker)
+        assert literal == value
+        assert role_sql[end] == ";"
+
+
+@pytest.mark.parametrize("value", BACKSLASH_LITERALS)
+def test_postgres_password_only_rotation_sql_starts_with_standard_conforming_strings(
+    value,
+):
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        new_password=value,
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    sql = build_postgres_rotation_steps(plan)[0].sql
+
+    assert sql.startswith(f"{STANDARD_CONFORMING_STRINGS_SQL}\n")
+    literal, end = _literal_after(sql, "WITH PASSWORD ")
+    assert literal == value
+    assert sql[end:] == ";"
+
+
+def test_postgres_rotation_dry_run_display_includes_standard_conforming_strings():
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="old-secret",
+        new_password="new-secret",
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    result = rotate_postgres_credentials(plan, dry_run=True)
+
+    assert result.masked_output == (
+        f"postgres: {STANDARD_CONFORMING_STRINGS_SQL}\n"
+        'ALTER ROLE "repom" WITH PASSWORD \'***\';',
+    )
+
+
 def test_password_only_postgres_plan_masks_password():
     plan = PostgresCredentialRotationPlan(
         current_user="repom",
@@ -198,7 +295,7 @@ def test_replacement_user_sql_uses_a_dollar_tag_absent_from_credentials():
     )
 
     sql = build_postgres_rotation_steps(plan)[0].sql
-    dollar_quote = sql.splitlines()[0].removeprefix("DO ")
+    dollar_quote = sql.splitlines()[1].removeprefix("DO ")
 
     assert dollar_quote != "$$"
     assert dollar_quote not in plan.new_password
@@ -284,7 +381,10 @@ def test_postgres_rotation_executes_structured_commands_through_env_file(
     assert command[5] == "repom_postgres"
     assert "old-secret" not in " ".join(command)
     assert "new-secret" not in " ".join(command)
-    assert kwargs["input"] == 'ALTER ROLE "repom" WITH PASSWORD \'new-secret\';'
+    assert kwargs["input"] == (
+        f"{STANDARD_CONFORMING_STRINGS_SQL}\n"
+        'ALTER ROLE "repom" WITH PASSWORD \'new-secret\';'
+    )
     assert kwargs["check"] is False
     assert kwargs["capture_output"] is True
     assert "env" not in kwargs
@@ -332,7 +432,7 @@ def test_postgres_grant_failure_leaves_credentials_and_env_untouched(
         executed_sql.append(sql)
         return subprocess.CompletedProcess(
             command,
-            1 if sql.startswith("GRANT ") else 0,
+            1 if sql.startswith(f"{STANDARD_CONFORMING_STRINGS_SQL}\nGRANT ") else 0,
             stdout="",
             stderr="grant failed",
         )

@@ -28,7 +28,12 @@ from repom.docker_compose_safety import (
     validate_secret_file_overwrite,
     write_secret_file,
 )
-from repom.postgres.credentials import mask_secret, quote_identifier, quote_literal
+from repom.postgres.credentials import (
+    STANDARD_CONFORMING_STRINGS_SQL,
+    mask_secret,
+    quote_identifier,
+    quote_literal,
+)
 from basekit.docker_compose import DockerVolume
 from basekit.docker_manager import DockerCommandExecutor, DockerManager
 from repom.docker_compose import RepomDockerComposeGenerator, RepomDockerService
@@ -292,7 +297,8 @@ def generate_init_sql(*, postgres_user: str | None = None) -> str:
     create_sql = "\n".join(create_lines)
     grant_sql = "\n".join(grant_lines)
 
-    return f"""-- Project databases
+    return f"""{STANDARD_CONFORMING_STRINGS_SQL}
+-- Project databases
 -- Use \\gexec pattern to handle "IF NOT EXISTS" (PostgreSQL doesn't have CREATE DATABASE IF NOT EXISTS)
 
 {create_sql}
