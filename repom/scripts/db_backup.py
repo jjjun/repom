@@ -160,7 +160,9 @@ def _backup_postgresql(container_name: str | None) -> None:
         # sslmode / sslrootcert を解決・検証する（db_url と同じロジックを共有）。
         # subprocess を起動する前に検証することで、prod での弱い sslmode を
         # プロセス起動前に拒否する。
-        env = build_host_pg_env(params.password, params.sslmode, params.sslrootcert)
+        env = build_host_pg_env(
+            params.password, params.sslmode, params.sslrootcert, params.tls_options
+        )
 
     # Ensure backup directory exists with restrictive permissions
     ensure_backup_dir(config.db_backup_path)

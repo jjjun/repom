@@ -44,6 +44,26 @@ UNSUPPORTED_CLIENT_QUERY_PARAMETERS = {
     "database",
     "user",
     "password",
+    # TLS and identity keys the client tools cannot carry safely: libpq would
+    # honor them in the URL while the child process silently ignored them.
+    # sslcert, sslkey, sslcrl, sslcrldir, channel_binding and
+    # ssl_min_protocol_version are forwarded instead (PgConnParams.tls_options).
+    "requiressl",
+    "gssencmode",
+    "options",
+    "sslsni",
+    "ssl_max_protocol_version",
+    "sslcertmode",
+    "sslnegotiation",
+    "sslcompression",
+    "sslpassword",
+    "require_auth",
+    "krbsrvname",
+    "gsslib",
+    "passfile",
+    "servicefile",
+    "target_session_attrs",
+    "load_balance_hosts",
 }
 
 
@@ -60,6 +80,20 @@ class PgConnParams:
     sslmode: str | None = None
     sslrootcert: str | None = None
     use_docker: bool = True
+    sslcert: str | None = None
+    sslkey: str | None = None
+    sslcrl: str | None = None
+    sslcrldir: str | None = None
+    channel_binding: str | None = None
+    ssl_min_protocol_version: str | None = None
+
+    def __post_init__(self) -> None:
+        for name, value in self.tls_options.items():
+            if any(char in value for char in "\0\r\n"):
+                raise ValueError(
+                    "PostgreSQL client tools reject a NUL byte or newline in the "
+                    f"URL query value for: {name}"
+                )
 
     def __repr__(self) -> str:
         password_display = "***" if self.password else "None"
@@ -68,8 +102,21 @@ class PgConnParams:
             f"user={self.user!r}, password={password_display}, "
             f"database={self.database!r}, container_name={self.container_name!r}, "
             f"sslmode={self.sslmode!r}, sslrootcert={self.sslrootcert!r}, "
-            f"use_docker={self.use_docker!r})"
+            f"use_docker={self.use_docker!r}, tls_options={self.tls_options!r})"
         )
+
+    @property
+    def tls_options(self) -> dict[str, str]:
+        """TLS options beyond sslmode / sslrootcert that host client tools receive."""
+        options = {
+            "sslcert": self.sslcert,
+            "sslkey": self.sslkey,
+            "sslcrl": self.sslcrl,
+            "sslcrldir": self.sslcrldir,
+            "channel_binding": self.channel_binding,
+            "ssl_min_protocol_version": self.ssl_min_protocol_version,
+        }
+        return {name: value for name, value in options.items() if value is not None}
 
     @classmethod
     def from_config(cls, config_obj: RepomConfig | None = None) -> "PgConnParams":
@@ -118,6 +165,12 @@ class PgConnParams:
                 sslmode=query_value("sslmode"),
                 sslrootcert=query_value("sslrootcert"),
                 use_docker=False,
+                sslcert=query_value("sslcert"),
+                sslkey=query_value("sslkey"),
+                sslcrl=query_value("sslcrl"),
+                sslcrldir=query_value("sslcrldir"),
+                channel_binding=query_value("channel_binding"),
+                ssl_min_protocol_version=query_value("ssl_min_protocol_version"),
             )
             validate_client_database(params.database)
             return params
@@ -269,7 +322,13 @@ def pg_tools_available(params: PgConnParams) -> bool:
 
 
 def _allow_docker(params: PgConnParams) -> bool:
-    return params.use_docker and _is_local_postgres_host(params.host)
+    # The container has no host environment, so TLS options that only reach the
+    # child through it force the host client tools instead of docker exec.
+    return (
+        params.use_docker
+        and not params.tls_options
+        and _is_local_postgres_host(params.host)
+    )
 
 
 def _pg_dump_custom_via_docker(params: PgConnParams, dump_file: BinaryIO) -> PgToolResult:
@@ -400,7 +459,9 @@ def _pg_restore_custom_via_host(params: PgConnParams, dump_path: Path) -> PgTool
 
 
 def _run_host_command(command: list[str], params: PgConnParams) -> subprocess.CompletedProcess:
-    env = build_host_pg_env(params.password, params.sslmode, params.sslrootcert)
+    env = build_host_pg_env(
+        params.password, params.sslmode, params.sslrootcert, params.tls_options
+    )
 
     try:
         return subprocess.run(

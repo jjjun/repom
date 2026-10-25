@@ -329,8 +329,62 @@ def test_postgres_restore_override_uses_url_host_and_credentials(monkeypatch, tm
     assert child_env["PGSSLROOTCERT"] == "/tmp/url-ca.pem"
 
 
+def test_postgres_restore_override_forwards_tls_options_to_host_psql(
+    monkeypatch, tmp_path
+):
+    from repom.config import RepomConfig
+
+    backup_file = _make_backup_file(tmp_path, name="url_db_20260101_000000.sql.gz")
+    config = RepomConfig()
+    config.db_url = (
+        "postgresql://url_user:url_password@db.example.internal:5544/url_db"
+        "?sslmode=verify-full&sslcert=%2Ftmp%2Fc.crt&sslkey=%2Ftmp%2Fc.key"
+        "&sslcrl=%2Ftmp%2Fc.crl&sslcrldir=%2Ftmp%2Fcrls"
+        "&channel_binding=require&ssl_min_protocol_version=TLSv1.3"
+    )
+    monkeypatch.setattr(db_restore, "config", config)
+    monkeypatch.setattr(
+        db_restore,
+        "build_pg_client_command",
+        lambda tool, **kwargs: fake_client_command(),
+    )
+    monkeypatch.setattr(
+        _backup_utils,
+        "is_container_running",
+        MagicMock(side_effect=AssertionError("Docker must not be probed")),
+    )
+    env_sink = tmp_path / "child-env.txt"
+    monkeypatch.setenv("PGSSLKEY", "/inherited/client.key")
+    monkeypatch.setenv("PGOPTIONS", "-c inherited=1")
+    monkeypatch.setenv("FAKE_CHILD_ECHO_ENV_SINK", str(env_sink))
+    monkeypatch.setenv(
+        "FAKE_CHILD_ECHO_ENV_KEYS",
+        "PGSSLCERT,PGSSLKEY,PGSSLCRL,PGSSLCRLDIR,PGCHANNELBINDING,"
+        "PGSSLMINPROTOCOLVERSION,PGOPTIONS",
+    )
+
+    db_restore.restore_postgresql(backup_file)
+
+    child_env = _read_echoed_env(env_sink)
+    assert child_env["PGSSLCERT"] == "/tmp/c.crt"
+    assert child_env["PGSSLKEY"] == "/tmp/c.key"
+    assert child_env["PGSSLCRL"] == "/tmp/c.crl"
+    assert child_env["PGSSLCRLDIR"] == "/tmp/crls"
+    assert child_env["PGCHANNELBINDING"] == "require"
+    assert child_env["PGSSLMINPROTOCOLVERSION"] == "TLSv1.3"
+    assert child_env["PGOPTIONS"] == "-c inherited=1"
+
+
 @pytest.mark.parametrize(
-    "query", ["port=6543", "dbname=other_database", "user=other_user"]
+    "query",
+    [
+        "port=6543",
+        "dbname=other_database",
+        "user=other_user",
+        "requiressl=1",
+        "sslsni=0",
+        "ssl_max_protocol_version=TLSv1.2",
+    ],
 )
 def test_postgres_restore_rejects_url_identity_overrides_before_execution(
     monkeypatch, tmp_path, query, caplog

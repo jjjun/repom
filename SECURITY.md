@@ -254,7 +254,20 @@ Unless a difference is stated below, these contracts apply to both
   regardless of the PostgreSQL URL driver name. Put those identity values in
   the URL authority/path where represented, or use an explicit client-tool
   configuration for other destination selectors;
-  `sslmode` and `sslrootcert` remain supported query options. Rejection occurs
+  `sslmode` and `sslrootcert` remain supported query options. `sslcert`,
+  `sslkey`, `sslcrl`, `sslcrldir`, `channel_binding`, and
+  `ssl_min_protocol_version` are forwarded to host client tools as `PGSSLCERT`,
+  `PGSSLKEY`, `PGSSLCRL`, `PGSSLCRLDIR`, `PGCHANNELBINDING`, and
+  `PGSSLMINPROTOCOLVERSION`; an inherited value is overwritten only when the URL
+  supplies the key, and a value containing a NUL byte or newline is rejected.
+  The `docker exec` path has no host environment, so forwarded options select
+  the host client tools instead of the container and no certificate path enters
+  the container. `requiressl`, `gssencmode`, `options`, `sslsni`,
+  `ssl_max_protocol_version`, `sslcertmode`, `sslnegotiation`, `sslcompression`,
+  `sslpassword`, `require_auth`, `krbsrvname`, `gsslib`, `passfile`,
+  `servicefile`, `target_session_attrs`, and `load_balance_hosts` are rejected
+  like the destination keys, naming the key and never the value. Query keys
+  outside these lists are neither forwarded nor rejected. Rejection occurs
   before backup/restore Docker probes or client processes. The configured
   local-host path may target the managed container through `docker exec`;
   configured remote hosts use host client tools. Client-tool database names,

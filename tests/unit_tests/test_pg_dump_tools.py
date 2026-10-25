@@ -133,6 +133,184 @@ def test_pg_conn_params_rejects_url_connection_query_overrides(
 
 
 @pytest.mark.parametrize(
+    "rejected_key",
+    [
+        "requiressl",
+        "gssencmode",
+        "options",
+        "sslsni",
+        "ssl_max_protocol_version",
+        "sslcertmode",
+        "sslnegotiation",
+        "sslcompression",
+        "sslpassword",
+        "require_auth",
+        "krbsrvname",
+        "gsslib",
+        "passfile",
+        "servicefile",
+        "target_session_attrs",
+        "load_balance_hosts",
+    ],
+)
+def test_pg_conn_params_rejects_unforwarded_tls_and_identity_keys(rejected_key):
+    config = RepomConfig()
+    config.db_url = (
+        "postgresql://url_user:url-secret-password@db.example.internal/url_db"
+        f"?sslmode=verify-full&{rejected_key}=query-secret-value"
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        PgConnParams.from_config(config)
+
+    assert str(exc_info.value) == (
+        "PostgreSQL client tools do not support URL query overrides for: "
+        f"{rejected_key}"
+    )
+    assert "query-secret-value" not in str(exc_info.value)
+    assert "url-secret-password" not in str(exc_info.value)
+
+
+def test_pg_conn_params_names_every_rejected_key_without_values():
+    config = RepomConfig()
+    config.db_url = (
+        "postgresql://url_user:url_password@db.example.internal/url_db"
+        "?requiressl=1&sslcert=%2Ftmp%2Fc.pem&options=-c%20secret-option"
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        PgConnParams.from_config(config)
+
+    assert str(exc_info.value).endswith(": options, requiressl")
+    assert "secret-option" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("query_key", "env_name"),
+    [
+        ("sslcert", "PGSSLCERT"),
+        ("sslkey", "PGSSLKEY"),
+        ("sslcrl", "PGSSLCRL"),
+        ("sslcrldir", "PGSSLCRLDIR"),
+        ("channel_binding", "PGCHANNELBINDING"),
+        ("ssl_min_protocol_version", "PGSSLMINPROTOCOLVERSION"),
+    ],
+)
+def test_pg_conn_params_forwards_identity_strengthening_keys_to_host_env(
+    monkeypatch, tmp_path: Path, query_key, env_name
+):
+    config = RepomConfig()
+    config.db_url = (
+        "postgresql://url_user:url_password@db.example.internal/url_db"
+        f"?sslmode=verify-full&{query_key}=%2Ftmp%2Fvalue"
+    )
+    params = PgConnParams.from_config(config)
+    dump_path = tmp_path / "db.dump"
+    run_calls = []
+
+    assert params.tls_options == {query_key: "/tmp/value"}
+    assert params.use_docker is False
+
+    monkeypatch.setattr(
+        _backup_utils,
+        "is_container_running",
+        MagicMock(side_effect=AssertionError("Docker must not be probed")),
+    )
+
+    def fake_run(command, **kwargs):
+        run_calls.append((command, kwargs))
+        if command == ["pg_dump", "--version"]:
+            return subprocess.CompletedProcess(command, 0, "pg_dump (PostgreSQL) 16.3\n", "")
+        Path(command[-1]).write_bytes(b"CUSTOM-DUMP")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(pg_dump_tools.subprocess, "run", fake_run)
+
+    pg_dump_custom(params, dump_path)
+
+    command, kwargs = run_calls[-1]
+    assert kwargs["env"][env_name] == "/tmp/value"
+    assert kwargs["env"]["PGSSLMODE"] == "verify-full"
+    assert "/tmp/value" not in command
+
+
+def test_pg_conn_params_forwards_all_identity_strengthening_keys_with_last_value_winning():
+    config = RepomConfig()
+    config.db_url = (
+        "postgresql://url_user:url_password@db.example.internal/url_db"
+        "?sslcert=%2Ftmp%2Fold.crt&sslcert=%2Ftmp%2Fc.crt&sslkey=%2Ftmp%2Fc.key"
+        "&sslcrl=%2Ftmp%2Fc.crl&sslcrldir=%2Ftmp%2Fcrls"
+        "&channel_binding=require&ssl_min_protocol_version=TLSv1.3"
+    )
+
+    params = PgConnParams.from_config(config)
+
+    assert params.tls_options == {
+        "sslcert": "/tmp/c.crt",
+        "sslkey": "/tmp/c.key",
+        "sslcrl": "/tmp/c.crl",
+        "sslcrldir": "/tmp/crls",
+        "channel_binding": "require",
+        "ssl_min_protocol_version": "TLSv1.3",
+    }
+
+
+def test_pg_conn_params_without_forwarded_keys_has_no_tls_options():
+    config = RepomConfig()
+    config.db_url = (
+        "postgresql://url_user:url_password@db.example.internal/url_db"
+        "?sslmode=verify-full&sslrootcert=%2Ftmp%2Fca.pem"
+    )
+
+    assert PgConnParams.from_config(config).tls_options == {}
+
+
+@pytest.mark.parametrize("encoded", ["%00", "%0A", "%0D"])
+def test_pg_conn_params_rejects_nul_and_newline_in_forwarded_values(encoded):
+    config = RepomConfig()
+    config.db_url = (
+        "postgresql://url_user:url-secret-password@db.example.internal/url_db"
+        f"?sslcert=%2Ftmp%2Fc{encoded}secret-tail.pem"
+    )
+
+    with pytest.raises(ValueError, match="sslcert") as exc_info:
+        PgConnParams.from_config(config)
+
+    assert "secret-tail" not in str(exc_info.value)
+    assert "url-secret-password" not in str(exc_info.value)
+
+
+def test_pg_conn_params_rejects_nul_in_directly_constructed_tls_option():
+    with pytest.raises(ValueError, match="channel_binding") as exc_info:
+        PgConnParams(
+            host="localhost",
+            port=5432,
+            user="user",
+            password="secret",
+            database="mine_py",
+            channel_binding="require\0secret-tail",
+        )
+
+    assert "secret-tail" not in str(exc_info.value)
+
+
+def test_pg_conn_params_repr_includes_forwarded_tls_options_without_secrets():
+    params = PgConnParams(
+        host="localhost",
+        port=5432,
+        user="user",
+        password="secret",
+        database="mine_py",
+        sslkey="/etc/ssl/private/client.key",
+    )
+
+    text = repr(params)
+
+    assert "tls_options={'sslkey': '/etc/ssl/private/client.key'}" in text
+    assert "secret" not in text
+
+
+@pytest.mark.parametrize(
     ("driver", "query", "argument", "query_value"),
     [
         ("psycopg", "port=6543", "port", "6543"),
@@ -899,6 +1077,115 @@ def test_pg_dump_custom_via_host_leaves_inherited_sslmode_untouched_without_tls_
     command, kwargs = run_calls[-1]
     assert kwargs["env"]["PGSSLMODE"] == "disable"
     assert "PGSSLROOTCERT" not in kwargs["env"]
+
+
+def test_pg_dump_custom_via_host_overwrites_inherited_tls_option_only_when_supplied(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.setenv("PGSSLCERT", "/inherited/client.crt")
+    monkeypatch.setenv("PGSSLKEY", "/inherited/client.key")
+    params = PgConnParams(
+        host="db.example.internal",
+        port=5432,
+        user="user",
+        password="secret",
+        database="mine_py",
+        use_docker=False,
+        sslcert="/url/client.crt",
+    )
+    run_calls = []
+
+    def fake_run(command, **kwargs):
+        run_calls.append((command, kwargs))
+        if command == ["pg_dump", "--version"]:
+            return subprocess.CompletedProcess(command, 0, "pg_dump (PostgreSQL) 16.3\n", "")
+        Path(command[-1]).write_bytes(b"CUSTOM-DUMP")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(pg_dump_tools.subprocess, "run", fake_run)
+
+    pg_dump_custom(params, tmp_path / "db.dump")
+
+    _, kwargs = run_calls[-1]
+    assert kwargs["env"]["PGSSLCERT"] == "/url/client.crt"
+    assert kwargs["env"]["PGSSLKEY"] == "/inherited/client.key"
+
+
+@pytest.mark.parametrize("operation", ["dump", "restore"])
+def test_tls_options_use_host_tools_even_when_the_container_is_running(
+    monkeypatch, tmp_path: Path, operation
+):
+    """A directly constructed PgConnParams for the local host would normally use
+    docker exec; the container has no host environment, so TLS options force the
+    host client tools without a Docker probe."""
+    params = PgConnParams(
+        host="localhost",
+        port=5435,
+        user="user",
+        password="secret",
+        database="mine_py",
+        container_name="managed-postgres",
+        sslcrl="/etc/ssl/client.crl",
+    )
+    run_calls = []
+
+    monkeypatch.setattr(
+        _backup_utils,
+        "is_container_running",
+        MagicMock(side_effect=AssertionError("Docker must not be probed")),
+    )
+    monkeypatch.setattr(
+        pg_dump_tools,
+        "is_container_running",
+        MagicMock(side_effect=AssertionError("Docker must not be probed")),
+    )
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "exec_command",
+        MagicMock(side_effect=AssertionError("docker exec must not be used")),
+    )
+
+    def fake_run(command, **kwargs):
+        run_calls.append((command, kwargs))
+        if command[1:] == ["--version"]:
+            return subprocess.CompletedProcess(command, 0, "tool (PostgreSQL) 16.3\n", "")
+        if operation == "dump":
+            Path(command[-1]).write_bytes(b"CUSTOM-DUMP")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(pg_dump_tools.subprocess, "run", fake_run)
+
+    if operation == "dump":
+        result = pg_dump_custom(params, tmp_path / "db.dump")
+    else:
+        dump_path = tmp_path / "db.dump"
+        dump_path.write_bytes(b"CUSTOM-DUMP")
+        result = pg_restore_custom(params, dump_path)
+
+    assert result.returncode == 0
+    assert result.used_docker is False
+    _, kwargs = run_calls[-1]
+    assert kwargs["env"]["PGSSLCRL"] == "/etc/ssl/client.crl"
+
+
+def test_pg_tools_available_skips_docker_probe_when_tls_options_are_set(monkeypatch):
+    params = PgConnParams(
+        host="localhost",
+        port=5435,
+        user="user",
+        password="secret",
+        database="mine_py",
+        container_name="managed-postgres",
+        channel_binding="require",
+    )
+    monkeypatch.setattr(
+        pg_dump_tools,
+        "is_container_running",
+        MagicMock(side_effect=AssertionError("Docker must not be probed")),
+    )
+    monkeypatch.setattr(pg_dump_tools.shutil, "which", lambda name: None)
+
+    assert pg_tools_available(params) is False
 
 
 class TestPgConnParamsFromConfig:

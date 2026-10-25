@@ -60,6 +60,31 @@ def test_build_host_pg_env_drops_inherited_destination_overrides(monkeypatch):
     assert env["PGSSLMODE"] == "require"
 
 
+def test_build_host_pg_env_maps_tls_options_to_libpq_variables(monkeypatch):
+    monkeypatch.setenv("PGSSLCRL", "/inherited/client.crl")
+    monkeypatch.setenv("PGOPTIONS", "-c inherited=1")
+
+    env = _backup_utils.build_host_pg_env(
+        "synthetic-password",
+        tls_options={
+            "sslcert": "/c/client.crt",
+            "sslkey": "/c/client.key",
+            "sslcrldir": "/c/crls",
+            "channel_binding": "require",
+            "ssl_min_protocol_version": "TLSv1.3",
+        },
+    )
+
+    assert env["PGSSLCERT"] == "/c/client.crt"
+    assert env["PGSSLKEY"] == "/c/client.key"
+    assert env["PGSSLCRLDIR"] == "/c/crls"
+    assert env["PGCHANNELBINDING"] == "require"
+    assert env["PGSSLMINPROTOCOLVERSION"] == "TLSv1.3"
+    # Only the variables named in tls_options are touched.
+    assert env["PGSSLCRL"] == "/inherited/client.crl"
+    assert env["PGOPTIONS"] == "-c inherited=1"
+
+
 def test_rotate_backups_keeps_newest_by_mtime(tmp_path):
     old = tmp_path / "db_20260101_000000.sql.gz"
     middle = tmp_path / "db_20260102_000000.sql.gz"

@@ -34,6 +34,21 @@
   trust store instead of raising `FileNotFoundError`.
 - BREAKING: Host PostgreSQL client tools no longer inherit `PGHOSTADDR` or `PGSERVICE`
   from the parent environment.
+- BREAKING: For a URL-overridden PostgreSQL target, `PgConnParams.from_config()` now
+  rejects the URL query keys `requiressl`, `gssencmode`, `options`, `sslsni`,
+  `ssl_max_protocol_version`, `sslcertmode`, `sslnegotiation`, `sslcompression`,
+  `sslpassword`, `require_auth`, `krbsrvname`, `gsslib`, `passfile`, `servicefile`,
+  `target_session_attrs`, and `load_balance_hosts` with `ValueError` (naming the key,
+  never the value) before any Docker probe or client process, so `db_backup`,
+  `db_restore`, and `pg_dump_custom()` / `pg_restore_custom()` no longer silently drop
+  them. `sslcert`, `sslkey`, `sslcrl`, `sslcrldir`, `channel_binding`, and
+  `ssl_min_protocol_version` are forwarded to the host client tools as `PGSSLCERT`,
+  `PGSSLKEY`, `PGSSLCRL`, `PGSSLCRLDIR`, `PGCHANNELBINDING`, and
+  `PGSSLMINPROTOCOLVERSION` (an inherited value is overwritten only when the URL
+  supplies the key; a value with a NUL byte or newline is rejected). `PgConnParams`
+  gains the matching fields and a `tls_options` property, and
+  `build_host_pg_env()` accepts `tls_options`. Forwarded options always select host
+  client tools instead of `docker exec`.
 - BREAKING: The shared PostgreSQL engine resolver now rejects `connect_args` keys
   outside the libpq, psycopg, and asyncpg-adapter keywords with `ValueError` in every
   `EXEC_ENV`. psycopg `conninfo` and libpq `requiressl` can no longer carry a

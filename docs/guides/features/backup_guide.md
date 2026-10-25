@@ -60,7 +60,15 @@ URL クエリに `host`、`hostaddr`、`service`、`dsn`、`port`、`dbname`、`
 `password` が含まれる PostgreSQL URL は、URL driver 名によらず `PgConnParams.from_config()` が
 `ValueError` で拒否します。URL authority/path で表せる接続先と認証情報はそこに置き、`hostaddr`、
 `service`、`dsn` を使う場合は明示的な client-tool 設定を選んでください。`sslmode` と
-`sslrootcert` は引き続き query で指定できます。
+`sslrootcert` は引き続き query で指定できます。`sslcert`、`sslkey`、`sslcrl`、`sslcrldir`、
+`channel_binding`、`ssl_min_protocol_version` も host 上の client tool へ
+`PGSSLCERT`、`PGSSLKEY`、`PGSSLCRL`、`PGSSLCRLDIR`、`PGCHANNELBINDING`、
+`PGSSLMINPROTOCOLVERSION` として渡され（URL に指定したキーだけが継承された環境変数を上書きします）、
+値に NUL バイトまたは改行を含む場合は拒否されます。これらのキーがあると `docker exec` ではなく
+host 上の client tool を使います。`requiressl`、`gssencmode`、`options`、`sslsni`、
+`ssl_max_protocol_version`、`sslcertmode`、`sslnegotiation`、`sslcompression`、`sslpassword`、
+`require_auth`、`krbsrvname`、`gsslib`、`passfile`、`servicefile`、`target_session_attrs`、
+`load_balance_hosts` は client tool に渡せないため、キー名だけを示して `ValueError` で拒否します。
 SQLite では `config.db_url` が示すファイルをバックアップ／リストア対象にします。相対パスは
 SQLAlchemy と同じくプロセスの作業ディレクトリを基準に解決されるため、異なる作業ディレクトリ
 から実行しても同じ DB を参照できるよう、絶対パスを推奨します。インメモリ SQLite と
