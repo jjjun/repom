@@ -251,7 +251,8 @@ Unless a difference is stated below, these contracts apply to both
   `sslmode` and `sslrootcert` remain supported query options. Rejection occurs
   before backup/restore Docker probes or client processes. The configured
   local-host path may target the managed container through `docker exec`;
-  configured remote hosts use host client tools. Client-tool database names
+  configured remote hosts use host client tools. Client-tool database names,
+  including PostgreSQL credential rotation's databases and maintenance database,
   must not use libpq connection-string syntax. `database_info`
   reports configured `postgres_db` even when a URL override selects another
   database. In `prod`, destination resolution includes `PGHOST` and
@@ -486,7 +487,8 @@ Unless a difference is stated below, these contracts apply to both
   Compose service environment, not a password CLI flag. Docker exposes service
   environment values through `docker inspect`. Some `docker exec` paths pass a
   configured container name without rejecting a leading `-`. Client-tool
-  database arguments reject libpq connection-string and URI forms, but argv
+  database arguments, including those of PostgreSQL rotation in dry-run and
+  execute modes, reject libpq connection-string and URI forms, but argv
   lists alone do not prevent option parsing by the invoked program.
 - The packaged `repom/postgres/docker-compose.template.yml` and
   `repom/redis/docker-compose.template.yml` files are not read by the runtime

@@ -15,6 +15,7 @@ from repom.credentials import (
     run_masked_command,
     secret_env_file,
 )
+from repom.scripts._backup_utils import validate_client_database
 
 
 class PostgresCredentialRotationError(RuntimeError):
@@ -136,6 +137,10 @@ def build_postgres_rotation_steps(
 ) -> tuple[SqlStep, ...]:
     """Build the SQL steps for a PostgreSQL rotation plan."""
 
+    validate_client_database(plan.maintenance_database)
+    for database in plan.databases:
+        validate_client_database(database)
+
     target_user = plan.new_user or plan.current_user
     steps: list[SqlStep] = []
 
@@ -236,8 +241,11 @@ def build_postgres_psql_command(
     supplied it is passed to ``docker exec --env-file``, so the container
     reads PGPASSWORD from that file's contents instead of the value
     appearing as a docker exec argument or on the host process environment.
+    ``step.database`` must be a plain database name so psql cannot parse it as
+    a libpq connection string or URI.
     """
 
+    validate_client_database(step.database)
     container_name = plan.container_name or config.postgres.container.get_container_name()
     command = ["docker", "exec", "-i"]
     if env_file:
@@ -246,6 +254,7 @@ def build_postgres_psql_command(
         [
             container_name,
             "psql",
+            "--no-psqlrc",
             "-v",
             "ON_ERROR_STOP=1",
             "-U",

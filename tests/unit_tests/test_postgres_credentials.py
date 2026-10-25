@@ -14,7 +14,9 @@ from repom.postgres.credentials import (
     PgAdminCredentialRotationPlan,
     PostgresCredentialRotationError,
     PostgresCredentialRotationPlan,
+    SqlStep,
     build_pgadmin_update_password_command,
+    build_postgres_psql_command,
     build_postgres_rotation_steps,
     build_pgadmin_volume_recreation_commands,
     quote_identifier,
@@ -609,6 +611,104 @@ def test_postgres_dry_run_omits_env_file_without_current_password():
     result = rotate_postgres_credentials(plan, dry_run=True)
 
     assert "--env-file" not in result.commands[0]
+
+
+def test_postgres_psql_command_skips_psqlrc():
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        new_password="new-secret",
+        container_name="repom_postgres",
+    )
+
+    command = build_postgres_psql_command(plan, SqlStep(database="repom", sql="SELECT 1;"))
+
+    assert command == (
+        "docker",
+        "exec",
+        "-i",
+        "repom_postgres",
+        "psql",
+        "--no-psqlrc",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-U",
+        "repom",
+        "-d",
+        "repom",
+    )
+
+
+@pytest.mark.parametrize(
+    "database",
+    [
+        "host=10.0.0.9 dbname=postgres",
+        "dbname=postgres",
+        "postgresql://10.0.0.9/postgres",
+        "POSTGRES://10.0.0.9/postgres",
+        "",
+    ],
+)
+@pytest.mark.parametrize("dry_run", [True, False])
+@pytest.mark.parametrize("field", ["databases", "maintenance_database"])
+def test_postgres_rotation_rejects_non_plain_database_before_any_command(
+    field, dry_run, database, monkeypatch, tmp_path
+):
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
+    runner = MagicMock()
+    options = {"databases": (database,)} if field == "databases" else {
+        "databases": (),
+        "maintenance_database": database,
+    }
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="old-secret",
+        new_password="new-secret",
+        container_name="repom_postgres",
+        **options,
+    )
+
+    with pytest.raises(ValueError, match="plain database name"):
+        rotate_postgres_credentials(plan, dry_run=dry_run, runner=runner)
+
+    runner.assert_not_called()
+
+
+@pytest.mark.parametrize("database", ["host=10.0.0.9 dbname=postgres", "postgresql://h/db"])
+def test_postgres_psql_command_rejects_non_plain_step_database(database):
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        new_password="new-secret",
+        container_name="repom_postgres",
+    )
+
+    with pytest.raises(ValueError, match="plain database name"):
+        build_postgres_psql_command(plan, SqlStep(database=database, sql="SELECT 1;"))
+
+
+def test_postgres_rotation_accepts_plain_database_names(monkeypatch, tmp_path):
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
+    runner = MagicMock()
+    runner.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="old-secret",
+        new_password="new-secret",
+        databases=("repom", "my-app.db"),
+        schemas=("public",),
+        container_name="repom_postgres",
+        maintenance_database="postgres",
+    )
+
+    dry_result = rotate_postgres_credentials(plan, dry_run=True)
+    rotate_postgres_credentials(plan, dry_run=False, runner=runner)
+
+    assert dry_result.commands[0][-2:] == ("-d", "postgres")
+    assert {command[-1] for command in dry_result.commands} == {
+        "postgres",
+        "repom",
+        "my-app.db",
+    }
+    assert runner.call_count == len(dry_result.commands)
 
 
 def test_pgadmin_update_password_command_uses_setup_py():

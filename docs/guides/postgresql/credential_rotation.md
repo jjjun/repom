@@ -42,6 +42,10 @@ password を変更します。grant が失敗したときは現在の login 認�
 `--database` は複数指定できます。既定では `db_name`、`db_name_dev`、`db_name_test` を対象とします。
 `--schema` も複数指定でき、既定値は `public` です。
 
+`--database` と `maintenance_database` には通常のデータベース名だけを指定できます。
+`host=... dbname=...` のような libpq 接続文字列や `postgresql://` URI は、dry-run と実行の
+どちらでも command を作る前に `ValueError` で拒否されます。
+
 application role 自体を置き換える場合は次のように指定します。
 
 ```bash
@@ -57,7 +61,9 @@ printf '%s\n%s\n' 'new-password' 'old-password' | uv run postgres_rotate_credent
 ```
 
 replacement-user path は新しい role を作成または更新し、DB、schema、table、sequence、将来の default
-privilege を付与します。古い role は削除しません。成功すると compose secret を再生成する前に
+privilege を付与します。古い role は削除せず、その password も変更しないため、古い password は
+有効なままで、`.env.bak` に残る以前の `.env` にも含まれます。不要になった古い role は
+別途 `ALTER ROLE ... NOLOGIN` などで無効化してください。成功すると compose secret を再生成する前に
 PostgreSQL の user と password の設定を両方更新します。
 
 ## pgAdmin

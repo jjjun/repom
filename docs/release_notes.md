@@ -212,6 +212,10 @@
 - Database URLs shown in logs and diagnostics mask PostgreSQL `sslpassword`, OAuth client
   secrets, SCRAM keys, and the existing password query parameters, including repeated,
   case-variant, and percent-encoded parameter names.
+- PostgreSQL credential rotation now rejects libpq connection-string and URI
+  database names in `databases` / `--database` and `maintenance_database` with
+  `ValueError` before any command is built, in dry-run and execute modes, matching
+  backup and restore. Its `psql` invocation now passes `--no-psqlrc`.
 
 ### Added
 
