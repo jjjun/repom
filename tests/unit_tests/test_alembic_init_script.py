@@ -7,6 +7,8 @@ instead of falling back to AlembicSetup's built-in defaults.
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from repom.alembic import AlembicTemplates
 from repom.scripts import alembic_init
 
@@ -69,3 +71,25 @@ def test_alembic_init_uses_configured_ini_options(monkeypatch, tmp_path):
     assert "version_table = alembic_version_mine" in ini_content
     assert "version_table_schema = migration" in ini_content
     assert (tmp_path / "migrations" / "__init__.py").exists()
+
+
+@pytest.mark.parametrize("version_locations", [".", "%(here)s"])
+def test_alembic_init_refuses_ini_version_locations_in_project_dir(
+    monkeypatch, tmp_path, capsys, version_locations
+):
+    """repom#274: an existing alembic.ini whose version_locations resolves to
+    the project directory is reported like alembic_reset does, not normalized.
+    """
+    (tmp_path / "alembic.ini").write_text(AlembicTemplates.generate_alembic_ini(
+        script_location="alembic",
+        version_locations=version_locations,
+    ))
+    monkeypatch.setattr(alembic_init, "config", _mock_config(str(tmp_path)))
+
+    with pytest.raises(SystemExit) as exc_info:
+        alembic_init.main()
+
+    assert exc_info.value.code == 1
+    assert "resolves to the project directory" in capsys.readouterr().out
+    assert not (tmp_path / "alembic").exists()
+    assert not (tmp_path / "__init__.py").exists()

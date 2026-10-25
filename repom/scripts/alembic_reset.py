@@ -10,6 +10,7 @@ from pathlib import Path
 from repom.alembic.setup import AlembicSetup
 from repom.config import config
 from repom.database import safe_db_url
+from repom.exceptions import UnsafeVersionsDirectoryError
 from repom.logging import ensure_logging_configured
 from repom.scripts._destructive import confirm_destructive_operation
 
@@ -43,7 +44,11 @@ def _resolve_alembic_reset(
 
 
 def describe_alembic_reset(config_path: str | Path | None = None) -> str:
-    """Return reset targets, raising FileNotFoundError if the ini is missing."""
+    """Return reset targets.
+
+    Raises FileNotFoundError if the ini is missing and
+    UnsafeVersionsDirectoryError if it names the project directory.
+    """
     _, target = _resolve_alembic_reset(config_path)
     return target
 
@@ -51,7 +56,11 @@ def describe_alembic_reset(config_path: str | Path | None = None) -> str:
 def reset_alembic_migrations(
     *, config_path: str | Path | None = None, yes: bool = False
 ) -> None:
-    """Confirm and reset an ini, raising FileNotFoundError if it is missing."""
+    """Confirm and reset an ini.
+
+    Raises FileNotFoundError if the ini is missing and
+    UnsafeVersionsDirectoryError if a versions directory is refused.
+    """
     setup, target = _resolve_alembic_reset(config_path)
     confirm_destructive_operation(
         operation="reset Alembic migrations",
@@ -83,7 +92,7 @@ def main(argv: list[str] | None = None):
     args = parser.parse_args(argv)
     try:
         reset_alembic_migrations(config_path=args.config, yes=args.yes)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, UnsafeVersionsDirectoryError) as exc:
         print(exc)
         raise SystemExit(1) from None
 

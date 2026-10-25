@@ -65,6 +65,19 @@ setup.create_version_directory()
 
 `version_locations` は利用側プロジェクトの revision 保存先として明示してください。省略すると Alembic は共有環境内の `versions` を使います。
 
+`%(here)s` を使わない相対パスは、repom（`alembic_reset` / `alembic_init`）では
+`alembic.ini` のあるディレクトリを基準に解決しますが、Alembic 本体
+（`alembic revision` / `alembic upgrade`）ではカレントディレクトリを基準に解決します。
+実行場所が `alembic.ini` と異なると両者が別のディレクトリを指すため、
+`%(here)s/alembic/versions` のように `%(here)s` を使ってください（生成される
+`alembic.ini` は `%(here)s` を使います）。
+
+`AlembicSetup` の constructor は `version_locations` 全体を 1 つのパスとして扱い、
+複数項目の分割は行いません。`alembic.ini` がまだない状態で
+`config.alembic_version_locations` に区切り文字入りの値を設定すると、`alembic_init` は
+その文字列全体を名前とするディレクトリを作成します。複数の `version_locations` は
+`alembic.ini` に直接記述し、`alembic_init` に読み込ませてください。
+
 既存の `alembic.ini` を上書きするには、`AlembicSetup(...)` の constructor ではなく
 `setup.create_alembic_ini(overwrite=True)` を呼び出します（デフォルト: `False`）。
 
@@ -111,8 +124,9 @@ def get_repom_config(config):
 実行前の対象表示には `describe_alembic_reset(config_path=...)` を使います。
 この説明文字列は CLI の確認表示と同じデータベース、version table、
 version directories を示します。`reset_alembic_migrations()` と
-`describe_alembic_reset()` は ini が見つからない場合に `FileNotFoundError` を送出します。
-CLI の `main()` だけがこの例外を表示して終了コード 1 に変換します。
+`describe_alembic_reset()` は ini が見つからない場合に `FileNotFoundError` を、
+削除対象の検証に失敗した場合に `UnsafeVersionsDirectoryError` を送出します。
+CLI の `main()` だけがこれらの例外を表示して終了コード 1 に変換します。
 
 ### マイグレーションのリセット
 
@@ -163,6 +177,19 @@ production 拒否も確認も行いません。直接呼び出す場合、これ
 production 環境での拒否、確認で `y` 以外を入力した場合、または非 TTY で `yes=True` を
 指定しなかった場合、wrapper は戻らず `SystemExit(1)` を送出します。処理を継続する必要がある
 Python 呼び出し元は `SystemExit` を捕捉してください。
+
+**削除対象ディレクトリの検証**: `alembic.ini` の `version_locations` で空白のみの項目は
+無視されます。`AlembicSetup.from_ini()` は、項目が `alembic.ini` のあるディレクトリまたは
+`config.root_path` と一致する場合（`.` など）に `UnsafeVersionsDirectoryError` を送出します。
+`AlembicReset.delete_migration_files()` は、これらに加えて `AlembicSetup.project_root` と
+カレントディレクトリに一致する場合と、versions ディレクトリがシンボリックリンクまたは
+ジャンクションの場合にも同じ例外を送出し、何も削除しません。`__pycache__` がリンクの場合は
+削除せずにスキップします。`AlembicSetup.reset_migrations()` は version table を削除する前に
+すべての versions ディレクトリを検証するため、拒否された場合に部分的なリセットは残りません。
+`alembic_reset` CLI は拒否の理由を表示して終了コード 1 で終了します。既存の `alembic.ini` を
+読む `alembic_init` CLI も同じ拒否を報告して終了コード 1 で終了し、versions ディレクトリを作成しません。意図してプロジェクト直下を
+versions ディレクトリにする場合に限り、`AlembicSetup.from_ini(..., allow_project_root=True)`
+または `AlembicSetup(..., allow_project_root=True)` を使えます（リンクの拒否は解除されません）。
 
 ---
 

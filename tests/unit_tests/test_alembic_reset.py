@@ -1,11 +1,15 @@
 """Unit tests for Alembic migration reset functionality."""
 
+import os
+import subprocess
 from unittest.mock import MagicMock, patch
 
+import pytest
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.dialects import postgresql
 
 from repom.alembic import AlembicReset
+from repom.exceptions import UnsafeVersionsDirectoryError
 import repom.alembic.reset as reset_module
 
 
@@ -180,3 +184,143 @@ def test_delete_migration_files_accepts_override_directory(tmp_path):
 
     assert not (other_dir / "0001_other.py").exists()
     assert (other_dir / "__init__.py").exists()
+
+
+def _link_or_skip(link, target):
+    """Create a directory symlink, or a junction on Windows without the
+    symlink privilege; skip when neither is available."""
+    try:
+        link.symlink_to(target, target_is_directory=True)
+        return
+    except (OSError, NotImplementedError):
+        pass
+    if os.name == "nt":
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            return
+    pytest.skip("directory links are not available")
+
+
+def test_delete_migration_files_refuses_project_dir(tmp_path):
+    """repom#274: a versions dir equal to the ini directory would delete the
+    project's own top-level *.py files."""
+    (tmp_path / "app.py").write_text("# project code")
+
+    reset = AlembicReset(
+        "sqlite:///unused.db", tmp_path, project_dirs=[tmp_path]
+    )
+
+    with pytest.raises(UnsafeVersionsDirectoryError):
+        reset.delete_migration_files()
+
+    assert (tmp_path / "app.py").exists()
+
+
+def test_delete_migration_files_refuses_project_dir_via_dot_segments(tmp_path):
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    (tmp_path / "app.py").write_text("# project code")
+
+    reset = AlembicReset(
+        "sqlite:///unused.db", nested / "..", project_dirs=[tmp_path]
+    )
+
+    with pytest.raises(UnsafeVersionsDirectoryError):
+        reset.delete_migration_files()
+
+    assert (tmp_path / "app.py").exists()
+
+
+def test_delete_migration_files_refuses_config_root_path(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        reset_module, "config", MagicMock(root_path=str(tmp_path))
+    )
+    (tmp_path / "app.py").write_text("# project code")
+
+    reset = AlembicReset("sqlite:///unused.db", tmp_path)
+
+    with pytest.raises(UnsafeVersionsDirectoryError):
+        reset.delete_migration_files()
+
+    assert (tmp_path / "app.py").exists()
+
+
+def test_delete_migration_files_refuses_current_directory(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "app.py").write_text("# project code")
+
+    reset = AlembicReset("sqlite:///unused.db", tmp_path)
+
+    with pytest.raises(UnsafeVersionsDirectoryError):
+        reset.delete_migration_files()
+
+    assert (tmp_path / "app.py").exists()
+
+
+def test_delete_migration_files_allow_project_root_opt_in(tmp_path):
+    (tmp_path / "0001_test.py").write_text("# migration")
+
+    reset = AlembicReset(
+        "sqlite:///unused.db",
+        tmp_path,
+        project_dirs=[tmp_path],
+        allow_project_root=True,
+    )
+    reset.delete_migration_files()
+
+    assert not (tmp_path / "0001_test.py").exists()
+
+
+def test_delete_migration_files_refuses_symlinked_versions_dir(tmp_path):
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "0001_test.py").write_text("# migration")
+    link = tmp_path / "versions"
+    _link_or_skip(link, target)
+
+    reset = AlembicReset("sqlite:///unused.db", link)
+
+    with pytest.raises(UnsafeVersionsDirectoryError):
+        reset.delete_migration_files()
+
+    assert (target / "0001_test.py").exists()
+
+
+def test_delete_migration_files_refuses_symlinked_versions_dir_with_opt_in(
+    tmp_path
+):
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "0001_test.py").write_text("# migration")
+    link = tmp_path / "versions"
+    _link_or_skip(link, target)
+
+    reset = AlembicReset("sqlite:///unused.db", link, allow_project_root=True)
+
+    with pytest.raises(UnsafeVersionsDirectoryError):
+        reset.delete_migration_files()
+
+    assert (target / "0001_test.py").exists()
+
+
+def test_delete_migration_files_does_not_follow_symlinked_pycache(
+    tmp_path, capsys
+):
+    versions_dir = tmp_path / "versions"
+    versions_dir.mkdir()
+    (versions_dir / "0001_test.py").write_text("# migration")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep.pyc").write_text("keep")
+    _link_or_skip(versions_dir / "__pycache__", outside)
+
+    reset = AlembicReset("sqlite:///unused.db", versions_dir)
+    reset.delete_migration_files()
+
+    assert not (versions_dir / "0001_test.py").exists()
+    assert (outside / "keep.pyc").exists()
+    assert (versions_dir / "__pycache__").exists()
+    assert "Skipped linked __pycache__" in capsys.readouterr().out

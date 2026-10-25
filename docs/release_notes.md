@@ -157,6 +157,14 @@
   configuration before changing live credentials. If persistence fails after the live
   change, it raises `PostgresCredentialRotationError` or
   `RedisCredentialRotationError`.
+- BREAKING: `AlembicSetup.from_ini()` ignores whitespace-only `version_locations`
+  entries and raises `UnsafeVersionsDirectoryError` for an entry that resolves to the
+  `alembic.ini` directory or `config.root_path`, unless `allow_project_root=True` is
+  passed. `AlembicReset.delete_migration_files()` raises it for a versions directory
+  equal to those directories, `AlembicSetup.project_root`, or the current working
+  directory, and for a symlinked or junctioned versions directory; a linked
+  `__pycache__` is skipped. `AlembicSetup.reset_migrations()` validates every
+  directory before dropping the version table.
 
 ### Fixed
 

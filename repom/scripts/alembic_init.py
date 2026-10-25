@@ -8,6 +8,7 @@ from pathlib import Path
 
 from repom.alembic.setup import AlembicSetup
 from repom.config import config
+from repom.exceptions import UnsafeVersionsDirectoryError
 from repom.logging import ensure_logging_configured
 
 
@@ -16,7 +17,11 @@ def main():
     ini_path = Path(config.root_path) / "alembic.ini"
 
     if ini_path.exists():
-        setup = AlembicSetup.from_ini(ini_path, config.db_url)
+        try:
+            setup = AlembicSetup.from_ini(ini_path, config.db_url)
+        except UnsafeVersionsDirectoryError as exc:
+            print(exc)
+            raise SystemExit(1) from None
     else:
         setup = AlembicSetup(
             project_root=config.root_path,

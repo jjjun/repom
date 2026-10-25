@@ -7,6 +7,10 @@ a unified interface for Alembic initialization and reset operations.
 import os
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
+from sqlalchemy import create_engine, inspect, text
 
 from repom.alembic import (
     AlembicSetup,
@@ -14,6 +18,8 @@ from repom.alembic import (
     SCRIPT_LOCATION,
     script_location_path,
 )
+from repom.exceptions import UnsafeVersionsDirectoryError
+import repom.alembic.reset as reset_module
 
 
 class TestAlembicSetupInit:
@@ -181,6 +187,92 @@ class TestFromIni:
         # versions_dir keeps pointing at the first location for callers that
         # only care about a single directory (e.g. alembic_init's summary).
         assert setup.versions_dir == tmp_path / "migrations_a"
+
+    def test_from_ini_drops_whitespace_only_version_locations(self, tmp_path):
+        """repom#274: Alembic's splitter keeps a whitespace-only token as "",
+        which Path("") would resolve to the ini directory itself."""
+        version_locations = os.pathsep.join([
+            "%(here)s/alembic/versions",
+            " ",
+            "%(here)s/other",
+        ])
+        ini_path = tmp_path / "alembic.ini"
+        ini_path.write_text(
+            "[alembic]\n"
+            "script_location = alembic\n"
+            f"version_locations = {version_locations}\n"
+            "path_separator = os\n"
+        )
+
+        setup = AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+
+        assert setup.versions_dirs == [
+            tmp_path / "alembic" / "versions",
+            tmp_path / "other",
+        ]
+
+    def test_from_ini_falls_back_when_only_whitespace_entries(self, tmp_path):
+        ini_path = tmp_path / "alembic.ini"
+        ini_path.write_text(
+            "[alembic]\n"
+            "script_location = alembic\n"
+            f"version_locations = {os.pathsep} {os.pathsep}\n"
+            "path_separator = os\n"
+        )
+
+        setup = AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+
+        assert setup.versions_dirs == [tmp_path / "alembic" / "versions"]
+
+    @pytest.mark.parametrize("location", [".", "%(here)s", "alembic/.."])
+    def test_from_ini_refuses_version_location_equal_to_ini_dir(
+        self, tmp_path, location
+    ):
+        ini_path = tmp_path / "alembic.ini"
+        ini_path.write_text(
+            "[alembic]\n"
+            "script_location = alembic\n"
+            f"version_locations = %(here)s/alembic/versions{os.pathsep}{location}\n"
+            "path_separator = os\n"
+        )
+
+        with pytest.raises(UnsafeVersionsDirectoryError):
+            AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+
+    def test_from_ini_refuses_version_location_equal_to_config_root_path(
+        self, monkeypatch, tmp_path
+    ):
+        conf_dir = tmp_path / "conf"
+        conf_dir.mkdir()
+        ini_path = conf_dir / "alembic.ini"
+        ini_path.write_text(
+            "[alembic]\n"
+            "script_location = alembic\n"
+            "version_locations = ..\n"
+            "path_separator = os\n"
+        )
+        monkeypatch.setattr(
+            reset_module, "config", MagicMock(root_path=str(tmp_path))
+        )
+
+        with pytest.raises(UnsafeVersionsDirectoryError):
+            AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+
+    def test_from_ini_allow_project_root_opt_in(self, tmp_path):
+        ini_path = tmp_path / "alembic.ini"
+        ini_path.write_text(
+            "[alembic]\n"
+            "script_location = alembic\n"
+            "version_locations = .\n"
+            "path_separator = os\n"
+        )
+
+        setup = AlembicSetup.from_ini(
+            ini_path, "sqlite:///test.db", allow_project_root=True
+        )
+
+        assert setup.versions_dirs == [tmp_path.resolve()]
+        assert setup.allow_project_root is True
 
 
 class TestCreateAlembicIni:
@@ -493,6 +585,43 @@ class TestResetMigrations:
         assert not (migrations_b / "0001_b.py").exists()
         assert (migrations_a / "__init__.py").exists()
         assert (migrations_b / "__init__.py").exists()
+
+    def test_reset_migrations_refuses_project_root_before_dropping_table(
+        self, tmp_path
+    ):
+        """repom#274: a refused versions dir must not leave a half reset."""
+        db_url = f"sqlite:///{tmp_path / 'reset.db'}"
+        engine = create_engine(db_url)
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE alembic_version (version_num VARCHAR(32))"
+            ))
+        (tmp_path / "app.py").write_text("# project code")
+        migrations = tmp_path / "migrations"
+        migrations.mkdir()
+        (migrations / "0001_a.py").write_text("# a")
+
+        setup = AlembicSetup(tmp_path, db_url)
+        setup.versions_dirs = [migrations, tmp_path]
+
+        with pytest.raises(UnsafeVersionsDirectoryError):
+            setup.reset_migrations()
+
+        assert inspect(engine).has_table("alembic_version")
+        assert (tmp_path / "app.py").exists()
+        assert (migrations / "0001_a.py").exists()
+        engine.dispose()
+
+    def test_reset_migrations_allow_project_root_opt_in(self, tmp_path):
+        (tmp_path / "0001_a.py").write_text("# a")
+        setup = AlembicSetup(
+            tmp_path, "sqlite:///test.db", allow_project_root=True
+        )
+        setup.versions_dirs = [tmp_path]
+
+        setup.reset_migrations(drop_table=False)
+
+        assert not (tmp_path / "0001_a.py").exists()
 
 
 class TestGetAlembicConfig:

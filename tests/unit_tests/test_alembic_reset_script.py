@@ -6,6 +6,7 @@ resolution (repom#160).
 """
 
 
+import os
 import re
 import sys
 from io import BytesIO, StringIO, TextIOWrapper
@@ -137,6 +138,58 @@ def test_alembic_reset_requires_ini_file(monkeypatch, tmp_path, capsys):
     captured = capsys.readouterr()
     assert captured.out == f"Alembic config file not found: {ini_path}\n"
     assert captured.err == ""
+
+
+def test_describe_alembic_reset_shows_every_version_directory(
+    monkeypatch, tmp_path
+):
+    """repom#274: the confirmation target keeps listing every resolved dir."""
+    ini_path = tmp_path / "alembic.ini"
+    ini_path.write_text(AlembicTemplates.generate_alembic_ini(
+        script_location="alembic",
+        version_locations=os.pathsep.join([
+            "%(here)s/migrations_a",
+            "%(here)s/migrations_b",
+        ]),
+    ))
+    monkeypatch.setattr(alembic_reset, "config", _mock_config(root_path=str(tmp_path)))
+
+    target = alembic_reset.describe_alembic_reset(ini_path)
+
+    assert (
+        f"version directories: {tmp_path / 'migrations_a'}, "
+        f"{tmp_path / 'migrations_b'}"
+    ) in target
+
+
+def test_alembic_reset_refuses_project_directory_version_location(
+    monkeypatch, tmp_path, capsys
+):
+    """repom#274: version_locations = . must not turn the ini directory into
+    a versions directory whose top-level *.py files get deleted."""
+    db_url = f"sqlite:///{tmp_path / 'refused.db'}"
+    engine = create_engine(db_url)
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32))"))
+    (tmp_path / "app.py").write_text("# project code")
+    (tmp_path / "alembic.ini").write_text(AlembicTemplates.generate_alembic_ini(
+        script_location="alembic",
+        version_locations=".",
+    ))
+
+    monkeypatch.setattr(
+        alembic_reset, "config", _mock_config(db_url=db_url, root_path=str(tmp_path))
+    )
+    monkeypatch.setattr(sys, "stdin", StringIO(""))
+
+    with pytest.raises(SystemExit) as exc_info:
+        alembic_reset.main(["--yes"])
+
+    assert exc_info.value.code == 1
+    assert "resolves to the project directory" in capsys.readouterr().out
+    assert inspect(engine).has_table("alembic_version")
+    assert (tmp_path / "app.py").exists()
+    engine.dispose()
 
 
 def test_alembic_reset_completes_with_cp932_stdout(monkeypatch, tmp_path):

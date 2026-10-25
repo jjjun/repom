@@ -397,6 +397,23 @@ Unless a difference is stated below, these contracts apply to both
   configured `version_locations` directory, including absolute paths. A failure
   partway through leaves a partial reset. The `AlembicSetup.reset_migrations`
   and `AlembicReset` Python APIs have no CLI confirmation guard.
+  - Whitespace-only `version_locations` entries are ignored, because Alembic's
+    splitter keeps them as empty strings that resolve to the `alembic.ini`
+    directory. `AlembicSetup.from_ini` raises `UnsafeVersionsDirectoryError` for
+    an entry that resolves to the `alembic.ini` directory or `config.root_path`
+    unless `allow_project_root=True` is passed, and
+    `AlembicReset.delete_migration_files` raises it for a versions directory equal
+    to `config.root_path`, the current working directory, or a `project_dirs` entry
+    (`AlembicSetup` passes its `project_root`), and for a symlinked or junctioned
+    versions directory (the latter even with `allow_project_root=True`). A linked
+    `__pycache__` is skipped, not removed. `AlembicSetup.reset_migrations`
+    validates every directory before it drops the version table. These checks
+    compare resolved paths for equality; they do not refuse an ancestor of those
+    directories or a link in a parent path component.
+  - Relative `version_locations` entries resolve against the `alembic.ini`
+    directory in repom but against the current working directory in Alembic, so
+    the two can name different directories when the working directory differs.
+    Use `%(here)s` to make both agree.
 - Test fixture factories accept normalized `EXEC_ENV=test`, an unambiguous
   in-memory SQLite URL, or explicit `allow_destructive=True`, evaluated when
   the factory is called. The memory check parses the SQLAlchemy URL and

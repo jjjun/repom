@@ -6,7 +6,8 @@ from alembic.config import Config as AlembicConfig
 from alembic.util.pyfiles import coerce_resource_to_filename
 from repom.alembic.constants import SCRIPT_LOCATION
 from repom.alembic.templates import AlembicTemplates
-from repom.alembic.reset import AlembicReset
+from repom.alembic.reset import AlembicReset, is_project_directory
+from repom.exceptions import UnsafeVersionsDirectoryError
 
 
 class AlembicSetup:
@@ -24,7 +25,8 @@ class AlembicSetup:
         version_locations: str = "%(here)s/alembic/versions",
         version_table: str | None = None,
         autogenerate_exclude_tables: str | Sequence[str] | None = None,
-        version_table_schema: str | None = None
+        version_table_schema: str | None = None,
+        allow_project_root: bool = False
     ):
         """
         Args:
@@ -39,6 +41,9 @@ class AlembicSetup:
             version_table: Alembic version table name
             autogenerate_exclude_tables: Sibling version table names to exclude
             version_table_schema: Alembic version table schema
+            allow_project_root: True の場合、reset_migrations() が project_root /
+                              config.root_path / カレントディレクトリと一致する
+                              versions ディレクトリを削除対象にすることを許可
 
         Note:
             - db_url や各パスのデフォルト値は scripts/ 側で config から取得して渡す
@@ -52,6 +57,7 @@ class AlembicSetup:
         self.version_table = version_table
         self.version_table_schema = version_table_schema
         self.autogenerate_exclude_tables = autogenerate_exclude_tables
+        self.allow_project_root = allow_project_root
 
         # %(here)s が含まれている場合は実際のパスに展開
         versions_path = version_locations.replace('%(here)s', str(self.project_root))
@@ -59,12 +65,25 @@ class AlembicSetup:
         self.versions_dirs = [self.versions_dir]
 
     @classmethod
-    def from_ini(cls, ini_path: str | Path, db_url: str) -> "AlembicSetup":
+    def from_ini(
+        cls,
+        ini_path: str | Path,
+        db_url: str,
+        *,
+        allow_project_root: bool = False
+    ) -> "AlembicSetup":
         """既存の alembic.ini から AlembicSetup を構築
 
         Args:
             ini_path: 読み込む alembic.ini のパス
             db_url: データベース URL（alembic.ini からは読み込まない）
+            allow_project_root: True の場合、alembic.ini のディレクトリや
+                              config.root_path と一致する version_locations を許可
+
+        Raises:
+            UnsafeVersionsDirectoryError: version_locations の項目が
+                alembic.ini のディレクトリまたは config.root_path と一致し、
+                allow_project_root が False の場合
 
         Note:
             script_location, version_locations, version_table,
@@ -73,7 +92,9 @@ class AlembicSetup:
             を含む）による version_locations の分割は、alembic 本体
             （alembic upgrade / alembic revision）と同じ規則に従う。
             %(here)s を使わない相対パスは、alembic.ini の配置ディレクトリを
-            基準に解決する。
+            基準に解決する（alembic 本体はカレントディレクトリ基準のため、
+            alembic.ini の場所に依存させるには %(here)s を使う）。
+            空白のみの項目は無視する。
         """
         ini_path = Path(ini_path)
         here = ini_path.resolve().parent
@@ -95,7 +116,13 @@ class AlembicSetup:
             location = Path(raw_location)
             return location if location.is_absolute() else here / location
 
-        raw_version_locations = alembic_config.get_version_locations_list()
+        # Alembic's splitter keeps whitespace-only tokens as "", which
+        # Path("") would resolve to the ini directory itself.
+        raw_version_locations = [
+            raw
+            for raw in alembic_config.get_version_locations_list() or []
+            if raw.strip()
+        ]
         if raw_version_locations:
             versions_dirs = [_resolve(raw) for raw in raw_version_locations]
             version_locations = raw_version_locations[0]
@@ -113,13 +140,22 @@ class AlembicSetup:
             versions_dirs = [default_versions_dir]
             version_locations = default_versions_dir.as_posix()
 
+        if not allow_project_root:
+            for versions_dir in versions_dirs:
+                if is_project_directory(versions_dir, [here]):
+                    raise UnsafeVersionsDirectoryError(
+                        f"version_locations entry resolves to the project "
+                        f"directory, not a versions directory: {versions_dir}"
+                    )
+
         setup = cls(
             project_root=here,
             db_url=db_url,
             script_location=script_location,
             version_locations=version_locations,
             version_table=version_table,
-            version_table_schema=version_table_schema
+            version_table_schema=version_table_schema,
+            allow_project_root=allow_project_root
         )
         setup.versions_dir = versions_dirs[0]
         setup.versions_dirs = versions_dirs
@@ -183,13 +219,25 @@ class AlembicSetup:
             対応するスクリプトが削除されます。
             version_locations が複数のディレクトリを指す場合、delete_files は
             そのすべてを対象にします。
+            versions ディレクトリが project_root / config.root_path /
+            カレントディレクトリと一致する場合、またはシンボリックリンクの場合は
+            UnsafeVersionsDirectoryError を送出し、何も削除しません
+            （allow_project_root=True で一致のみ許可）。
         """
         reset = AlembicReset(
             db_url=self.db_url,
             versions_dir=self.versions_dir,
             version_table=self.version_table or "alembic_version",
-            version_table_schema=self.version_table_schema
+            version_table_schema=self.version_table_schema,
+            project_dirs=[self.project_root],
+            allow_project_root=self.allow_project_root
         )
+
+        # Refuse before dropping the version table so a refused directory
+        # cannot leave the reset half done.
+        if delete_files:
+            for versions_dir in self.versions_dirs:
+                reset.validate_versions_dir(versions_dir)
 
         # A missing version table remains a reported no-op for compatibility;
         # explicitly requested migration-file deletion still proceeds.

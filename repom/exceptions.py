@@ -15,6 +15,10 @@ class NulByteError(ValueError, DontWrapMixin):
         )
 
 
+class UnsafeVersionsDirectoryError(ValueError):
+    """Raised when a migration versions directory is a project directory or a link."""
+
+
 def is_unique_violation(exc: IntegrityError) -> bool:
     """Return whether an integrity error represents a unique constraint violation."""
     original = exc.orig
