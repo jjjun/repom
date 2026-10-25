@@ -28,6 +28,11 @@
   default.
 - BREAKING: Host PostgreSQL client tools no longer inherit `PGHOSTADDR` or `PGSERVICE`
   from the parent environment.
+- BREAKING: The shared PostgreSQL engine resolver now rejects `connect_args` keys
+  outside the libpq, psycopg, and asyncpg-adapter keywords with `ValueError` in every
+  `EXEC_ENV`. psycopg `conninfo` and libpq `requiressl` can no longer carry a
+  destination or `sslmode` that the destination and TLS checks do not read. Move such
+  settings to the URL or to explicit keywords.
 - BREAKING: String entries in `order_by` and sequence `default_order_by` values are
   parsed as canonical `column:asc` or `column:desc` specifications and must name
   columns in `allowed_order_columns`; invalid or non-allowlisted strings raise

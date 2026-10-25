@@ -225,7 +225,21 @@ Unless a difference is stated below, these contracts apply to both
   query or SQLAlchemy `connect_args` values for `host`, `hostaddr`, `service`,
   and `dsn`. `DatabaseManager`, `resolve_engine_settings()`, and synchronous
   diagnostics probes resolve these destination overrides; probes use the
-  config object being checked. The shared `repom/alembic/env.py` and `AlembicReset`
+  config object being checked. The resolver reads only those keys, so it
+  accepts PostgreSQL `connect_args` keys only from an allowlist of libpq,
+  psycopg, and asyncpg-adapter keywords and raises `ValueError` for the rest in
+  every `EXEC_ENV`. That rejects psycopg `conninfo`, which psycopg merges with
+  the other keywords and so can supply `hostaddr`, `host`, or `sslmode`, and
+  libpq `requiressl`, which libpq rewrites to `sslmode`. Keywords of drivers
+  outside that set, such as pg8000, are rejected too. The asyncpg adapter keeps
+  its own allowlist. Tests:
+  `test_psycopg_connection_string_carriers_are_rejected`,
+  `test_prod_resolve_engine_settings_rejects_conninfo_destination`,
+  `test_prod_get_sync_engine_rejects_conninfo_destination`,
+  `test_prod_normal_engine_and_database_info_probe_reject_unsafe_connect_args`,
+  `test_asyncpg_adapter_still_rejects_unsupported_connect_args`, and
+  `test_postgres_connect_args_allowlist_covers_installed_libpq_keywords`. The
+  shared `repom/alembic/env.py` and `AlembicReset`
   build engines from `db_url` only. Synchronous test fixtures pass engine kwargs
   without the resolver, and consumer-built engines must opt into it. Review backup/restore
   host-tool and `docker exec` paths separately: URL-overridden client tools use
@@ -264,7 +278,10 @@ Unless a difference is stated below, these contracts apply to both
   when a mode is resolved; `connect_args` TLS options override URL options. If
   URL and `connect_args` omit `sslmode`, `PGSSLMODE` is validated and propagated
   when no explicit `config.postgres.sslmode` is set. Loopback/socket and
-  development defaults may permit plaintext.
+  development defaults may permit plaintext. Only SQLite and PostgreSQL are
+  supported backends: a database URL override for another backend, such as
+  MySQL, is returned unchanged in `prod` and gets no destination or transport
+  guard (`test_prod_non_postgres_override_has_no_transport_guard`).
 - `require` alone is not a guarantee of certificate/hostname verification.
   Preserve explicitly selected `verify-ca`/`verify-full` semantics across driver
   adaptation. For libpq, absent `sslrootcert`, verification uses `PGSSLROOTCERT`

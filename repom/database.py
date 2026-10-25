@@ -142,6 +142,90 @@ _SQLALCHEMY_ASYNCPG_CONNECT_ARGUMENTS = frozenset(
     {"prepared_statement_cache_size", "prepared_statement_name_func"}
 )
 
+# libpq connection keywords. ``requiressl`` is deliberately absent: libpq
+# rewrites it to ``sslmode``, which the TLS resolver would not see.
+_LIBPQ_CONNECT_ARGUMENTS = frozenset(
+    {
+        "host",
+        "hostaddr",
+        "port",
+        "dbname",
+        "user",
+        "password",
+        "passfile",
+        "require_auth",
+        "channel_binding",
+        "connect_timeout",
+        "client_encoding",
+        "options",
+        "application_name",
+        "fallback_application_name",
+        "keepalives",
+        "keepalives_idle",
+        "keepalives_interval",
+        "keepalives_count",
+        "tcp_user_timeout",
+        "replication",
+        "gssencmode",
+        "gssdelegation",
+        "sslmode",
+        "sslnegotiation",
+        "sslcompression",
+        "sslcert",
+        "sslkey",
+        "sslpassword",
+        "sslcertmode",
+        "sslrootcert",
+        "sslcrl",
+        "sslcrldir",
+        "sslsni",
+        "sslkeylogfile",
+        "requirepeer",
+        "ssl_min_protocol_version",
+        "ssl_max_protocol_version",
+        "min_protocol_version",
+        "max_protocol_version",
+        "krbsrvname",
+        "gsslib",
+        "service",
+        "servicefile",
+        "target_session_attrs",
+        "load_balance_hosts",
+        "oauth_issuer",
+        "oauth_client_id",
+        "oauth_client_secret",
+        "oauth_scope",
+        "scram_client_key",
+        "scram_server_key",
+    }
+)
+
+# psycopg / psycopg2 keywords that are not libpq options. ``conninfo`` is
+# deliberately absent: psycopg merges it with the other keywords, so it can
+# supply a destination or TLS option that the resolver never reads.
+_PSYCOPG_CONNECT_ARGUMENTS = frozenset(
+    {
+        "autocommit",
+        "prepare_threshold",
+        "context",
+        "row_factory",
+        "cursor_factory",
+        "connection_factory",
+    }
+)
+
+# The sync resolver also sees connect_args that are destined for the asyncpg
+# engine built from the same engine_kwargs, so it accepts the asyncpg adapter's
+# keywords as well.
+_POSTGRES_CONNECT_ARGUMENTS = (
+    _LIBPQ_CONNECT_ARGUMENTS
+    | _PSYCOPG_CONNECT_ARGUMENTS
+    | _ASYNCPG_CONNECT_ARGUMENTS
+    | _LIBPQ_ASYNCPG_CONNECT_ARGUMENTS
+    | _ASYNCPG_DSN_OPTIONS
+    | _SQLALCHEMY_ASYNCPG_CONNECT_ARGUMENTS
+)
+
 
 def _mask_secret_query_params(url: str) -> str:
     """Mask known secret query parameters in a database URL.
@@ -224,6 +308,16 @@ def _resolve_postgres_engine_policy(
         connect_args = dict(raw_connect_args)
     else:
         raise TypeError("connect_args must be a mapping for PostgreSQL")
+
+    if not asyncpg:
+        unsupported_options = set(connect_args) - _POSTGRES_CONNECT_ARGUMENTS
+        if unsupported_options:
+            names = ", ".join(sorted(repr(name) for name in unsupported_options))
+            raise ValueError(
+                f"Unsupported PostgreSQL connect_args option(s): {names}; "
+                "their destination and TLS options cannot be validated, so use "
+                "the URL or explicit libpq keywords instead"
+            )
 
     if is_prod_exec_env(policy_config.exec_env) and (
         "dsn" in url.query or "dsn" in connect_args

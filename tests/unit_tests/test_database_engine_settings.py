@@ -1,6 +1,7 @@
 """DatabaseManager engine URL and keyword adaptation tests."""
 
 import ssl
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.dialects.postgresql.asyncpg import PGDialect_asyncpg
@@ -135,7 +136,7 @@ def test_native_asyncpg_ssl_context_overrides_url_and_keeps_input_unchanged():
 @pytest.mark.parametrize(
     ("connect_args", "message"),
     [
-        ({"socket_timeout": 5}, "Unsupported postgresql\\+asyncpg connect_args"),
+        ({"socket_timeout": 5}, "Unsupported PostgreSQL connect_args"),
         (
             {"connect_timeout": 7, "timeout": 3},
             "connect_timeout.*conflicts.*timeout",
@@ -512,3 +513,145 @@ def test_prod_hostless_url_without_environment_destination_keeps_local_prefer():
     assert make_url(resolved_url).query.get("sslmode") is None
     assert sslmode == "prefer"
     assert hosts == (None,)
+
+
+@pytest.mark.parametrize("exec_env", ["dev", "prod"])
+@pytest.mark.parametrize(
+    ("sync_url", "carrier", "connect_args"),
+    [
+        (
+            "postgresql+psycopg://localhost/app?sslmode=prefer",
+            "conninfo",
+            {"conninfo": "hostaddr=203.0.113.5 sslmode=disable"},
+        ),
+        (
+            "postgresql+psycopg:///app",
+            "conninfo",
+            {"conninfo": "host=db.example.invalid sslmode=disable"},
+        ),
+        (
+            "postgresql+psycopg://db.example.invalid/app?sslmode=require",
+            "requiressl",
+            {"requiressl": "0"},
+        ),
+    ],
+)
+def test_psycopg_connection_string_carriers_are_rejected(
+    exec_env, sync_url, carrier, connect_args
+):
+    with pytest.raises(
+        ValueError, match=f"Unsupported PostgreSQL connect_args.*'{carrier}'"
+    ) as excinfo:
+        database_module._resolve_postgres_engine_policy(
+            sync_url,
+            {"connect_args": connect_args},
+            config_obj=RepomConfig(exec_env=exec_env),
+            environ={},
+        )
+
+    assert "203.0.113.5" not in str(excinfo.value)
+    assert "db.example.invalid" not in str(excinfo.value)
+
+
+def test_prod_resolve_engine_settings_rejects_conninfo_destination(monkeypatch):
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env="prod"))
+
+    with pytest.raises(ValueError, match="'conninfo'"):
+        DatabaseManager.resolve_engine_settings(
+            "postgresql+psycopg://localhost/app?sslmode=prefer",
+            {"connect_args": {"conninfo": "hostaddr=203.0.113.5 sslmode=disable"}},
+        )
+
+
+def test_prod_get_sync_engine_rejects_conninfo_destination(monkeypatch):
+    policy_config = RepomConfig(exec_env="prod")
+    monkeypatch.setattr(
+        database_module,
+        "config",
+        SimpleNamespace(
+            exec_env="prod",
+            db_url="postgresql+psycopg://localhost/app?sslmode=prefer",
+            engine_kwargs={
+                "connect_args": {"conninfo": "hostaddr=203.0.113.5 sslmode=disable"}
+            },
+            postgres_tls_settings_for_url=policy_config.postgres_tls_settings_for_url,
+        ),
+    )
+
+    def create_engine_must_not_run(*args, **kwargs):
+        raise AssertionError("create_engine must not run for a rejected carrier")
+
+    monkeypatch.setattr(database_module, "create_engine", create_engine_must_not_run)
+    manager = DatabaseManager()
+
+    with pytest.raises(ValueError, match="'conninfo'"):
+        manager.get_sync_engine()
+
+    assert manager._sync_engine is None
+
+
+@pytest.mark.parametrize(
+    "connect_args",
+    [
+        {"conninfo": "hostaddr=203.0.113.5 sslmode=disable"},
+        {"socket_timeout": 5},
+    ],
+)
+def test_asyncpg_adapter_still_rejects_unsupported_connect_args(connect_args):
+    with pytest.raises(ValueError, match="Unsupported postgresql\\+asyncpg connect_args"):
+        DatabaseManager._adapt_asyncpg_connect_options(
+            "postgresql+asyncpg://u:p@h/db", {"connect_args": connect_args}
+        )
+
+
+def test_postgres_connect_args_allowlist_keeps_supported_keywords():
+    connect_args = {
+        "connect_timeout": 7,
+        "application_name": "repom",
+        "options": "-csearch_path=app",
+        "keepalives": 1,
+        "sslrootcert": "ca.pem",
+        "server_settings": {"statement_timeout": "1000"},
+        "timeout": 3,
+    }
+    engine_kwargs = {"connect_args": connect_args}
+
+    _, resolved_kwargs, _, _ = database_module._resolve_postgres_engine_policy(
+        "postgresql+psycopg://u:p@h/db?sslmode=require",
+        engine_kwargs,
+        config_obj=RepomConfig(exec_env="prod"),
+        environ={},
+    )
+
+    assert resolved_kwargs is engine_kwargs
+
+
+def test_postgres_connect_args_allowlist_covers_installed_libpq_keywords():
+    pq = pytest.importorskip("psycopg.pq")
+
+    libpq_keywords = {
+        option.keyword.decode() for option in pq.Conninfo.get_defaults()
+    }
+
+    assert libpq_keywords <= database_module._POSTGRES_CONNECT_ARGUMENTS
+    assert "conninfo" not in database_module._POSTGRES_CONNECT_ARGUMENTS
+    assert "requiressl" not in database_module._POSTGRES_CONNECT_ARGUMENTS
+
+
+def test_prod_non_postgres_override_has_no_transport_guard():
+    policy_config = RepomConfig(exec_env="prod")
+    mysql_url = "mysql+pymysql://u:p@db.example.invalid/app"
+    engine_kwargs = {"connect_args": {"ssl_disabled": True}}
+
+    policy_config.db_url = mysql_url
+    resolved_url, resolved_kwargs, sslmode, hosts = (
+        database_module._resolve_postgres_engine_policy(
+            mysql_url, engine_kwargs, config_obj=policy_config, environ={}
+        )
+    )
+
+    assert policy_config.db_url == mysql_url
+    assert resolved_url == mysql_url
+    assert resolved_kwargs is engine_kwargs
+    assert sslmode is None
+    assert hosts == ()

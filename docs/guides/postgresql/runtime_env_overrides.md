@@ -92,6 +92,12 @@ URL query または
 prod で接続先と TLS 設定を安全に検証できないため使用できません。
 asyncpg は `host` を使えますが、
 `hostaddr` はサポートしないため共有 resolver を使う engine 設定時に拒否されます。
+共有 resolver を使う engine では、PostgreSQL の `connect_args` に使えるキーは libpq、psycopg、
+asyncpg adapter のキーワードに限られます。psycopg の `conninfo` や、libpq が `sslmode` に
+書き換える `requiressl` のように、resolver が読めない形で接続先や TLS mode を運ぶキーは、
+`EXEC_ENV` に関係なく `ValueError` になります。接続先と TLS は URL か明示的なキーワードで指定してください。
+SQLite と PostgreSQL 以外の URL override（MySQL など）は prod でも変更されず、接続先と transport の
+検証対象外です。
 `host` が Unix socket path または loopback のみの場合はローカルとして扱います。
 `DatabaseManager` の engine 作成時の warning は connect args を含む実効接続先と TLS 設定を表示します。
 

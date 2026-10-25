@@ -265,6 +265,11 @@ def test_collect_database_info_sync_postgres_reads_size():
             "DSN",
             "dsn_secret",
         ),
+        (
+            {"conninfo": "hostaddr=198.51.100.5 sslmode=disable password=conninfo_secret"},
+            "conninfo",
+            "conninfo_secret",
+        ),
     ],
 )
 def test_prod_normal_engine_and_database_info_probe_reject_unsafe_connect_args(
