@@ -81,6 +81,10 @@ URL-level policy が適用されます。
 `ValueError` になります。`require` または `verify-ca` / `verify-full` を指定してください。
 URL と `connect_args` に `sslmode` がなく、`config.postgres.sslmode` も未設定の場合は
 `PGSSLMODE` を検証して使います。選択された mode は sync / async 両方の engine に反映されます。
+共有 resolver は、URL と `connect_args` に `sslmode` / `ssl` がなく、`config.postgres.sslmode` または
+`PGSSLMODE` が設定されているか、prod のリモート接続先である場合、解決した `sslmode` と、設定済みで
+URL にない `sslrootcert` を URL に書き込みます。それ以外では URL を変更せず、libpq と asyncpg の既定値
+(`prefer`) が使われます。
 共有 resolver を使う engine では、接続先の判定に URL authority の host に加えて、
 URL query、`engine_kwargs.connect_args`、および `PGHOST` / `PGHOSTADDR` の fallback を使います。
 `PGHOSTADDR` は URL host が明示されている場合も候補に含め、実際の接続先アドレスとして判定します。

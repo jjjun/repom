@@ -189,6 +189,9 @@ class TestPostgresConnectionTest:
         mock_config.postgres = mock_postgres
         mock_config.postgres_db = 'test_db'
         mock_config.db_url = 'postgresql://test_user:test_pass@localhost:5432/test_db'
+        mock_config.postgres_tls_settings_for_url = (
+            RepomConfig(exec_env='dev').postgres_tls_settings_for_url
+        )
         mock_config.engine_kwargs = {
             'pool_pre_ping': True,
             'connect_args': {'connect_timeout': 10, 'application_name': 'myapp'},
@@ -262,6 +265,9 @@ class TestPostgresConnectionTest:
         mock_config.postgres = mock_postgres
         mock_config.postgres_db = 'test_db'
         mock_config.db_url = 'postgresql://test_user:test_pass@localhost:5432/test_db'
+        mock_config.postgres_tls_settings_for_url = (
+            RepomConfig(exec_env='dev').postgres_tls_settings_for_url
+        )
         mock_config.engine_kwargs = {'connect_args': {}}
 
         # Mock connection failure
@@ -283,6 +289,9 @@ class TestPostgresConnectionTest:
         mock_config.postgres = mock_postgres
         mock_config.postgres_db = 'test_db'
         mock_config.db_url = 'postgresql://test_user:test_pass@localhost:5432/test_db'
+        mock_config.postgres_tls_settings_for_url = (
+            RepomConfig(exec_env='dev').postgres_tls_settings_for_url
+        )
         mock_config.engine_kwargs = {'connect_args': {}}
 
         mock_engine = Mock()

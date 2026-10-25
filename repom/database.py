@@ -357,13 +357,21 @@ def _resolve_postgres_engine_policy(
         and "ssl" not in connect_args
         and (
             "PGSSLMODE" in environ
+            or tls.sslmode_configured
             or (is_prod_exec_env(policy_config.exec_env) and is_remote)
         )
     ):
         # Materialize the resolved mode so sync libpq and asyncpg use the same
-        # policy, including a mode selected through PGSSLMODE.
+        # policy, including a mode selected through config.postgres.sslmode or
+        # PGSSLMODE.
         query = dict(url.query)
         query["sslmode"] = tls.sslmode
+        if (
+            tls.sslrootcert
+            and "sslrootcert" not in query
+            and "sslrootcert" not in connect_args
+        ):
+            query["sslrootcert"] = tls.sslrootcert
         url = url.set(query=query)
         db_url = url.render_as_string(hide_password=False)
 
@@ -1132,10 +1140,12 @@ class DatabaseManager:
         PGSSLROOTCERT or ~/.postgresql/root.crt for its default root certificate;
         it does not use the system trust store. With sslrootcert, this method
         builds an SSLContext from that CA file; this path does not load CRLs.
+        The libpq 16+ keyword ``sslrootcert=system`` selects the platform trust
+        store instead of a file, so it builds a default SSLContext.
 
         Args:
             sslmode: One of disable/allow/prefer/require/verify-ca/verify-full.
-            sslrootcert: Path to a CA bundle, or None/empty.
+            sslrootcert: Path to a CA bundle, ``"system"``, or None/empty.
 
         Returns:
             Either the original sslmode string, or an ssl.SSLContext loaded
@@ -1143,7 +1153,10 @@ class DatabaseManager:
         """
         if sslmode in ("disable", "allow", "prefer") or not sslrootcert:
             return sslmode
-        ssl_context = ssl.create_default_context(cafile=sslrootcert)
+        if sslrootcert == "system":
+            ssl_context = ssl.create_default_context()
+        else:
+            ssl_context = ssl.create_default_context(cafile=sslrootcert)
         ssl_context.check_hostname = sslmode == "verify-full"
         return ssl_context
 

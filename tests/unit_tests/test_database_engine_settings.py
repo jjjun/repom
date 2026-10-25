@@ -516,6 +516,147 @@ def test_prod_hostless_url_without_environment_destination_keeps_local_prefer():
 
 
 @pytest.mark.parametrize("exec_env", ["dev", "prod"])
+@pytest.mark.parametrize("host", ["localhost", "db.example.invalid"])
+def test_configured_sslmode_is_materialized_into_raw_url(exec_env, host):
+    policy_config = RepomConfig(exec_env=exec_env)
+    policy_config.postgres.sslmode = "verify-full"
+    engine_kwargs = {}
+
+    resolved_url, resolved_kwargs, sslmode, _ = (
+        database_module._resolve_postgres_engine_policy(
+            f"postgresql+psycopg://{host}/app",
+            engine_kwargs,
+            config_obj=policy_config,
+            environ={},
+        )
+    )
+
+    assert make_url(resolved_url).query["sslmode"] == "verify-full"
+    assert sslmode == "verify-full"
+    assert resolved_kwargs is engine_kwargs
+
+
+def test_configured_sslmode_does_not_override_url_or_connect_args_tls():
+    policy_config = RepomConfig(exec_env="dev")
+    policy_config.postgres.sslmode = "verify-full"
+    url_with_mode = "postgresql+psycopg://localhost/app?sslmode=prefer"
+
+    resolved_url, _, sslmode, _ = database_module._resolve_postgres_engine_policy(
+        url_with_mode, {}, config_obj=policy_config, environ={}
+    )
+    assert resolved_url == url_with_mode
+    assert sslmode == "prefer"
+
+    for connect_args in ({"sslmode": "require"}, {"ssl": "require"}):
+        resolved_url, _, _, _ = database_module._resolve_postgres_engine_policy(
+            "postgresql+psycopg://localhost/app",
+            {"connect_args": connect_args},
+            config_obj=policy_config,
+            environ={},
+        )
+        assert "sslmode" not in make_url(resolved_url).query
+
+
+def test_unset_sslmode_keeps_raw_url_unchanged_in_dev():
+    policy_config = RepomConfig(exec_env="dev")
+    raw_url = "postgresql+psycopg://localhost/app"
+
+    resolved_url, _, sslmode, _ = database_module._resolve_postgres_engine_policy(
+        raw_url, {}, config_obj=policy_config, environ={}
+    )
+
+    assert resolved_url == raw_url
+    assert sslmode == "prefer"
+
+
+def test_configured_sslmode_and_sslrootcert_reach_both_drivers(monkeypatch):
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    create_context_calls = []
+
+    def create_default_context(*, cafile=None):
+        create_context_calls.append(cafile)
+        return ssl_context
+
+    monkeypatch.setattr(database_module.ssl, "create_default_context", create_default_context)
+    policy_config = RepomConfig(exec_env="dev")
+    policy_config.postgres.sslmode = "verify-full"
+    policy_config.postgres.sslrootcert = "configured-ca.pem"
+    monkeypatch.setattr(database_module, "config", policy_config)
+
+    (sync_url, sync_kwargs), (async_url, async_kwargs) = (
+        DatabaseManager.resolve_engine_settings(
+            "postgresql+psycopg://u:p@localhost/app", {}, environ={}
+        )
+    )
+
+    sync_query = make_url(sync_url).query
+    assert sync_query["sslmode"] == "verify-full"
+    assert sync_query["sslrootcert"] == "configured-ca.pem"
+    assert sync_kwargs == {}
+    assert make_url(async_url).drivername == "postgresql+asyncpg"
+    assert create_context_calls == ["configured-ca.pem"]
+    assert async_kwargs["connect_args"]["ssl"] is ssl_context
+    assert ssl_context.check_hostname is True
+
+
+def test_configured_sslmode_without_sslrootcert_reaches_asyncpg(monkeypatch):
+    policy_config = RepomConfig(exec_env="dev")
+    policy_config.postgres.sslmode = "require"
+    monkeypatch.setattr(database_module, "config", policy_config)
+
+    (sync_url, _), (_, async_kwargs) = DatabaseManager.resolve_engine_settings(
+        "postgresql+psycopg://u:p@localhost/app", {}, environ={}
+    )
+
+    sync_query = make_url(sync_url).query
+    assert sync_query["sslmode"] == "require"
+    assert "sslrootcert" not in sync_query
+    assert async_kwargs["connect_args"]["ssl"] == "require"
+
+
+def test_url_sslrootcert_is_kept_over_configured_sslrootcert():
+    policy_config = RepomConfig(exec_env="dev")
+    policy_config.postgres.sslmode = "verify-full"
+    policy_config.postgres.sslrootcert = "configured-ca.pem"
+
+    resolved_url, _, _, _ = database_module._resolve_postgres_engine_policy(
+        "postgresql+psycopg://localhost/app?sslrootcert=url-ca.pem",
+        {},
+        config_obj=policy_config,
+        environ={},
+    )
+
+    assert make_url(resolved_url).query["sslrootcert"] == "url-ca.pem"
+
+
+@pytest.mark.parametrize("sslmode, check_hostname", [("verify-ca", False), ("verify-full", True)])
+def test_asyncpg_sslrootcert_system_uses_the_platform_trust_store(
+    monkeypatch, sslmode, check_hostname
+):
+    create_context_calls = []
+    real_create_default_context = ssl.create_default_context
+
+    def create_default_context(*args, **kwargs):
+        create_context_calls.append((args, kwargs))
+        return real_create_default_context()
+
+    monkeypatch.setattr(database_module.ssl, "create_default_context", create_default_context)
+
+    (_, _), (_, async_kwargs) = DatabaseManager.resolve_engine_settings(
+        "postgresql+psycopg://u:p@db.example.invalid/app"
+        f"?sslmode={sslmode}&sslrootcert=system",
+        {},
+        environ={},
+    )
+
+    assert create_context_calls == [((), {})]
+    context = async_kwargs["connect_args"]["ssl"]
+    assert isinstance(context, ssl.SSLContext)
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is check_hostname
+
+
+@pytest.mark.parametrize("exec_env", ["dev", "prod"])
 @pytest.mark.parametrize(
     ("sync_url", "carrier", "connect_args"),
     [

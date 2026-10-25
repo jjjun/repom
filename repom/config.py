@@ -156,6 +156,9 @@ class PostgresTlsSettings:
 
     sslmode: str
     sslrootcert: Optional[str]
+    # config.postgres.sslmode から決まった場合に True。エンジン用 resolver が、
+    # URL に sslmode がなくてもこの明示設定を URL へ書き込む判断に使う。
+    sslmode_configured: bool = field(default=False, compare=False)
 
 
 @dataclass
@@ -378,8 +381,10 @@ class RepomConfig(Config):
         environ = os.environ if environ is None else environ
         hosts = _postgres_host_values(host)
         is_remote = any(not _is_local_postgres_host(value) for value in hosts)
+        sslmode_configured = False
         if sslmode is None:
             sslmode = self.postgres.sslmode
+            sslmode_configured = sslmode is not None
         if sslmode is None:
             sslmode = environ.get("PGSSLMODE")
         if sslmode is None:
@@ -405,6 +410,7 @@ class RepomConfig(Config):
         return PostgresTlsSettings(
             sslmode=sslmode,
             sslrootcert=self.postgres.sslrootcert,
+            sslmode_configured=sslmode_configured,
         )
 
     def postgres_tls_settings_for_url(

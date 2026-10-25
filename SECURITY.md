@@ -277,20 +277,26 @@ Unless a difference is stated below, these contracts apply to both
   resolved `sslmode` into generated and PostgreSQL override URLs, and into
   `PGSSLMODE` for host libpq client tools
   when a mode is resolved; `connect_args` TLS options override URL options. If
-  URL and `connect_args` omit `sslmode`, `PGSSLMODE` is validated and propagated
-  when no explicit `config.postgres.sslmode` is set. Loopback/socket and
-  development defaults may permit plaintext. Only SQLite and PostgreSQL are
-  supported backends: a database URL override for another backend, such as
-  MySQL, is returned unchanged in `prod` and gets no destination or transport
-  guard (`test_prod_non_postgres_override_has_no_transport_guard`).
+  URL and `connect_args` omit `sslmode` and `ssl`, the engine resolver writes the
+  resolved `sslmode`, and a configured `sslrootcert` the URL lacks, into the URL
+  for both drivers when `config.postgres.sslmode` or `PGSSLMODE` is set or the
+  destination is a remote `prod` host; `PGSSLMODE` is validated and propagated
+  only when no explicit `config.postgres.sslmode` is set. Otherwise the URL is
+  left unchanged and libpq or asyncpg apply their own default (`prefer`).
+  Loopback/socket and development defaults may permit plaintext. Only SQLite
+  and PostgreSQL are supported backends: a database URL override for another
+  backend, such as MySQL, is returned unchanged in `prod` and gets no
+  destination or transport guard
+  (`test_prod_non_postgres_override_has_no_transport_guard`).
 - `require` alone is not a guarantee of certificate/hostname verification.
   Preserve explicitly selected `verify-ca`/`verify-full` semantics across driver
   adaptation. For libpq, absent `sslrootcert`, verification uses `PGSSLROOTCERT`
   or `~/.postgresql/root.crt`, not the system trust store. The asyncpg path
   passes a mode string through when no root certificate is configured; with an
   explicit root certificate, repom builds an `SSLContext` that does not load
-  CRLs. Deployments needing authenticated remote peers must choose the
-  corresponding verification settings and trust roots.
+  CRLs; `sslrootcert=system` (libpq 16+) builds a default context that uses the
+  platform trust store. Deployments needing authenticated remote peers must
+  choose the corresponding verification settings and trust roots.
 - Ordinary repr, logs, CLI status, diagnostics, and errors must not unexpectedly
   expose credentials. `safe_db_url()` masks userinfo passwords and a fixed set
   of query keys, including `dsn`; it is not a universal sanitizer. Alembic URL

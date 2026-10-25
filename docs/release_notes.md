@@ -26,6 +26,12 @@
   production destination now raises `ValueError`. TLS mode precedence is URL or
   `connect_args`, then `config.postgres.sslmode`, then `PGSSLMODE`, then the destination
   default.
+- The shared PostgreSQL engine resolver now writes an explicit
+  `config.postgres.sslmode` (and a configured `sslrootcert` the URL lacks) into raw
+  URLs that omit `sslmode`, so `resolve_engine_settings()` and the `repom.testing`
+  fixtures apply the mode they report for both drivers. The asyncpg adaptation also
+  accepts `sslrootcert=system` and builds a default `SSLContext` from the platform
+  trust store instead of raising `FileNotFoundError`.
 - BREAKING: Host PostgreSQL client tools no longer inherit `PGHOSTADDR` or `PGSERVICE`
   from the parent environment.
 - BREAKING: The shared PostgreSQL engine resolver now rejects `connect_args` keys
