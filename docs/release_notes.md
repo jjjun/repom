@@ -190,6 +190,14 @@
 
 ### Fixed
 
+- `write_checksum()` now writes the `.sha256` sidecar to an exclusive 0600
+  `.sha256.partial` sibling and publishes it with `os.replace`, so a symlink planted
+  at the sidecar path is replaced instead of followed and a reader never sees a
+  truncated sidecar; a failed write leaves no partial file. `pg_dump_custom()` now
+  streams a Docker dump through the descriptor of its exclusive partial file instead of
+  reopening the path, and creates a missing dump directory with mode 0700 (an existing
+  directory keeps its mode). Exploiting the old behavior needed write access to the
+  backup directory.
 - A plaintext `<backup>.<random>.decompressed` copy that a hard-killed PostgreSQL
   restore left in the backup directory is now removed once it is 24 hours old, like a
   `.partial` file: `db_restore` clears such files for any PostgreSQL backup name before

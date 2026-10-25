@@ -18,6 +18,8 @@ from repom.scripts.pg_dump_tools import (
     pg_tools_available,
 )
 
+POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="POSIX file mode bits only")
+
 
 def _params(
     password: str | None = "secret",
@@ -364,6 +366,114 @@ def test_pg_dump_custom_replaces_symlink_without_following_it(monkeypatch, tmp_p
     assert not dump_path.is_symlink()
     assert victim_path.read_bytes() == b"keep this file"
     assert _backup_utils.verify_checksum(dump_path) is True
+
+
+def _use_fake_docker_pg_dump(monkeypatch, stdout_bytes: int) -> None:
+    monkeypatch.setattr(_backup_utils, "is_container_running", MagicMock(return_value=True))
+    monkeypatch.setattr(
+        pg_dump_tools.DockerCommandExecutor,
+        "exec_command",
+        _version_only_exec_command("pg_dump"),
+    )
+    monkeypatch.setattr(
+        pg_dump_tools,
+        "build_pg_client_command",
+        lambda tool, **kwargs: fake_client_command(),
+    )
+    monkeypatch.setenv("FAKE_CHILD_STDOUT_BYTES", str(stdout_bytes))
+
+
+def test_pg_dump_custom_via_docker_streams_into_the_exclusive_descriptor(
+    monkeypatch, tmp_path: Path
+):
+    """The Docker dump writes through the descriptor open_backup_temp_file
+    returned, never by reopening the partial path (a link swapped in between
+    create and write would be followed)."""
+    dump_path = tmp_path / "db.dump"
+    opened = []
+    streamed = []
+    real_open_backup_temp_file = pg_dump_tools.open_backup_temp_file
+    real_via_docker = pg_dump_tools._pg_dump_custom_via_docker
+
+    def spy_open_backup_temp_file(path):
+        dump_file = real_open_backup_temp_file(path)
+        opened.append((path, dump_file))
+        return dump_file
+
+    def spy_via_docker(params, dump_file):
+        streamed.append(dump_file)
+        return real_via_docker(params, dump_file)
+
+    def reject_reopen(*args, **kwargs):
+        raise AssertionError(f"dump path reopened by path: {args}")
+
+    _use_fake_docker_pg_dump(monkeypatch, 1024)
+    monkeypatch.setattr(pg_dump_tools, "open_backup_temp_file", spy_open_backup_temp_file)
+    monkeypatch.setattr(pg_dump_tools, "_pg_dump_custom_via_docker", spy_via_docker)
+    monkeypatch.setattr(pg_dump_tools, "open", reject_reopen, raising=False)
+
+    result = pg_dump_custom(_params(), dump_path)
+
+    assert result.returncode == 0
+    assert result.used_docker is True
+    partial_path, partial_file = opened[0]
+    assert partial_path == dump_path.with_name("db.dump.partial")
+    assert streamed == [partial_file]
+    assert partial_file.closed
+    assert dump_path.stat().st_size == 1024
+    assert _backup_utils.verify_checksum(dump_path) is True
+    assert list(tmp_path.glob("*.partial")) == []
+
+
+def test_pg_dump_custom_via_docker_closes_descriptor_when_docker_binary_is_missing(
+    monkeypatch, tmp_path: Path
+):
+    dump_path = tmp_path / "db.dump"
+    opened = []
+    real_open_backup_temp_file = pg_dump_tools.open_backup_temp_file
+
+    def spy_open_backup_temp_file(path):
+        dump_file = real_open_backup_temp_file(path)
+        opened.append(dump_file)
+        return dump_file
+
+    _use_fake_docker_pg_dump(monkeypatch, 0)
+    monkeypatch.setattr(
+        pg_dump_tools,
+        "build_pg_client_command",
+        lambda tool, **kwargs: ["repom-test-nonexistent-pg-client-binary"],
+    )
+    monkeypatch.setattr(pg_dump_tools, "open_backup_temp_file", spy_open_backup_temp_file)
+
+    result = pg_dump_custom(_params(), dump_path)
+
+    assert result.returncode == 127
+    assert opened[0].closed
+    assert list(tmp_path.iterdir()) == []
+
+
+@POSIX_ONLY
+def test_pg_dump_custom_creates_missing_dump_directory_with_mode_0700(monkeypatch, tmp_path):
+    dump_dir = tmp_path / "dumps"
+    _use_fake_docker_pg_dump(monkeypatch, 64)
+
+    result = pg_dump_custom(_params(), dump_dir / "db.dump")
+
+    assert result.returncode == 0
+    assert dump_dir.stat().st_mode & 0o777 == 0o700
+
+
+@POSIX_ONLY
+def test_pg_dump_custom_keeps_mode_of_existing_dump_directory(monkeypatch, tmp_path):
+    dump_dir = tmp_path / "shared"
+    dump_dir.mkdir()
+    os.chmod(dump_dir, 0o755)
+    _use_fake_docker_pg_dump(monkeypatch, 64)
+
+    result = pg_dump_custom(_params(), dump_dir / "db.dump")
+
+    assert result.returncode == 0
+    assert dump_dir.stat().st_mode & 0o777 == 0o755
 
 
 @pytest.mark.parametrize("name", ["my db.dump", "db#1.dump", "db?x.dump", "a..b.dump"])

@@ -513,6 +513,85 @@ def test_write_checksum_and_verify_checksum_round_trip(tmp_path):
     assert sidecar.exists()
     assert compute_checksum(backup_path) in sidecar.read_text(encoding="utf-8")
     assert verify_checksum(backup_path) is True
+    assert list(tmp_path.glob("*.partial")) == []
+
+
+@POSIX_ONLY
+def test_write_checksum_creates_sidecar_with_mode_0600(tmp_path):
+    backup_path = tmp_path / "db_20260101_000000.sql.gz"
+    backup_path.write_bytes(b"backup payload")
+
+    sidecar = write_checksum(backup_path)
+
+    assert sidecar.stat().st_mode & 0o777 == 0o600
+
+
+@POSIX_ONLY
+def test_write_checksum_replaces_symlink_without_following_it(tmp_path):
+    backup_path = tmp_path / "db_20260101_000000.sql.gz"
+    backup_path.write_bytes(b"backup payload")
+    victim = tmp_path / "victim.txt"
+    victim.write_bytes(b"keep this file")
+    checksum_path(backup_path).symlink_to(victim)
+
+    sidecar = write_checksum(backup_path)
+
+    assert not sidecar.is_symlink()
+    assert victim.read_bytes() == b"keep this file"
+    assert verify_checksum(backup_path) is True
+
+
+def test_write_checksum_replaces_existing_sidecar_atomically(monkeypatch, tmp_path):
+    backup_path = tmp_path / "db_20260101_000000.sql.gz"
+    backup_path.write_bytes(b"backup payload")
+    sidecar = checksum_path(backup_path)
+    sidecar.write_text("stale\n", encoding="utf-8")
+    real_replace = os.replace
+    replaced = []
+
+    def spy_replace(src, dst):
+        # Until the replace, readers still see the previous complete sidecar.
+        replaced.append((src, dst, sidecar.read_text(encoding="utf-8")))
+        real_replace(src, dst)
+
+    monkeypatch.setattr(_backup_utils.os, "replace", spy_replace)
+
+    write_checksum(backup_path)
+
+    assert replaced == [(sidecar.with_name(f"{sidecar.name}.partial"), sidecar, "stale\n")]
+    assert verify_checksum(backup_path) is True
+    assert list(tmp_path.glob("*.partial")) == []
+
+
+def test_write_checksum_removes_partial_when_publish_fails(monkeypatch, tmp_path):
+    backup_path = tmp_path / "db_20260101_000000.sql.gz"
+    backup_path.write_bytes(b"backup payload")
+    sidecar = checksum_path(backup_path)
+    sidecar.write_text("previous\n", encoding="utf-8")
+
+    def failing_replace(src, dst):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(_backup_utils.os, "replace", failing_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        write_checksum(backup_path)
+
+    assert sidecar.read_text(encoding="utf-8") == "previous\n"
+    assert list(tmp_path.glob("*.partial")) == []
+
+
+def test_write_checksum_keeps_foreign_partial_it_did_not_create(tmp_path):
+    backup_path = tmp_path / "db_20260101_000000.sql.gz"
+    backup_path.write_bytes(b"backup payload")
+    foreign_partial = tmp_path / "db_20260101_000000.sql.gz.sha256.partial"
+    foreign_partial.write_bytes(b"other writer")
+
+    with pytest.raises(FileExistsError):
+        write_checksum(backup_path)
+
+    assert foreign_partial.read_bytes() == b"other writer"
+    assert not checksum_path(backup_path).exists()
 
 
 def test_verify_checksum_returns_false_when_no_sidecar_exists(tmp_path):

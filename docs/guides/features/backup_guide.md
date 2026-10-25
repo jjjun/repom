@@ -46,7 +46,9 @@ Windows の drive 相対 path を拒否します。
 `ChecksumError` が `RestoreError` に wrap されて呼び出し元へ通知され、リストアを
 中断します。`db_backup` と `pg_dump_custom()` は exclusive な sibling `.partial` file を mode `0600` で
 作成し、成功後に backup file を公開します。checksum sidecar は backup file の公開後に書かれるため、
-sidecar がない場合は警告のみで restore が続行します。この checksum は sidecar がある場合の不一致を
+sidecar がない場合は警告のみで restore が続行します。sidecar は exclusive な mode `0600` の
+`.sha256.partial` に書いてから atomic に置き換えるため、sidecar の path にある symlink や古い
+file は辿られず置き換えられます。この checksum は sidecar がある場合の不一致を
 検出しますが、backup と sidecar の両方を置き換えた場合の真正性は保証しません。
 
 ## データベース接続先
@@ -164,7 +166,9 @@ object を使用せず、`bytea` 列には影響しません。
 `repom.scripts.pg_dump_tools` は custom-format の PostgreSQL dump / restore を行う
 library helper を提供します。`PgConnParams.from_config()` は現在の設定から接続情報を作成し、
 `pg_dump_custom()` と `pg_restore_custom()` はそれぞれ custom-format の dump と restore を
-実行します。`pg_dump_custom()` は owner-only の sibling partial file と checksum sidecar を使います。
+実行します。`pg_dump_custom()` は owner-only の sibling partial file と checksum sidecar を使い、
+Docker 経由の dump は partial file を path で開き直さず、exclusive に作成した descriptor へ書き込みます。
+dump 先の directory が存在しない場合は mode `0700` で作成し、既存の directory の mode は変更しません。
 `pg_restore_custom()` は `pg_restore --clean --if-exists --single-transaction` を確認なしで実行し、
 production 環境の拒否もありません。
 `pg_tools_available()` は設定された経路で必要な client tools を利用できるか確認します。

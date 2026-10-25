@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import BinaryIO
 
 from basekit.docker_manager import DockerCommandExecutor
 from sqlalchemy.engine import make_url
@@ -18,6 +19,7 @@ from repom.scripts._backup_utils import (
     build_pg_client_command,
     checksum_path,
     compute_checksum,
+    ensure_backup_dir,
     mask_password,
     open_backup_temp_file,
     run_postgres_via_docker_or_host,
@@ -156,7 +158,11 @@ def pg_dump_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
         # A drive-relative path such as "C:_x.dump" (a database named "C:"
         # joined onto a directory) lands in the drive's working directory.
         raise ValueError(f"dump path cannot be drive-relative: {dump_path}")
-    dump_path.parent.mkdir(parents=True, exist_ok=True)
+    if not dump_path.parent.exists():
+        # The directory is caller-supplied, so only one created here gets the
+        # owner-only mode; an existing directory keeps its mode instead of being
+        # chmod-ed (it may be shared or not owned by this process).
+        ensure_backup_dir(dump_path.parent)
     partial_path = dump_path.with_name(f"{dump_path.name}.partial")
     checksum_destination = checksum_path(dump_path)
     checksum_partial_path = checksum_destination.with_name(
@@ -164,8 +170,7 @@ def pg_dump_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
     )
 
     try:
-        with open_backup_temp_file(partial_path):
-            pass
+        partial_file = open_backup_temp_file(partial_path)
     except OSError as exc:
         return PgToolResult(
             returncode=1,
@@ -174,11 +179,22 @@ def pg_dump_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
             stderr=str(exc),
         )
 
+    def dump_via_docker() -> PgToolResult:
+        # Stream through the descriptor created above instead of reopening the
+        # path, so a link swapped in after creation is never followed.
+        with partial_file:
+            return _pg_dump_custom_via_docker(params, partial_file)
+
+    def dump_via_host() -> PgToolResult:
+        # pg_dump opens --file itself; release the descriptor first.
+        partial_file.close()
+        return _pg_dump_custom_via_host(params, partial_path)
+
     checksum_partial_created = False
     try:
         result = run_postgres_via_docker_or_host(
-            via_docker=lambda: _pg_dump_custom_via_docker(params, partial_path),
-            via_host=lambda: _pg_dump_custom_via_host(params, partial_path),
+            via_docker=dump_via_docker,
+            via_host=dump_via_host,
             operation="custom-format dump",
             host_tools="host pg_dump",
             container_name=params.container_name,
@@ -214,6 +230,7 @@ def pg_dump_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
         checksum_partial_path.replace(checksum_destination)
         return result
     finally:
+        partial_file.close()
         partial_path.unlink(missing_ok=True)
         if checksum_partial_created:
             checksum_partial_path.unlink(missing_ok=True)
@@ -255,7 +272,7 @@ def _allow_docker(params: PgConnParams) -> bool:
     return params.use_docker and _is_local_postgres_host(params.host)
 
 
-def _pg_dump_custom_via_docker(params: PgConnParams, dump_path: Path) -> PgToolResult:
+def _pg_dump_custom_via_docker(params: PgConnParams, dump_file: BinaryIO) -> PgToolResult:
     container_name = _container_name(params)
     tool_version = _docker_tool_version(container_name, "pg_dump", params.password)
     command = build_pg_client_command(
@@ -268,10 +285,9 @@ def _pg_dump_custom_via_docker(params: PgConnParams, dump_path: Path) -> PgToolR
         container_name=container_name,
     )
 
+    writer = ByteCountingWriter(dump_file)
     try:
-        with open(dump_path, "wb") as dump_file:
-            writer = ByteCountingWriter(dump_file)
-            result = run_streaming_command(command, stdout_file=writer, password=params.password)
+        result = run_streaming_command(command, stdout_file=writer, password=params.password)
     except FileNotFoundError as exc:
         return PgToolResult(
             returncode=127,

@@ -474,7 +474,13 @@ Unless a difference is stated below, these contracts apply to both
   target. Assess path construction, existing files, links, failure cleanup, and
   backup naming against a concrete attacker capability. `db_backup` and
   `pg_dump_custom()` create exclusive 0600 sibling partial files and publish the
-  backup after success; both generate SHA-256 sidecars. PostgreSQL backup names
+  backup after success; both generate SHA-256 sidecars, each written to an
+  exclusive 0600 `.sha256.partial` sibling and atomically replaced into place, so
+  a symlink or older file at the sidecar path is replaced rather than followed or
+  truncated. `pg_dump_custom()` streams a Docker dump through the descriptor of its
+  exclusive partial file instead of reopening the path, and creates a missing dump
+  directory with mode 0700 but leaves an existing directory's mode unchanged.
+  PostgreSQL backup names
   are derived from the database name after allowing only ASCII letters, digits,
   `_`, `.`, and `-` and rejecting `..`; `db_backup` also requires the joined
   backup, partial, and sidecar paths to be direct children of the backup

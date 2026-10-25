@@ -173,12 +173,24 @@ def checksum_path(backup_path: Path) -> Path:
 
 
 def write_checksum(backup_path: Path) -> Path:
-    """Record ``backup_path``'s SHA-256 checksum in a sidecar file."""
+    """Record ``backup_path``'s SHA-256 checksum in a sidecar file.
+
+    Written to an exclusive 0600 ``.partial`` sibling and published with
+    ``os.replace``, so a symlink or older file at the sidecar path is replaced
+    rather than followed or truncated, and a reader never sees a half-written
+    sidecar.
+    """
     digest = compute_checksum(backup_path)
     sidecar = checksum_path(backup_path)
-    fd = os.open(sidecar, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, BACKUP_FILE_MODE)
-    with os.fdopen(fd, "w") as sidecar_file:
-        sidecar_file.write(f"{digest}  {backup_path.name}\n")
+    partial = sidecar.with_name(f"{sidecar.name}.partial")
+    sidecar_file = open_backup_temp_file(partial)
+    try:
+        with sidecar_file:
+            sidecar_file.write(f"{digest}  {backup_path.name}\n".encode("utf-8"))
+        os.replace(partial, sidecar)
+    except BaseException:
+        partial.unlink(missing_ok=True)
+        raise
     return sidecar
 
 
