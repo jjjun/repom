@@ -491,6 +491,17 @@ Unless a difference is stated below, these contracts apply to both
   atomically replaced into place. repom sets no Windows ACLs, and the compose
   directory itself is not restricted. Permission tests skip on Windows; POSIX
   mode bits alone are not evidence of equivalent Windows ACL isolation.
+- A PostgreSQL restore first decompresses the whole backup into a sibling
+  `<backup>.<random>.decompressed` file in the backup directory, created
+  exclusively with mode 0600 (`tempfile.mkstemp`), so a corrupt archive fails
+  before `psql` starts. The file holds the full database as plain SQL and is
+  not shown in backup listings. The restore unlinks it in a `finally` block
+  (also on a `psql` failure or `KeyboardInterrupt`), but a hard kill or power
+  loss leaves it behind. The next `db_restore` run, and `db_backup` for the same
+  database, remove such files once they are 24 hours old (the `.partial` rule),
+  matching only anchored backup names. Until then, and while neither runs, the
+  plaintext stays on disk; delete it by hand after an interrupted restore. repom
+  sets no Windows ACL on it, as for other backup files.
 - Generated Compose/configuration/initialization content must not allow values
   to inject additional directives or SQL. Published service ports default to
   loopback; LAN exposure requires explicit configuration. Generation must retain

@@ -1,6 +1,8 @@
 
 import gzip
+import os
 import sqlite3
+import time
 from unittest.mock import MagicMock
 
 import pytest
@@ -104,6 +106,78 @@ def test_restore_succeeds_when_psql_exits_zero(monkeypatch, tmp_path):
     _use_fake_psql(monkeypatch)
 
     db_restore.restore_postgresql_via_host(backup_file)
+
+
+def test_restore_removes_decompressed_temp_file_when_psql_fails(monkeypatch, tmp_path):
+    backup_file = _make_backup_file(tmp_path)
+    config = _mock_postgres_config(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    _use_fake_psql(monkeypatch)
+    monkeypatch.setenv("FAKE_CHILD_EXIT_CODE", "1")
+    monkeypatch.setenv("FAKE_CHILD_STDERR_TEXT", "psql: FATAL")
+
+    with pytest.raises(RestoreError, match="psql"):
+        db_restore.restore_postgresql_via_host(backup_file)
+
+    assert list(tmp_path.glob("*.decompressed")) == []
+    assert [path.name for path in tmp_path.iterdir()] == [backup_file.name]
+
+
+def test_restore_removes_decompressed_temp_file_when_psql_succeeds(monkeypatch, tmp_path):
+    backup_file = _make_backup_file(tmp_path)
+    config = _mock_postgres_config(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    _use_fake_psql(monkeypatch)
+
+    db_restore.restore_postgresql_via_host(backup_file)
+
+    assert [path.name for path in tmp_path.iterdir()] == [backup_file.name]
+
+
+def test_restore_removes_stale_decompressed_files_left_by_an_interrupted_restore(
+    monkeypatch, tmp_path
+):
+    stale_time = time.time() - _backup_utils.STALE_PARTIAL_BACKUP_AGE_SECONDS - 1
+    backup_file = _make_backup_file(tmp_path)
+    other_backup = _make_backup_file(tmp_path, name="other_20260101_000000.sql.gz")
+    sidecar = write_checksum(other_backup)
+    stale = tmp_path / "other_20260101_000000.sql.gz.abcd1234.decompressed"
+    recent = tmp_path / "repom_test_20260101_000000.sql.gz.wxyz5678.decompressed"
+    unrelated = tmp_path / "notes.sql.gz.abcd1234.decompressed"
+    stale.write_bytes(b"SELECT 'leaked';\n")
+    recent.write_bytes(b"SELECT 'in progress';\n")
+    unrelated.write_bytes(b"not a backup")
+    os.utime(stale, (stale_time, stale_time))
+    os.utime(unrelated, (stale_time, stale_time))
+    config = _mock_postgres_config(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    _use_fake_psql(monkeypatch)
+
+    db_restore.restore_postgresql_via_host(backup_file)
+
+    assert not stale.exists()
+    assert recent.exists()
+    assert unrelated.exists()
+    assert other_backup.exists()
+    assert sidecar.exists()
+
+
+def test_restore_proceeds_when_stale_decompressed_cleanup_fails(monkeypatch, tmp_path):
+    backup_file = _make_backup_file(tmp_path)
+    config = _mock_postgres_config(tmp_path)
+    monkeypatch.setattr(db_restore, "config", config)
+    _use_fake_psql(monkeypatch)
+    monkeypatch.setattr(
+        db_restore,
+        "cleanup_stale_decompressed_files",
+        MagicMock(side_effect=PermissionError("in use")),
+    )
+    sink_path = tmp_path / "stdin_echo.bin"
+    monkeypatch.setenv("FAKE_CHILD_STDIN_SINK", str(sink_path))
+
+    db_restore.restore_postgresql_via_host(backup_file)
+
+    assert sink_path.read_bytes() == b"SELECT 1;\n"
 
 
 def test_restore_postgresql_via_host_delivers_exact_decompressed_bytes_to_psql_stdin(

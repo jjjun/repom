@@ -20,9 +20,11 @@ from pathlib import Path
 from typing import Optional
 
 from repom.scripts._backup_utils import (
+    POSTGRES_BACKUP_NAME_PATTERN,
     RestoreError,
     build_host_pg_env,
     build_pg_client_command,
+    cleanup_stale_decompressed_files,
     format_size,
     get_backups,
     gzip_decompress_to_temp_file,
@@ -196,6 +198,23 @@ def _psql_command(container_name: str | None) -> list[str]:
     )
 
 
+def _remove_stale_decompressed_files(backup_dir: Path) -> None:
+    """Remove plaintext copies an interrupted earlier restore left in ``backup_dir``.
+
+    A failure here only means a stale file stays for the next run, so it must
+    not block the restore in progress.
+    """
+    try:
+        removed = cleanup_stale_decompressed_files(
+            backup_dir, "*.sql.gz", POSTGRES_BACKUP_NAME_PATTERN
+        )
+    except OSError as e:
+        logger.warning(f"Could not remove stale decompressed restore files: {e}")
+        return
+    for path in removed:
+        logger.warning(f"Removed stale decompressed restore file: {path.name}")
+
+
 def _restore_postgresql(backup_file: Path, container_name: str | None) -> None:
     """PostgreSQL データベースのリストア処理（ホスト / Docker exec 共通）
 
@@ -217,6 +236,9 @@ def _restore_postgresql(backup_file: Path, container_name: str | None) -> None:
 
     try:
         warn_if_checksum_missing(backup_file)
+
+        # 強制終了などで残った前回の展開済み平文ファイルを（24 時間経過分のみ）削除する
+        _remove_stale_decompressed_files(backup_file.parent)
 
         # 破損／切り詰められた gzip はここで検出し、psql を起動する前に失敗させる
         logger.debug("Decompressing backup file")

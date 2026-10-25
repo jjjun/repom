@@ -18,6 +18,7 @@ from repom.scripts._backup_utils import (
     build_pg_client_command,
     checksum_path,
     cleanup_incomplete_backups,
+    cleanup_stale_decompressed_files,
     compute_checksum,
     ensure_backup_dir,
     format_size,
@@ -157,6 +158,76 @@ def test_cleanup_incomplete_backups_preserves_recent_partial_artifacts(tmp_path)
     assert removed == [stale_partial]
     assert recent_partial.exists()
     assert not stale_partial.exists()
+
+
+def test_cleanup_incomplete_backups_removes_stale_decompressed_files(tmp_path):
+    stale_age = _backup_utils.STALE_PARTIAL_BACKUP_AGE_SECONDS + 1
+    final = tmp_path / "db_20260101_000000.sql.gz"
+    sidecar = tmp_path / "db_20260101_000000.sql.gz.sha256"
+    recent = tmp_path / "db_20260101_000000.sql.gz.abcd1234.decompressed"
+    stale = tmp_path / "db_20260102_000000.sql.gz.wxyz_987.decompressed"
+    _touch(final, 1)
+    _touch(sidecar, 1)
+    _touch(recent, time.time())
+    _touch(stale, time.time() - stale_age)
+
+    removed = cleanup_incomplete_backups(tmp_path, "db_*.sql.gz")
+
+    assert removed == [stale]
+    assert not stale.exists()
+    assert recent.exists()
+    assert final.exists()
+    assert sidecar.exists()
+
+
+def test_cleanup_incomplete_backups_decompressed_cleanup_honors_name_pattern(tmp_path):
+    stale_time = time.time() - _backup_utils.STALE_PARTIAL_BACKUP_AGE_SECONDS - 1
+    prod = tmp_path / "repom_20260101_000000.sql.gz.abcd1234.decompressed"
+    dev = tmp_path / "repom_dev_20260101_000000.sql.gz.abcd1234.decompressed"
+    unrelated = tmp_path / "repom_20260101_000000.sql.gz.decompressed"
+    _touch(prod, stale_time)
+    _touch(dev, stale_time)
+    _touch(unrelated, stale_time)
+
+    removed = cleanup_incomplete_backups(
+        tmp_path, "repom_*.sql.gz", name_pattern=backup_name_pattern("repom", ".sql.gz")
+    )
+
+    assert removed == [prod]
+    assert not prod.exists()
+    assert dev.exists()
+    assert unrelated.exists()
+
+
+def test_rotate_backups_reports_stale_decompressed_files_as_removed(tmp_path):
+    stale_time = time.time() - _backup_utils.STALE_PARTIAL_BACKUP_AGE_SECONDS - 1
+    kept = tmp_path / "db_20260103_000000.sql.gz"
+    stale = tmp_path / "db_20260103_000000.sql.gz.abcd1234.decompressed"
+    _touch(kept, 3)
+    _touch(stale, stale_time)
+
+    removed = rotate_backups(tmp_path, "db_*.sql.gz", max_keep=3)
+
+    assert removed == [stale]
+    assert kept.exists()
+
+
+def test_cleanup_stale_decompressed_files_matches_any_postgres_backup_name(tmp_path):
+    stale_time = time.time() - _backup_utils.STALE_PARTIAL_BACKUP_AGE_SECONDS - 1
+    current = tmp_path / "repom_20260101_000000.sql.gz.abcd1234.decompressed"
+    legacy = tmp_path / "db_20260101_000000.sql.gz.abcd1234.decompressed"
+    other_kind = tmp_path / "notes.sql.gz.abcd1234.decompressed"
+    partial = tmp_path / "repom_20260101_000000.sql.gz.partial"
+    for path in (current, legacy, other_kind, partial):
+        _touch(path, stale_time)
+
+    removed = cleanup_stale_decompressed_files(
+        tmp_path, "*.sql.gz", _backup_utils.POSTGRES_BACKUP_NAME_PATTERN
+    )
+
+    assert sorted(removed) == sorted([current, legacy])
+    assert other_kind.exists()
+    assert partial.exists()
 
 
 def test_backup_name_pattern_does_not_match_database_with_shared_prefix():
@@ -745,6 +816,21 @@ class TestGzipDecompressToTempFile:
         source.write_bytes(b"not a gzip file")
 
         with pytest.raises(gzip.BadGzipFile):
+            gzip_decompress_to_temp_file(source)
+
+        assert list(tmp_path.glob("*.decompressed")) == []
+
+    def test_interrupt_while_decompressing_removes_temp_file(self, tmp_path, monkeypatch):
+        source = tmp_path / "backup.sql.gz"
+        with gzip.open(source, "wb") as f:
+            f.write(b"payload")
+
+        def interrupted_copy(*args, **kwargs):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(_backup_utils.shutil, "copyfileobj", interrupted_copy)
+
+        with pytest.raises(KeyboardInterrupt):
             gzip_decompress_to_temp_file(source)
 
         assert list(tmp_path.glob("*.decompressed")) == []

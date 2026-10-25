@@ -33,6 +33,14 @@ BACKUP_DIR_MODE = 0o700
 BACKUP_FILE_MODE = 0o600
 CHECKSUM_SUFFIX = ".sha256"
 BACKUP_NAME_COMPONENT_PATTERN = re.compile(r"[A-Za-z0-9_.-]+")
+# Any PostgreSQL backup db_backup wrote (or a legacy ``db_<timestamp>`` one),
+# whichever database it came from.
+POSTGRES_BACKUP_NAME_PATTERN = re.compile(
+    BACKUP_NAME_COMPONENT_PATTERN.pattern + r"_\d{8}_\d{6}\.sql\.gz"
+)
+# Suffix of the plaintext copy gzip_decompress_to_temp_file leaves next to the
+# backup while a restore is running.
+DECOMPRESSED_SUFFIX = ".decompressed"
 
 
 class ChecksumError(Exception):
@@ -366,12 +374,44 @@ def parse_backup_source_database(name: str, suffix: str) -> Optional[str]:
     return source
 
 
+def cleanup_stale_decompressed_files(
+    backup_dir: Path,
+    glob_pattern: str,
+    name_pattern: Optional[re.Pattern[str]] = None,
+) -> list[Path]:
+    """Remove stale plaintext copies left by an interrupted PostgreSQL restore.
+
+    ``gzip_decompress_to_temp_file`` names its temp file
+    ``<backup name>.<random>.decompressed`` and a restore unlinks it in a
+    ``finally`` block, so one only survives a hard kill or power loss. It holds
+    the whole database as plain SQL and is never listed as a backup, so it is
+    removed once it is older than STALE_PARTIAL_BACKUP_AGE_SECONDS, like a
+    ``.partial`` file. ``glob_pattern`` and ``name_pattern`` select the backup
+    the file was made from, exactly as in ``cleanup_incomplete_backups``.
+    """
+    removed_files = []
+    stale_cutoff = time.time() - STALE_PARTIAL_BACKUP_AGE_SECONDS
+    for path in backup_dir.glob(f"{glob_pattern}.*{DECOMPRESSED_SUFFIX}"):
+        if name_pattern is not None:
+            # Drop the mkstemp random part to recover the backup's own name.
+            source_name = path.name.removesuffix(DECOMPRESSED_SUFFIX).rpartition(".")[0]
+            if not name_pattern.fullmatch(source_name):
+                continue
+        try:
+            if path.stat().st_mtime <= stale_cutoff:
+                path.unlink(missing_ok=True)
+                removed_files.append(path)
+        except FileNotFoundError:
+            continue
+    return removed_files
+
+
 def cleanup_incomplete_backups(
     backup_dir: Path,
     glob_pattern: str,
     name_pattern: Optional[re.Pattern[str]] = None,
 ) -> list[Path]:
-    """Remove zero-byte backup files and stale partial artifacts.
+    """Remove zero-byte backup files and stale partial and decompressed artifacts.
 
     When ``name_pattern`` is given, only files whose name fullmatches it are
     considered, so a ``glob_pattern`` that is also a prefix of another
@@ -401,6 +441,8 @@ def cleanup_incomplete_backups(
                 incomplete_files.append(path)
         except FileNotFoundError:
             continue
+
+    incomplete_files.extend(cleanup_stale_decompressed_files(backup_dir, glob_pattern, name_pattern))
 
     return incomplete_files
 
@@ -641,10 +683,11 @@ def gzip_decompress_to_temp_file(source: Path) -> Path:
     corrupt archive raises here (gzip.BadGzipFile / EOFError) before any of
     its content reaches a client tool's stdin - a restore must fail before
     the child process starts, not partway through applying it. The caller
-    owns the returned path and must unlink it when done.
+    owns the returned path and must unlink it when done; a copy that survives
+    a hard kill is removed by ``cleanup_stale_decompressed_files``.
     """
     fd, tmp_name = tempfile.mkstemp(
-        dir=source.parent, prefix=f"{source.name}.", suffix=".decompressed"
+        dir=source.parent, prefix=f"{source.name}.", suffix=DECOMPRESSED_SUFFIX
     )
     os.close(fd)
     tmp_path = Path(tmp_name)
@@ -652,7 +695,7 @@ def gzip_decompress_to_temp_file(source: Path) -> Path:
     try:
         with gzip.open(source, "rb") as compressed, open(tmp_path, "wb") as decompressed:
             shutil.copyfileobj(compressed, decompressed)
-    except Exception:
+    except BaseException:
         tmp_path.unlink(missing_ok=True)
         raise
     return tmp_path

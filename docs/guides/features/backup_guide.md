@@ -151,6 +151,14 @@ large object を含むプレーン SQL ダンプでは、large object の処理�
 が psql の外側のトランザクションを途中で終了させる場合があります。repom のモデルは large
 object を使用せず、`bytea` 列には影響しません。
 
+`psql` を起動する前に、アーカイブ全体を backup directory 直下の
+`<backup>.<random>.decompressed` へ展開して検証します。このファイルは mode `0600` で排他的に
+作成され、データベース全体を平文の SQL として含み、バックアップ一覧には表示されません。
+リストアは成功・失敗（`psql` の失敗や `Ctrl+C` を含む）にかかわらず削除しますが、強制終了や
+電源断では残ります。残ったファイルは、次の `db_restore`（PostgreSQL のリストア）と同じ DB の
+`db_backup` が、作成から 24 時間以上経過したものに限り `.partial` と同じ基準で削除します。
+それまでは平文のまま残るため、リストアが中断された場合は手動で削除してください。
+
 ## `pg_dump_tools` の library helper
 
 `repom.scripts.pg_dump_tools` は custom-format の PostgreSQL dump / restore を行う

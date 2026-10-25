@@ -190,6 +190,13 @@
 
 ### Fixed
 
+- A plaintext `<backup>.<random>.decompressed` copy that a hard-killed PostgreSQL
+  restore left in the backup directory is now removed once it is 24 hours old, like a
+  `.partial` file: `db_restore` clears such files for any PostgreSQL backup name before
+  decompressing, and `db_backup` clears them for its own database through the existing
+  stale-file cleanup. Interrupting the decompression (for example with `Ctrl+C`) also
+  removes its temp file now. Restore behaviour is unchanged. `SECURITY.md` describes
+  the temp file and its cleanup.
 - An empty or whitespace-only `version_table` / `version_table_schema` in
   `alembic.ini` now counts as absent in both `env.py` and `AlembicSetup.from_ini`,
   so the migration environment and `reset_migrations` agree on the version table.
