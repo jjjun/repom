@@ -741,7 +741,7 @@ commit と rollback は呼び出し元が管理します。
 `asyncio.TaskGroup` 内の task、`asyncio.to_thread()`、`contextvars.copy_context().run()` があります。
 子 task や thread から同じ Repository を使うと session を同時利用する可能性があり、子側の書き込みが
 親 scope の終了前に内部 session を commit することもあります。通常の `threading.Thread` と
-`executor.submit()` は Python 3.12.8 では context を継承しませんが、Python 3.14 では継承が有効に
+`executor.submit()` は Python 3.12 では context を継承しませんが、Python 3.14 では継承が有効に
 なる場合があります。継承の有無を前提にせず、この scope 内から子処理を開始しないでください。
 
 `find()` など標準メソッドを使うと、通常のフィルタや soft-delete 条件、検索オプションが適用されます。

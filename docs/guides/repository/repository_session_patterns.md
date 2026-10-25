@@ -202,7 +202,7 @@ session object を引き継ぐことがあります。例として、`asyncio.cr
 で task 化される coroutine、`asyncio.TaskGroup` 内の task、`asyncio.to_thread()`、
 `contextvars.copy_context().run()` があります。子 task や thread から同じ Repository を使うと
 session を同時利用する可能性があり、子側の書き込みが親 scope の終了前にその内部 session を
-commit することもあります。通常の `threading.Thread` と `executor.submit()` は Python 3.12.8
+commit することもあります。通常の `threading.Thread` と `executor.submit()` は Python 3.12
 では context を継承しませんが、Python 3.14 では thread context 継承が有効になる場合があります。
 継承の有無を前提にせず、consumer code がこの protected scope 内で子処理を開始しないでください。
 これは利用上の制約であり、request 間の脆弱性が確認されたという意味ではありません。
