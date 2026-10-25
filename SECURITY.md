@@ -457,7 +457,18 @@ Unless a difference is stated below, these contracts apply to both
 - Generated Compose/configuration/initialization content must not allow values
   to inject additional directives or SQL. Published service ports default to
   loopback; LAN exposure requires explicit configuration. Generation must retain
-  the missing/placeholder-credential checks for enabled services.
+  the missing/placeholder-credential checks for enabled services. Compose
+  interpolates `$VAR` and `${VAR}` in YAML values, so the literal PostgreSQL
+  environment values (`POSTGRES_USER`, the `pg_isready` healthcheck user, and
+  `PGADMIN_DEFAULT_EMAIL`) go through `quote_yaml_literal()`, which doubles `$`;
+  the `${POSTGRES_PASSWORD}`, `${PGADMIN_DEFAULT_PASSWORD}`, and
+  `${REDIS_PASSWORD}` entries stay deliberate interpolation references written
+  with `quote_yaml_string()`. `format_bound_port()` converts the published host
+  port with `int()` and raises `ValueError` outside 1-65535; it accepts a
+  numeric string and renders the integer, and does not validate the container
+  port. Tests: `TestQuoteYamlLiteral`,
+  `test_generated_services_double_dollar_in_user_and_email`,
+  `TestFormatBoundPort`, and `test_non_integer_host_port_is_rejected`.
 - Generated Compose image references, container names, and named-volume names
   are validated before they reach the shared writer. Volume names must match
   Docker's named-volume syntax so they cannot become host bind mounts. Host-side
@@ -485,7 +496,18 @@ Unless a difference is stated below, these contracts apply to both
   itself does not establish safety against the invoked program's option parsing.
   Host PostgreSQL client tools receive the password through `PGPASSWORD`.
   PostgreSQL rotation sends SQL through stdin and supplies the current password
-  through a mode-0600 env file passed with `docker exec --env-file`. The pgAdmin
+  through a mode-0600 env file passed with `docker exec --env-file`. Redis
+  rotation uses the same helper for the old password (`REDISCLI_AUTH`).
+  `secret_env_file()` rejects a variable name or secret containing a newline,
+  carriage return, or NUL byte with `ValueError` before it creates the file, and
+  the PostgreSQL and Redis rotation functions apply the same check to the
+  current / old password before any command is built or run, in dry-run and
+  execute modes. Characters outside those three are not checked. Tests:
+  `test_secret_env_file_rejects_control_characters_in_the_secret`,
+  `test_secret_env_file_rejects_control_characters_in_the_variable_name`,
+  `test_secret_env_file_error_does_not_echo_the_secret`,
+  `test_postgres_rotation_rejects_control_characters_in_current_password`, and
+  `test_redis_rotation_rejects_control_characters_in_old_password`. The pgAdmin
   update command carries its password in argv; Redis rotation's explicit
   `--new-password` and `--old-password` options also expose values in argv.
   The Redis health check uses `redis-cli ping` with `REDISCLI_AUTH` from the

@@ -600,6 +600,27 @@ def test_postgres_dry_run_shows_env_file_placeholder_when_current_password_set()
     assert "<postgres-auth-env-file>" in result.commands[0]
 
 
+@pytest.mark.parametrize("dry_run", [True, False])
+@pytest.mark.parametrize("character", ["\n", "\r", "\x00"])
+def test_postgres_rotation_rejects_control_characters_in_current_password(
+    dry_run, character
+):
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password=f"old{character}INJECTED=1",
+        new_password="new-secret",
+        databases=(),
+        container_name="repom_postgres",
+    )
+    runner = MagicMock()
+
+    with pytest.raises(ValueError, match="current_password") as excinfo:
+        rotate_postgres_credentials(plan, dry_run=dry_run, runner=runner)
+
+    assert "INJECTED" not in str(excinfo.value)
+    runner.assert_not_called()
+
+
 def test_postgres_dry_run_omits_env_file_without_current_password():
     plan = PostgresCredentialRotationPlan(
         current_user="repom",

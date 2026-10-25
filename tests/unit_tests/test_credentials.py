@@ -150,6 +150,34 @@ def test_secret_env_file_writes_a_file_and_removes_it_afterward():
     assert not os.path.exists(path)
 
 
+@pytest.mark.parametrize("character", ["\n", "\r", "\x00"])
+def test_secret_env_file_rejects_control_characters_in_the_secret(character):
+    with patch("repom.credentials.tempfile.mkstemp") as mkstemp:
+        with pytest.raises(ValueError, match="PGPASSWORD"):
+            with secret_env_file("PGPASSWORD", f"old{character}INJECTED=1"):
+                pass
+
+    mkstemp.assert_not_called()
+
+
+@pytest.mark.parametrize("character", ["\n", "\r", "\x00"])
+def test_secret_env_file_rejects_control_characters_in_the_variable_name(character):
+    with patch("repom.credentials.tempfile.mkstemp") as mkstemp:
+        with pytest.raises(ValueError, match="env_var"):
+            with secret_env_file(f"PGPASSWORD{character}INJECTED", "sentinel-secret"):
+                pass
+
+    mkstemp.assert_not_called()
+
+
+def test_secret_env_file_error_does_not_echo_the_secret():
+    with pytest.raises(ValueError) as excinfo:
+        with secret_env_file("PGPASSWORD", "sentinel\nsecret"):
+            pass
+
+    assert "sentinel" not in str(excinfo.value)
+
+
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits do not verify Windows ACLs")
 def test_secret_env_file_creates_a_0600_file():
     with patch("repom.credentials.os.chmod"):

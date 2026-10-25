@@ -9,6 +9,7 @@ from repom.docker_compose_safety import (
     format_bound_port,
     format_env_file,
     parse_env_file,
+    quote_yaml_literal,
     quote_yaml_string,
     reject_control_characters,
     validate_restart_policy,
@@ -66,6 +67,20 @@ class TestQuoteYamlString:
         )
 
 
+class TestQuoteYamlLiteral:
+    def test_wraps_plain_value_in_double_quotes(self):
+        assert quote_yaml_literal("repom") == '"repom"'
+
+    def test_doubles_dollar_so_compose_reads_the_value_back_verbatim(self):
+        assert quote_yaml_literal("a$b${C}") == '"a$$b$${C}"'
+
+    def test_quote_yaml_string_keeps_a_deliberate_interpolation_reference(self):
+        assert quote_yaml_string("${POSTGRES_PASSWORD}") == '"${POSTGRES_PASSWORD}"'
+
+    def test_still_escapes_yaml_metacharacters(self):
+        assert quote_yaml_literal('a"b\\c\nd') == '"a\\"b\\\\c\\nd"'
+
+
 class TestValidateRestartPolicy:
     @pytest.mark.parametrize(
         "value",
@@ -91,6 +106,19 @@ class TestFormatBoundPort:
 
     def test_binds_all_interfaces_when_opted_in(self):
         assert format_bound_port(5432, 5432, expose_to_lan=True) == "0.0.0.0:5432:5432"
+
+    def test_accepts_a_numeric_string_and_renders_the_integer(self):
+        assert format_bound_port(" 5433\n", 5432, expose_to_lan=False) == "127.0.0.1:5433:5432"
+
+    @pytest.mark.parametrize("host_port", ["abc", "5432:80", "5432\n- 22:22", None, ""])
+    def test_rejects_a_non_integer_port(self, host_port):
+        with pytest.raises(ValueError, match="host_port must be an integer"):
+            format_bound_port(host_port, 5432, expose_to_lan=False)
+
+    @pytest.mark.parametrize("host_port", [0, -1, 65536])
+    def test_rejects_an_out_of_range_port(self, host_port):
+        with pytest.raises(ValueError, match="host_port must be between 1 and 65535"):
+            format_bound_port(host_port, 5432, expose_to_lan=False)
 
 
 class TestFormatEnvFile:

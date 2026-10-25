@@ -15,6 +15,7 @@ from repom.credentials import (
     run_masked_command,
     secret_env_file,
 )
+from repom.docker_compose_safety import reject_control_characters
 from repom.scripts._backup_utils import validate_client_database
 
 
@@ -274,6 +275,8 @@ def rotate_postgres_credentials(
 ) -> CredentialRotationResult:
     """Execute or dry-run a PostgreSQL credential rotation plan."""
 
+    if plan.current_password is not None:
+        reject_control_characters(plan.current_password, field_name="current_password")
     steps = build_postgres_rotation_steps(plan)
     display_plan = replace(
         plan,

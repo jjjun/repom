@@ -18,6 +18,7 @@ from repom.credentials import DEFAULT_CREDENTIAL_PLACEHOLDER, reject_default_cre
 from repom.docker_compose_safety import (
     format_bound_port,
     format_env_file,
+    quote_yaml_literal,
     quote_yaml_string,
     reject_control_characters,
     validate_docker_image,
@@ -173,7 +174,7 @@ def generate_docker_compose(
         container_name=container_name,
         restart=restart_policy,
         environment={
-            "POSTGRES_USER": quote_yaml_string(user),
+            "POSTGRES_USER": quote_yaml_literal(user),
             "POSTGRES_PASSWORD": quote_yaml_string("${POSTGRES_PASSWORD}"),
         },
         ports=[
@@ -184,7 +185,7 @@ def generate_docker_compose(
             f"{init_dir.absolute()}:/docker-entrypoint-initdb.d",
         ],
         healthcheck={
-            "test": f'["CMD", "pg_isready", "-U", {quote_yaml_string(user)}]',
+            "test": f'["CMD", "pg_isready", "-U", {quote_yaml_literal(user)}]',
             "interval": "5s",
             "timeout": "5s",
             "retries": 5,
@@ -231,7 +232,7 @@ def generate_docker_compose(
             container_name=pgadmin_container_name,
             restart=pgadmin_restart_policy,
             environment={
-                "PGADMIN_DEFAULT_EMAIL": quote_yaml_string(pgadmin_email),
+                "PGADMIN_DEFAULT_EMAIL": quote_yaml_literal(pgadmin_email),
                 "PGADMIN_DEFAULT_PASSWORD": quote_yaml_string(
                     "${PGADMIN_DEFAULT_PASSWORD}"
                 ),

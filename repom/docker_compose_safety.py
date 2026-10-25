@@ -106,9 +106,26 @@ def quote_yaml_string(value: str) -> str:
     return f'"{escaped}"'
 
 
+def quote_yaml_literal(value: str) -> str:
+    """Render ``value`` as a YAML double-quoted scalar Compose reads back verbatim.
+
+    Compose interpolates ``$VAR`` and ``${VAR}`` in YAML values after parsing,
+    so a literal ``$`` must be doubled. :func:`quote_yaml_string` leaves ``$``
+    alone because some callers pass a deliberate ``${VAR}`` reference.
+    """
+
+    return quote_yaml_string(value.replace("$", "$$"))
+
+
 def format_bound_port(host_port: int, container_port: int, *, expose_to_lan: bool) -> str:
     """Format a Compose port mapping, bound to loopback unless opted out."""
 
+    try:
+        host_port = int(host_port)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("host_port must be an integer") from exc
+    if not 0 < host_port < 65536:
+        raise ValueError("host_port must be between 1 and 65535")
     bind_host = _ALL_INTERFACES_HOST if expose_to_lan else LOOPBACK_HOST
     return f"{bind_host}:{host_port}:{container_port}"
 
@@ -299,6 +316,7 @@ __all__ = [
     "format_bound_port",
     "format_env_file",
     "parse_env_file",
+    "quote_yaml_literal",
     "quote_yaml_string",
     "reject_control_characters",
     "backup_secret_file",

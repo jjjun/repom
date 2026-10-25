@@ -222,6 +222,17 @@
   database names in `databases` / `--database` and `maintenance_database` with
   `ValueError` before any command is built, in dry-run and execute modes, matching
   backup and restore. Its `psql` invocation now passes `--no-psqlrc`.
+- `secret_env_file()` and the PostgreSQL / Redis credential rotation entry points
+  (`rotate_postgres_credentials()` and `rotate_redis_password()`) now reject a
+  newline, carriage return, or NUL in the current or old password with `ValueError`
+  before any file is created or command is built, in dry-run and execute modes, so
+  such a value can no longer add a line to the `docker exec --env-file` file;
+  `secret_env_file()` applies the same check to its variable name. Generated PostgreSQL Compose files now double a
+  literal `$` in `POSTGRES_USER`, the `pg_isready` healthcheck argument, and
+  `PGADMIN_DEFAULT_EMAIL` so Compose reads the configured value back verbatim; the
+  `${POSTGRES_PASSWORD}`, `${PGADMIN_DEFAULT_PASSWORD}`, and `${REDIS_PASSWORD}`
+  references are unchanged. `format_bound_port()` now raises `ValueError` for a
+  `host_port` that is not an integer or is outside 1-65535.
 
 ### Added
 

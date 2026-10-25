@@ -1116,6 +1116,46 @@ class TestPostgresAutoStartArtifactRefresh:
         assert 'restart: "no"' in compose
         assert 'restart: "on-failure:3"' in compose
 
+    def test_generated_services_double_dollar_in_user_and_email(self, tmp_path):
+        manager, _, _ = self._make_manager(tmp_path)
+        test_config = self._make_config(
+            tmp_path,
+            postgres_name="postgres_test",
+            postgres_port=5432,
+            postgres_volume="postgres_test_data",
+            postgres_password="postgres-secret",
+            pgadmin_enabled=True,
+        )
+        test_config.postgres.user = "app$user"
+        test_config.pgadmin.email = "a$b@example.com"
+
+        with patch.object(manage, "config", test_config):
+            with patch.object(manage, "PostgresManager", return_value=manager):
+                compose = manage.generate_docker_compose().generate()
+
+        assert 'POSTGRES_USER: "app$$user"' in compose
+        assert '"pg_isready", "-U", "app$$user"' in compose
+        assert 'PGADMIN_DEFAULT_EMAIL: "a$$b@example.com"' in compose
+        # Password entries stay deliberate Compose interpolation references.
+        assert 'POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"' in compose
+        assert 'PGADMIN_DEFAULT_PASSWORD: "${PGADMIN_DEFAULT_PASSWORD}"' in compose
+
+    def test_non_integer_host_port_is_rejected(self, tmp_path):
+        manager, _, _ = self._make_manager(tmp_path)
+        test_config = self._make_config(
+            tmp_path,
+            postgres_name="postgres_test",
+            postgres_port="5432:80",
+            postgres_volume="postgres_test_data",
+            postgres_password="postgres-secret",
+            pgadmin_enabled=False,
+        )
+
+        with patch.object(manage, "config", test_config):
+            with patch.object(manage, "PostgresManager", return_value=manager):
+                with pytest.raises(ValueError, match="host_port"):
+                    manage.generate_docker_compose()
+
     @pytest.mark.parametrize(
         "restart_policy",
         ["sometimes", "on-failure:0", "on-failure:x", "with space", "bad\npolicy"],

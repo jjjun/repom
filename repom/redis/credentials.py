@@ -126,6 +126,8 @@ def rotate_redis_password(
     new_password = reject_control_characters(
         plan.new_password, field_name="new_password"
     )
+    if plan.old_password is not None:
+        reject_control_characters(plan.old_password, field_name="old_password")
     escaped_password = new_password.replace("\\", "\\\\").replace('"', '\\"')
     input_text = f'CONFIG SET requirepass "{escaped_password}"\n'
     escaped_old_password = (

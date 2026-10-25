@@ -11,6 +11,8 @@ import tempfile
 from contextlib import contextmanager
 from typing import Callable, Iterable, Iterator, Sequence, TextIO
 
+from repom.docker_compose_safety import reject_control_characters
+
 
 def resolve_password(
     *,
@@ -91,11 +93,19 @@ def secret_env_file(
     docker exec argument or on the host process environment. The file is
     removed as soon as the caller is done with it, keeping the window in
     which the secret exists on disk as short as possible.
+
+    ``env_var`` and ``secret`` are each rejected before the file is created
+    when they contain a newline, carriage return, or NUL byte, since either
+    could add a second line (an extra variable, or a bare name that docker
+    copies from the host environment) to the env file.
     """
 
     if not secret:
         yield None
         return
+
+    reject_control_characters(env_var, field_name="env_var")
+    reject_control_characters(secret, field_name=env_var)
 
     fd, path = tempfile.mkstemp(prefix=prefix, suffix=".env")
     try:

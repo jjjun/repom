@@ -240,6 +240,23 @@ def test_redis_rotation_uses_auth_only_when_old_password_is_explicit():
     assert "old-secret" not in " ".join(result.command)
 
 
+@pytest.mark.parametrize("dry_run", [True, False])
+@pytest.mark.parametrize("character", ["\n", "\r", "\x00"])
+def test_redis_rotation_rejects_control_characters_in_old_password(dry_run, character):
+    plan = RedisCredentialRotationPlan(
+        old_password=f"old{character}INJECTED=1",
+        new_password="new-secret",
+        container_name="repom_redis",
+    )
+    runner = MagicMock()
+
+    with pytest.raises(ValueError, match="old_password") as excinfo:
+        rotate_redis_password(plan, dry_run=dry_run, runner=runner)
+
+    assert "INJECTED" not in str(excinfo.value)
+    runner.assert_not_called()
+
+
 def test_redis_rotation_password_not_in_argv():
     """Neither the old nor the new password ever appears in any recorded argv."""
     calls: list[tuple] = []
