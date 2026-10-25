@@ -366,6 +366,34 @@ def test_pg_dump_custom_replaces_symlink_without_following_it(monkeypatch, tmp_p
     assert _backup_utils.verify_checksum(dump_path) is True
 
 
+@pytest.mark.parametrize("name", ["my db.dump", "db#1.dump", "db?x.dump", "a..b.dump"])
+def test_pg_dump_custom_rejects_dump_name_outside_allowlist(monkeypatch, tmp_path, name):
+    dump_dir = tmp_path / "dumps"
+    run_dump = MagicMock()
+    monkeypatch.setattr(pg_dump_tools, "run_postgres_via_docker_or_host", run_dump)
+
+    with pytest.raises(ValueError, match="letters, digits"):
+        pg_dump_custom(_params(), dump_dir / name)
+
+    run_dump.assert_not_called()
+    assert not dump_dir.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="drive-relative paths exist only on Windows")
+def test_pg_dump_custom_rejects_drive_relative_dump_path(monkeypatch):
+    run_dump = MagicMock()
+    monkeypatch.setattr(pg_dump_tools, "run_postgres_via_docker_or_host", run_dump)
+    # What a database named "C:" produces when joined onto a dump directory on
+    # another drive.
+    dump_path = Path("C:_20261025_132742.dump")
+
+    assert dump_path.drive and not dump_path.root
+    with pytest.raises(ValueError, match="drive-relative"):
+        pg_dump_custom(_params(), dump_path)
+
+    run_dump.assert_not_called()
+
+
 def test_pg_restore_custom_streams_dump_bytes_to_docker(monkeypatch, tmp_path: Path):
     """The Docker custom-format restore must stream dump_path's bytes
     straight into pg_restore's stdin via the shared Popen-based streaming
@@ -652,12 +680,13 @@ def test_pg_restore_custom_falls_back_to_host_when_docker_daemon_unavailable(
 
     assert result.returncode == 0
     assert result.used_docker is False
-    assert commands[-1][-6:] == [
+    assert commands[-1][-7:] == [
         "--clean",
         "--if-exists",
         "--no-owner",
         "--no-acl",
         "--single-transaction",
+        "--",
         str(dump_path),
     ]
 

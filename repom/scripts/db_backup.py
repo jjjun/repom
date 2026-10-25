@@ -13,10 +13,12 @@ from repom.scripts._backup_utils import (
     backup_name_pattern,
     build_host_pg_env,
     build_pg_client_command,
+    checksum_path,
     cleanup_incomplete_backups,
     ensure_backup_dir,
     open_backup_temp_file,
     publish_backup,
+    require_path_in_dir,
     run_postgres_via_docker_or_host,
     run_streaming_command,
     snapshot_sqlite_database,
@@ -172,6 +174,8 @@ def _backup_postgresql(container_name: str | None) -> None:
     logger.debug(f"Backup file name: {backup_name}")
 
     backup_dir = Path(config.db_backup_path)
+    for artifact_path in (backup_path, partial_path, checksum_path(backup_path)):
+        require_path_in_dir(artifact_path, backup_dir)
     backup_pattern = f"{params.database}_*.sql.gz"
     name_pattern = backup_name_pattern(params.database, ".sql.gz")
     cleanup_stale_backups(backup_dir, backup_pattern, name_pattern)

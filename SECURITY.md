@@ -438,7 +438,12 @@ Unless a difference is stated below, these contracts apply to both
   backup naming against a concrete attacker capability. `db_backup` and
   `pg_dump_custom()` create exclusive 0600 sibling partial files and publish the
   backup after success; both generate SHA-256 sidecars. PostgreSQL backup names
-  are derived from the database name after rejecting path separators and `..`.
+  are derived from the database name after allowing only ASCII letters, digits,
+  `_`, `.`, and `-` and rejecting `..`; `db_backup` also requires the joined
+  backup, partial, and sidecar paths to be direct children of the backup
+  directory. `pg_dump_custom()` applies the same name check to the caller-supplied
+  dump file name and rejects Windows drive-relative dump paths, but cannot
+  see the directory the caller joined the name onto.
   The backup is published before its sidecar, so a missing sidecar warns and
   restore proceeds; a present but mismatched sidecar fails verification. The
   sidecar detects a mismatch only when present and does not authenticate a

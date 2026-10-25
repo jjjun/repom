@@ -5,6 +5,7 @@ import os
 import re
 import sqlite3
 from datetime import datetime
+from pathlib import PureWindowsPath
 from unittest.mock import MagicMock
 
 import pytest
@@ -85,6 +86,44 @@ def test_backup_postgresql_rejects_unsafe_database_filename(
         db_backup.backup_postgresql_via_host()
 
     assert not (tmp_path / "backups").exists()
+
+
+@pytest.mark.parametrize("database", ["C:", "a:b", "db?x", "db#frag", "my db"])
+def test_backup_postgresql_rejects_database_names_outside_filename_allowlist(
+    monkeypatch, tmp_path, database
+):
+    config = _mock_postgres_config(tmp_path / "backups")
+    config.postgres_db = database
+    monkeypatch.setattr(db_backup, "config", config)
+
+    with pytest.raises(ValueError, match="letters, digits"):
+        db_backup.backup_postgresql_via_host()
+
+    assert not (tmp_path / "backups").exists()
+
+
+def test_backup_postgresql_rejects_drive_relative_join_before_creating_files(
+    monkeypatch, tmp_path
+):
+    # A backup directory on another drive: joining "C:_<ts>.sql.gz" onto it
+    # makes pathlib drop the directory. Nothing below touches the real
+    # filesystem, so the directory only needs to be a Windows-style path.
+    config = _mock_postgres_config(r"G:\backups")
+    config.postgres_db = "C:"
+    monkeypatch.setattr(db_backup, "config", config)
+    # Bypass the name allowlist and read the joined path as Windows would, to
+    # exercise the containment check on its own on any platform.
+    monkeypatch.setattr(db_backup, "validate_backup_name_component", lambda value: value)
+    monkeypatch.setattr(db_backup, "Path", PureWindowsPath)
+    ensure_dir = MagicMock()
+    open_partial = MagicMock()
+    monkeypatch.setattr(db_backup, "ensure_backup_dir", ensure_dir)
+    monkeypatch.setattr(db_backup, "open_backup_temp_file", open_partial)
+
+    with pytest.raises(ValueError, match="not directly inside"):
+        db_backup.backup_postgresql_via_host()
+
+    open_partial.assert_not_called()
 
 
 @pytest.mark.parametrize(

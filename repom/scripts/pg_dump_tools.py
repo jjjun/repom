@@ -22,6 +22,7 @@ from repom.scripts._backup_utils import (
     open_backup_temp_file,
     run_postgres_via_docker_or_host,
     run_streaming_command,
+    validate_backup_name_component,
     validate_client_database,
     warn_if_checksum_missing,
 )
@@ -150,6 +151,11 @@ def pg_dump_custom(params: PgConnParams, dump_path: Path) -> PgToolResult:
 
     ensure_logging_configured()
     dump_path = Path(dump_path)
+    validate_backup_name_component(dump_path.name)
+    if dump_path.drive and not dump_path.root:
+        # A drive-relative path such as "C:_x.dump" (a database named "C:"
+        # joined onto a directory) lands in the drive's working directory.
+        raise ValueError(f"dump path cannot be drive-relative: {dump_path}")
     dump_path.parent.mkdir(parents=True, exist_ok=True)
     partial_path = dump_path.with_name(f"{dump_path.name}.partial")
     checksum_destination = checksum_path(dump_path)
@@ -364,6 +370,7 @@ def _pg_restore_custom_via_host(params: PgConnParams, dump_path: Path) -> PgTool
             "--no-owner",
             "--no-acl",
             "--single-transaction",
+            "--",
             str(dump_path),
         ],
     )

@@ -31,7 +31,11 @@ uv run db_backup
 - PostgreSQL: `<data_path>/backups/postgres/<接続先の DB 名>_<YYYYmmdd_HHMMSS>.sql.gz`
 - SQLite: `<data_path>/backups/sqlite/<db のファイル名 stem>_<YYYYmmdd_HHMMSS><db のファイル名拡張子>`
 
-PostgreSQL の backup name は DB 名から作られますが、path separator と `..` を含む DB 名は拒否されます。
+PostgreSQL の backup name は DB 名から作られますが、ASCII の英数字と `_` `.` `-` 以外を含む DB 名
+（path separator、Windows の drive 指定になる `:` など）と `..` を含む DB 名は拒否されます。
+`db_backup` は連結後の backup / partial / sidecar の各 path が backup directory の直下にあることも
+確認し、ファイルを作る前に失敗します。`pg_dump_custom()` も dump のファイル名に同じ検査を行い、
+Windows の drive 相対 path を拒否します。
 
 従来の `.sqlite3` バックアップも引き続き一覧に表示されます。
 

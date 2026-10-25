@@ -1,6 +1,7 @@
 
 import gzip
 import io
+from pathlib import PurePosixPath, PureWindowsPath
 from unittest.mock import MagicMock
 import os
 import time
@@ -26,9 +27,11 @@ from repom.scripts._backup_utils import (
     open_backup_temp_file,
     parse_backup_source_database,
     publish_backup,
+    require_path_in_dir,
     rotate_backups,
     run_postgres_via_docker_or_host,
     run_streaming_command,
+    validate_backup_name_component,
     verify_checksum,
     warn_if_checksum_missing,
     write_checksum,
@@ -820,3 +823,59 @@ class TestPublishBackup:
         assert checksum_path(backup_path).exists()
         assert not old.exists()
         assert not checksum_path(old).exists()
+
+
+@pytest.mark.parametrize(
+    "value", ["repom", "repom_test", "my-db", "db.v2", "Repom_Dev-1.2", "_", "a"]
+)
+def test_validate_backup_name_component_accepts_plain_names(value):
+    assert validate_backup_name_component(value) == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "..",
+        "../outside",
+        "db/name",
+        "db\name",
+        "C:",
+        "C:foo",
+        "a:b",
+        "db?mode=rw",
+        "db#frag",
+        "my db",
+        "db\n",
+        "db\x00",
+    ],
+)
+def test_validate_backup_name_component_rejects_unsafe_names(value):
+    with pytest.raises(ValueError, match="path separators"):
+        validate_backup_name_component(value)
+
+
+@pytest.mark.parametrize("path_type", [PurePosixPath, PureWindowsPath])
+def test_require_path_in_dir_accepts_direct_child(path_type):
+    directory = path_type("backups") / "postgres"
+    path = directory / "repom_20261025_132742.sql.gz"
+
+    assert require_path_in_dir(path, directory) is path
+
+
+@pytest.mark.parametrize("path_type", [PurePosixPath, PureWindowsPath])
+@pytest.mark.parametrize("name", ["sub/x.sql.gz", "../x.sql.gz"])
+def test_require_path_in_dir_rejects_other_parents(path_type, name):
+    directory = path_type("backups")
+
+    with pytest.raises(ValueError, match="not directly inside"):
+        require_path_in_dir(directory / name, directory)
+
+
+def test_require_path_in_dir_rejects_windows_drive_relative_join():
+    directory = PureWindowsPath("backups")
+    joined = directory / "C:_20261025_132742.sql.gz"
+
+    assert joined.parent != directory
+    with pytest.raises(ValueError, match="not directly inside"):
+        require_path_in_dir(joined, directory)

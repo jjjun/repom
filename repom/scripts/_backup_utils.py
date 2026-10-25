@@ -32,6 +32,7 @@ STREAMED_STDERR_SPOOL_LIMIT = 1024 * 1024
 BACKUP_DIR_MODE = 0o700
 BACKUP_FILE_MODE = 0o600
 CHECKSUM_SUFFIX = ".sha256"
+BACKUP_NAME_COMPONENT_PATTERN = re.compile(r"[A-Za-z0-9_.-]+")
 
 
 class ChecksumError(Exception):
@@ -307,10 +308,31 @@ def backup_name_pattern(stem: str, suffix: str) -> re.Pattern[str]:
 
 
 def validate_backup_name_component(value: str) -> str:
-    """Reject database names that could escape the configured backup directory."""
-    if not value or "/" in value or "\\" in value or ".." in value:
-        raise ValueError("database name cannot contain path separators or '..'")
+    """Reject names that could escape the configured backup directory.
+
+    Only ASCII letters, digits, ``_``, ``.`` and ``-`` are allowed. Besides
+    path separators and ``..``, that excludes ``:`` - pathlib on Windows reads
+    a leading ``C:`` as a drive, so a database named ``C:`` would otherwise
+    join to a drive-relative path outside the backup directory.
+    """
+    if not value or ".." in value or not BACKUP_NAME_COMPONENT_PATTERN.fullmatch(value):
+        raise ValueError(
+            "name may only contain letters, digits, '_', '.' and '-', "
+            "and cannot contain path separators or '..'"
+        )
     return value
+
+
+def require_path_in_dir(path: Path, directory: Path) -> Path:
+    """Require ``path`` to be a direct child of ``directory`` after joining.
+
+    Checked on the joined path because pathlib can reinterpret a name while
+    joining (e.g. a Windows drive-relative ``C:_x`` replaces ``directory``),
+    which a check on the name alone would not see.
+    """
+    if path.parent != directory:
+        raise ValueError(f"backup path {path} is not directly inside {directory}")
+    return path
 
 
 def validate_client_database(database: str) -> str:

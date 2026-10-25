@@ -143,6 +143,12 @@
   remain supported query options. PostgreSQL
   client tools reject database names containing `=` or written as `postgres://` or
   `postgresql://` URIs. PostgreSQL backup names reject path separators and `..`.
+- BREAKING: PostgreSQL backup names now accept only ASCII letters, digits, `_`, `.`,
+  and `-`; a database name containing anything else (for example `:`, `?`, `#`, or a
+  space) is rejected by `db_backup`, and `db_backup` requires the joined backup,
+  partial, and checksum paths to sit directly in the backup directory. `pg_dump_custom()`
+  applies the same check to the dump file name and rejects Windows drive-relative dump
+  paths. `pg_restore_custom()` passes `--` before the dump path to host `pg_restore`.
 - BREAKING: PostgreSQL client tools use Docker exec only when the configured host is
   local. Remote hosts use host client tools even when the managed container is running;
   this check also applies to `PgConnParams` constructed directly by consumers.
