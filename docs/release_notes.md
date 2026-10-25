@@ -239,6 +239,12 @@
   `${POSTGRES_PASSWORD}`, `${PGADMIN_DEFAULT_PASSWORD}`, and `${REDIS_PASSWORD}`
   references are unchanged. `format_bound_port()` now raises `ValueError` for a
   `host_port` that is not an integer or is outside 1-65535.
+- `pgadmin_rotate_password` / `rotate_pgadmin_password()` now reject a placeholder
+  (`CHANGE_ME`) or control-character new password and pre-validate the generated
+  Compose configuration before the live `update-user` runs (execute mode; dry-run is
+  unchanged). A persistence failure after the live change now prints the
+  `postgres_generate --force-regenerate` recovery steps and raises
+  `PgAdminCredentialRotationError` instead of leaving `.env` stale silently.
 
 ### Added
 

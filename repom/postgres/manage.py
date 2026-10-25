@@ -140,6 +140,7 @@ def generate_docker_compose(
     validate_credentials: bool = True,
     postgres_password: str | None = None,
     postgres_user: str | None = None,
+    pgadmin_password: str | None = None,
 ) -> RepomDockerComposeGenerator:
     """Generate a compose model for PostgreSQL and optional pgAdmin."""
 
@@ -203,11 +204,14 @@ def generate_docker_compose(
             config.pgadmin.email, field_name="pgadmin.email"
         )
         if validate_credentials:
+            pgadmin_secret = (
+                pgadmin_password if pgadmin_password is not None else config.pgadmin.password
+            )
             reject_default_credential(
-                config.pgadmin.password, env_var="PGADMIN_DEFAULT_PASSWORD"
+                pgadmin_secret, env_var="PGADMIN_DEFAULT_PASSWORD"
             )
             reject_control_characters(
-                config.pgadmin.password, field_name="pgadmin.password"
+                pgadmin_secret, field_name="pgadmin.password"
             )
         pgadmin_container_name = validate_docker_name(
             pgadmin_container.get_container_name(),
@@ -302,14 +306,19 @@ def _prepare_generation(
     overwrite_secrets: bool = False,
     postgres_password: str | None = None,
     postgres_user: str | None = None,
+    pgadmin_password: str | None = None,
 ):
     """Validate generated values and prepare PostgreSQL artifacts without writing."""
     manager = PostgresManager()
     password = postgres_password if postgres_password is not None else config.postgres.password
     user = postgres_user if postgres_user is not None else config.postgres.user
+    pgadmin_secret = (
+        pgadmin_password if pgadmin_password is not None else config.pgadmin.password
+    )
     generator = generate_docker_compose(
         postgres_password=password,
         postgres_user=user,
+        pgadmin_password=pgadmin_secret,
     )
 
     init_dir = manager.get_init_dir()
@@ -321,7 +330,7 @@ def _prepare_generation(
 
     secrets = {"POSTGRES_PASSWORD": password}
     if config.pgadmin.container.enabled:
-        secrets["PGADMIN_DEFAULT_PASSWORD"] = config.pgadmin.password
+        secrets["PGADMIN_DEFAULT_PASSWORD"] = pgadmin_secret
     env_path = compose_dir / ".env"
     env_content = format_env_file(secrets)
     rotation_commands = ("postgres_rotate_credentials",)
@@ -354,6 +363,11 @@ def _validate_generation(
         postgres_password=postgres_password,
         postgres_user=postgres_user,
     )
+
+
+def _validate_pgadmin_generation(*, pgadmin_password: str) -> None:
+    """Validate the artifacts needed after a live pgAdmin rotation."""
+    _prepare_generation(overwrite_secrets=True, pgadmin_password=pgadmin_password)
 
 
 def generate(*, overwrite_secrets: bool = False):

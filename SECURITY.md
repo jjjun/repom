@@ -488,15 +488,17 @@ Unless a difference is stated below, these contracts apply to both
 - Existing secret files must not be silently replaced with different credentials.
   Intentional regeneration and credential rotation must preserve their explicit
   execution/overwrite controls and consistent persistent configuration.
-  PostgreSQL and Redis rotations validate generated configuration before changing
-  the live credential, then persist `.env` after the live change. A persistence
-  failure can leave the live and stored credentials inconsistent; these two
-  commands print recovery steps. Redis rotation changes the live password
+  PostgreSQL, Redis, and pgAdmin rotations validate generated configuration
+  before changing the live credential, then persist `.env` after the live
+  change. A persistence failure can leave the live and stored credentials
+  inconsistent; these three commands print recovery steps. pgAdmin rotation
+  also rejects a placeholder or control-character new password before running
+  `update-user`. Redis rotation changes the live password
   without recreating the container; a restart before the recreate restores the
   creation-time authentication settings, and the command prints the required
-  `redis_stop` / `redis_start` recreate step. pgAdmin password rotation also
-  changes the live password before regenerating files, and a persistence failure
-  can leave them inconsistent.
+  `redis_stop` / `redis_start` recreate step. Recreating the pgAdmin volume
+  (`--recreate-volume`) is a separate path that regenerates files after its
+  destructive step and has no such recovery message.
 - Subprocess argument, environment, stdin, and secret-file channels must preserve
   data boundaries and avoid unintended credential exposure. An argv list by
   itself does not establish safety against the invoked program's option parsing.

@@ -769,7 +769,8 @@ def test_pgadmin_rotation_masks_password_in_output():
     assert "***" in result.masked_output[0]
 
 
-def test_pgadmin_rotation_failure_masks_password():
+def test_pgadmin_rotation_failure_masks_password(monkeypatch, tmp_path):
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
     runner = MagicMock()
     runner.return_value = MagicMock(
         returncode=1,
@@ -787,6 +788,97 @@ def test_pgadmin_rotation_failure_masks_password():
 
     assert "sentinel-new-secret" not in str(excinfo.value)
     assert "***" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "new_password, message",
+    (
+        ("CHANGE_ME", "PGADMIN_DEFAULT_PASSWORD is not set"),
+        ("bad\nPGADMIN_EXTRA=1", "pgadmin.password must not contain"),
+    ),
+)
+def test_pgadmin_rotation_rejects_unusable_password_before_live_change(
+    new_password, message, monkeypatch, tmp_path
+):
+    mock_config, env_file, original_env = _configure_temp_secret_generation(
+        monkeypatch, tmp_path
+    )
+    runner = MagicMock()
+    plan = PgAdminCredentialRotationPlan(
+        email="admin@example.com",
+        new_password=new_password,
+        container_name="repom_pgadmin",
+    )
+
+    with pytest.raises(ValueError, match=message):
+        rotate_pgadmin_password(plan, dry_run=False, runner=runner)
+
+    runner.assert_not_called()
+    assert mock_config.pgadmin.password == "pgadmin-config-secret"
+    assert env_file.read_text(encoding="utf-8") == original_env
+
+
+def test_pgadmin_rotation_validates_generated_values_before_live_change(
+    monkeypatch, tmp_path
+):
+    from repom.postgres import manage
+
+    mock_config, _, _ = _configure_temp_secret_generation(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        manage,
+        "_validate_pgadmin_generation",
+        MagicMock(side_effect=ValueError("invalid generated configuration")),
+    )
+    runner = MagicMock()
+    plan = PgAdminCredentialRotationPlan(
+        email="admin@example.com",
+        new_password="pgadmin-rotated-secret",
+        container_name="repom_pgadmin",
+    )
+
+    with pytest.raises(ValueError, match="invalid generated configuration"):
+        rotate_pgadmin_password(plan, dry_run=False, runner=runner)
+
+    runner.assert_not_called()
+    assert mock_config.pgadmin.password == "pgadmin-config-secret"
+
+
+def test_pgadmin_generation_validation_uses_the_new_password(monkeypatch, tmp_path):
+    from repom.postgres import manage
+
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
+    compose = MagicMock()
+    monkeypatch.setattr(manage, "generate_docker_compose", compose)
+
+    manage._validate_pgadmin_generation(pgadmin_password="pgadmin-rotated-secret")
+
+    assert compose.call_args.kwargs["pgadmin_password"] == "pgadmin-rotated-secret"
+
+
+def test_pgadmin_rotation_reports_recovery_if_file_persistence_fails(
+    monkeypatch, tmp_path, capsys
+):
+    from repom.postgres import credentials
+
+    mock_config, _, _ = _configure_temp_secret_generation(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        credentials,
+        "_regenerate_compose_secrets",
+        MagicMock(side_effect=OSError("disk unavailable")),
+    )
+    plan = PgAdminCredentialRotationPlan(
+        email="admin@example.com",
+        new_password="pgadmin-rotated-secret",
+        container_name="repom_pgadmin",
+    )
+
+    with pytest.raises(PgAdminCredentialRotationError, match="force-regenerate"):
+        rotate_pgadmin_password(plan, dry_run=False, runner=_rotation_runner())
+
+    assert mock_config.pgadmin.password == "pgadmin-rotated-secret"
+    output = capsys.readouterr().out
+    assert "Recovery required" in output
+    assert "pgadmin-rotated-secret" not in output
 
 
 def test_pgadmin_volume_recreation_is_dry_run_without_confirm():

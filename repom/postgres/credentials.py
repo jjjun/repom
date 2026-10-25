@@ -11,6 +11,7 @@ from repom.config import config
 from repom.credentials import (
     CommandRunner,
     mask_secret as _mask_secret,
+    reject_default_credential,
     resolve_password,
     run_masked_command,
     secret_env_file,
@@ -384,12 +385,24 @@ def rotate_pgadmin_password(
     a raw ``CalledProcessError``: the command is checked explicitly and any
     failure is reported through :class:`PgAdminCredentialRotationError` with
     the password masked out of both the command and captured stderr.
+
+    Executing validates the new password and the generated files before the
+    live change, so a placeholder or unpersistable configuration fails before
+    ``update-user`` runs. A persistence failure after the live change prints
+    recovery steps and raises :class:`PgAdminCredentialRotationError`.
     """
 
     command = build_pgadmin_update_password_command(plan)
     secrets = (plan.new_password,)
     masked_command = mask_secret(" ".join(command), secrets)
     if not dry_run:
+        from repom.postgres.manage import _validate_pgadmin_generation
+
+        reject_default_credential(
+            plan.new_password, env_var="PGADMIN_DEFAULT_PASSWORD"
+        )
+        reject_control_characters(plan.new_password, field_name="pgadmin.password")
+        _validate_pgadmin_generation(pgadmin_password=plan.new_password)
         run_masked_command(
             command,
             runner=runner,
@@ -398,7 +411,16 @@ def rotate_pgadmin_password(
             action="pgAdmin update-user",
         )
         config.pgadmin.password = plan.new_password
-        _regenerate_compose_secrets()
+        try:
+            _regenerate_compose_secrets()
+        except Exception as exc:
+            recovery = (
+                "The live pgAdmin password was changed, but generated files "
+                "could not be updated. Run `postgres_generate --force-regenerate` "
+                "to persist the configured credential before restarting services."
+            )
+            print(f"Recovery required: {recovery}")
+            raise PgAdminCredentialRotationError(recovery) from exc
     masked_commands = tuple(mask_secret(part, secrets) for part in command)
     return CredentialRotationResult(
         dry_run=dry_run,
