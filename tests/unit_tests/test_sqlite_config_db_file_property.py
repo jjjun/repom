@@ -3,8 +3,26 @@
 This test validates Option 1 implementation: db_file as a property that
 automatically recalculates based on db_name without explicit reset.
 """
+import pytest
+
 from repom.config import RepomConfig
-from repom.sqlite.config import SqliteConfig
+from repom.sqlite.config import SqliteConfig, validate_sqlite_db_file_name
+
+UNSAFE_DB_FILE_NAMES = [
+    "../x",
+    "..",
+    "a/b",
+    "a\\b",
+    "x?mode=rw&uri=true",
+    "x#y",
+    "C:",
+    "C:x",
+    "file:x",
+    "a\x00b",
+    "a\x1fb",
+    "a\x7fb",
+    "a\x85b",
+]
 
 
 class TestSqliteConfigDbFileProperty:
@@ -111,6 +129,58 @@ class TestSqliteConfigDbFileProperty:
 
         # db_file_path は db_file の自動計算を使用する
         assert 'myapp_dev.sqlite3' in config.sqlite.db_file_path
+
+
+@pytest.mark.parametrize("value", UNSAFE_DB_FILE_NAMES)
+def test_db_file_setter_rejects_unsafe_names(value):
+    config = RepomConfig()
+    config.sqlite.db_file = "custom.db"
+
+    with pytest.raises(ValueError, match="sqlite.db_file must be a plain file name"):
+        config.sqlite.db_file = value
+
+    assert config.sqlite.db_file == "custom.db"
+
+
+@pytest.mark.parametrize("value", UNSAFE_DB_FILE_NAMES)
+def test_default_db_file_rejects_unsafe_db_name(value):
+    config = RepomConfig()
+    config.exec_env = "dev"
+    config.db_name = value
+
+    with pytest.raises(ValueError, match="db_name must be a plain file name"):
+        config.sqlite.db_file
+
+    with pytest.raises(ValueError, match="db_name must be a plain file name"):
+        config.sqlite.get_default_db_file("prod")
+
+
+@pytest.mark.parametrize(
+    "value", ["custom.sqlite3", "my app.db", "データ.sqlite3", "a-b_c.1.db", "100%.db"]
+)
+def test_db_file_accepts_plain_names_with_spaces_and_unicode(value):
+    config = RepomConfig()
+    config.sqlite.db_file = value
+
+    assert config.sqlite.db_file == value
+
+
+def test_empty_db_file_still_selects_no_file():
+    config = RepomConfig()
+    config.exec_env = "dev"
+    config.sqlite.use_in_memory_for_tests = False
+
+    config.sqlite.db_file = ""
+
+    assert config.sqlite.db_file_path is None
+    assert config.db_url is None
+
+
+def test_validate_sqlite_db_file_name_rejects_empty_and_returns_valid_names():
+    assert validate_sqlite_db_file_name("a.sqlite3", field_name="x") == "a.sqlite3"
+
+    with pytest.raises(ValueError, match="x must be a plain file name"):
+        validate_sqlite_db_file_name("", field_name="x")
 
 
 def test_unbound_sqlite_config_has_no_derived_paths():

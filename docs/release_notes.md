@@ -155,6 +155,16 @@
   partial, and checksum paths to sit directly in the backup directory. `pg_dump_custom()`
   applies the same check to the dump file name and rejects Windows drive-relative dump
   paths. `pg_restore_custom()` passes `--` before the dump path to host `pg_restore`.
+- BREAKING: `RepomConfig.db_url` builds the SQLite file URL with
+  `sqlalchemy.engine.URL.create()` instead of string interpolation and raises
+  `ValueError` when the path would not read back through `make_url()` unchanged (for
+  example a `?` in `sqlite.db_path`). The SQLite file name, derived from `db_name` or set
+  through `sqlite.db_file` / `SQLITE_DB_FILE`, is validated and rejected with
+  `ValueError` if it is empty or contains a path separator, `..`, `:` (a Windows drive
+  prefix or `file:` URI), `?`, `#`, or a control character such as NUL. Spaces and
+  non-ASCII characters remain allowed, an absolute `sqlite.db_path` is still accepted,
+  and PostgreSQL naming is not checked. On Windows the generated URL now uses the
+  platform path separator throughout instead of a mix of `\` and `/`.
 - BREAKING: PostgreSQL client tools use Docker exec only when the configured host is
   local. Remote hosts use host client tools even when the managed container is running;
   this check also applies to `PgConnParams` constructed directly by consumers.

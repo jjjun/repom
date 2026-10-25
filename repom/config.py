@@ -36,6 +36,25 @@ _POSTGRES_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _POSTGRES_STRONG_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
 
 
+def _sqlite_file_url(database: str) -> str:
+    """Render a file-based SQLite URL, refusing a path a URL cannot carry.
+
+    SQLAlchemy does not percent-encode the SQLite database component, so a
+    ``?`` in the directory would be read back as the start of a query string
+    (for example ``uri=true``) instead of as part of the file path.
+    """
+    rendered = URL.create("sqlite", database=database).render_as_string(
+        hide_password=False
+    )
+    parsed = make_url(rendered)
+    if parsed.database != database or parsed.query:
+        raise ValueError(
+            "sqlite.db_path and the SQLite file name must form a path that "
+            "survives a database URL round trip; remove '?' from the path"
+        )
+    return rendered
+
+
 def _postgres_host_values(value) -> tuple[object, ...]:
     """Expand PostgreSQL host values, including libpq's comma-separated lists."""
     if isinstance(value, (tuple, list)):
@@ -300,6 +319,9 @@ class RepomConfig(Config):
         - PostgreSQL: {db_name}_dev, {db_name}_test, {db_name}
         - SQLite: {db_name}_dev.sqlite3, {db_name}_test.sqlite3, {db_name}.sqlite3
 
+        SQLite のファイル名として使われるときは、パス区切り・..・:・?・#・制御文字を
+        含む値を ValueError で拒否します（PostgreSQL では検査しません）。
+
         使用例:
             # CONFIG_HOOK で設定
             def hook_config(config):
@@ -495,6 +517,12 @@ class RepomConfig(Config):
             または
             sqlite:///:memory: （テスト環境）
 
+            ファイル名は db_name から作られるか sqlite.db_file で指定され、
+            パス区切り・..・:・?・#・制御文字を含む場合は ValueError になります
+            （スペースと非 ASCII 文字は使用可）。URL は sqlalchemy.engine.URL で
+            組み立てた後に make_url で読み戻して確認するため、sqlite.db_path に
+            ? を含むと ValueError になります。絶対パスの db_path は使用できます。
+
         テスト環境 (exec_env == 'test') かつ use_in_memory_db_for_tests == True の場合、
         SQLite は自動的に in-memory を使用します。
 
@@ -563,7 +591,7 @@ class RepomConfig(Config):
         db_path = self.sqlite.db_path if self.sqlite.db_path else self.data_path
         db_file = self.sqlite.db_file  # property で自動計算される
         if db_file:
-            return f"sqlite:///{db_path}/{db_file}"
+            return _sqlite_file_url(str(Path(db_path or "") / db_file))
         return None
 
     @db_url.setter

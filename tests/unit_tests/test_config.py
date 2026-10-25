@@ -3,7 +3,9 @@
 from __future__ import annotations
 import logging
 from repom.config import RepomConfig
+from repom.database import safe_db_url
 import pytest
+from sqlalchemy.engine import make_url
 
 from pathlib import Path
 
@@ -78,7 +80,7 @@ def test_db_url_defaults_to_sqlite_uri(config_factory):
 
     config = config_factory()
 
-    expected = f"sqlite:///{config.sqlite.db_path}/{config.sqlite.db_file}"
+    expected = f"sqlite:///{Path(config.sqlite.db_path) / config.sqlite.db_file}"
     assert config.db_url == expected
 
     override = "sqlite:////tmp/custom.sqlite3"
@@ -137,7 +139,7 @@ def test_db_url_returns_file_based_when_in_memory_disabled(config_factory):
     config = config_factory(exec_env="test")
 
     config.sqlite.use_in_memory_for_tests = False
-    expected = f"sqlite:///{config.sqlite.db_path}/{config.sqlite.db_file}"
+    expected = f"sqlite:///{Path(config.sqlite.db_path) / config.sqlite.db_file}"
     assert config.db_url == expected
 
 
@@ -145,11 +147,86 @@ def test_db_url_returns_file_based_for_non_test_env(config_factory):
     """``db_url`` returns file-based URL for non-test environments regardless of use_in_memory_db_for_tests."""
     # dev 環境
     config_dev = config_factory(exec_env="dev")
-    assert config_dev.db_url == f"sqlite:///{config_dev.sqlite.db_path}/{config_dev.sqlite.db_file}"
+    assert config_dev.db_url == f"sqlite:///{Path(config_dev.sqlite.db_path) / config_dev.sqlite.db_file}"
 
     # prod 環境
     config_prod = config_factory(exec_env="prod")
-    assert config_prod.db_url == f"sqlite:///{config_prod.sqlite.db_path}/{config_prod.sqlite.db_file}"
+    assert config_prod.db_url == f"sqlite:///{Path(config_prod.sqlite.db_path) / config_prod.sqlite.db_file}"
+
+
+@pytest.mark.parametrize(
+    ("exec_env", "file_name"),
+    [
+        ("dev", "repom_dev.sqlite3"),
+        ("test", "repom_test.sqlite3"),
+        ("prod", "repom.sqlite3"),
+    ],
+)
+def test_db_url_default_file_names_resolve_to_the_same_files(
+    config_factory, tmp_path, exec_env, file_name
+):
+    config = config_factory(exec_env=exec_env)
+    config.sqlite.use_in_memory_for_tests = False
+
+    expected_path = tmp_path / "data" / "repom" / file_name
+    assert config.db_url == f"sqlite:///{expected_path}"
+    assert make_url(config.db_url).database == str(expected_path)
+    assert safe_db_url(config.db_url) == config.db_url
+
+
+def test_db_url_allows_absolute_db_path_and_spaces_or_unicode_names(
+    config_factory, tmp_path
+):
+    config = config_factory(exec_env="dev")
+    config.sqlite.db_path = str(tmp_path / "abs dir")
+    config.db_name = "データ app"
+
+    url = make_url(config.db_url)
+
+    assert url.query == {}
+    assert url.database == str(tmp_path / "abs dir" / "データ app_dev.sqlite3")
+    assert safe_db_url(config.db_url) == config.db_url
+
+
+@pytest.mark.parametrize(
+    "db_name",
+    [
+        "../../tmp/x?mode=rw&uri=true",
+        "..",
+        "a/b",
+        "a\\b",
+        "x?y",
+        "x#y",
+        "C:",
+        "C:x",
+        "file:x",
+        "a\x00b",
+        "a\nb",
+    ],
+)
+def test_db_url_rejects_unsafe_db_name(config_factory, db_name):
+    config = config_factory(exec_env="dev")
+    config.db_name = db_name
+
+    with pytest.raises(ValueError, match="db_name must be a plain file name"):
+        config.db_url
+
+
+def test_db_url_rejects_unsafe_db_file(config_factory):
+    config = config_factory(exec_env="dev")
+
+    with pytest.raises(ValueError, match="sqlite.db_file must be a plain file name"):
+        config.sqlite.db_file = "../x?mode=rw&uri=true"
+
+
+def test_db_url_rejects_db_path_that_would_read_back_as_a_query(
+    config_factory, tmp_path
+):
+    config = config_factory(exec_env="dev")
+    config.sqlite.db_path = str(tmp_path / "dir?uri=true")
+
+    with pytest.raises(ValueError, match="URL round trip"):
+        config.db_url
 
 
 def test_db_url_override_takes_precedence(config_factory):
@@ -258,7 +335,7 @@ def test_unknown_exec_env_uses_dev_database_defaults_and_warns_once(
     with caplog.at_level(logging.WARNING, logger="repom.exec_env"):
         assert config.postgres_db == "myapp_dev"
         assert config.sqlite.get_default_db_file(exec_env) == "myapp_dev.sqlite3"
-        assert config.db_url == f"sqlite:///{config.sqlite.db_path}/myapp_dev.sqlite3"
+        assert config.db_url == f"sqlite:///{Path(config.sqlite.db_path) / 'myapp_dev.sqlite3'}"
         assert config.postgres_db == "myapp_dev"
 
     warnings = [record for record in caplog.records if record.levelno == logging.WARNING]

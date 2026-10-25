@@ -288,6 +288,22 @@ Unless a difference is stated below, these contracts apply to both
   backend, such as MySQL, is returned unchanged in `prod` and gets no
   destination or transport guard
   (`test_prod_non_postgres_override_has_no_transport_guard`).
+- The file-based SQLite URL that `RepomConfig.db_url` generates is built with
+  `sqlalchemy.engine.URL.create()` from `sqlite.db_path` and a file name. The
+  name, taken from `db_name` or `sqlite.db_file` / `SQLITE_DB_FILE`, must be
+  non-empty and free of path separators, `..`, `:` (a Windows drive prefix or a
+  `file:` URI), `?`, `#`, and control characters including NUL; spaces and
+  non-ASCII characters are allowed, and an absolute `db_path` is accepted as a
+  directory setting. SQLAlchemy does not percent-encode the SQLite database
+  component, so the generated URL is read back with `make_url()` and rejected
+  when the path would not survive unchanged (for example a `?` in `db_path`).
+  Tests: `test_db_url_rejects_unsafe_db_name`,
+  `test_db_file_setter_rejects_unsafe_names`,
+  `test_apply_sqlite_env_overrides_rejects_unsafe_db_file`, and
+  `test_db_url_rejects_db_path_that_would_read_back_as_a_query`.
+  This is hardening of operator configuration, not a trust boundary: the checks
+  do not cover `db_path` beyond that round trip, a `db_url` override, or
+  PostgreSQL names.
 - `require` alone is not a guarantee of certificate/hostname verification.
   Preserve explicitly selected `verify-ca`/`verify-full` semantics across driver
   adaptation. For libpq, absent `sslrootcert`, verification uses `PGSSLROOTCERT`

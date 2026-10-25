@@ -264,7 +264,9 @@ repom/
 SQLite のファイル名は `db_name` が `repom` の場合、`dev` / `test` では
 `{db_name}_{env}.sqlite3`、それ以外では `{db_name}.sqlite3` です。ファイルは
 `config.data_path` に作成され、既定では `<root_path>/data/repom` です。`test` は既定で
-in-memory SQLite を使用するため、通常はファイルを作成しません。
+in-memory SQLite を使用するため、通常はファイルを作成しません。`db_name` や `sqlite.db_file` に
+path separator、`..`、`:`、`?`、`#`、制御文字を含めることはできず、`ValueError` になります
+（詳細は[PostgreSQL の実行時環境変数](../postgresql/runtime_env_overrides.md)）。
 
 ---
 

@@ -38,6 +38,19 @@ def test_apply_sqlite_env_overrides_applies_db_path_and_file(monkeypatch):
     assert config.sqlite.db_file == "custom.sqlite3"
 
 
+@pytest.mark.parametrize(
+    "value", ["../x", "a/b", "a\\b", "x?mode=rw&uri=true", "x#y", "C:", "a\x1fb"]
+)
+def test_apply_sqlite_env_overrides_rejects_unsafe_db_file(monkeypatch, value):
+    monkeypatch.setenv("SQLITE_DB_FILE", value)
+    config = RepomConfig()
+
+    with pytest.raises(ValueError, match="sqlite.db_file must be a plain file name"):
+        apply_sqlite_env_overrides(config)
+
+    assert config.sqlite.db_file == "repom_test.sqlite3"
+
+
 @pytest.mark.parametrize("value", ["1", "true", "yes", "on"])
 def test_apply_sqlite_env_overrides_enables_in_memory_tests(monkeypatch, value):
     monkeypatch.setenv("SQLITE_USE_IN_MEMORY_FOR_TESTS", value)
