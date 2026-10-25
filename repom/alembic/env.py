@@ -10,6 +10,7 @@ from basekit.discovery import validate_package_security
 from repom.database import Base
 from repom.config import config as db_config
 from repom.alembic import render_repom_type
+from repom.alembic.options import resolve_version_table_options
 from repom.utility import load_models
 
 # this is the Alembic Config object, which provides
@@ -36,6 +37,7 @@ config.set_main_option("sqlalchemy.url", db_config.db_url.replace("%", "%%"))
 #
 # version_table is read from alembic.ini and defaults to alembic_version.
 # version_table_schema is also read from alembic.ini and defaults to None.
+# An empty or whitespace-only value counts as absent for both.
 # Consumers with multiple independent migration namespaces should give each
 # script_location/version_locations pair its own version_table and, when
 # separating namespaces by schema, its own version_table_schema.
@@ -50,10 +52,7 @@ config.set_main_option("sqlalchemy.url", db_config.db_url.replace("%", "%%"))
 # The module component must sit under db_config.allowed_package_prefixes;
 # _load_pre_migration_hook validates it before importing.
 
-version_table = config.get_main_option("version_table", "alembic_version")
-version_table_schema = config.get_main_option("version_table_schema")
-if version_table_schema is not None:
-    version_table_schema = version_table_schema.strip() or None
+version_table, version_table_schema = resolve_version_table_options(config)
 
 
 def _parse_table_names(value: str | None) -> frozenset[str]:
@@ -74,6 +73,14 @@ def _load_pre_migration_hook(hook_path: str):
     # code-execution setting: validate the target module against
     # allowed_package_prefixes before importing it, the same boundary
     # load_models() enforces for model auto-import.
+    # A second ':' would make the loader import a different module name than
+    # the one validated here, so only a single module:callable separator is
+    # accepted.
+    if hook_path.count(":") > 1:
+        raise ValueError(
+            "pre_migration_hook must use a single 'module:callable' "
+            f"separator (pre_migration_hook='{hook_path}')"
+        )
     module_path = hook_path.split(":", 1)[0]
     try:
         validate_package_security(

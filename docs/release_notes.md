@@ -180,6 +180,12 @@
 
 ### Fixed
 
+- An empty or whitespace-only `version_table` / `version_table_schema` in
+  `alembic.ini` now counts as absent in both `env.py` and `AlembicSetup.from_ini`,
+  so the migration environment and `reset_migrations` agree on the version table.
+  `pre_migration_hook` values with more than one `:` are rejected, and
+  `AlembicTemplates.generate_alembic_ini` rejects non-ASCII `script_location` and
+  `version_locations` because Alembic reads `alembic.ini` with the locale encoding.
 - Sync `get_or_create()` now refreshes internally managed results after commit
   so created, existing, and unique-conflict recovery rows remain readable after
   the session closes.

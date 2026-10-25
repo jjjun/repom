@@ -5,6 +5,7 @@ from pathlib import Path
 from alembic.config import Config as AlembicConfig
 from alembic.util.pyfiles import coerce_resource_to_filename
 from repom.alembic.constants import SCRIPT_LOCATION
+from repom.alembic.options import resolve_version_table_options
 from repom.alembic.templates import AlembicTemplates
 from repom.alembic.reset import AlembicReset, is_project_directory
 from repom.exceptions import UnsafeVersionsDirectoryError
@@ -95,6 +96,8 @@ class AlembicSetup:
             基準に解決する（alembic 本体はカレントディレクトリ基準のため、
             alembic.ini の場所に依存させるには %(here)s を使う）。
             空白のみの項目は無視する。
+            version_table が空または空白のみの場合は未指定と同様に
+            alembic_version、version_table_schema は None として扱う。
         """
         ini_path = Path(ini_path)
         here = ini_path.resolve().parent
@@ -103,14 +106,9 @@ class AlembicSetup:
         script_location = alembic_config.get_main_option(
             "script_location", SCRIPT_LOCATION
         )
-        version_table = alembic_config.get_main_option(
-            "version_table", "alembic_version"
+        version_table, version_table_schema = resolve_version_table_options(
+            alembic_config
         )
-        version_table_schema = alembic_config.get_main_option(
-            "version_table_schema"
-        )
-        if version_table_schema is not None:
-            version_table_schema = version_table_schema.strip() or None
 
         def _resolve(raw_location: str) -> Path:
             location = Path(raw_location)

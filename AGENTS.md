@@ -129,7 +129,8 @@ which can be set in `CONFIG_HOOK`. After creation, runtime commands read only
 
 `repom/alembic/env.py` reads `version_table` and `version_table_schema` from
 `alembic.ini`. They default to `alembic_version` and no explicit schema,
-respectively. A consuming project with independent migration namespaces should
+respectively; an empty or whitespace-only value counts as absent, in `env.py` and
+`AlembicSetup.from_ini` alike. A consuming project with independent migration namespaces should
 configure a distinct `script_location`, `version_locations`, and `version_table`
 for each namespace. When separating namespaces by schema, configure a distinct
 `version_table_schema` as well.
@@ -155,7 +156,8 @@ reject a configuration.
 
 The hook's module component must sit under the consuming project's configured
 `allowed_package_prefixes`; `repom/alembic/env.py` validates this before importing
-the module.
+the module. A value with more than one `:` is rejected, so the validated module
+name is the one the loader imports.
 
 ### Trust Boundary
 
@@ -176,7 +178,9 @@ which wraps it) must never be fed a value derived from untrusted input - a
 project name, a CI variable, anything an attacker could influence - for
 `script_location`, `version_locations`, `version_table`,
 `version_table_schema`, or `autogenerate_exclude_tables`. Path options reject a
-newline, a carriage return, a NUL byte, and a leading `[`. `%` interpolation is
+newline, a carriage return, a NUL byte, a leading `[`, and (for `script_location`
+and `version_locations`) non-ASCII characters, because the file is written as
+UTF-8 but Alembic reads it with the locale encoding. `%` interpolation is
 intentionally allowed. `version_table`, `version_table_schema`, and each
 exclusion entry must additionally match a plain identifier pattern
 (`[A-Za-z_][A-Za-z0-9_]*`). String-form `autogenerate_exclude_tables` values are

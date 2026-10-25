@@ -32,6 +32,20 @@ class AlembicTemplates:
             raise ValueError(f"{option} must not start with '[': {value!r}")
 
     @staticmethod
+    def _reject_non_ascii(option: str, value: str) -> None:
+        """Reject a value Alembic could not read back from alembic.ini.
+
+        The file is written as UTF-8 but Alembic reads it with the locale
+        encoding, so a non-ASCII value raises UnicodeDecodeError on hosts such
+        as cp932 Windows.
+        """
+        if not value.isascii():
+            raise ValueError(
+                f"{option} must be ASCII only because Alembic reads "
+                f"alembic.ini with the locale encoding: {value!r}"
+            )
+
+    @staticmethod
     def _reject_non_identifier(option: str, value: str) -> None:
         """Constrain an identifier-shaped option to a conservative pattern."""
         AlembicTemplates._reject_ini_injection(option, value)
@@ -70,7 +84,11 @@ class AlembicTemplates:
         AlembicTemplates._reject_ini_injection(
             "script_location", script_location
         )
+        AlembicTemplates._reject_non_ascii("script_location", script_location)
         AlembicTemplates._reject_ini_injection(
+            "version_locations", version_locations
+        )
+        AlembicTemplates._reject_non_ascii(
             "version_locations", version_locations
         )
         if version_table is not None:

@@ -73,6 +73,8 @@ class AlembicConfigStub:
     ("configured_version_table", "expected_version_table"),
     [
         (None, "alembic_version"),
+        ("", "alembic_version"),
+        ("   ", "alembic_version"),
         ("alembic_version_fast_domain", "alembic_version_fast_domain"),
     ],
 )
@@ -313,6 +315,28 @@ def test_pre_migration_hook_rejects_module_outside_allowed_prefixes(monkeypatch)
 
     with pytest.raises(ValueError):
         _run_env_with_pre_migration_hook(monkeypatch, "evil_module:run")
+
+
+@pytest.mark.parametrize(
+    "hook_path",
+    ["repom.fake_pre_migration_hook:run:extra", "repom.fake:hook:run:extra"],
+)
+def test_pre_migration_hook_rejects_more_than_one_colon(
+    monkeypatch, hook_path
+):
+    """The validated prefix is split at the first ':' while the loader
+    imports everything before the last one, so a second ':' would let the
+    loader import a module name that was never validated.
+    """
+    monkeypatch.setattr(
+        repom.config.config, "allowed_package_prefixes", {"repom."}
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        _run_env_with_pre_migration_hook(monkeypatch, hook_path)
+
+    assert "single 'module:callable' separator" in str(exc_info.value)
+    assert f"pre_migration_hook='{hook_path}'" in str(exc_info.value)
 
 
 @pytest.mark.parametrize(

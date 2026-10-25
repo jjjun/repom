@@ -45,6 +45,16 @@ def test_generate_alembic_ini_rejects_newline_in_every_option(kwargs):
         AlembicTemplates.generate_alembic_ini(**kwargs)
 
 
+@pytest.mark.parametrize("option", ["script_location", "version_locations"])
+def test_generate_alembic_ini_rejects_non_ascii_path_options(option):
+    """The ini is written as UTF-8 but Alembic reads it with the locale
+    encoding, so a non-ASCII path would fail on hosts such as cp932."""
+    kwargs = {**_base_kwargs(), option: "migrations_テスト"}
+
+    with pytest.raises(ValueError, match="ASCII only"):
+        AlembicTemplates.generate_alembic_ini(**kwargs)
+
+
 @pytest.mark.parametrize(
     "bad_value",
     ['quoted"name', "semi;colon", "bracket[name]", "1leading_digit", "has space"],

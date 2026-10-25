@@ -326,8 +326,12 @@ Unless a difference is stated below, these contracts apply to both
 
 - Enforced import checks: model discovery validates each configured model
   package name before importing it, and `pre_migration_hook` validates its
-  module component before loading the callable. Both use raw `startswith`
-  matching. Prefixes should end in `.`, because a dotless prefix also admits
+  module component before loading the callable. A hook value with more than one
+  `:` is rejected before validation, so the validated module name is the one
+  the loader imports (the loader splits at the last `:`);
+  `test_pre_migration_hook_rejects_more_than_one_colon` covers this. The model
+  discovery and hook prefix checks both use raw `startswith` matching. Prefixes
+  should end in `.`, because a dotless prefix also admits
   sibling names. An empty prefix set disables the discovery check but rejects
   every hook. A string value for `allowed_package_prefixes` is iterated one
   character at a time. These checks validate names only; they do not select or
@@ -353,14 +357,25 @@ Unless a difference is stated below, these contracts apply to both
   Display-only discovery still imports model code and applies package checks.
   Review generated migrations.
 - INI generation: path options reject newline, carriage return, NUL, and a
-  leading `[`. `%` interpolation is intentionally allowed. Identifier options
+  leading `[`. `script_location` and `version_locations` must also be ASCII,
+  because the generated file is UTF-8 while Alembic reads `alembic.ini` with the
+  locale encoding; this check applies only to the generator, not to a
+  hand-written ini read at runtime
+  (`test_generate_alembic_ini_rejects_non_ascii_path_options`). `%`
+  interpolation is intentionally allowed. Identifier options
   and each exclusion entry must match `[A-Za-z_][A-Za-z0-9_]*`. String-form
   `autogenerate_exclude_tables` values are split, trimmed, validated, and
   rejoined before they are written, so the emitted value has passed the same
   newline, carriage-return, NUL, and identifier checks. Template inputs must
   come from trusted configuration as specified in [AGENTS.md](AGENTS.md);
   validation does not make the generator an untrusted-configuration service.
-- Runtime migration paths and namespace settings come from `alembic.ini`.
+- Runtime migration paths and namespace settings come from `alembic.ini`. An
+  empty or whitespace-only `version_table` or `version_table_schema` counts as
+  absent in both the shared `env.py` and `AlembicSetup.from_ini`, defaulting to
+  `alembic_version` and no schema, so `env.py` and `reset_migrations` agree on
+  the table in use (`test_env_configures_version_table` in `test_alembic_env.py`
+  and `test_from_ini_treats_blank_version_table_as_absent` in
+  `test_alembic_setup.py`).
   `autogenerate_exclude_tables` accepts any table name; limiting it to sibling
   version tables is a review rule, not an enforced control. An exclusion matches
   a reflected table by unqualified name in any schema, suppressing that

@@ -117,6 +117,34 @@ class TestFromIni:
         assert setup.versions_dir == expected
         assert setup.versions_dirs == [expected]
 
+    @pytest.mark.parametrize("blank", ["", "   "])
+    def test_from_ini_treats_blank_version_table_as_absent(
+        self, tmp_path, monkeypatch, blank
+    ):
+        """A present-but-empty version_table must not reach reset as "",
+        or reset and env.py would disagree about the table in use."""
+        ini_path = tmp_path / "alembic.ini"
+        ini_path.write_text(
+            "[alembic]\n"
+            f"version_table = {blank}\n"
+            f"version_table_schema = {blank}\n"
+        )
+        created_with = {}
+
+        class ResetStub:
+            def __init__(self, **kwargs):
+                created_with.update(kwargs)
+
+        monkeypatch.setattr("repom.alembic.setup.AlembicReset", ResetStub)
+
+        setup = AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+        setup.reset_migrations(drop_table=False, delete_files=False)
+
+        assert setup.version_table == "alembic_version"
+        assert setup.version_table_schema is None
+        assert created_with["version_table"] == "alembic_version"
+        assert created_with["version_table_schema"] is None
+
     def test_from_ini_defaults_to_packaged_script_location(self, tmp_path):
         ini_path = tmp_path / "alembic.ini"
         ini_path.write_text(

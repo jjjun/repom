@@ -63,6 +63,9 @@ setup.create_version_directory()
 - `version_table_schema`: Alembic のバージョンテーブルを配置するスキーマ（デフォルト: 明示的なスキーマなし）
 - `autogenerate_exclude_tables`: 除外する兄弟名前空間のバージョンテーブル名（文字列またはシーケンス）
 
+`alembic.ini` の `version_table` / `version_table_schema` が空または空白のみの場合は、
+未指定と同様に扱います（`env.py` と `AlembicSetup.from_ini` で共通）。
+
 `version_locations` は利用側プロジェクトの revision 保存先として明示してください。省略すると Alembic は共有環境内の `versions` を使います。
 
 `%(here)s` を使わない相対パスは、repom（`alembic_reset` / `alembic_init`）では
@@ -435,11 +438,13 @@ mine-py/
 `version_table`、`version_table_schema`、`autogenerate_exclude_tables` には、
 リポジトリ名や CI 変数など外部由来の値をそのまま渡さないでください。
 改行・復帰・NUL・先頭が `[` の値は例外を送出して拒否されます。
+`script_location` と `version_locations` の非 ASCII 文字も拒否されます
+（`alembic.ini` は UTF-8 で書き込まれますが、Alembic はロケールのエンコーディングで読み込むため）。
 `version_table` / `version_table_schema` / `autogenerate_exclude_tables` の
 各要素は `[A-Za-z_][A-Za-z0-9_]*` の識別子パターンのみ許可されます。
 `pre_migration_hook` が指すモジュールは `allowed_package_prefixes` で
 許可した prefix 配下である必要があり、`repom/alembic/env.py` がインポート前に
-これを検証します。
+これを検証します。`:` を 2 つ以上含む値は拒否されます。
 
 ---
 
