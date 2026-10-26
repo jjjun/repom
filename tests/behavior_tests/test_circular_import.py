@@ -1,8 +1,12 @@
-"""Regression coverage for model discovery with circular relationships."""
+"""Regression coverage for circular imports: model relationships and
+CONFIG_HOOK modules that import repom.alembic."""
 
+import os
 from pathlib import Path
 import subprocess
 import sys
+
+from tests.pytest_helpers import CHILD_PROCESS_TIMEOUT_SEC
 
 
 def test_load_models_configures_circular_relationship_models():
@@ -56,6 +60,36 @@ with Session(engine) as session:
         cwd=Path(__file__).resolve().parents[2],
         capture_output=True,
         text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_import_repom_with_config_hook_importing_repom_alembic():
+    # repom.config loads once per interpreter, so the import runs in a child.
+    hook_module = "tests.fixtures.config_hooks.alembic_constants_hook"
+    script = f"""
+import sys
+
+import repom
+import repom.alembic
+from repom.config import config
+
+assert "{hook_module}" in sys.modules
+assert config.alembic_script_location == "repom:alembic"
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=Path(__file__).resolve().parents[2],
+        env={
+            **os.environ,
+            "CONFIG_HOOK": f"{hook_module}:hook_config",
+            "EXEC_ENV": "test",
+            "BASEKIT_NO_SIDE_EFFECTS": "1",
+        },
+        capture_output=True,
+        text=True,
+        timeout=CHILD_PROCESS_TIMEOUT_SEC,
     )
 
     assert result.returncode == 0, result.stdout + result.stderr

@@ -217,6 +217,14 @@
 
 ### Fixed
 
+- `import repom` no longer fails with `ConfigHookLoadError` when the `CONFIG_HOOK`
+  module imports `repom.alembic` (for example `from repom.alembic.constants import
+  SCRIPT_LOCATION`). Commit 4370076 (repom#274) was the first affected revision:
+  `repom.alembic.reset` imported `repom.config` at module level, which came back to
+  `repom.config` while it was still loading the hook. `is_project_directory()` now
+  imports `repom.config` when it is called, so the modules that `repom.alembic`
+  imports no longer import `repom.config` at module level and a `CONFIG_HOOK` module
+  can import `repom.alembic`.
 - PostgreSQL credential rotation and the generated init SQL no longer depend on the
   server's `standard_conforming_strings` default. Every rotation `psql` step payload
   (also shown in the dry-run output) and the generated `01_init_databases.sql` now

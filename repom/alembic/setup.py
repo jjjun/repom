@@ -15,7 +15,9 @@ class AlembicSetup:
     """Alembic セットアップと管理のための統合ユーティリティ
 
     テストとスクリプトの両方で使用可能。
-    config に依存せず、引数でパスを受け取る設計。
+    パスは引数で受け取る設計。from_ini() と reset_migrations() は、versions
+    ディレクトリが config.root_path と一致しないか検証するために config.root_path
+    を参照する。
     """
 
     def __init__(

@@ -23,6 +23,13 @@ hook は必ず1個の config 引数を受け取り、設定オブジェクトを
 import した時点で新しい `RepomConfig` を作ったり、引数なし関数を登録したりしないで
 ください。
 
+hook module は `repom.config` の初期化中に import されます。そのため、hook module は
+`repom.config`、および module の読み込み時に `repom.config` を import する module
+（`repom.database`、`repom.models`、`repom.repositories`、最上位 `repom` package の名前など）
+を import してはいけません。import すると、初期化途中の `repom.config` へ戻って
+`import repom` が `ConfigHookLoadError` で失敗します。安全に import できるのは
+`repom.config_hooks.*`、`repom.exec_env`、`repom.alembic.constants` です。
+
 ## Import-time side effects
 
 `repom.config` は import 時に設定を読み込みます。`auto_create_dirs` が有効な場合は

@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.dialects import postgresql
 
 from repom.alembic import AlembicReset
+from repom.config import config
 from repom.exceptions import UnsafeVersionsDirectoryError
 import repom.alembic.reset as reset_module
 
@@ -235,9 +236,7 @@ def test_delete_migration_files_refuses_project_dir_via_dot_segments(tmp_path):
 
 
 def test_delete_migration_files_refuses_config_root_path(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        reset_module, "config", MagicMock(root_path=str(tmp_path))
-    )
+    monkeypatch.setattr(config, "root_path", str(tmp_path))
     (tmp_path / "app.py").write_text("# project code")
 
     reset = AlembicReset("sqlite:///unused.db", tmp_path)

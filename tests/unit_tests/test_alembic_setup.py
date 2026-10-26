@@ -7,7 +7,6 @@ a unified interface for Alembic initialization and reset operations.
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import create_engine, inspect, text
@@ -18,8 +17,8 @@ from repom.alembic import (
     SCRIPT_LOCATION,
     script_location_path,
 )
+from repom.config import config
 from repom.exceptions import UnsafeVersionsDirectoryError
-import repom.alembic.reset as reset_module
 
 
 class TestAlembicSetupInit:
@@ -279,9 +278,7 @@ class TestFromIni:
             "version_locations = ..\n"
             "path_separator = os\n"
         )
-        monkeypatch.setattr(
-            reset_module, "config", MagicMock(root_path=str(tmp_path))
-        )
+        monkeypatch.setattr(config, "root_path", str(tmp_path))
 
         with pytest.raises(UnsafeVersionsDirectoryError):
             AlembicSetup.from_ini(ini_path, "sqlite:///test.db")

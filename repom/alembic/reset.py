@@ -4,7 +4,6 @@ from collections.abc import Iterable
 from pathlib import Path
 from sqlalchemy import create_engine, inspect, text
 
-from repom.config import config
 from repom.exceptions import UnsafeVersionsDirectoryError
 
 
@@ -14,6 +13,11 @@ def is_project_directory(path: Path, project_dirs: Iterable[Path] = ()) -> bool:
     versions ディレクトリがこれらに一致すると、プロジェクト直下の *.py が
     マイグレーションファイルとして削除対象になる。
     """
+    # この module では repom.config を module level で import しない。CONFIG_HOOK の
+    # module は repom.config の初期化中に import され、repom.alembic (例:
+    # repom.alembic.constants) を import することがあり、循環してしまうため。
+    from repom.config import config
+
     candidates = [Path(project_dir) for project_dir in project_dirs]
     if config.root_path:
         candidates.append(Path(config.root_path))
