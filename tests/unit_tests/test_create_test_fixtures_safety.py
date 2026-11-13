@@ -14,6 +14,7 @@ import pytest
 from repom.config import config
 from repom.testing import (
     _is_in_memory_sqlite_url,
+    _require_test_database,
     create_async_test_fixtures,
     create_test_fixtures,
 )
@@ -144,6 +145,21 @@ def test_fixture_factories_reject_memory_marker_in_sqlite_filename(
         ("sqlite:///repom:memory:.sqlite3", False),
         ("sqlite:///repom.sqlite3?check_same_thread=:memory:", False),
         ("sqlite://[::1", False),
+        ("sqlite:///file:///tmp/memdb?mode=memory&uri=true", True),
+        ("sqlite:///file::memory:?uri=true", True),
+        ("sqlite:///file:real1.db#?mode=memory&uri=true", False),
+        ("sqlite+pysqlite:///file:real1.db#?mode=memory&uri=true", False),
+        ("sqlite+aiosqlite:///file:real1.db#?mode=memory&uri=true", False),
+        ("sqlite:///file:real5.db#frag?uri=true&mode=memory&cache=shared", False),
+        ("sqlite:///file:real6.db#:memory:?mode=memory&uri=true", False),
+        ("sqlite:///file:///tmp/real9.db#?mode=memory&uri=true", False),
+        ("sqlite:///file:memdb#?mode=memory&uri=true", False),
+        ("sqlite:///file::memory:#frag?cache=shared&uri=true", False),
+        ("sqlite:///file:memdb?mode=memory&uri=true#", False),
+        ("sqlite:///file:real%23.db?mode=memory&uri=true", False),
+        ("sqlite:///file:real%3F.db?mode=memory&uri=true", False),
+        ("sqlite:///file:real%00.db?mode=memory&uri=true", False),
+        ("sqlite:///file:mem%20db?mode=memory&uri=true", False),
     ],
 )
 def test_in_memory_sqlite_url_classifier_requires_unambiguous_memory_target(
@@ -172,3 +188,150 @@ def test_fixture_factories_allow_explicit_destructive_opt_in_for_file_database(
     assert callable(db_engine)
     assert callable(db_test)
     assert not db_path.exists()
+
+
+def _format_url(template, driver, tmp_path):
+    return template.format(driver=driver, path=tmp_path.as_posix().lstrip("/"))
+
+
+def _create_sentinel_database(db_path):
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("CREATE TABLE sentinel (value TEXT NOT NULL)")
+        connection.execute("INSERT INTO sentinel VALUES ('preserved')")
+    return db_path
+
+
+def _read_sentinel(db_path):
+    with sqlite3.connect(db_path) as connection:
+        return connection.execute("SELECT value FROM sentinel").fetchone()
+
+
+# SQLite ignores everything after "#" in a URI, so "mode=memory" placed after it
+# never takes effect and the named file is opened read-write (repom#296).
+# "%" escapes are refused too: SQLite decodes them after the check has run.
+_REJECTED_FILE_URI_TEMPLATES = [
+    pytest.param("{driver}:///file:real.db#?mode=memory&uri=true", id="empty-fragment"),
+    pytest.param(
+        "{driver}:///file:real.db#frag?uri=true&mode=memory&cache=shared",
+        id="fragment-text",
+    ),
+    pytest.param(
+        "{driver}:///file:real.db#:memory:?mode=memory&uri=true", id="memory-marker-fragment"
+    ),
+    pytest.param(
+        "{driver}:///file:///{path}/real.db#?mode=memory&uri=true", id="absolute-path"
+    ),
+    pytest.param(
+        "{driver}:///file::memory:#frag?cache=shared&uri=true", id="memory-filename-fragment"
+    ),
+    pytest.param("{driver}:///file:real%23.db?mode=memory&uri=true", id="escaped-hash"),
+    pytest.param("{driver}:///file:real%3F.db?mode=memory&uri=true", id="escaped-question"),
+    pytest.param("{driver}:///file:real%00.db?mode=memory&uri=true", id="escaped-nul"),
+]
+
+
+@pytest.mark.parametrize("driver", ["sqlite", "sqlite+pysqlite", "sqlite+aiosqlite"])
+@pytest.mark.parametrize("template", _REJECTED_FILE_URI_TEMPLATES)
+def test_require_test_database_rejects_file_uris_that_hide_the_memory_mode(
+    tmp_path, monkeypatch, driver, template
+):
+    monkeypatch.setattr(config, "exec_env", "dev")
+    monkeypatch.chdir(tmp_path)
+    real_db = _create_sentinel_database(tmp_path / "real.db")
+    db_url = _format_url(template, driver, tmp_path)
+
+    with pytest.raises(RuntimeError, match="Refusing to create test fixtures"):
+        _require_test_database(db_url, allow_destructive=False)
+
+    assert _require_test_database(db_url, allow_destructive=True) is None
+    assert _read_sentinel(real_db) == ("preserved",)
+    assert [path.name for path in tmp_path.iterdir()] == ["real.db"]
+
+
+@pytest.mark.parametrize(
+    ("create_fixtures", "driver"),
+    [
+        (create_test_fixtures, "sqlite"),
+        (create_async_test_fixtures, "sqlite+aiosqlite"),
+    ],
+)
+@pytest.mark.parametrize("template", _REJECTED_FILE_URI_TEMPLATES)
+def test_fixture_factories_reject_file_uris_that_hide_the_memory_mode(
+    tmp_path, monkeypatch, create_fixtures, driver, template
+):
+    monkeypatch.setattr(config, "exec_env", "dev")
+    monkeypatch.chdir(tmp_path)
+    real_db = _create_sentinel_database(tmp_path / "real.db")
+    db_url = _format_url(template, driver, tmp_path)
+
+    with pytest.raises(RuntimeError, match="Refusing to create test fixtures"):
+        create_fixtures(db_url=db_url, model_loader=lambda: None)
+
+    assert _read_sentinel(real_db) == ("preserved",)
+    assert [path.name for path in tmp_path.iterdir()] == ["real.db"]
+
+
+# Every form the memory check accepts. Connecting through the fixture must
+# neither fail on the engine settings nor create a file on disk.
+_ACCEPTED_MEMORY_URL_TEMPLATES = [
+    pytest.param("{driver}://", id="bare"),
+    pytest.param("{driver}:///:memory:", id="memory-filename"),
+    pytest.param("{driver}:///file:memdb?mode=memory&uri=true", id="uri-mode-memory"),
+    pytest.param(
+        "{driver}:///file:memdb?mode=memory&cache=private&uri=true", id="uri-cache-private"
+    ),
+    pytest.param(
+        "{driver}:///file:memdb?mode=memory&cache=shared&uri=true", id="uri-cache-shared"
+    ),
+    pytest.param("{driver}:///file::memory:?cache=shared&uri=true", id="uri-memory-filename"),
+    pytest.param(
+        "{driver}:///file:///{path}/memdb?mode=memory&uri=true", id="uri-absolute-path"
+    ),
+]
+
+
+@pytest.mark.parametrize("driver", ["sqlite", "sqlite+pysqlite"])
+@pytest.mark.parametrize("template", _ACCEPTED_MEMORY_URL_TEMPLATES)
+def test_sync_fixture_accepted_memory_urls_create_no_file(
+    tmp_path, monkeypatch, driver, template
+):
+    monkeypatch.setattr(config, "exec_env", "dev")
+    monkeypatch.chdir(tmp_path)
+    db_url = _format_url(template, driver, tmp_path)
+    assert _is_in_memory_sqlite_url(db_url)
+
+    db_engine, _ = create_test_fixtures(db_url=db_url, model_loader=lambda: None)
+    engine_generator = db_engine.__wrapped__()
+    engine = next(engine_generator)
+    try:
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql("SELECT 1").scalar() == 1
+    finally:
+        next(engine_generator, None)
+
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("template", _ACCEPTED_MEMORY_URL_TEMPLATES)
+async def test_async_fixture_accepted_memory_urls_create_no_file(
+    tmp_path, monkeypatch, template
+):
+    monkeypatch.setattr(config, "exec_env", "dev")
+    monkeypatch.chdir(tmp_path)
+    db_url = _format_url(template, "sqlite+aiosqlite", tmp_path)
+    assert _is_in_memory_sqlite_url(db_url)
+
+    async_db_engine, _ = create_async_test_fixtures(
+        db_url=db_url, model_loader=lambda: None
+    )
+    engine_generator = async_db_engine.__wrapped__()
+    engine = await anext(engine_generator)
+    try:
+        async with engine.connect() as connection:
+            result = await connection.exec_driver_sql("SELECT 1")
+            assert result.scalar() == 1
+    finally:
+        await anext(engine_generator, None)
+
+    assert list(tmp_path.iterdir()) == []

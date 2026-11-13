@@ -141,7 +141,10 @@ db_engine, db_test = create_test_fixtures(
   `file::memory:` のファイル名を指定した場合に限り in-memory として扱い、URI オプションには
   `cache=private` または `cache=shared` だけを追加できる。URL の解析に失敗した場合、URI
   オプションが重複・未対応の場合、ファイル名や無関係なクエリ値に `:memory:` が含まれる場合は
-  in-memory と判定しない。正規化後の `EXEC_ENV` が `test` でなく、in-memory と判定されない
+  in-memory と判定しない。`file:` URI の名前に `#` または `%` が含まれる場合も判定しない
+  （SQLite は `#` 以降を無視するため `mode=memory` が効かず、名前のファイルが開かれる。
+  `%` のエスケープは SQLite が判定後に復号する）。
+  正規化後の `EXEC_ENV` が `test` でなく、in-memory と判定されない
   `db_url` を渡すと、テスト終了時の `drop_all` が実データベースを壊さないよう
   `RuntimeError` を送出する。実際にそのデータベースへ向けたい場合は
   `allow_destructive=True` を明示する。これは URL が破棄可能なデータを指す保証ではない。

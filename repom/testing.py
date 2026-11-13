@@ -60,6 +60,13 @@ def _is_in_memory_sqlite_url(db_url: str) -> bool:
 
     if not url.database.startswith("file:") or query.get("uri", "").lower() != "true":
         return False
+    # SQLite ends a URI path at "#" and ignores the rest, query included, so a
+    # "mode=memory" after it never reaches SQLite and the named file is opened.
+    # SQLite also decodes "%" escapes in the path, so the name it opens can
+    # differ from the one examined here; refuse both instead of reasoning
+    # about decoded names (repom#296).
+    if "#" in url.database or "%" in url.database:
+        return False
     if not set(query).issubset({"uri", "mode", "cache"}):
         return False
     if query.get("cache", "shared") not in {"private", "shared"}:

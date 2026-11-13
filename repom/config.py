@@ -84,6 +84,24 @@ def _sqlite_file_url(database: str) -> str:
     return rendered
 
 
+def _is_sqlite_memory_database(url: URL) -> bool:
+    """Return whether the parsed SQLite URL names an in-memory database.
+
+    SQLAlchemy picks the pool class from the parsed URL: no database,
+    ``:memory:``, or ``mode=memory`` in the query select a single-connection
+    pool, which rejects ``pool_size`` and the other queue-pool options. The
+    ``file::memory:`` URI also names a memory database. Searching the URL text
+    for ``:memory:`` instead misses ``sqlite://`` and ``mode=memory`` URIs.
+    """
+    if url.get_backend_name() != "sqlite":
+        return False
+    return (
+        not url.database
+        or url.database in {":memory:", "file::memory:"}
+        or url.query.get("mode") == "memory"
+    )
+
+
 def _postgres_host_values(value) -> tuple[object, ...]:
     """Expand PostgreSQL host values, including libpq's comma-separated lists."""
     if isinstance(value, (tuple, list)):
@@ -1004,7 +1022,7 @@ class RepomConfig(Config):
             }
 
         # SQLite :memory: DB の場合は、StaticPool を使用して単一接続を全スレッドで共有
-        is_memory_db = bool(url) and ":memory:" in url
+        is_memory_db = bool(url) and _is_sqlite_memory_database(make_url(url))
 
         if is_memory_db:
             # :memory: DB 用の設定（StaticPool を使用）

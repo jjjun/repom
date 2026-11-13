@@ -534,7 +534,11 @@ Unless a difference is stated below, these contracts apply to both
   the `file::memory:` filename;
   only `cache=private` or `cache=shared` may accompany the URI options.
   Malformed URLs, repeated or unsupported URI options, and `:memory:` in a
-  filename or unrelated query value do not qualify. `EXEC_ENV=test` permits
+  filename or unrelated query value do not qualify. A `file:` URI whose name
+  contains `#` or `%` does not qualify either: SQLite ends the URI at `#` and
+  ignores the rest, so `mode=memory` after it never applies and the named file
+  is opened, and SQLite decodes `%` escapes in the name after the check has
+  run. `EXEC_ENV=test` permits
   any URL. These checks cannot prove a URL names disposable data; consumers
   must select a dedicated database.
 - `bind_global_manager=True` temporarily binds the fixture engine to the

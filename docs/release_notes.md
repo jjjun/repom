@@ -230,6 +230,24 @@
 
 ### Fixed
 
+- The in-memory SQLite check behind `create_test_fixtures()` and
+  `create_async_test_fixtures()` no longer accepts a `file:` URI whose name contains `#`
+  (repom#296). SQLite ends a URI at `#` and ignores the rest, so in
+  `sqlite:///file:app.db#?mode=memory&uri=true` the `mode=memory` never applied: the check
+  passed outside `EXEC_ENV=test` without `allow_destructive=True`, SQLite opened `app.db`
+  read-write, and the session fixture's teardown dropped every `Base.metadata` table in
+  it. Such a URL now raises `RuntimeError` for the `sqlite`, `sqlite+pysqlite`, and
+  `sqlite+aiosqlite` schemes. A `file:` URI name containing `%` is refused as well
+  (behavior change), because SQLite decodes `%` escapes after the check has examined the
+  name; pass `allow_destructive=True` or use `EXEC_ENV=test` if you really need one. The
+  forms the check documented as accepted are unchanged.
+- `RepomConfig.engine_kwargs_for_url()` (and so the fixture factories) now classifies an
+  in-memory SQLite database from the parsed URL instead of by the `:memory:` substring
+  (repom#296). `sqlite://` and `file:` URIs with `mode=memory`, which the fixture check
+  accepts, previously received queue-pool options and failed with `TypeError: Invalid
+  argument(s) 'max_overflow','pool_timeout'` in both the sync and the async fixture;
+  they now use `StaticPool` like `sqlite:///:memory:`. A file database whose name or query
+  merely contains `:memory:` now receives queue-pool options instead of `StaticPool`.
 - `safe_db_url()` now masks a secret query key that follows a `#` (repom#295). It located
   the query with `urlsplit()`, which ends the URL at `#`, while SQLAlchemy `make_url()`
   keeps `#` in the host or database name and reads what follows the first `?` as query
