@@ -34,6 +34,23 @@ PostgreSQL や Redis の機能が必要な場合は、利用する extras を指
 uv add "repom[postgres,postgres-async,redis] @ git+https://github.com/jjjun/repom.git"
 ```
 
+非同期 API（`AsyncBaseRepository`、`get_async_db_session()` など）を使う場合は、
+次のいずれかの extras が必要です。いずれも `sqlalchemy[asyncio]` を通じて
+greenlet をインストールします。extras なしの `repom` は greenlet を要求しないため、
+同期専用の利用では追加されません。
+
+| extra | 追加される非同期ドライバー |
+| --- | --- |
+| `async` | `aiosqlite`（SQLite） |
+| `postgres-async` | `asyncpg`（PostgreSQL） |
+| `async-all` | `aiosqlite` と `asyncpg` |
+
+```bash
+uv add "repom[async] @ git+https://github.com/jjjun/repom.git"
+```
+
+PostgreSQL の同期ドライバーも使う場合は `postgres` extra を併用してください。
+
 配布 wheel には `repom/alembic/` の共有環境（`env.py`、`script.py.mako`）も含まれます。
 `script_location = repom:alembic` で利用できます。revision ファイルは利用側プロジェクトに
 保存するため、`alembic.ini` には `version_locations = %(here)s/alembic/versions` を設定してください。

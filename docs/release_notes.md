@@ -217,6 +217,14 @@
 
 ### Fixed
 
+- The `async`, `postgres-async` and `async-all` extras now include
+  `sqlalchemy[asyncio]` (same version range as the core `sqlalchemy` dependency), so
+  installing them brings in greenlet on every platform. Previously greenlet came only
+  from SQLAlchemy's `platform_machine`-gated default dependency and was missing, for
+  example, on Apple Silicon macOS (`arm64`), which made the first async connection
+  fail with `ValueError: the greenlet library is required to use this function.`
+  Async use requires one of these extras; a plain `repom` install still does not
+  require greenlet.
 - `import repom` no longer fails with `ConfigHookLoadError` when the `CONFIG_HOOK`
   module imports `repom.alembic` (for example `from repom.alembic.constants import
   SCRIPT_LOCATION`). Commit 4370076 (repom#274) was the first affected revision:

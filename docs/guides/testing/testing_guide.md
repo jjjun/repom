@@ -116,6 +116,8 @@ async def test_async_save(async_db_test):
 
 SQLite async テストには `aiosqlite`、pytest には `pytest-asyncio` が必要です。
 このリポジトリの dev dependency には両方が含まれています。
+利用側プロジェクトでは `repom[async]` extra で `aiosqlite` と、非同期 API に必要な
+greenlet（`sqlalchemy[asyncio]` 経由）をインストールできます。
 
 `repom.testing` は `repom.database.convert_to_async_uri` も再 export します。
 

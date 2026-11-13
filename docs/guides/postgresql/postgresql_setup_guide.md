@@ -14,6 +14,14 @@ named volume は保持されます。
 uv sync --extra postgres
 ```
 
+非同期 API（asyncpg）も使う場合は `postgres-async` extra を追加してください。
+この extra は `sqlalchemy[asyncio]` を通じて非同期 API に必要な greenlet も
+インストールします。
+
+```bash
+uv sync --extra postgres --extra postgres-async
+```
+
 リポジトリ自身の開発設定は `.env.example` の
 `CONFIG_HOOK=repom.config_hook:hook_config` を使います。この hook は正規化した
 `EXEC_ENV` が `test` の場合だけ SQLite を選び、それ以外では PostgreSQL を選択します。

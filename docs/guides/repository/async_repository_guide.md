@@ -6,6 +6,13 @@
 [`test_repository_api_parity.py`](../../../tests/unit_tests/test_repository_api_parity.py) で検証されています。
 このガイドに記載していない `BaseRepository` の API も `AsyncBaseRepository` で利用できます。
 
+非同期 API を使うには、`async`、`postgres-async`、`async-all` のいずれかの extra で
+repom をインストールしてください。これらは `sqlalchemy[asyncio]` を通じて greenlet を
+インストールします。extra を指定しない場合、greenlet がない環境では最初の非同期接続が
+`ValueError: the greenlet library is required to use this function.` で失敗します。
+`repom[async]` は SQLite（`aiosqlite`）、`repom[postgres-async]` は PostgreSQL
+（`asyncpg`）、`repom[async-all]` は両方のドライバーを含みます。
+
 ## 定義
 
 型引数からモデルを推論する subclass を推奨します。
