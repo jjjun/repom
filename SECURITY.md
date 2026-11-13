@@ -298,9 +298,10 @@ Unless a difference is stated below, these contracts apply to both
 - In `prod`, non-local PostgreSQL destinations require `sslmode` of at least
   `require`. `RepomConfig.db_url` and `postgres_tls_settings_for_url()` enforce
   URL TLS policy, while `postgres_tls_settings()` applies it to the configured
-  host. `_resolve_postgres_engine_policy()` also checks `connect_args` and
-  asyncpg's `ssl`; `DatabaseManager`, `resolve_engine_settings()`, and
-  synchronous diagnostics probes use that resolver. The migration engine,
+  host. `_resolve_postgres_engine_policy()` also checks `connect_args`, asyncpg's
+  `ssl` as a `connect_args` key, and the URL query `ssl`; `DatabaseManager`,
+  `resolve_engine_settings()`, and synchronous diagnostics probes use that
+  resolver. The migration engine,
   `AlembicReset`, synchronous test fixtures, and consumer-built engines get
   only URL-level enforcement or none unless they call it. repom writes its
   resolved `sslmode` into generated and PostgreSQL override URLs, and into
@@ -317,6 +318,36 @@ Unless a difference is stated below, these contracts apply to both
   backend, such as MySQL, is returned unchanged in `prod` and gets no
   destination or transport guard
   (`test_prod_non_postgres_override_has_no_transport_guard`).
+- The URL query `ssl` is asyncpg's own key for the libpq mode names and is part
+  of the TLS resolution, not a way around it. It must be one of `disable`,
+  `allow`, `prefer`, `require`, `verify-ca`, or `verify-full`; another value,
+  including a repeated key, raises `ValueError`. `RepomConfig.db_url` and the
+  engine resolver neither write `sslmode` into a URL that carries it nor let a
+  configured or `PGSSLMODE` mode replace it. The `prod` remote floor applies to
+  it, with or without `sslcert`, `sslkey`, `sslpassword`, `sslcrl`,
+  `ssl_min_protocol_version`, or `ssl_max_protocol_version`. The asyncpg adapter
+  removes it from the URL and derives `connect_args['ssl']`, or the DSN
+  `sslmode` when a DSN option is present, from it, so the two cannot disagree.
+  `ssl` together with a different URL `sslmode`, or with a `connect_args` `ssl`
+  or `sslmode` that disagrees (an `SSLContext` or `True` counts as `require`),
+  raises `ValueError` naming the keys and never the values; equal values are
+  accepted. The synchronous engine keeps the URL `ssl`, which libpq rejects
+  (`invalid connection option "ssl"`), so it fails closed there; host client
+  tools receive it as `PGSSLMODE`. The async engine's debug log prints the
+  masked source URL followed by the `ssl` argument asyncpg receives. Tests:
+  `test_url_ssl_selects_the_asyncpg_ssl_mode_without_an_injected_sslmode`,
+  `test_url_ssl_with_sslrootcert_builds_the_matching_ssl_context`,
+  `test_url_ssl_with_dsn_options_keeps_one_mode_in_the_dsn`,
+  `test_prod_rejects_weak_url_ssl_for_remote_hosts`,
+  `test_conflicting_url_ssl_and_sslmode_raise_naming_both_keys`,
+  `test_url_ssl_conflicting_with_connect_args_raises`,
+  `test_url_ssl_must_be_a_libpq_mode_name`,
+  `test_url_ssl_is_not_overridden_by_configured_or_environment_sslmode`,
+  `test_sync_engine_keeps_url_ssl_which_libpq_rejects`,
+  `test_postgres_override_with_url_ssl_gets_no_sslmode`,
+  `test_pg_conn_params_take_url_ssl_as_the_sslmode`, and
+  `TestGetAsyncEngineUrlSsl`, which captures the keyword arguments that
+  `asyncpg.connect` receives.
 - The file-based SQLite URL that `RepomConfig.db_url` generates is built with
   `sqlalchemy.engine.URL.create()` from `sqlite.db_path` and a file name. The
   name, taken from `db_name` or `sqlite.db_file` / `SQLITE_DB_FILE`, must be
@@ -335,7 +366,7 @@ Unless a difference is stated below, these contracts apply to both
   PostgreSQL names.
 - `require` alone is not a guarantee of certificate/hostname verification.
   Preserve explicitly selected `verify-ca`/`verify-full` semantics across driver
-  adaptation. For libpq, absent `sslrootcert`, verification uses `PGSSLROOTCERT`
+  adaptation, including a mode selected through the URL query `ssl`. For libpq, absent `sslrootcert`, verification uses `PGSSLROOTCERT`
   or `~/.postgresql/root.crt`, not the system trust store. The asyncpg path
   passes a mode string through when no root certificate is configured; with an
   explicit root certificate, repom builds an `SSLContext` that does not load

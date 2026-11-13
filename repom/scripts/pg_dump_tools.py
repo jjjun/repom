@@ -155,6 +155,12 @@ class PgConnParams:
                     return value[-1] if value else None
                 return value
 
+            # db_url no longer writes sslmode into a URL that carries asyncpg's
+            # ``ssl``; libpq tools take that mode through PGSSLMODE instead.
+            sslmode = query_value("sslmode")
+            if sslmode is None:
+                sslmode = query_value("ssl")
+
             params = cls(
                 host=url.host,
                 port=url.port if url.port is not None else 5432,
@@ -162,7 +168,7 @@ class PgConnParams:
                 password=url.password,
                 database=url.database,
                 container_name=active_config.postgres.container.get_container_name(),
-                sslmode=query_value("sslmode"),
+                sslmode=sslmode,
                 sslrootcert=query_value("sslrootcert"),
                 use_docker=False,
                 sslcert=query_value("sslcert"),

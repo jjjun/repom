@@ -257,6 +257,71 @@ class TestURLOverride:
         with pytest.raises(ValueError, match="db.example.internal.*URL query"):
             config.db_url
 
+    @pytest.mark.parametrize('exec_env', ['dev', 'prod'])
+    @pytest.mark.parametrize('driver', ['postgresql', 'postgresql+asyncpg'])
+    def test_postgres_override_with_url_ssl_gets_no_sslmode(self, exec_env, driver):
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env=exec_env)
+        config.postgres.sslmode = 'require'
+        config.postgres.sslrootcert = '/etc/ssl/certs/default-ca.pem'
+        config.db_url = (
+            f'{driver}://app:secret@db.example.internal/appdb?ssl=verify-full'
+        )
+
+        url = make_url(config.db_url)
+
+        assert url.query == {'ssl': 'verify-full'}
+
+    @pytest.mark.parametrize('ssl_mode', ['disable', 'allow', 'prefer'])
+    def test_prod_remote_postgres_override_rejects_weak_url_ssl(self, ssl_mode):
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='prod')
+        config.db_url = (
+            'postgresql://app:secret@db.example.internal/appdb'
+            f'?ssl={ssl_mode}'
+        )
+
+        with pytest.raises(ValueError, match="db.example.internal.*URL query"):
+            config.db_url
+
+    @pytest.mark.parametrize('exec_env', ['dev', 'prod'])
+    def test_postgres_override_rejects_conflicting_url_ssl_and_sslmode(self, exec_env):
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env=exec_env)
+        config.db_url = (
+            'postgresql://app:secret@db.example.internal/appdb'
+            '?ssl=verify-full&sslmode=require&sslpassword=key-secret'
+        )
+
+        with pytest.raises(ValueError, match="'ssl' and 'sslmode'") as excinfo:
+            config.db_url
+
+        assert 'key-secret' not in str(excinfo.value)
+
+    @pytest.mark.parametrize('exec_env', ['dev', 'prod'])
+    def test_postgres_override_accepts_equal_url_ssl_and_sslmode(self, exec_env):
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env=exec_env)
+        config.db_url = (
+            'postgresql://app:secret@db.example.internal/appdb'
+            '?ssl=verify-full&sslmode=verify-full'
+        )
+
+        url = make_url(config.db_url)
+
+        assert url.query == {'ssl': 'verify-full', 'sslmode': 'verify-full'}
+
+    @pytest.mark.parametrize('value', ['true', 'verify_full', 'VERIFY-FULL'])
+    def test_postgres_override_rejects_unknown_url_ssl_value(self, value):
+        from repom.config import RepomConfig
+        config = RepomConfig(exec_env='dev')
+        config.db_url = f'postgresql://app:secret@db.example.internal/appdb?ssl={value}'
+
+        with pytest.raises(ValueError, match="'ssl' must be one of") as excinfo:
+            config.db_url
+
+        assert value not in str(excinfo.value)
+
     @pytest.mark.parametrize(
         ('exec_env', 'host', 'expected_sslmode'),
         [

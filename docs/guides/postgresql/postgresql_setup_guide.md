@@ -147,6 +147,15 @@ PostgreSQL URL の TLS 既定値と `sslrootcert`、正規化後の production �
 `connect_timeout` と `timeout`、または `application_name` と
 `server_settings.application_name` が異なる値なら `ValueError` になります。
 
+asyncpg 固有の URL query `ssl` は `sslmode` と同じ 6 つのモード名（`disable` / `allow` /
+`prefer` / `require` / `verify-ca` / `verify-full`）だけを受け付け、`sslmode` と同じ TLS
+policy で検証されます。URL に `ssl` があると repom は `sslmode` を補わず、`ssl` から
+`connect_args["ssl"]`（`sslcert` などの DSN option があるときは DSN の `sslmode`）を作ります。
+`ssl` と URL の `sslmode`、または `connect_args` の `ssl` / `sslmode` の値が食い違うと、キー名だけを
+示して `ValueError` になります。同じ値なら受け付けます。`ssl` は asyncpg だけが解釈するため、同じ URL
+を読む同期 psycopg engine では libpq が `invalid connection option "ssl"` として接続を拒否します。
+同期 engine も使う URL には `sslmode` を使ってください。
+
 asyncpg 固有の接続オプションと既存の `server_settings` は保持されます。
 `sslcert`、`sslkey`、`sslpassword`、`sslcrl`、`ssl_min_protocol_version`、
 `ssl_max_protocol_version` は asyncpg の DSN option として渡されます。SQLAlchemy の

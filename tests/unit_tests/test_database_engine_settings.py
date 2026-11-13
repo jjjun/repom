@@ -825,3 +825,281 @@ def test_prod_non_postgres_override_has_no_transport_guard():
     assert resolved_kwargs is engine_kwargs
     assert sslmode is None
     assert hosts == ()
+
+
+_URL_SSL_REMOTE = "app:secret@db.example.invalid/app"
+_URL_SSL_DSN_OPTION_QUERIES = [
+    "sslcert=c.pem&sslkey=k.pem",
+    "sslpassword=key-secret",
+    "sslcrl=r.pem",
+    "ssl_min_protocol_version=TLSv1.2",
+    "ssl_max_protocol_version=TLSv1.3",
+]
+
+
+def _asyncpg_connect_kwargs(async_url, async_kwargs):
+    """Merge the URL and connect_args the way SQLAlchemy builds asyncpg's kwargs."""
+    _, driver_args = PGDialect_asyncpg().create_connect_args(make_url(async_url))
+    driver_args.update(async_kwargs.get("connect_args", {}))
+    return driver_args
+
+
+@pytest.mark.parametrize("exec_env", ["dev", "prod"])
+@pytest.mark.parametrize("driver", ["postgresql", "postgresql+asyncpg"])
+@pytest.mark.parametrize("mode", ["verify-ca", "verify-full"])
+def test_url_ssl_selects_the_asyncpg_ssl_mode_without_an_injected_sslmode(
+    monkeypatch, exec_env, driver, mode
+):
+    policy_config = RepomConfig(exec_env=exec_env)
+    policy_config.db_url = f"{driver}://{_URL_SSL_REMOTE}?ssl={mode}"
+    monkeypatch.setattr(database_module, "config", policy_config)
+
+    (sync_url, _), (async_url, async_kwargs) = DatabaseManager.resolve_engine_settings(
+        policy_config.db_url, {}, environ={}
+    )
+    connect_kwargs = _asyncpg_connect_kwargs(async_url, async_kwargs)
+
+    assert make_url(sync_url).query == {"ssl": mode}
+    assert make_url(async_url).query == {}
+    assert connect_kwargs["ssl"] == mode
+    assert "sslmode" not in connect_kwargs
+
+
+@pytest.mark.parametrize("exec_env", ["dev", "prod"])
+@pytest.mark.parametrize(
+    ("mode", "check_hostname"), [("verify-ca", False), ("verify-full", True)]
+)
+def test_url_ssl_with_sslrootcert_builds_the_matching_ssl_context(
+    monkeypatch, exec_env, mode, check_hostname
+):
+    create_context_calls = []
+    real_create_default_context = ssl.create_default_context
+
+    def create_default_context(*, cafile=None):
+        create_context_calls.append(cafile)
+        return real_create_default_context()
+
+    monkeypatch.setattr(database_module.ssl, "create_default_context", create_default_context)
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env=exec_env))
+
+    _, (async_url, async_kwargs) = DatabaseManager.resolve_engine_settings(
+        f"postgresql://{_URL_SSL_REMOTE}?ssl={mode}&sslrootcert=ca.pem", {}, environ={}
+    )
+
+    context = async_kwargs["connect_args"]["ssl"]
+    assert create_context_calls == ["ca.pem"]
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is check_hostname
+    assert make_url(async_url).query == {}
+
+
+@pytest.mark.parametrize(
+    ("exec_env", "mode"),
+    [
+        ("dev", "disable"),
+        ("dev", "prefer"),
+        ("dev", "verify-full"),
+        ("prod", "require"),
+        ("prod", "verify-ca"),
+        ("prod", "verify-full"),
+    ],
+)
+@pytest.mark.parametrize("dsn_query", _URL_SSL_DSN_OPTION_QUERIES)
+def test_url_ssl_with_dsn_options_keeps_one_mode_in_the_dsn(
+    monkeypatch, exec_env, mode, dsn_query
+):
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env=exec_env))
+
+    _, (async_url, async_kwargs) = DatabaseManager.resolve_engine_settings(
+        f"postgresql://{_URL_SSL_REMOTE}?ssl={mode}&{dsn_query}", {}, environ={}
+    )
+
+    connect_args = async_kwargs["connect_args"]
+    dsn_query_options = make_url(connect_args["dsn"]).query
+    assert make_url(async_url).query == {}
+    assert "ssl" not in connect_args
+    assert dsn_query_options["sslmode"] == mode
+    assert set(dsn_query_options) == {
+        "sslmode",
+        *(pair.split("=")[0] for pair in dsn_query.split("&")),
+    }
+
+
+@pytest.mark.parametrize("driver", ["postgresql", "postgresql+asyncpg"])
+@pytest.mark.parametrize("mode", ["disable", "allow", "prefer"])
+@pytest.mark.parametrize("extra_query", ["", *_URL_SSL_DSN_OPTION_QUERIES])
+def test_prod_rejects_weak_url_ssl_for_remote_hosts(
+    monkeypatch, driver, mode, extra_query
+):
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env="prod"))
+    query = f"ssl={mode}&{extra_query}" if extra_query else f"ssl={mode}"
+
+    with pytest.raises(ValueError, match="not allowed in prod") as excinfo:
+        DatabaseManager.resolve_engine_settings(
+            f"{driver}://{_URL_SSL_REMOTE}?{query}", {}, environ={}
+        )
+
+    assert "key-secret" not in str(excinfo.value)
+
+
+def test_prod_url_ssl_floor_applies_to_remote_hosts_only(monkeypatch):
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env="prod"))
+
+    _, (_, async_kwargs) = DatabaseManager.resolve_engine_settings(
+        "postgresql://app:secret@localhost/app?ssl=prefer", {}, environ={}
+    )
+
+    assert async_kwargs["connect_args"]["ssl"] == "prefer"
+
+
+@pytest.mark.parametrize("exec_env", ["dev", "prod"])
+@pytest.mark.parametrize("driver", ["postgresql", "postgresql+asyncpg"])
+def test_conflicting_url_ssl_and_sslmode_raise_naming_both_keys(
+    monkeypatch, exec_env, driver
+):
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env=exec_env))
+
+    with pytest.raises(ValueError, match="'ssl' and 'sslmode'") as excinfo:
+        DatabaseManager.resolve_engine_settings(
+            f"{driver}://{_URL_SSL_REMOTE}?sslmode=verify-full&ssl=disable"
+            "&sslcert=c.pem&sslkey=k.pem&sslpassword=key-secret",
+            {},
+            environ={},
+        )
+
+    assert "key-secret" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize("exec_env", ["dev", "prod"])
+def test_equal_url_ssl_and_sslmode_are_accepted(monkeypatch, exec_env):
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env=exec_env))
+
+    (sync_url, _), (async_url, async_kwargs) = DatabaseManager.resolve_engine_settings(
+        f"postgresql://{_URL_SSL_REMOTE}?sslmode=verify-full&ssl=verify-full",
+        {},
+        environ={},
+    )
+
+    assert make_url(sync_url).query == {"sslmode": "verify-full", "ssl": "verify-full"}
+    assert make_url(async_url).query == {}
+    assert async_kwargs["connect_args"]["ssl"] == "verify-full"
+
+
+@pytest.mark.parametrize("exec_env", ["dev", "prod"])
+@pytest.mark.parametrize(
+    ("connect_args", "message"),
+    [
+        ({"sslmode": "require"}, r"'ssl' conflicts with connect_args\['sslmode'\]"),
+        ({"ssl": "require"}, r"'ssl' conflicts with connect_args\['ssl'\]"),
+        ({"ssl": True}, r"'ssl' conflicts with connect_args\['ssl'\]"),
+        (
+            {"ssl": ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)},
+            r"'ssl' conflicts with connect_args\['ssl'\]",
+        ),
+    ],
+)
+def test_url_ssl_conflicting_with_connect_args_raises(
+    monkeypatch, exec_env, connect_args, message
+):
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env=exec_env))
+
+    with pytest.raises(ValueError, match=message):
+        DatabaseManager.resolve_engine_settings(
+            f"postgresql://{_URL_SSL_REMOTE}?ssl=verify-full",
+            {"connect_args": connect_args},
+            environ={},
+        )
+
+
+@pytest.mark.parametrize(
+    ("url_mode", "connect_args", "expected_ssl"),
+    [
+        ("verify-full", {"sslmode": "verify-full"}, "verify-full"),
+        ("verify-full", {"ssl": "verify-full"}, "verify-full"),
+    ],
+)
+def test_url_ssl_agreeing_with_connect_args_is_accepted(
+    monkeypatch, url_mode, connect_args, expected_ssl
+):
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env="prod"))
+
+    _, (async_url, async_kwargs) = DatabaseManager.resolve_engine_settings(
+        f"postgresql://{_URL_SSL_REMOTE}?ssl={url_mode}",
+        {"connect_args": connect_args},
+        environ={},
+    )
+
+    assert make_url(async_url).query == {}
+    assert async_kwargs["connect_args"]["ssl"] == expected_ssl
+
+
+def test_url_ssl_require_agrees_with_a_native_ssl_context(monkeypatch):
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env="prod"))
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+    _, (async_url, async_kwargs) = DatabaseManager.resolve_engine_settings(
+        f"postgresql://{_URL_SSL_REMOTE}?ssl=require",
+        {"connect_args": {"ssl": ssl_context}},
+        environ={},
+    )
+
+    assert make_url(async_url).query == {}
+    assert async_kwargs["connect_args"]["ssl"] is ssl_context
+
+
+@pytest.mark.parametrize("exec_env", ["dev", "prod"])
+@pytest.mark.parametrize(
+    "query",
+    ["ssl=true", "ssl=verify_full", "ssl=VERIFY-FULL", "ssl=verify-full&ssl=require"],
+)
+def test_url_ssl_must_be_a_libpq_mode_name(monkeypatch, exec_env, query):
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env=exec_env))
+
+    with pytest.raises(ValueError, match="'ssl' must be one of"):
+        DatabaseManager.resolve_engine_settings(
+            f"postgresql://{_URL_SSL_REMOTE}?{query}", {}, environ={}
+        )
+
+
+def test_url_ssl_is_not_overridden_by_configured_or_environment_sslmode():
+    policy_config = RepomConfig(exec_env="prod")
+    policy_config.postgres.sslmode = "require"
+    raw_url = f"postgresql+asyncpg://{_URL_SSL_REMOTE}?ssl=verify-full"
+
+    resolved_url, _, sslmode, _ = database_module._resolve_postgres_engine_policy(
+        raw_url,
+        {},
+        asyncpg=True,
+        config_obj=policy_config,
+        environ={"PGSSLMODE": "require"},
+    )
+
+    assert resolved_url == raw_url
+    assert sslmode == "verify-full"
+
+
+def test_sync_engine_keeps_url_ssl_which_libpq_rejects():
+    psycopg = pytest.importorskip("psycopg")
+
+    (sync_url, _), _ = DatabaseManager.resolve_engine_settings(
+        f"postgresql+psycopg://{_URL_SSL_REMOTE}?ssl=verify-full", {}, environ={}
+    )
+
+    assert make_url(sync_url).query == {"ssl": "verify-full"}
+    with pytest.raises(psycopg.OperationalError, match='invalid connection option "ssl"'):
+        psycopg.pq.Conninfo.parse(b"host=h ssl=verify-full")
+
+
+def test_prod_tls_warning_follows_url_ssl(monkeypatch, caplog):
+    monkeypatch.setattr(database_module, "config", RepomConfig(exec_env="prod"))
+    caplog.set_level("WARNING", logger="repom.database")
+
+    database_module._warn_if_prod_sslmode_not_enforced(
+        "postgresql://localhost/app?ssl=require", {}, asyncpg=True
+    )
+    assert not caplog.records
+
+    database_module._warn_if_prod_sslmode_not_enforced(
+        "postgresql://localhost/app?ssl=prefer", {}, asyncpg=True
+    )
+    assert "sslmode='prefer'" in caplog.text

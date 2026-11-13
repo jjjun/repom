@@ -76,7 +76,12 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import Session, sessionmaker, declarative_base
 
-from repom.config import _is_local_postgres_host, _postgres_connection_hosts, config
+from repom.config import (
+    _is_local_postgres_host,
+    _postgres_connection_hosts,
+    _postgres_url_sslmode,
+    config,
+)
 from repom.exec_env import is_prod_exec_env
 from repom.logging import ensure_logging_configured, get_logger
 
@@ -286,6 +291,34 @@ def _asyncpg_sslmode(connect_args: Mapping) -> Optional[str]:
     return "disable"
 
 
+def _describe_asyncpg_ssl(value) -> str:
+    """Describe an asyncpg ``ssl`` argument for logs."""
+    if isinstance(value, ssl.SSLContext):
+        return (
+            f"SSLContext(check_hostname={value.check_hostname}, "
+            f"verify_mode={value.verify_mode.name})"
+        )
+    return repr(value)
+
+
+def _reject_url_ssl_conflicts(url_ssl: str, connect_args: Mapping) -> None:
+    """Reject connect_args TLS options that disagree with URL query ``ssl``.
+
+    ``connect_args`` would otherwise override the URL value silently, so an
+    explicit ``ssl=verify-full`` could end up weaker. An ``SSLContext`` or
+    ``True`` counts as ``require`` and so only agrees with ``ssl=require``.
+    """
+    if "sslmode" in connect_args and connect_args["sslmode"] != url_ssl:
+        raise ValueError(
+            "PostgreSQL URL query option 'ssl' conflicts with "
+            "connect_args['sslmode']"
+        )
+    if "ssl" in connect_args and _asyncpg_sslmode(connect_args) != url_ssl:
+        raise ValueError(
+            "PostgreSQL URL query option 'ssl' conflicts with connect_args['ssl']"
+        )
+
+
 def _resolve_postgres_engine_policy(
     db_url: str,
     engine_kwargs: dict,
@@ -294,7 +327,7 @@ def _resolve_postgres_engine_policy(
     config_obj=None,
     environ: Mapping[str, str] | None = None,
 ) -> tuple[str, dict, Optional[str], tuple[object, ...]]:
-    """Resolve TLS mode from asyncpg ssl, connect_args sslmode, then URL sslmode."""
+    """Resolve TLS mode from asyncpg ssl, connect_args sslmode, then URL sslmode or ssl."""
     policy_config = config if config_obj is None else config_obj
     environ = os.environ if environ is None else environ
     url = make_url(db_url)
@@ -329,10 +362,13 @@ def _resolve_postgres_engine_policy(
 
     hosts = _postgres_connection_hosts(url, connect_args, environ)
     is_remote = any(not _is_local_postgres_host(host) for host in hosts)
+    url_sslmode = _postgres_url_sslmode(url.query)
+    if "ssl" in url.query:
+        _reject_url_ssl_conflicts(url_sslmode, connect_args)
     sslmode = (
         _asyncpg_sslmode(connect_args)
         if asyncpg and "ssl" in connect_args
-        else connect_args.get("sslmode", url.query.get("sslmode"))
+        else connect_args.get("sslmode", url_sslmode)
     )
 
     if (
@@ -353,6 +389,7 @@ def _resolve_postgres_engine_policy(
 
     if (
         url.query.get("sslmode") is None
+        and "ssl" not in url.query
         and "sslmode" not in connect_args
         and "ssl" not in connect_args
         and (
@@ -828,8 +865,17 @@ class DatabaseManager:
                     _warn_if_prod_sslmode_not_enforced(
                         sync_url, config.engine_kwargs, asyncpg=True
                     )
+                    # The source URL's TLS query keys are rewritten by the adapter
+                    # (and connect_args override them), so also log the ssl
+                    # argument asyncpg actually receives.
+                    async_connect_args = async_engine_kwargs.get("connect_args") or {}
+                    async_tls = (
+                        f" (effective ssl={_describe_asyncpg_ssl(async_connect_args['ssl'])})"
+                        if "ssl" in async_connect_args
+                        else ""
+                    )
                     logger.debug(
-                        f"Async engine created: {safe_db_url(source_async_url)}"
+                        f"Async engine created: {safe_db_url(source_async_url)}{async_tls}"
                     )
         return self._async_engine
 
@@ -1170,11 +1216,13 @@ class DatabaseManager:
         and no catch-all ``**kwargs`` - so db_url's ``?sslmode=...`` and
         engine_kwargs's psycopg-style connect_args would otherwise raise
         TypeError on the first async connection. URL values are defaults;
-        explicit connect_args override them. Certificate options that asyncpg
-        accepts only in its DSN are moved to a DSN, while SQLAlchemy dialect
-        options remain in the URL. Conflicting aliases or unsupported options
-        raise ValueError. Only the asyncpg driver is affected; other drivers
-        are returned unchanged.
+        explicit connect_args override them, except that the URL's native
+        ``ssl`` is folded into ``sslmode`` and a connect_args ``ssl`` or
+        ``sslmode`` that disagrees with it raises ValueError. Certificate
+        options that asyncpg accepts only in its DSN are moved to a DSN, while
+        SQLAlchemy dialect options remain in the URL. Conflicting aliases or
+        unsupported options raise ValueError. Only the asyncpg driver is
+        affected; other drivers are returned unchanged.
 
         Args:
             async_url: Async database URL (already converted by _convert_to_async_uri)
@@ -1206,7 +1254,12 @@ class DatabaseManager:
                 "configured as a mapping in connect_args"
             )
 
-        url_sslmode = query.pop("sslmode", None)
+        # URL ``ssl`` is asyncpg's own key for the same libpq modes. Folding it
+        # into the sslmode below keeps connect_args["ssl"] and the DSN
+        # ``sslmode`` this method writes from disagreeing with the URL.
+        url_sslmode = _postgres_url_sslmode(query)
+        url_ssl = query.pop("ssl", None)
+        query.pop("sslmode", None)
         url_sslrootcert = query.pop("sslrootcert", None)
         url_connect_timeout = query.pop("connect_timeout", None)
         url_application_name = query.pop("application_name", None)
@@ -1247,6 +1300,8 @@ class DatabaseManager:
             raise ValueError(
                 f"connect_args['ssl'] conflicts with libpq SSL option(s): {names}"
             )
+        if url_ssl is not None:
+            _reject_url_ssl_conflicts(url_ssl, connect_args)
 
         asyncpg_connect_args = {
             name: value

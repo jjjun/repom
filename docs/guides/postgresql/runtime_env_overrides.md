@@ -70,7 +70,7 @@ URL-level policy が適用されます。
 | `DatabaseManager` / `resolve_engine_settings()` | URL と環境 fallback を含む実効接続先を検証します。 | `host` / `hostaddr` / `service` / `dsn` と TLS を検証し、URL より優先します。 |
 | `repom_info` / 同期 `database_info` probe | probe に渡された config を使い、共有 resolver で検証します。 | `DatabaseManager` と同じ検証を行い、短い `connect_timeout` のみ上書きします。 |
 | Alembic engine / `AlembicReset` / 同期 test fixture / consumer-built engine | URL-level policy のみ、または検証なしです。 | 共有 resolver を呼ばない限り検証されません。 |
-| PostgreSQL client tools | client-tool 固有の URL / host policy を使い、destination query overrides を拒否します。 | SQLAlchemy engine kwargs の対象外です。 `sslmode` / `sslrootcert` query と configured-host の TLS policy を適用し、`sslcert` / `sslkey` / `sslcrl` / `sslcrldir` / `channel_binding` / `ssl_min_protocol_version` query は host client tool の `PG*` 環境変数へ渡し、`requiressl` などその他の TLS / 認証 query は拒否します。host 指定を迂回する `PGHOSTADDR` / `PGSERVICE` は child process 環境から除きます。 |
+| PostgreSQL client tools | client-tool 固有の URL / host policy を使い、destination query overrides を拒否します。 | SQLAlchemy engine kwargs の対象外です。 `sslmode`（URL の `ssl` を含む）/ `sslrootcert` query と configured-host の TLS policy を適用し、`sslcert` / `sslkey` / `sslcrl` / `sslcrldir` / `channel_binding` / `ssl_min_protocol_version` query は host client tool の `PG*` 環境変数へ渡し、`requiressl` などその他の TLS / 認証 query は拒否します。host 指定を迂回する `PGHOSTADDR` / `PGSERVICE` は child process 環境から除きます。 |
 
 独自の engine を作る場合は、URL-level policy だけでは `connect_args` による接続先変更を検証できません。
 実効設定の検証には `DatabaseManager.resolve_engine_settings()` を使ってください。
@@ -85,6 +85,17 @@ URL と `connect_args` に `sslmode` がなく、`config.postgres.sslmode` も�
 `PGSSLMODE` が設定されているか、prod のリモート接続先である場合、解決した `sslmode` と、設定済みで
 URL にない `sslrootcert` を URL に書き込みます。それ以外では URL を変更せず、libpq と asyncpg の既定値
 (`prefer`) が使われます。
+asyncpg 固有の URL query `ssl` は `sslmode` と同じ扱いです。値は 6 つの libpq mode 名
+（`disable` / `allow` / `prefer` / `require` / `verify-ca` / `verify-full`）に限られ、それ以外は
+`ValueError` になります。`RepomConfig.db_url` と共有 resolver は `ssl` を持つ URL に `sslmode` を補わず、
+`config.postgres.sslmode` や `PGSSLMODE` でも置き換えません。prod のリモート接続先では
+`ssl=disable|allow|prefer` を拒否し、`sslcert` などの DSN option を併用しても同じです。asyncpg adapter は
+`ssl` を URL から取り除き、そこから `connect_args["ssl"]`（DSN option があるときは DSN の `sslmode`）を
+作るため、両者が食い違うことはありません。`ssl` と URL の `sslmode`、または `connect_args` の `ssl` /
+`sslmode` の値が食い違う場合は、キー名だけを示して `ValueError` になり、同じ値なら受け付けます。
+`connect_args` の `ssl` が `SSLContext` または `True` のときは `require` として比較します。同期 engine は
+URL の `ssl` をそのまま保持し、libpq が `invalid connection option "ssl"` として接続を拒否します。
+PostgreSQL client tools は URL の `ssl` を `sslmode` として `PGSSLMODE` に渡します。
 共有 resolver を使う engine では、接続先の判定に URL authority の host に加えて、
 URL query、`engine_kwargs.connect_args`、および `PGHOST` / `PGHOSTADDR` の fallback を使います。
 `PGHOSTADDR` は URL host が明示されている場合も候補に含め、実際の接続先アドレスとして判定します。

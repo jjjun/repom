@@ -60,7 +60,8 @@ URL クエリに `host`、`hostaddr`、`service`、`dsn`、`port`、`dbname`、`
 `password` が含まれる PostgreSQL URL は、URL driver 名によらず `PgConnParams.from_config()` が
 `ValueError` で拒否します。URL authority/path で表せる接続先と認証情報はそこに置き、`hostaddr`、
 `service`、`dsn` を使う場合は明示的な client-tool 設定を選んでください。`sslmode` と
-`sslrootcert` は引き続き query で指定できます。`sslcert`、`sslkey`、`sslcrl`、`sslcrldir`、
+`sslrootcert` は引き続き query で指定できます。asyncpg 用の `ssl` query は `sslmode` として
+扱われます。`sslcert`、`sslkey`、`sslcrl`、`sslcrldir`、
 `channel_binding`、`ssl_min_protocol_version` も host 上の client tool へ
 `PGSSLCERT`、`PGSSLKEY`、`PGSSLCRL`、`PGSSLCRLDIR`、`PGCHANNELBINDING`、
 `PGSSLMINPROTOCOLVERSION` として渡され（URL に指定したキーだけが継承された環境変数を上書きします）、
@@ -97,7 +98,8 @@ database のいずれかがない場合は、`PgConnParams.from_config()` が `V
 
 URL override を使う PostgreSQL の host-side client tool も、prod 環境の TLS policy を適用した
 有効 URL の値で接続します。remote host で `sslmode` が未指定なら `require` が補われ、
-設定済みの `sslrootcert` も有効 URL に追加されます。host がない URL は local 扱いです。
+設定済みの `sslrootcert` も有効 URL に追加されます（URL に `ssl` がある場合は何も補わず、
+その値を `sslmode` として使います）。host がない URL は local 扱いです。
 prod の remote host で弱い `sslmode` を指定すると、client process の起動前に拒否されます。
 URL の identity query override も `db_backup` / `db_restore` が Docker probe や client process を
 始める前に拒否します。`-d` に渡す DB 名も、libpq の接続文字列や URI として解釈される形式は拒否します。

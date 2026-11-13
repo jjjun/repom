@@ -35,6 +35,35 @@ _POSTGRES_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 # 平文フォールバックを許すため prod のリモート接続では拒否する sslmode
 _POSTGRES_STRONG_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
 
+# libpq の sslmode 名 - asyncpg の URL クエリ ``ssl`` に文字列で指定できる値
+_POSTGRES_SSLMODES = frozenset(
+    {"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}
+)
+
+
+def _postgres_url_sslmode(query: Mapping[str, object]) -> Optional[str]:
+    """URL クエリの ``sslmode`` / asyncpg の ``ssl`` が選ぶ TLS モードを返す。
+
+    ``ssl`` は asyncpg 専用のキーだが、``sslmode`` と同じモード名で TLS を選ぶ。
+    両方があって値が異なる場合、または ``ssl`` が 6 つのモード名以外の場合は、
+    値を含めずキー名だけで ValueError にする。両方が同じ値ならその値を返す。
+    """
+    ssl_value = query.get("ssl")
+    sslmode = query.get("sslmode")
+    if ssl_value is None:
+        return sslmode
+    if not isinstance(ssl_value, str) or ssl_value not in _POSTGRES_SSLMODES:
+        raise ValueError(
+            "PostgreSQL URL query option 'ssl' must be one of "
+            "disable, allow, prefer, require, verify-ca, verify-full"
+        )
+    if sslmode is not None and sslmode != ssl_value:
+        raise ValueError(
+            "PostgreSQL URL query options 'ssl' and 'sslmode' conflict; "
+            "set only one of them or give both the same mode"
+        )
+    return ssl_value
+
 
 def _sqlite_file_url(database: str) -> str:
     """Render a file-based SQLite URL, refusing a path a URL cannot carry.
@@ -442,12 +471,16 @@ class RepomConfig(Config):
         sslmode: Optional[str] = None,
         environ: Mapping[str, str] | None = None,
     ) -> PostgresTlsSettings:
-        """Resolve and validate TLS settings for a PostgreSQL URL and overrides."""
+        """Resolve and validate TLS settings for a PostgreSQL URL and overrides.
+
+        URL query ``ssl`` (asyncpg's own key) selects the mode like ``sslmode``.
+        """
+        url_sslmode = _postgres_url_sslmode(url.query)
         if sslmode is None:
             if connect_args is not None and "sslmode" in connect_args:
                 sslmode = connect_args["sslmode"]
             else:
-                sslmode = url.query.get("sslmode")
+                sslmode = url_sslmode
         return self._resolve_postgres_tls(
             _postgres_connection_hosts(url, connect_args, environ),
             sslmode=sslmode,
@@ -511,6 +544,9 @@ class RepomConfig(Config):
             config.postgres.sslrootcert を設定すると sslrootcert クエリ
             パラメータも付与されます。prod でリモート接続先へ接続する際に
             sslmode が require 未満の場合は ValueError を送出します。
+            URL 上書きが asyncpg の ssl クエリを持つ場合は sslmode を補わず、
+            ssl を sslmode と同じく検証します（ssl と sslmode の値が食い違う
+            場合や ssl が 6 つのモード名以外の場合は ValueError）。
 
         SQLite (db_type='sqlite', デフォルト):
             sqlite:///path/to/db.sqlite3
@@ -548,8 +584,8 @@ class RepomConfig(Config):
                 return self._db_url
 
             query = dict(url.query)
-            if "sslmode" in query:
-                self.postgres_tls_settings_for_url(url, sslmode=query["sslmode"])
+            if "sslmode" in query or "ssl" in query:
+                self.postgres_tls_settings_for_url(url)
             else:
                 tls = self.postgres_tls_settings_for_url(url)
                 query["sslmode"] = tls.sslmode

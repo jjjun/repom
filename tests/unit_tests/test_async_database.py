@@ -589,6 +589,180 @@ class TestAdaptAsyncpgConnectOptionsFromUrl:
         effective_kwargs.update(adapted_kwargs["connect_args"])
         inspect.signature(asyncpg.connect).bind(*args, **effective_kwargs)
 
+    def test_url_ssl_is_folded_into_the_asyncpg_ssl_argument(self):
+        adapted_url, adapted_kwargs = self._adapt("ssl=verify-full")
+
+        assert make_url(adapted_url).query == {}
+        assert adapted_kwargs["connect_args"]["ssl"] == "verify-full"
+
+    def test_url_ssl_with_sslrootcert_builds_the_matching_ssl_context(self, monkeypatch):
+        create_context_calls = []
+        real_create_default_context = ssl.create_default_context
+
+        def create_default_context(*, cafile=None):
+            create_context_calls.append(cafile)
+            return real_create_default_context()
+
+        monkeypatch.setattr(ssl, "create_default_context", create_default_context)
+
+        _, adapted_kwargs = self._adapt("ssl=verify-full&sslrootcert=ca.pem")
+
+        assert create_context_calls == ["ca.pem"]
+
+        assert adapted_kwargs["connect_args"]["ssl"].check_hostname is True
+
+    @pytest.mark.parametrize(
+        ("query", "connect_args"),
+        [
+            ("ssl=verify-full&sslmode=require", None),
+            ("ssl=verify-full", {"sslmode": "require"}),
+            ("ssl=verify-full", {"ssl": "require"}),
+            ("ssl=bogus", None),
+            ("ssl=verify-full&ssl=require", None),
+        ],
+    )
+    def test_rejects_url_ssl_that_conflicts_or_is_not_a_mode_name(
+        self, query, connect_args
+    ):
+        with pytest.raises(ValueError, match="'ssl'"):
+            self._adapt(query, connect_args)
+
+
+class TestGetAsyncEngineUrlSsl:
+    """URL ``ssl`` (asyncpg's own key) must reach ``asyncpg.connect`` as the TLS
+    argument, not be replaced by an ``sslmode`` that repom writes into the URL."""
+
+    class Connected(Exception):
+        """Raised by the asyncpg.connect stub after it has captured its kwargs."""
+
+    @pytest.fixture(autouse=True)
+    def clean_libpq_environment(self, monkeypatch):
+        for name in ("PGHOST", "PGHOSTADDR", "PGSERVICE", "PGSSLMODE"):
+            monkeypatch.delenv(name, raising=False)
+
+    async def _asyncpg_connect_kwargs(self, monkeypatch, exec_env, url):
+        policy_config = RepomConfig(exec_env=exec_env)
+        policy_config.db_url = url
+        monkeypatch.setattr(database_module, "config", policy_config)
+        captured = {}
+
+        async def fake_connect(*args, **kwargs):
+            captured.update(kwargs)
+            raise self.Connected
+
+        monkeypatch.setattr(asyncpg, "connect", fake_connect)
+        manager = DatabaseManager()
+        try:
+            engine = await manager.get_async_engine()
+            with pytest.raises(self.Connected):
+                async with engine.connect():
+                    pass
+        finally:
+            await manager.dispose_async()
+        return captured
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("exec_env", ["dev", "prod"])
+    @pytest.mark.parametrize("driver", ["postgresql", "postgresql+asyncpg"])
+    @pytest.mark.parametrize("mode", ["verify-ca", "verify-full"])
+    async def test_url_ssl_reaches_asyncpg_connect(
+        self, monkeypatch, exec_env, driver, mode
+    ):
+        captured = await self._asyncpg_connect_kwargs(
+            monkeypatch,
+            exec_env,
+            f"{driver}://app:secret@db.example.invalid/app?ssl={mode}",
+        )
+
+        assert captured["host"] == "db.example.invalid"
+        assert captured["ssl"] == mode
+        assert "sslmode" not in captured
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("exec_env", ["dev", "prod"])
+    async def test_url_ssl_with_sslrootcert_reaches_asyncpg_as_verifying_context(
+        self, monkeypatch, exec_env
+    ):
+        create_context_calls = []
+        real_create_default_context = ssl.create_default_context
+
+        def create_default_context(*, cafile=None):
+            create_context_calls.append(cafile)
+            return real_create_default_context()
+
+        monkeypatch.setattr(ssl, "create_default_context", create_default_context)
+
+        captured = await self._asyncpg_connect_kwargs(
+            monkeypatch,
+            exec_env,
+            "postgresql://app:secret@db.example.invalid/app"
+            "?ssl=verify-full&sslrootcert=ca.pem",
+        )
+
+        assert create_context_calls == ["ca.pem"]
+        assert captured["ssl"].verify_mode == ssl.CERT_REQUIRED
+        assert captured["ssl"].check_hostname is True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("exec_env", "mode"),
+        [("dev", "disable"), ("dev", "verify-full"), ("prod", "verify-full")],
+    )
+    async def test_url_ssl_with_dsn_options_leaves_only_the_dsn_sslmode(
+        self, monkeypatch, exec_env, mode
+    ):
+        captured = await self._asyncpg_connect_kwargs(
+            monkeypatch,
+            exec_env,
+            "postgresql://app:secret@db.example.invalid/app"
+            f"?ssl={mode}&sslcert=c.pem&sslkey=k.pem",
+        )
+
+        assert "ssl" not in captured
+        assert make_url(captured["dsn"]).query == {
+            "sslcert": "c.pem",
+            "sslkey": "k.pem",
+            "sslmode": mode,
+        }
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("exec_env", ["dev", "prod"])
+    async def test_conflicting_url_ssl_and_sslmode_do_not_create_an_engine(
+        self, monkeypatch, exec_env
+    ):
+        policy_config = RepomConfig(exec_env=exec_env)
+        policy_config.db_url = (
+            "postgresql://app:secret@db.example.invalid/app"
+            "?sslmode=verify-full&sslcert=c.pem&sslkey=k.pem&ssl=disable"
+        )
+        monkeypatch.setattr(database_module, "config", policy_config)
+        manager = DatabaseManager()
+
+        with pytest.raises(ValueError, match="'ssl' and 'sslmode'"):
+            await manager.get_async_engine()
+
+        assert manager._async_engine is None
+
+    @pytest.mark.asyncio
+    async def test_debug_log_shows_the_effective_ssl_argument(
+        self, monkeypatch, caplog
+    ):
+        policy_config = RepomConfig(exec_env="prod")
+        policy_config.db_url = (
+            "postgresql://app:secret@db.example.invalid/app?ssl=verify-full"
+        )
+        monkeypatch.setattr(database_module, "config", policy_config)
+        manager = DatabaseManager()
+        caplog.set_level("DEBUG", logger="repom.database")
+
+        try:
+            await manager.get_async_engine()
+        finally:
+            await manager.dispose_async()
+
+        assert "(effective ssl='verify-full')" in caplog.text
+        assert "secret" not in caplog.text
+
 
 class TestGetAsyncEngineEchoKwarg:
     """RepomConfig.engine_kwargs の docstring はサブクラスでのオーバーライドを

@@ -59,6 +59,19 @@ def test_pg_conn_params_from_overridden_url():
     assert "url_password" not in repr(params)
 
 
+@pytest.mark.parametrize("exec_env", ["dev", "prod"])
+def test_pg_conn_params_take_url_ssl_as_the_sslmode(exec_env):
+    config = RepomConfig(exec_env=exec_env)
+    config.db_url = (
+        "postgresql://url_user:url_password@db.example.internal/url_db"
+        "?ssl=verify-full"
+    )
+
+    params = PgConnParams.from_config(config)
+
+    assert params.sslmode == "verify-full"
+
+
 def test_pg_conn_params_from_config_keeps_structured_settings():
     config = RepomConfig()
     config.db_type = "postgres"

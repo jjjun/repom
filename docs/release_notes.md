@@ -214,9 +214,36 @@
   directory, and for a symlinked or junctioned versions directory; a linked
   `__pycache__` is skipped. `AlembicSetup.reset_migrations()` validates every
   directory before dropping the version table.
+- BREAKING: The PostgreSQL URL query `ssl` is now validated and enforced like
+  `sslmode` (repom#293). It must be one of `disable`, `allow`, `prefer`, `require`,
+  `verify-ca`, or `verify-full`; any other value, including a repeated key, raises
+  `ValueError`. In production a remote destination with `ssl=disable|allow|prefer`
+  raises, also together with `sslcert`, `sslkey`, `sslpassword`, `sslcrl`,
+  `ssl_min_protocol_version`, or `ssl_max_protocol_version`. `ssl` together with a
+  different URL `sslmode`, or with a `connect_args` `ssl` or `sslmode` that disagrees
+  (an `SSLContext` or `True` counts as `require`), raises `ValueError` naming the keys
+  and never the values; equal values are accepted. The synchronous engine keeps `ssl`
+  in the URL, so it still fails closed: libpq rejects it with `invalid connection
+  option "ssl"`. Use `sslmode` for a URL that the synchronous engine also reads.
+  `PgConnParams.from_config()` passes a URL `ssl` to the host client tools as
+  `PGSSLMODE`.
 
 ### Fixed
 
+- A PostgreSQL URL query `ssl` (asyncpg's own key for the libpq mode names) no longer
+  loses its mode to an injected `sslmode` (repom#293). `RepomConfig.db_url` and the
+  shared engine resolver used to write `sslmode` (`require` in prod for a remote host,
+  `prefer` elsewhere) into a URL that carried only `ssl`, and the asyncpg adapter then
+  wrote `connect_args['ssl']` from it, so `?ssl=verify-full` ran as `require` or
+  `prefer` with no certificate or hostname verification. They no longer inject
+  `sslmode` when the URL carries `ssl`, and the adapter removes `ssl` from the URL and
+  derives `connect_args['ssl']`, or the DSN `sslmode` when `sslcert`, `sslkey`,
+  `sslpassword`, `sslcrl`, `ssl_min_protocol_version`, or `ssl_max_protocol_version`
+  is present, from it. `ssl=verify-full` now reaches `asyncpg.connect` as verified TLS
+  (with `sslrootcert`, as an `SSLContext` that checks the host name only for
+  `verify-full`), and a URL `ssl` can no longer override the DSN `sslmode` and bypass
+  the prod TLS floor. The "Async engine created" debug log still prints the masked
+  source URL and now appends the `ssl` argument asyncpg receives.
 - The `async`, `postgres-async` and `async-all` extras now include
   `sqlalchemy[asyncio]` (same version range as the core `sqlalchemy` dependency), so
   installing them brings in greenlet on every platform. Previously greenlet came only
