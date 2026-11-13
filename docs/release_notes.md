@@ -230,6 +230,20 @@
 
 ### Fixed
 
+- Auto-start (`ensure_running()` for Redis and PostgreSQL) now refuses to start when a
+  secret variable the generated Compose file references (`REDIS_PASSWORD`,
+  `POSTGRES_PASSWORD`, and `PGADMIN_DEFAULT_PASSWORD` while pgAdmin is enabled) is set
+  in the process environment to anything but the stored `.env` value (repom#294). Docker
+  Compose resolves `${VAR}` from the process environment before the compose-directory
+  `.env`, and a variable that is set but empty still wins (checked with Docker Compose
+  v2.6.0 through `docker compose config`). A stored `.env` holding a real password was
+  therefore bypassed when the environment, including values `load_dotenv()` read from the
+  project `.env`, held `REDIS_PASSWORD=` or `POSTGRES_PASSWORD=CHANGE_ME`: Redis was
+  created with `--requirepass ""`, and a fresh PostgreSQL or pgAdmin volume was
+  initialised with the placeholder. The refusal names the variable and never its value;
+  unset the variable or make it equal to the stored value. An unset variable or one equal
+  to the stored value leaves the stored `.env` as the effective source. Explicit
+  `*_generate` and `*_start`, rotation, stop, and remove are unchanged.
 - A PostgreSQL URL query `ssl` (asyncpg's own key for the libpq mode names) no longer
   loses its mode to an injected `sslmode` (repom#293). `RepomConfig.db_url` and the
   shared engine resolver used to write `sslmode` (`require` in prod for a remote host,

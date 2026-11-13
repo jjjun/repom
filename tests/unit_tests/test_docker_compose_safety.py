@@ -196,6 +196,84 @@ class TestValidateStoredSecretValues:
         assert "saved-secret" not in message
         assert "different-secret" not in message
 
+    def _validate_with_environ(self, path, environ, current_values=None):
+        validate_stored_secret_values(
+            path,
+            current_values or {"PASSWORD": "saved-secret"},
+            default_credential_placeholder="CHANGE_ME",
+            rotation_commands=("rotate_password",),
+            generate_command="service_generate",
+            environ=environ,
+        )
+
+    @pytest.mark.parametrize(
+        "environ",
+        [{}, {"PASSWORD": "saved-secret"}, {"UNRELATED": ""}],
+        ids=["unset", "equal-to-stored", "unrelated-name"],
+    )
+    def test_environment_that_leaves_stored_secret_effective_is_accepted(
+        self, tmp_path, environ
+    ):
+        path = tmp_path / ".env"
+        path.write_text(format_env_file({"PASSWORD": "saved-secret"}), encoding="utf-8")
+
+        self._validate_with_environ(path, environ)
+
+    @pytest.mark.parametrize(
+        "shadow",
+        ["", "CHANGE_ME", "stale-exported-secret"],
+        ids=["empty", "placeholder", "stale"],
+    )
+    def test_environment_that_shadows_stored_secret_is_refused_by_name(
+        self, tmp_path, shadow
+    ):
+        path = tmp_path / ".env"
+        path.write_text(format_env_file({"PASSWORD": "saved-secret"}), encoding="utf-8")
+
+        with pytest.raises(ValueError) as excinfo:
+            self._validate_with_environ(path, {"PASSWORD": shadow})
+
+        message = str(excinfo.value)
+        assert "PASSWORD" in message
+        assert str(path) in message
+        assert "rotate_password" in message
+        assert "service_generate --force-regenerate" in message
+        assert "saved-secret" not in message
+        assert "CHANGE_ME" not in message
+        assert "stale-exported-secret" not in message
+
+    def test_refusal_lists_every_shadowed_name_and_skips_unlisted_ones(self, tmp_path):
+        path = tmp_path / ".env"
+        path.write_text(
+            format_env_file({"FIRST": "one", "SECOND": "two", "THIRD": "three"}),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError) as excinfo:
+            self._validate_with_environ(
+                path,
+                {"FIRST": "", "SECOND": "two", "THIRD": "x", "OTHER": ""},
+                current_values={"FIRST": "one", "SECOND": "two", "THIRD": "three"},
+            )
+
+        message = str(excinfo.value)
+        assert "FIRST, THIRD" in message
+        assert "SECOND" not in message
+        assert "OTHER" not in message
+
+    def test_environment_is_not_consulted_unless_given(self, tmp_path, monkeypatch):
+        path = tmp_path / ".env"
+        path.write_text(format_env_file({"PASSWORD": "saved-secret"}), encoding="utf-8")
+        monkeypatch.setenv("PASSWORD", "")
+
+        validate_stored_secret_values(
+            path,
+            {"PASSWORD": "saved-secret"},
+            default_credential_placeholder="CHANGE_ME",
+            rotation_commands=("rotate_password",),
+            generate_command="service_generate",
+        )
+
 
 class TestWriteSecretFile:
     @pytest.mark.skipif(

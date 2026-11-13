@@ -49,6 +49,16 @@ auto-start は既存 `.env` の必須 key と設定値との差を確認しま�
 `.env` 内の空値・placeholder 値を独立して拒否しません。`*_stop` と `*_remove` は credential 検証なしで
 生成物を書き直すため、既存 `.env` の値は検証しません。
 
+生成した Compose file は secret を `${REDIS_PASSWORD}`、`${POSTGRES_PASSWORD}`、
+`${PGADMIN_DEFAULT_PASSWORD}` として参照します。Compose はこれらを compose directory の `.env` より先に
+process environment から解決し、設定済みで空の変数も優先します（Docker Compose v2.6.0 の
+`docker compose config` で確認）。`load_dotenv()` が読み込んだプロジェクトの `.env` の値も process
+environment に含まれます。そのため auto-start は、Compose file が参照する変数（`PGADMIN_DEFAULT_PASSWORD`
+は pgAdmin 有効時のみ）が保存済み `.env` と異なる値（空値や `CHANGE_ME` を含む）で process environment に
+設定されている場合、変数名だけを示して起動を拒否します。値は表示しません。変数を unset するか、保存済みの値に
+揃えてください。未設定、または保存済みと同じ値であれば、その secret の実効値は保存済み `.env` です。この確認の
+対象は auto-start だけです。
+
 アプリ起動時に必要なサービスを保証する場合は、サービス固有の
 `ensure_running()` を利用できます。
 

@@ -205,8 +205,16 @@ def validate_stored_secret_values(
     default_credential_placeholder: str,
     rotation_commands: tuple[str, ...],
     generate_command: str,
+    environ: Mapping[str, str] | None = None,
 ) -> None:
-    """Keep an existing generated ``.env`` authoritative during auto-start."""
+    """Keep an existing generated ``.env`` authoritative during auto-start.
+
+    Compose resolves ``${VAR}`` from the process environment before the project
+    ``.env``, and a variable that is set but empty still wins. When ``environ``
+    is given, a key it sets to anything other than the stored value is refused
+    by name, because the Compose child would use that value instead of the
+    stored secret.
+    """
 
     try:
         stored_values = parse_env_file(path.read_text(encoding="utf-8"))
@@ -234,6 +242,23 @@ def validate_stored_secret_values(
                 f"credentials, or {generate_command} --force-regenerate to "
                 "intentionally replace them."
             )
+    if environ is None:
+        return
+    shadowing = [
+        key
+        for key in current_values
+        if key in environ and environ[key] != stored_values[key]
+    ]
+    if shadowing:
+        names = ", ".join(shadowing)
+        raise ValueError(
+            "Refusing to auto-start because the process environment sets "
+            f"{names} to a value other than the one stored in {path}. Docker "
+            f"Compose reads the process environment before {path}, and an "
+            f"empty value counts as set. Unset {names}, use {commands} to "
+            f"rotate credentials, or run {generate_command} --force-regenerate "
+            "to intentionally replace them."
+        )
 
 
 def write_secret_file(path: Path, content: str) -> None:

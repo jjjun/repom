@@ -39,6 +39,12 @@ def _redis_password_configured(tmp_path, monkeypatch):
         yield
 
 
+@pytest.fixture(autouse=True)
+def _no_exported_redis_password(monkeypatch):
+    """Keep a shell or CI REDIS_PASSWORD out of the auto-start environment check."""
+    monkeypatch.delenv("REDIS_PASSWORD", raising=False)
+
+
 def test_redis_package_exports_config_classes_only():
     import repom.redis as redis
 
@@ -807,6 +813,93 @@ class TestRedisAutoStartArtifactRefresh:
         assert compose_file.read_text(encoding="utf-8") == "existing compose\n"
         assert redis_conf.read_text(encoding="utf-8") == "existing config\n"
         manager.start.assert_not_called()
+
+    def _store_secret_and_record_compose(self, tmp_path, monkeypatch):
+        """Store a real password and record the Compose calls auto-start makes.
+
+        basekit's Compose runner passes no ``env=`` to the child, so the child
+        sees ``os.environ`` as it is when the runner is called; each call is
+        recorded with the REDIS_PASSWORD value in effect at that moment.
+        """
+
+        current_config = self._make_config(
+            tmp_path,
+            name="redis_a",
+            port=26379,
+            volume="redis_a_data",
+            password="saved-secret",
+        )
+        spawned = []
+
+        def record_compose(command, compose_file, **kwargs):
+            spawned.append(
+                (command, compose_file, kwargs, os.environ.get("REDIS_PASSWORD"))
+            )
+
+        monkeypatch.setattr(DockerCommandExecutor, "run_docker_compose", record_compose)
+        monkeypatch.setattr(
+            RedisManager, "wait_for_service", lambda self, max_retries: None
+        )
+        with patch.object(manage, "config", current_config):
+            manage.generate()
+        return current_config, spawned, tmp_path / "redis"
+
+    @pytest.mark.parametrize(
+        "shadow",
+        ["", DEFAULT_CREDENTIAL_PLACEHOLDER, "stale-exported-secret"],
+        ids=["empty", "placeholder", "stale"],
+    )
+    def test_auto_start_refuses_exported_value_that_shadows_stored_env(
+        self, tmp_path, monkeypatch, shadow
+    ):
+        current_config, spawned, compose_dir = self._store_secret_and_record_compose(
+            tmp_path, monkeypatch
+        )
+        env_path = compose_dir / ".env"
+        compose_file = compose_dir / manage.COMPOSE_FILENAME
+        original = (env_path.read_bytes(), compose_file.read_bytes())
+        monkeypatch.setenv("REDIS_PASSWORD", shadow)
+
+        with patch.object(manage, "config", current_config):
+            with patch("repom.docker_service.is_container_running", return_value=False):
+                with pytest.raises(RuntimeError) as excinfo:
+                    manage.ensure_running()
+
+        message = str(excinfo.value)
+        assert "REDIS_PASSWORD" in message
+        assert str(env_path) in message
+        assert "saved-secret" not in message
+        assert DEFAULT_CREDENTIAL_PLACEHOLDER not in message
+        assert "stale-exported-secret" not in message
+        assert (env_path.read_bytes(), compose_file.read_bytes()) == original
+        assert spawned == []
+
+    @pytest.mark.parametrize("exported", [None, "saved-secret"], ids=["unset", "equal"])
+    def test_auto_start_compose_child_never_sees_an_empty_or_changed_secret(
+        self, tmp_path, monkeypatch, exported
+    ):
+        current_config, spawned, compose_dir = self._store_secret_and_record_compose(
+            tmp_path, monkeypatch
+        )
+        compose_file = compose_dir / manage.COMPOSE_FILENAME
+        if exported is not None:
+            monkeypatch.setenv("REDIS_PASSWORD", exported)
+
+        with patch.object(manage, "config", current_config):
+            with patch("repom.docker_service.is_container_running", return_value=False):
+                manage.ensure_running()
+
+        assert spawned == [
+            (
+                "up -d",
+                compose_file,
+                {"cwd": compose_file.parent, "project_name": "redis_a"},
+                exported,
+            )
+        ]
+        assert 'REDIS_PASSWORD: "${REDIS_PASSWORD}"' in compose_file.read_text(
+            encoding="utf-8"
+        )
 
     @pytest.mark.parametrize("entrypoint", [manage.stop, manage.remove])
     def test_stop_and_remove_refresh_compose_before_lifecycle_call(

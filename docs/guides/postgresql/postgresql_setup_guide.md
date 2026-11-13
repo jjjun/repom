@@ -102,6 +102,13 @@ application の `ensure_running()` は停止した PostgreSQL / pgAdmin を起�
 `EXEC_ENV` を指定してください。詳細は
 [Docker manager ガイド](../features/docker_manager_guide.md)を参照してください。
 
+Compose は generated file の `${POSTGRES_PASSWORD}` と `${PGADMIN_DEFAULT_PASSWORD}` を、compose directory の
+`.env` より先に process environment から解決します（設定済みで空の値も優先）。`ensure_running()` は、
+`POSTGRES_PASSWORD`（pgAdmin 有効時は `PGADMIN_DEFAULT_PASSWORD` も）が保存済み `.env` と異なる値（空値や
+`CHANGE_ME` を含む）で process environment に設定されている場合、変数名だけを示して起動を拒否します。
+unset するか保存済みの値に揃えてください。未設定または同じ値であれば、それぞれの password の実効値は保存済み
+`.env` です。pgAdmin 無効時、Compose file は `PGADMIN_DEFAULT_PASSWORD` を参照しないため確認しません。
+
 ## 停止と削除
 
 ```bash

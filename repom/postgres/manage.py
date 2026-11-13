@@ -10,6 +10,7 @@ Console scripts:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -459,6 +460,7 @@ def _prepare_auto_start() -> None:
         default_credential_placeholder=DEFAULT_CREDENTIAL_PLACEHOLDER,
         rotation_commands=rotation_commands,
         generate_command="postgres_generate",
+        environ=os.environ,
     )
     _write_secret_free_artifacts()
 

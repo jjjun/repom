@@ -10,6 +10,7 @@ Console scripts:
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -301,6 +302,7 @@ def _prepare_auto_start() -> None:
         default_credential_placeholder=DEFAULT_CREDENTIAL_PLACEHOLDER,
         rotation_commands=("redis_rotate_password",),
         generate_command="redis_generate",
+        environ=os.environ,
     )
     _write_secret_free_artifacts()
 

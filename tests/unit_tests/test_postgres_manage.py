@@ -17,6 +17,14 @@ from repom.postgres.credentials import STANDARD_CONFORMING_STRINGS_SQL
 from repom.postgres.manage import PostgresManager
 from tests.pytest_helpers import read_standard_sql_literal
 
+
+@pytest.fixture(autouse=True)
+def _no_exported_postgres_secrets(monkeypatch):
+    """Keep shell or CI secrets out of the auto-start environment check."""
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+    monkeypatch.delenv("PGADMIN_DEFAULT_PASSWORD", raising=False)
+
+
 class TestGenerateDockerComposePostgresOnly:
     """generate_docker_compose() - PostgreSQL のみ（pgAdmin 無効）"""
 
@@ -1374,6 +1382,134 @@ class TestPostgresAutoStartArtifactRefresh:
         assert "postgres_rotate_credentials" in message
         assert "pgadmin_rotate_password" not in message
         manager.start.assert_not_called()
+
+    def _store_secrets_and_record_compose(
+        self, tmp_path, monkeypatch, *, pgadmin_enabled
+    ):
+        """Store real passwords and record the Compose calls auto-start makes.
+
+        basekit's Compose runner passes no ``env=`` to the child, so the child
+        sees ``os.environ`` as it is when the runner is called; each call is
+        recorded with the secret variables in effect at that moment.
+        """
+
+        current_config = self._make_config(
+            tmp_path,
+            postgres_name="postgres_a",
+            postgres_port=5433,
+            postgres_volume="postgres_a_data",
+            postgres_password="saved-db-secret",
+            pgadmin_enabled=pgadmin_enabled,
+            pgadmin_password="saved-admin-secret",
+        )
+        spawned = []
+
+        def record_compose(command, compose_file, **kwargs):
+            spawned.append(
+                (
+                    command,
+                    compose_file,
+                    kwargs,
+                    {
+                        name: os.environ.get(name)
+                        for name in ("POSTGRES_PASSWORD", "PGADMIN_DEFAULT_PASSWORD")
+                    },
+                )
+            )
+
+        monkeypatch.setattr(DockerCommandExecutor, "run_docker_compose", record_compose)
+        monkeypatch.setattr(
+            PostgresManager, "wait_for_service", lambda self, max_retries: None
+        )
+        with patch.object(manage, "config", current_config):
+            manage.generate()
+        return current_config, spawned, tmp_path / "postgres"
+
+    @pytest.mark.parametrize(
+        "shadow",
+        ["", "CHANGE_ME", "stale-exported-secret"],
+        ids=["empty", "placeholder", "stale"],
+    )
+    @pytest.mark.parametrize(
+        ("variable", "pgadmin_enabled"),
+        [
+            ("POSTGRES_PASSWORD", False),
+            ("POSTGRES_PASSWORD", True),
+            ("PGADMIN_DEFAULT_PASSWORD", True),
+        ],
+        ids=["postgres", "postgres-with-pgadmin", "pgadmin"],
+    )
+    def test_auto_start_refuses_exported_value_that_shadows_stored_env(
+        self, tmp_path, monkeypatch, variable, pgadmin_enabled, shadow
+    ):
+        current_config, spawned, compose_dir = self._store_secrets_and_record_compose(
+            tmp_path, monkeypatch, pgadmin_enabled=pgadmin_enabled
+        )
+        env_path = compose_dir / ".env"
+        compose_file = compose_dir / manage.COMPOSE_FILENAME
+        original = (env_path.read_bytes(), compose_file.read_bytes())
+        monkeypatch.setenv(variable, shadow)
+
+        with patch.object(manage, "config", current_config):
+            with patch("repom.docker_service.is_container_running", return_value=False):
+                with pytest.raises(RuntimeError) as excinfo:
+                    manage.ensure_running()
+
+        message = str(excinfo.value)
+        assert variable in message
+        assert str(env_path) in message
+        assert "saved-db-secret" not in message
+        assert "saved-admin-secret" not in message
+        assert "CHANGE_ME" not in message
+        assert "stale-exported-secret" not in message
+        assert (env_path.read_bytes(), compose_file.read_bytes()) == original
+        assert spawned == []
+
+    @pytest.mark.parametrize(
+        ("pgadmin_enabled", "exported"),
+        [
+            (False, {}),
+            (True, {}),
+            (
+                True,
+                {
+                    "POSTGRES_PASSWORD": "saved-db-secret",
+                    "PGADMIN_DEFAULT_PASSWORD": "saved-admin-secret",
+                },
+            ),
+            # pgAdmin is not in the Compose file, so its variable is not read.
+            (False, {"PGADMIN_DEFAULT_PASSWORD": ""}),
+        ],
+        ids=["unset", "unset-with-pgadmin", "equal-with-pgadmin", "pgadmin-disabled"],
+    )
+    def test_auto_start_compose_child_never_sees_an_empty_or_changed_secret(
+        self, tmp_path, monkeypatch, pgadmin_enabled, exported
+    ):
+        current_config, spawned, compose_dir = self._store_secrets_and_record_compose(
+            tmp_path, monkeypatch, pgadmin_enabled=pgadmin_enabled
+        )
+        compose_file = compose_dir / manage.COMPOSE_FILENAME
+        for name, value in exported.items():
+            monkeypatch.setenv(name, value)
+
+        with patch.object(manage, "config", current_config):
+            with patch("repom.docker_service.is_container_running", return_value=False):
+                manage.ensure_running()
+
+        assert spawned == [
+            (
+                "up -d",
+                compose_file,
+                {"cwd": compose_file.parent, "project_name": "postgres_a"},
+                {
+                    "POSTGRES_PASSWORD": exported.get("POSTGRES_PASSWORD"),
+                    "PGADMIN_DEFAULT_PASSWORD": exported.get("PGADMIN_DEFAULT_PASSWORD"),
+                },
+            )
+        ]
+        compose = compose_file.read_text(encoding="utf-8")
+        assert 'POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"' in compose
+        assert ("PGADMIN_DEFAULT_PASSWORD" in compose) is pgadmin_enabled
 
     @pytest.mark.parametrize("entrypoint", [manage.stop, manage.remove])
     def test_stop_and_remove_refresh_compose_before_lifecycle_call(

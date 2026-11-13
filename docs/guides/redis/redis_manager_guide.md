@@ -102,6 +102,12 @@ file と `redis.conf` を書き直し、既存の `.env` をそのまま再利�
 file を書き直すため、対象環境の `EXEC_ENV` を指定してください。再生成時の secret 保護と
 `--force-regenerate` は [Docker manager ガイド](../features/docker_manager_guide.md)を参照してください。
 
+Compose は generated file の `${REDIS_PASSWORD}` を、compose directory の `.env` より先に process
+environment から解決します（設定済みで空の値も優先）。`ensure_running()` は `REDIS_PASSWORD` が保存済み
+`.env` と異なる値（空値や `CHANGE_ME` を含む）で process environment に設定されている場合、変数名だけを示して
+起動を拒否します。unset するか保存済みの値に揃えてください。未設定または同じ値であれば、Redis の
+password の実効値は保存済み `.env` です。
+
 ## 停止と削除
 
 ```bash

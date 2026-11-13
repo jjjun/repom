@@ -593,6 +593,28 @@ Unless a difference is stated below, these contracts apply to both
   independently reject empty or placeholder values stored in `.env`. Stop and
   remove rewrite generated files with credential validation disabled and do not
   validate the stored `.env` contents.
+- The generated Compose file reads each secret as `${REDIS_PASSWORD}`,
+  `${POSTGRES_PASSWORD}`, or `${PGADMIN_DEFAULT_PASSWORD}`. Compose resolves
+  these from the process environment before the compose-directory `.env`, and a
+  variable that is set but empty still wins; this was checked with Docker
+  Compose v2.6.0 through `docker compose config` only (no container was
+  started), where an `env_file:` reference is shadowed the same way. The
+  Compose child inherits `os.environ`, which
+  includes values `load_dotenv()` read from the project `.env`. Auto-start
+  therefore refuses, naming the variable and never its value, when a secret
+  variable its Compose file references (`PGADMIN_DEFAULT_PASSWORD` only while
+  pgAdmin is enabled) is set in the process environment to anything but the
+  stored value, an empty or placeholder value included. When the variable is
+  unset or equals the stored value, the stored `.env` is the effective source
+  of that secret. This check covers only auto-start (`ensure_running()`).
+  Explicit generate and start compare the configured credential with the stored
+  `.env`, not the process environment with the configured credential, so a
+  `CONFIG_HOOK` that does not read the variable can still be shadowed by a
+  stale export. The Compose child of stop and remove also inherits the
+  environment; neither creates containers. Tests:
+  `TestValidateStoredSecretValues` and the `shadows_stored_env` and
+  `compose_child_never_sees` auto-start tests in `test_redis_manage.py` and
+  `test_postgres_manage.py`.
 - Existing secret files must not be silently replaced with different credentials.
   Intentional regeneration and credential rotation must preserve their explicit
   execution/overwrite controls and consistent persistent configuration.
