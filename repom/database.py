@@ -239,13 +239,17 @@ def _mask_secret_query_params(url: str) -> str:
     password carried in the URL's userinfo. libpq also accepts passwords,
     private-key passphrases, OAuth client secrets, and SCRAM keys as query
     parameters; those values must be masked separately.
+
+    The query starts at the first ``?`` and ``#`` is an ordinary character, as
+    in ``make_url()``. ``urlsplit()`` would end the URL at ``#`` and leave a
+    secret key after it unmasked while the driver still reads it.
     """
     try:
-        parts = urlsplit(url)
-        if not parts.query:
+        head, separator, query = url.partition("?")
+        if not separator:
             return url
 
-        query_pairs = parse_qsl(parts.query, keep_blank_values=True)
+        query_pairs = parse_qsl(query, keep_blank_values=True)
         if not any(key.lower() in _SECRET_QUERY_PARAM_NAMES for key, _ in query_pairs):
             return url
 
@@ -253,7 +257,7 @@ def _mask_secret_query_params(url: str) -> str:
             (key, "***" if key.lower() in _SECRET_QUERY_PARAM_NAMES else value)
             for key, value in query_pairs
         ]
-        return urlunsplit(parts._replace(query=urlencode(masked_pairs, safe="*")))
+        return f"{head}?{urlencode(masked_pairs, safe='*')}"
     except (UnicodeError, ValueError):
         return "<invalid database URL>"
 

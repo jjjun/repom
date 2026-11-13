@@ -230,6 +230,17 @@
 
 ### Fixed
 
+- `safe_db_url()` now masks a secret query key that follows a `#` (repom#295). It located
+  the query with `urlsplit()`, which ends the URL at `#`, while SQLAlchemy `make_url()`
+  keeps `#` in the host or database name and reads what follows the first `?` as query
+  parameters. A URL such as `postgresql://app:pw@h/my#db?password=...` therefore reached
+  the `repom_info` URL line, the engine-created debug logs, the `convert_to_async_uri`
+  error text, and `DatabaseInfo.target` with `password=...` unmasked; `sslpassword`,
+  `dsn`, and the other masked keys were affected the same way. The query is now found
+  from the first `?`, and `#` is an ordinary character. As a side effect, a host-less URL
+  with a masked key (for example `postgresql:///db?password=...`) is displayed with the
+  value masked instead of as `<invalid database URL>`. An unencoded `@` followed by `/`
+  in a password is still displayed as the driver parses it; see `SECURITY.md`.
 - Auto-start (`ensure_running()` for Redis and PostgreSQL) now refuses to start when a
   secret variable the generated Compose file references (`REDIS_PASSWORD`,
   `POSTGRES_PASSWORD`, and `PGADMIN_DEFAULT_PASSWORD` while pgAdmin is enabled) is set

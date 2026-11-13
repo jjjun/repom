@@ -375,12 +375,25 @@ Unless a difference is stated below, these contracts apply to both
   choose the corresponding verification settings and trust roots.
 - Ordinary repr, logs, CLI status, diagnostics, and errors must not unexpectedly
   expose credentials. `safe_db_url()` masks userinfo passwords and a fixed set
-  of query keys, including `dsn`; it is not a universal sanitizer. Alembic URL
+  of query keys, including `dsn`; it is not a universal sanitizer. It finds the
+  query the way `make_url()` does, from the first `?` with `#` an ordinary
+  character of the host or database name, so a key from that fixed set after a
+  `#` is masked too. Tests: `test_safe_db_url_masks_secret_query_after_hash_in_postgresql_url`,
+  `test_safe_db_url_masks_secret_query_after_hash_in_sqlite_url`,
+  `test_safe_db_url_masks_secret_query_variants_after_hash`,
+  `test_safe_db_url_masks_hash_url_with_ambiguous_credentials`,
+  `test_safe_db_url_keeps_hash_in_names_without_secret_query`,
+  `test_safe_db_url_masks_secret_query_in_hostless_url`, and
+  `test_convert_to_async_uri_error_masks_secret_query_after_hash`. Alembic URL
   values are percent-escaped before ConfigParser handling. Still review
   malformed URLs: `RepomConfig.db_url` can fail in `make_url()` before
   `safe_db_url()` runs, and `repom_info.main` prints uncaught display errors;
   check parser exceptions for password fragments. An unencoded `@` can move a
-  password fragment into the host, which appears in TLS errors and warnings.
+  password fragment into the host, which appears in TLS errors and warnings. A
+  `/` after that `@` moves the rest into the database name; `safe_db_url()`
+  displays both, because it renders the URL as the driver parses it and cannot
+  tell that part from a host or database name. Percent-encode `@` and `/` in
+  passwords.
   Restore `psql` stderr can contain SQL and backup data and is printed, logged,
   and included in `RestoreError`; only the exact configured password is
   masked. Include exception chains and failing child-process output in review.

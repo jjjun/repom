@@ -124,6 +124,103 @@ def test_safe_db_url_masks_secret_query_parameters_with_ambiguous_credentials():
     assert "known-ssl-passphrase" not in result
 
 
+_SECRET_KEYS = sorted(database._SECRET_QUERY_PARAM_NAMES)
+
+# make_url() keeps '#' in the host or database name and parses what follows the
+# first '?' as query parameters, so a secret key after '#' is still a real one.
+_HASH_URL_TEMPLATES = [
+    pytest.param(
+        "{driver}://app:pw@h/my#db?{key}=known-secret",
+        "{driver}://app:***@h/my#db?{key}=***",
+        id="in-database-name",
+    ),
+    pytest.param(
+        "{driver}://app:pw@h/db#frag?{key}=known-secret",
+        "{driver}://app:***@h/db#frag?{key}=***",
+        id="before-query",
+    ),
+    pytest.param(
+        "{driver}://app:pw@h#x/db?{key}=known-secret",
+        "{driver}://app:***@h#x/db?{key}=***",
+        id="in-host",
+    ),
+]
+
+
+@pytest.mark.parametrize("key", _SECRET_KEYS)
+@pytest.mark.parametrize("driver", ["postgresql", "postgresql+psycopg2", "postgresql+asyncpg"])
+@pytest.mark.parametrize(("template", "expected"), _HASH_URL_TEMPLATES)
+def test_safe_db_url_masks_secret_query_after_hash_in_postgresql_url(
+    template, expected, driver, key
+):
+    result = database.safe_db_url(template.format(driver=driver, key=key))
+
+    assert result == expected.format(driver=driver, key=key)
+    assert "known-secret" not in result
+
+
+@pytest.mark.parametrize("key", _SECRET_KEYS)
+@pytest.mark.parametrize("driver", ["sqlite", "sqlite+aiosqlite"])
+def test_safe_db_url_masks_secret_query_after_hash_in_sqlite_url(driver, key):
+    url = f"{driver}:///data#v1.sqlite3?{key}=known-secret"
+
+    result = database.safe_db_url(url)
+
+    assert result == f"{driver}:///data#v1.sqlite3?{key}=***"
+    assert "known-secret" not in result
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_query"),
+    [
+        ("SSLPassword=known-secret", "SSLPassword=***"),
+        ("%73slpassword=known-secret", "sslpassword=***"),
+        (
+            "application_name=repom&password=known-secret&dsn=known-dsn",
+            "application_name=repom&dsn=***&password=***",
+        ),
+    ],
+)
+def test_safe_db_url_masks_secret_query_variants_after_hash(query, expected_query):
+    result = database.safe_db_url(f"postgresql://app:pw@h/my#db?{query}")
+
+    assert result == f"postgresql://app:***@h/my#db?{expected_query}"
+    assert "known-secret" not in result
+    assert "known-dsn" not in result
+
+
+def test_safe_db_url_masks_secret_query_in_hostless_url():
+    result = database.safe_db_url("postgresql:///db?password=known-secret")
+
+    assert result == "postgresql:///db?password=***"
+
+
+def test_safe_db_url_masks_hash_url_with_ambiguous_credentials():
+    url = "postgresql://user:p@known-userinfo@h/db#frag?password=known-secret"
+
+    result = database.safe_db_url(url)
+
+    assert result == "postgresql://***@h/db#frag?password=***"
+    assert "known-secret" not in result
+    assert "known-userinfo" not in result
+
+
+def test_safe_db_url_keeps_hash_in_names_without_secret_query():
+    url = "postgresql://app:pw@h#x/my#db?sslmode=require"
+
+    assert database.safe_db_url(url) == "postgresql://app:***@h#x/my#db?sslmode=require"
+
+
+def test_convert_to_async_uri_error_masks_secret_query_after_hash():
+    url = "oracle://user:pw@localhost:5432/app#v1?password=known-secret"
+
+    with pytest.raises(ValueError) as excinfo:
+        database.convert_to_async_uri(url)
+
+    assert "known-secret" not in str(excinfo.value)
+    assert "app#v1?password=***" in str(excinfo.value)
+
+
 def test_safe_db_url_hides_secrets_when_url_is_malformed():
     secret = "known-ssl-passphrase"
 
