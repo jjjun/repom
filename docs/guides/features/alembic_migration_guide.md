@@ -189,6 +189,8 @@ Python 呼び出し元は `SystemExit` を捕捉してください。
 ジャンクションの場合にも同じ例外を送出し、何も削除しません。`__pycache__` がリンクの場合は
 削除せずにスキップします。`AlembicSetup.reset_migrations()` は version table を削除する前に
 すべての versions ディレクトリを検証するため、拒否された場合に部分的なリセットは残りません。
+一致は表記ではなくディレクトリの実体で判定するため、Windows の `\\?\` や
+`//localhost/<ドライブ>$` を付けた表記、`link/<サブディレクトリ>/..` のようにリンクを経由する表記も拒否されます。
 `alembic_reset` CLI は拒否の理由を表示して終了コード 1 で終了します。既存の `alembic.ini` を
 読む `alembic_init` CLI も同じ拒否を報告して終了コード 1 で終了し、versions ディレクトリを作成しません。意図してプロジェクト直下を
 versions ディレクトリにする場合に限り、`AlembicSetup.from_ini(..., allow_project_root=True)`

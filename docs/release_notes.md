@@ -230,6 +230,18 @@
 
 ### Fixed
 
+- `AlembicSetup.from_ini()` and `AlembicReset.delete_migration_files()` /
+  `validate_versions_dir()` now refuse alternate spellings of the project directory
+  (repom#297). On Windows, `//?/<project>`, `\\?\<project>`, and
+  `//localhost/<drive>$/...` resolved to a path different from `<project>`, so a
+  `version_locations` entry, versions directory, `project_dirs` entry, or
+  `config.root_path` written that way slipped past the "not the project directory"
+  check and `reset_migrations()` deleted the project's top-level `*.py`. Directories are
+  now compared by identity (`os.path.samefile()` when both exist). A legitimate versions
+  directory given with a `\\?\` prefix still works. The linked-versions-directory check
+  now also tests the path with `..` collapsed, so `link/<subdir>/..` is refused on POSIX
+  instead of deleting inside the link target. The `__init__.py` keep-check ignores case
+  on Windows, where `glob("*.py")` does.
 - The in-memory SQLite check behind `create_test_fixtures()` and
   `create_async_test_fixtures()` no longer accepts a `file:` URI whose name contains `#`
   (repom#296). SQLite ends a URI at `#` and ignores the rest, so in

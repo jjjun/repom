@@ -518,9 +518,14 @@ Unless a difference is stated below, these contracts apply to both
     (`AlembicSetup` passes its `project_root`), and for a symlinked or junctioned
     versions directory (the latter even with `allow_project_root=True`). A linked
     `__pycache__` is skipped, not removed. `AlembicSetup.reset_migrations`
-    validates every directory before it drops the version table. These checks
-    compare resolved paths for equality; they do not refuse an ancestor of those
-    directories or a link in a parent path component.
+    validates every directory before it drops the version table. The directory
+    checks treat resolved paths as equal, or `os.path.samefile()` as equal when both
+    exist, so on Windows `\\?\` / `//?/` and `//localhost/<drive>$` spellings of those
+    directories are refused as well. The link check tests the last component of the
+    path as given and of the path with `..` collapsed lexically, so `link/inner/..`
+    is refused as the link it ends in. The checks do not refuse an ancestor of those
+    directories or a link in a parent path component, including a `..` that follows
+    such a link (`link/../x`). `__init__.py` is kept regardless of case on Windows.
   - Relative `version_locations` entries resolve against the `alembic.ini`
     directory in repom but against the current working directory in Alembic, so
     the two can name different directories when the working directory differs.

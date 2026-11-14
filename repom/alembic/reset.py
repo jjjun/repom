@@ -1,10 +1,25 @@
 """Alembic migration reset functionality."""
 
+import os
 from collections.abc import Iterable
 from pathlib import Path
 from sqlalchemy import create_engine, inspect, text
 
 from repom.exceptions import UnsafeVersionsDirectoryError
+
+
+def _is_same_directory(path: Path, other: Path) -> bool:
+    """resolve() の結果が等しいか、os.path.samefile() が同一と判定するか
+
+    Windows では //?/C:/proj や //localhost/C$/proj のように resolve() 後も
+    表記が異なる別名があるため、存在する場合は実体で比較する。
+    """
+    if path.resolve() == other.resolve():
+        return True
+    try:
+        return os.path.samefile(path, other)
+    except OSError:
+        return False
 
 
 def is_project_directory(path: Path, project_dirs: Iterable[Path] = ()) -> bool:
@@ -21,12 +36,20 @@ def is_project_directory(path: Path, project_dirs: Iterable[Path] = ()) -> bool:
     candidates = [Path(project_dir) for project_dir in project_dirs]
     if config.root_path:
         candidates.append(Path(config.root_path))
-    resolved = Path(path).resolve()
-    return any(resolved == candidate.resolve() for candidate in candidates)
+    return any(_is_same_directory(Path(path), candidate) for candidate in candidates)
 
 
 def _is_link(path: Path) -> bool:
     return path.is_symlink() or path.is_junction()
+
+
+def _is_linked_directory(path: Path) -> bool:
+    """path、または ".." を字句的に畳んだ path の末尾がリンクか判定
+
+    pathlib は ".." を畳まないため、link/inner/.. は末尾が実ディレクトリでも
+    POSIX ではリンク先そのものを指す。
+    """
+    return _is_link(path) or _is_link(Path(os.path.abspath(path)))
 
 
 class AlembicReset:
@@ -103,7 +126,7 @@ class AlembicReset:
                 project_dirs / config.root_path / カレントディレクトリと同じ場合
         """
         versions_dir = Path(versions_dir)
-        if _is_link(versions_dir):
+        if _is_linked_directory(versions_dir):
             raise UnsafeVersionsDirectoryError(
                 f"Refusing to delete migration files through a linked "
                 f"versions directory: {versions_dir}"
@@ -136,7 +159,8 @@ class AlembicReset:
         deleted_count = 0
         for file in versions_dir.glob("*.py"):
             # __init__.py は保持
-            if file.name == "__init__.py":
+            # Windows の glob は大文字小文字を区別しないため normcase で比較する
+            if os.path.normcase(file.name) == "__init__.py":
                 continue
 
             file.unlink()

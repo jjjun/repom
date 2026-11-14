@@ -19,6 +19,11 @@ from repom.alembic import (
 )
 from repom.config import config
 from repom.exceptions import UnsafeVersionsDirectoryError
+from tests.pytest_helpers import WINDOWS_ALIAS_KINDS, windows_alias_of
+
+windows_only = pytest.mark.skipif(
+    os.name != "nt", reason="Windows-only path spellings"
+)
 
 
 class TestAlembicSetupInit:
@@ -298,6 +303,59 @@ class TestFromIni:
 
         assert setup.versions_dirs == [tmp_path.resolve()]
         assert setup.allow_project_root is True
+
+    @windows_only
+    @pytest.mark.parametrize("kind", WINDOWS_ALIAS_KINDS)
+    def test_from_ini_refuses_alias_of_ini_dir(self, tmp_path, kind):
+        """repom#297: //?/ and //localhost/<drive>$ spellings name the ini
+        directory although Path.resolve() keeps them distinct."""
+        ini_path = tmp_path / "alembic.ini"
+        ini_path.write_text(
+            "[alembic]\n"
+            "script_location = alembic\n"
+            f"version_locations = {windows_alias_of(tmp_path, kind)}\n"
+            "path_separator = os\n"
+        )
+
+        with pytest.raises(UnsafeVersionsDirectoryError):
+            AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+
+    @windows_only
+    @pytest.mark.parametrize("kind", WINDOWS_ALIAS_KINDS)
+    def test_from_ini_refuses_alias_of_config_root_path(
+        self, monkeypatch, tmp_path, kind
+    ):
+        conf_dir = tmp_path / "conf"
+        conf_dir.mkdir()
+        ini_path = conf_dir / "alembic.ini"
+        ini_path.write_text(
+            "[alembic]\n"
+            "script_location = alembic\n"
+            f"version_locations = {windows_alias_of(tmp_path, kind)}\n"
+            "path_separator = os\n"
+        )
+        monkeypatch.setattr(config, "root_path", str(tmp_path))
+
+        with pytest.raises(UnsafeVersionsDirectoryError):
+            AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+
+    @windows_only
+    @pytest.mark.parametrize("kind", WINDOWS_ALIAS_KINDS)
+    def test_from_ini_accepts_alias_of_versions_dir(self, tmp_path, kind):
+        versions_dir = tmp_path / "alembic" / "versions"
+        versions_dir.mkdir(parents=True)
+        alias = windows_alias_of(versions_dir, kind)
+        ini_path = tmp_path / "alembic.ini"
+        ini_path.write_text(
+            "[alembic]\n"
+            "script_location = alembic\n"
+            f"version_locations = {alias}\n"
+            "path_separator = os\n"
+        )
+
+        setup = AlembicSetup.from_ini(ini_path, "sqlite:///test.db")
+
+        assert setup.versions_dirs == [alias]
 
 
 class TestCreateAlembicIni:
@@ -635,6 +693,30 @@ class TestResetMigrations:
         assert inspect(engine).has_table("alembic_version")
         assert (tmp_path / "app.py").exists()
         assert (migrations / "0001_a.py").exists()
+        engine.dispose()
+
+    @windows_only
+    @pytest.mark.parametrize("kind", WINDOWS_ALIAS_KINDS)
+    def test_reset_migrations_refuses_alias_of_project_root_before_dropping_table(
+        self, tmp_path, kind
+    ):
+        """repom#297: an alias of the project root must not leave a half reset."""
+        db_url = f"sqlite:///{tmp_path / 'reset.db'}"
+        engine = create_engine(db_url)
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE alembic_version (version_num VARCHAR(32))"
+            ))
+        (tmp_path / "app.py").write_text("# project code")
+
+        setup = AlembicSetup(tmp_path, db_url)
+        setup.versions_dirs = [windows_alias_of(tmp_path, kind)]
+
+        with pytest.raises(UnsafeVersionsDirectoryError):
+            setup.reset_migrations()
+
+        assert inspect(engine).has_table("alembic_version")
+        assert (tmp_path / "app.py").exists()
         engine.dispose()
 
     def test_reset_migrations_allow_project_root_opt_in(self, tmp_path):

@@ -12,6 +12,11 @@ from repom.alembic import AlembicReset
 from repom.config import config
 from repom.exceptions import UnsafeVersionsDirectoryError
 import repom.alembic.reset as reset_module
+from tests.pytest_helpers import WINDOWS_ALIAS_KINDS, windows_alias_of
+
+windows_only = pytest.mark.skipif(
+    os.name != "nt", reason="Windows-only path spellings"
+)
 
 
 def test_drop_alembic_version_table_uses_default_name(tmp_path):
@@ -323,3 +328,124 @@ def test_delete_migration_files_does_not_follow_symlinked_pycache(
     assert (outside / "keep.pyc").exists()
     assert (versions_dir / "__pycache__").exists()
     assert "Skipped linked __pycache__" in capsys.readouterr().out
+
+
+@windows_only
+@pytest.mark.parametrize("kind", WINDOWS_ALIAS_KINDS)
+def test_delete_migration_files_refuses_alias_of_project_dir(tmp_path, kind):
+    """repom#297: resolve() keeps //?/ and //localhost/<drive>$ spellings
+    distinct from the plain path, but they name the same directory."""
+    (tmp_path / "app.py").write_text("# project code")
+
+    reset = AlembicReset(
+        "sqlite:///unused.db",
+        windows_alias_of(tmp_path, kind),
+        project_dirs=[tmp_path],
+    )
+
+    with pytest.raises(UnsafeVersionsDirectoryError):
+        reset.delete_migration_files()
+
+    assert (tmp_path / "app.py").exists()
+
+
+@windows_only
+@pytest.mark.parametrize("kind", WINDOWS_ALIAS_KINDS)
+def test_delete_migration_files_refuses_alias_project_dirs_entry(tmp_path, kind):
+    (tmp_path / "app.py").write_text("# project code")
+
+    reset = AlembicReset(
+        "sqlite:///unused.db",
+        tmp_path,
+        project_dirs=[windows_alias_of(tmp_path, kind)],
+    )
+
+    with pytest.raises(UnsafeVersionsDirectoryError):
+        reset.delete_migration_files()
+
+    assert (tmp_path / "app.py").exists()
+
+
+@windows_only
+@pytest.mark.parametrize("kind", WINDOWS_ALIAS_KINDS)
+def test_delete_migration_files_refuses_alias_config_root_path(
+    monkeypatch, tmp_path, kind
+):
+    monkeypatch.setattr(
+        config, "root_path", str(windows_alias_of(tmp_path, kind))
+    )
+    (tmp_path / "app.py").write_text("# project code")
+
+    reset = AlembicReset("sqlite:///unused.db", tmp_path)
+
+    with pytest.raises(UnsafeVersionsDirectoryError):
+        reset.delete_migration_files()
+
+    assert (tmp_path / "app.py").exists()
+
+
+@windows_only
+@pytest.mark.parametrize("kind", WINDOWS_ALIAS_KINDS)
+def test_delete_migration_files_refuses_alias_of_current_directory(
+    monkeypatch, tmp_path, kind
+):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "app.py").write_text("# project code")
+
+    reset = AlembicReset(
+        "sqlite:///unused.db", windows_alias_of(tmp_path, kind)
+    )
+
+    with pytest.raises(UnsafeVersionsDirectoryError):
+        reset.delete_migration_files()
+
+    assert (tmp_path / "app.py").exists()
+
+
+@windows_only
+@pytest.mark.parametrize("kind", WINDOWS_ALIAS_KINDS)
+def test_delete_migration_files_accepts_alias_of_versions_dir(tmp_path, kind):
+    versions_dir = tmp_path / "versions"
+    versions_dir.mkdir()
+    (versions_dir / "__init__.py").touch()
+    (versions_dir / "0001_test.py").write_text("# migration")
+
+    reset = AlembicReset(
+        "sqlite:///unused.db",
+        windows_alias_of(versions_dir, kind),
+        project_dirs=[tmp_path],
+    )
+    reset.delete_migration_files()
+
+    assert not (versions_dir / "0001_test.py").exists()
+    assert (versions_dir / "__init__.py").exists()
+
+
+@windows_only
+def test_delete_migration_files_keeps_init_regardless_of_case(tmp_path):
+    """glob("*.py") is case-insensitive on Windows, so __INIT__.PY matches."""
+    (tmp_path / "__INIT__.PY").touch()
+    (tmp_path / "0001_test.py").write_text("# migration")
+
+    reset = AlembicReset("sqlite:///unused.db", tmp_path)
+    reset.delete_migration_files()
+
+    assert (tmp_path / "__INIT__.PY").exists()
+    assert not (tmp_path / "0001_test.py").exists()
+
+
+def test_delete_migration_files_refuses_dot_dot_through_linked_dir(tmp_path):
+    """repom#297: link/inner/.. ends in a real directory name, but the
+    operating system resolves it to the link target itself."""
+    target = tmp_path / "target"
+    (target / "inner").mkdir(parents=True)
+    (target / "0001_test.py").write_text("# migration")
+    link = tmp_path / "versions"
+    _link_or_skip(link, target)
+
+    reset = AlembicReset("sqlite:///unused.db", link / "inner" / "..")
+
+    with pytest.raises(UnsafeVersionsDirectoryError):
+        reset.delete_migration_files()
+
+    assert (target / "0001_test.py").exists()
