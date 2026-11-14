@@ -36,6 +36,7 @@ def _params(
         container_name="managed-postgres",
         sslmode=sslmode,
         sslrootcert=sslrootcert,
+        use_docker=True,
     )
 
 
@@ -202,6 +203,143 @@ def test_pg_tools_available_skips_docker_probe_when_port_differs_from_container_
     monkeypatch.setattr(pg_dump_tools.shutil, "which", lambda name: None)
 
     assert pg_tools_available(params) is False
+
+
+def _direct_params(port: int, use_docker: bool | None = None) -> PgConnParams:
+    # None leaves use_docker out, so the field keeps its constructor default.
+    explicit = {} if use_docker is None else {"use_docker": use_docker}
+    return PgConnParams(
+        host="127.0.0.1",
+        port=port,
+        user="user",
+        password="secret",
+        database="mine_py",
+        container_name="managed-postgres",
+        **explicit,
+    )
+
+
+@pytest.fixture
+def container_host_port(monkeypatch) -> int:
+    """Publish the managed container on 5433 for the module-level config."""
+    monkeypatch.setattr(pg_dump_tools.config.postgres.container, "host_port", 5433)
+    return 5433
+
+
+def _run_with_recorded_argv(
+    monkeypatch, tmp_path: Path, operation: str, params: PgConnParams, container_running: bool
+):
+    """Run a dump or restore with every client process faked.
+
+    Returns the result, the argv of the dump / restore client process, and the
+    mock that stands in for the container probe.
+    """
+    tool = "pg_dump" if operation == "dump" else "pg_restore"
+    argvs: list[list[str]] = []
+    probe = MagicMock(return_value=container_running)
+
+    monkeypatch.setattr(_backup_utils, "is_container_running", probe)
+    monkeypatch.setattr(pg_dump_tools, "is_container_running", probe)
+
+    def exec_command(container_name, command, stdin=None, capture_output=True):
+        assert command == [tool, "--version"]
+        return subprocess.CompletedProcess(command, 0, b"tool (PostgreSQL) 16.3\n", b"")
+
+    def fake_run(command, **kwargs):
+        if command[1:] == ["--version"]:
+            return subprocess.CompletedProcess(command, 0, "tool (PostgreSQL) 16.3\n", "")
+        argvs.append(command)
+        if operation == "dump":
+            Path(command[-1]).write_bytes(b"CUSTOM-DUMP")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    def fake_streaming(command, *, stdin_file=None, stdout_file=None, password=None, env=None):
+        argvs.append(command)
+        if stdout_file is not None:
+            stdout_file.write(b"CUSTOM-DUMP")
+        return _backup_utils.StreamedCommandResult(returncode=0, stderr="")
+
+    monkeypatch.setattr(pg_dump_tools.DockerCommandExecutor, "exec_command", exec_command)
+    monkeypatch.setattr(pg_dump_tools.subprocess, "run", fake_run)
+    monkeypatch.setattr(pg_dump_tools, "run_streaming_command", fake_streaming)
+
+    dump_path = tmp_path / "db.dump"
+    if operation == "dump":
+        result = pg_dump_custom(params, dump_path)
+    else:
+        dump_path.write_bytes(b"CUSTOM-DUMP")
+        result = pg_restore_custom(params, dump_path)
+    return result, argvs[-1], probe
+
+
+def test_directly_built_params_leave_use_docker_to_the_port_rule():
+    assert _direct_params(5432).use_docker is None
+
+
+@pytest.mark.parametrize("operation", ["dump", "restore"])
+@pytest.mark.parametrize(
+    ("port", "use_docker", "container_running", "expect_docker", "expect_probe"),
+    [
+        # The published port selects the container, as from_config() does.
+        (5433, None, True, True, True),
+        (5433, None, False, False, True),
+        # Another port is a different server: host tools, and no container probe.
+        (5432, None, True, False, False),
+        (5432, None, False, False, False),
+        # An explicit request keeps the container whatever the port.
+        (5432, True, True, True, True),
+        (5432, True, False, False, True),
+        # An explicit refusal keeps the host tools on the published port.
+        (5433, False, True, False, False),
+    ],
+)
+def test_directly_built_params_choose_the_container_by_port_unless_requested(
+    monkeypatch,
+    tmp_path: Path,
+    container_host_port,
+    operation,
+    port,
+    use_docker,
+    container_running,
+    expect_docker,
+    expect_probe,
+):
+    tool = "pg_dump" if operation == "dump" else "pg_restore"
+
+    result, argv, probe = _run_with_recorded_argv(
+        monkeypatch, tmp_path, operation, _direct_params(port, use_docker), container_running
+    )
+
+    assert result.returncode == 0
+    assert result.used_docker is expect_docker
+    assert probe.called is expect_probe
+    if expect_docker:
+        expected = ["docker", "exec", "managed-postgres", tool]
+        if operation == "restore":
+            expected.insert(2, "-i")
+        assert argv[: len(expected)] == expected
+    else:
+        assert argv[:9] == [tool, "-h", "127.0.0.1", "-p", str(port), "-U", "user", "-d", "mine_py"]
+
+
+@pytest.mark.parametrize(
+    ("port", "use_docker", "expect_probe"),
+    [
+        (5433, None, True),
+        (5432, None, False),
+        (5432, True, True),
+        (5433, False, False),
+    ],
+)
+def test_pg_tools_available_probes_the_container_by_port_unless_requested(
+    monkeypatch, container_host_port, port, use_docker, expect_probe
+):
+    probe = MagicMock(return_value=True)
+    monkeypatch.setattr(pg_dump_tools, "is_container_running", probe)
+    monkeypatch.setattr(pg_dump_tools.shutil, "which", lambda name: None)
+
+    assert pg_tools_available(_direct_params(port, use_docker)) is expect_probe
+    assert probe.called is expect_probe
 
 
 @pytest.mark.parametrize(
@@ -1234,6 +1372,7 @@ def test_tls_options_use_host_tools_even_when_the_container_is_running(
         password="secret",
         database="mine_py",
         container_name="managed-postgres",
+        use_docker=True,
         sslcrl="/etc/ssl/client.crl",
     )
     run_calls = []
@@ -1285,6 +1424,7 @@ def test_pg_tools_available_skips_docker_probe_when_tls_options_are_set(monkeypa
         password="secret",
         database="mine_py",
         container_name="managed-postgres",
+        use_docker=True,
         channel_binding="require",
     )
     monkeypatch.setattr(

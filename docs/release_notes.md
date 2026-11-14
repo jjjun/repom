@@ -61,6 +61,15 @@
   a backup or restore that previously ran through Docker may now use host tools.
   `db_backup` logs, and the `db_restore` confirmation shows, the resolved endpoint
   (`container <name>` or `host:port`, never the password).
+- BREAKING: `PgConnParams.use_docker` now defaults to `None` instead of `True`, and the
+  port rule above applies to a directly constructed `PgConnParams` too: `pg_dump_custom()`,
+  `pg_restore_custom()`, and `pg_tools_available()` take `docker exec` only for a local
+  host whose `port` equals `config.postgres.container.host_port`. Before, the default
+  selected the managed container for any local host and port, so a native server on
+  another port was silently replaced by the container database (`pg_restore_custom()`
+  runs `--clean --if-exists` without a prompt). A caller that wants the container
+  whatever the port must now pass `use_docker=True`; `use_docker=False` still forces
+  host tools. `PgConnParams.from_config()` results are unchanged.
 - BREAKING: The shared PostgreSQL engine resolver now rejects `connect_args` keys
   outside the libpq, psycopg, and asyncpg-adapter keywords with `ValueError` in every
   `EXEC_ENV`. psycopg `conninfo` and libpq `requiressl` can no longer carry a

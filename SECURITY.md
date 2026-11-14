@@ -279,10 +279,15 @@ Unless a difference is stated below, these contracts apply to both
   when `config.postgres.port` equals `config.postgres.container.host_port`;
   `docker exec` carries no host or port, so a different configured port and
   configured remote hosts use host client tools against `host:port`, even while
-  the container is running. `db_backup` logs and the `db_restore` confirmation
-  shows the resolved endpoint (`container <name>` or `host:port`, never the
-  password); the restore display is decided when the prompt is printed and the
-  container is probed again when the restore runs. Client-tool database names,
+  the container is running. A directly constructed `PgConnParams` follows the
+  same rule through its own `port` while `use_docker` keeps its default `None`;
+  `use_docker=True` explicitly requests the managed container whatever the port
+  (still only for a local host without forwarded TLS options) and
+  `use_docker=False` always uses host client tools. `db_backup` logs and the
+  `db_restore` confirmation shows the resolved endpoint (`container <name>` or
+  `host:port`, never the password); the restore display is decided when the
+  prompt is printed and the container is probed again when the restore runs.
+  Client-tool database names,
   including PostgreSQL credential rotation's databases and maintenance database,
   must not use libpq connection-string syntax. `database_info`
   reports configured `postgres_db` even when a URL override selects another

@@ -69,7 +69,15 @@ UNSUPPORTED_CLIENT_QUERY_PARAMETERS = {
 
 @dataclass(frozen=True)
 class PgConnParams:
-    """Connection details for PostgreSQL client tools."""
+    """Connection details for PostgreSQL client tools.
+
+    ``use_docker`` is tri-state. ``None`` (the default) selects ``docker exec``
+    only for a local host whose ``port`` equals
+    ``config.postgres.container.host_port``, because ``docker exec`` carries no
+    host or port and always reaches the managed container's own server. ``True``
+    explicitly requests the managed container whatever the port (still local
+    hosts only, and never with TLS options); ``False`` always uses host tools.
+    """
 
     host: str
     port: int
@@ -79,7 +87,7 @@ class PgConnParams:
     container_name: str | None = None
     sslmode: str | None = None
     sslrootcert: str | None = None
-    use_docker: bool = True
+    use_docker: bool | None = None
     sslcert: str | None = None
     sslkey: str | None = None
     sslcrl: str | None = None
@@ -338,8 +346,13 @@ def pg_tools_available(params: PgConnParams) -> bool:
 def _allow_docker(params: PgConnParams) -> bool:
     # The container has no host environment, so TLS options that only reach the
     # child through it force the host client tools instead of docker exec.
+    use_docker = params.use_docker
+    if use_docker is None:
+        # docker exec carries no -h / -p, so without an explicit request the
+        # container is taken only when the caller's port is its published port.
+        use_docker = params.port == config.postgres.container.host_port
     return (
-        params.use_docker
+        use_docker
         and not params.tls_options
         and _is_local_postgres_host(params.host)
     )

@@ -195,6 +195,10 @@ production 環境の拒否もありません。
 これらは console script の `db_backup` / `db_restore` とは別の library API です。URL 由来の
 接続情報には `PgConnParams.from_config()` を使ってください。直接構築した `PgConnParams` は
 呼び出し元が明示的に渡す trusted 値であり、URL query validation を通りません。
+`PgConnParams.use_docker` の既定値は `None` で、`docker exec` は host が local で `port` が
+`config.postgres.container.host_port` と一致する場合だけ選ばれます（`docker exec` は host と
+port を持たないため）。port に関係なく管理コンテナを使うには `use_docker=True` を明示し、
+host の client tools に固定するには `use_docker=False` を指定してください。
 
 ## 失敗時の挙動
 
