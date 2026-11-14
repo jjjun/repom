@@ -991,25 +991,22 @@ dependencies = [
     { name = "basekit" },
     { name = "inflect" },
     { name = "pydantic" },
-    { name = "sqlalchemy" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 
 [package.optional-dependencies]
 async = [
     { name = "aiosqlite" },
-    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 async-all = [
     { name = "aiosqlite" },
     { name = "asyncpg" },
-    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 postgres = [
     { name = "psycopg", extra = ["binary"] },
 ]
 postgres-async = [
     { name = "asyncpg" },
-    { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 redis = [
     { name = "redis" },
@@ -1041,10 +1038,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.3.4,<4.0.0" },
     { name = "pydantic", specifier = ">=2.13.4,<3.0.0" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=7.4.0,<8.0.0" },
-    { name = "sqlalchemy", specifier = ">=2.0.49,<3.0.0" },
-    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'async'", specifier = ">=2.0.49,<3.0.0" },
-    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'async-all'", specifier = ">=2.0.49,<3.0.0" },
-    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'postgres-async'", specifier = ">=2.0.49,<3.0.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.49,<3.0.0" },
 ]
 provides-extras = ["postgres", "postgres-async", "redis", "async", "async-all"]
 

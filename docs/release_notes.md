@@ -342,14 +342,17 @@
   `verify-full`), and a URL `ssl` can no longer override the DSN `sslmode` and bypass
   the prod TLS floor. The "Async engine created" debug log still prints the masked
   source URL and now appends the `ssl` argument asyncpg receives.
-- The `async`, `postgres-async` and `async-all` extras now include
-  `sqlalchemy[asyncio]` (same version range as the core `sqlalchemy` dependency), so
-  installing them brings in greenlet on every platform. Previously greenlet came only
-  from SQLAlchemy's `platform_machine`-gated default dependency and was missing, for
-  example, on Apple Silicon macOS (`arm64`), which made the first async connection
-  fail with `ValueError: the greenlet library is required to use this function.`
-  Async use requires one of these extras; a plain `repom` install still does not
-  require greenlet.
+- The core dependency is now `sqlalchemy[asyncio]` (same version range as before), so
+  greenlet is installed on every platform, with or without extras (repom#292, repom#302).
+  Previously greenlet came only from SQLAlchemy 2.0's `platform_machine`-gated default
+  dependency and was missing, for example, on Apple Silicon macOS (`arm64`), which made
+  the first async connection fail with `ValueError: the greenlet library is required to
+  use this function.` On SQLAlchemy 2.1, which declares greenlet only under its
+  `asyncio` extra, a plain `repom` install could not be imported at all:
+  `repom.database` imports `sqlalchemy.ext.asyncio` at module level, so `import repom`
+  raised `ImportError`. The `async`, `postgres-async` and `async-all` extras no longer
+  list `sqlalchemy[asyncio]` and add only their async drivers (`aiosqlite`, `asyncpg`).
+  CI now imports a plain install on SQLAlchemy 2.1.8.
 - `import repom` no longer fails with `ConfigHookLoadError` when the `CONFIG_HOOK`
   module imports `repom.alembic` (for example `from repom.alembic.constants import
   SCRIPT_LOCATION`). Commit 4370076 (repom#274) was the first affected revision:

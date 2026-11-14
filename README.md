@@ -34,10 +34,10 @@ PostgreSQL や Redis の機能が必要な場合は、利用する extras を指
 uv add "repom[postgres,postgres-async,redis] @ git+https://github.com/jjjun/repom.git"
 ```
 
-非同期 API（`AsyncBaseRepository`、`get_async_db_session()` など）を使う場合は、
-次のいずれかの extras が必要です。いずれも `sqlalchemy[asyncio]` を通じて
-greenlet をインストールします。extras なしの `repom` は greenlet を要求しないため、
-同期専用の利用では追加されません。
+`repom` は `sqlalchemy[asyncio]` を必須依存として宣言しているため、extras なしでも
+greenlet が常にインストールされます。非同期 API（`AsyncBaseRepository`、
+`get_async_db_session()` など）で使う非同期ドライバーは、次のいずれかの extras で
+追加します。
 
 | extra | 追加される非同期ドライバー |
 | --- | --- |

@@ -2,8 +2,13 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
 
-ASYNC_EXTRAS = ["async", "postgres-async", "async-all"]
+ASYNC_EXTRA_DRIVERS = {
+    "async": {"aiosqlite"},
+    "postgres-async": {"asyncpg"},
+    "async-all": {"aiosqlite", "asyncpg"},
+}
 
 
 def _load_project_metadata() -> dict:
@@ -12,24 +17,23 @@ def _load_project_metadata() -> dict:
         return tomllib.load(pyproject_file)["project"]
 
 
-def _core_sqlalchemy_specifier(dependencies: list[str]) -> str:
-    matches = [req for req in dependencies if req.startswith("sqlalchemy")]
-    assert len(matches) == 1, f"expected one sqlalchemy requirement, got {matches}"
-    return matches[0][len("sqlalchemy"):]
+def _requirement_names(requirements: list[str]) -> set[str]:
+    return {Requirement(req).name for req in requirements}
 
 
-@pytest.mark.parametrize("extra", ASYNC_EXTRAS)
-def test_async_extras_require_sqlalchemy_asyncio(extra):
-    project = _load_project_metadata()
-    core_specifier = _core_sqlalchemy_specifier(project["dependencies"])
-
-    extra_requirements = project["optional-dependencies"][extra]
-
-    assert f"sqlalchemy[asyncio]{core_specifier}" in extra_requirements
-
-
-def test_core_dependencies_do_not_require_greenlet():
+def test_core_dependencies_require_sqlalchemy_asyncio():
     dependencies = _load_project_metadata()["dependencies"]
 
-    assert not any(req.startswith("greenlet") for req in dependencies)
-    assert not any("[asyncio]" in req for req in dependencies)
+    sqlalchemy_requirements = [
+        Requirement(req) for req in dependencies if Requirement(req).name == "sqlalchemy"
+    ]
+
+    assert len(sqlalchemy_requirements) == 1
+    assert "asyncio" in sqlalchemy_requirements[0].extras
+
+
+@pytest.mark.parametrize("extra", ASYNC_EXTRA_DRIVERS)
+def test_async_extras_keep_their_drivers(extra):
+    extra_requirements = _load_project_metadata()["optional-dependencies"][extra]
+
+    assert ASYNC_EXTRA_DRIVERS[extra] <= _requirement_names(extra_requirements)

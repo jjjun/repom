@@ -25,6 +25,14 @@ jobs:
       - run: uv run ruff check --output-format=github .
       - run: uv run pytest
         if: ${{ !cancelled() }}
+      - name: Import repom without extras on SQLAlchemy 2.1
+        env:
+          BASEKIT_NO_SIDE_EFFECTS: "1"
+        run: >-
+          uv run --no-project --isolated
+          --with "sqlalchemy==2.1.8" --with "repom @ ."
+          python -c "import repom, repom.models, repom.repositories"
+        if: ${{ !cancelled() }}
 
   postgres-integration:
     runs-on: ubuntu-latest

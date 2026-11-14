@@ -15,8 +15,9 @@ uv sync --extra postgres
 ```
 
 非同期 API（asyncpg）も使う場合は `postgres-async` extra を追加してください。
-この extra は `sqlalchemy[asyncio]` を通じて非同期 API に必要な greenlet も
-インストールします。
+この extra が追加するのは非同期ドライバー（`asyncpg`）だけです。非同期 API に必要な
+greenlet は、repom の必須依存 `sqlalchemy[asyncio]` により extras なしでも
+インストールされます。
 
 ```bash
 uv sync --extra postgres --extra postgres-async
