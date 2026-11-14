@@ -10,6 +10,7 @@ in explicitly.
 import sqlite3
 
 import pytest
+from sqlalchemy.engine import URL
 
 from repom.config import config
 from repom.testing import (
@@ -158,7 +159,9 @@ def test_fixture_factories_reject_memory_marker_in_sqlite_filename(
         ("sqlite:///file:memdb?mode=memory&uri=true#", False),
         ("sqlite:///file:real%23.db?mode=memory&uri=true", False),
         ("sqlite:///file:real%3F.db?mode=memory&uri=true", False),
+        ("sqlite:///file:real%3f.db?mode=memory&uri=true", False),
         ("sqlite:///file:real%00.db?mode=memory&uri=true", False),
+        ("sqlite:///file:x%25y?mode=memory&uri=true", False),
         ("sqlite:///file:mem%20db?mode=memory&uri=true", False),
     ],
 )
@@ -226,7 +229,11 @@ _REJECTED_FILE_URI_TEMPLATES = [
     ),
     pytest.param("{driver}:///file:real%23.db?mode=memory&uri=true", id="escaped-hash"),
     pytest.param("{driver}:///file:real%3F.db?mode=memory&uri=true", id="escaped-question"),
+    pytest.param(
+        "{driver}:///file:real%3f.db?mode=memory&uri=true", id="escaped-question-lowercase"
+    ),
     pytest.param("{driver}:///file:real%00.db?mode=memory&uri=true", id="escaped-nul"),
+    pytest.param("{driver}:///file:real%25.db?mode=memory&uri=true", id="escaped-percent"),
 ]
 
 
@@ -269,6 +276,52 @@ def test_fixture_factories_reject_file_uris_that_hide_the_memory_mode(
 
     assert _read_sentinel(real_db) == ("preserved",)
     assert [path.name for path in tmp_path.iterdir()] == ["real.db"]
+
+
+# SQLAlchemy 2.1 percent-decodes url.database, so the escaped names above reach the
+# check in these decoded forms; 2.0 keeps the escapes. Feeding the decoded forms
+# through make_url makes the 2.1 behavior testable on either version (repom#301).
+_DECODED_FILE_URI_DATABASES = [
+    pytest.param("file:real?.db", id="question"),
+    pytest.param("file:x#y", id="hash"),
+    pytest.param("file:x%y", id="percent"),
+    pytest.param("file:mem db", id="space"),
+    pytest.param("file:x\x00y", id="nul"),
+    pytest.param("file:x\ty", id="tab"),
+    pytest.param("file:x\x7fy", id="delete"),
+]
+
+
+def _patch_make_url_with_decoded_database(monkeypatch, database):
+    url = URL.create(
+        "sqlite", database=database, query={"mode": "memory", "uri": "true"}
+    )
+    monkeypatch.setattr("repom.testing.make_url", lambda db_url: url)
+
+
+@pytest.mark.parametrize("database", _DECODED_FILE_URI_DATABASES)
+def test_in_memory_sqlite_url_classifier_rejects_decoded_database_names(
+    monkeypatch, database
+):
+    _patch_make_url_with_decoded_database(monkeypatch, database)
+
+    assert _is_in_memory_sqlite_url("sqlite:///decoded?mode=memory&uri=true") is False
+
+
+@pytest.mark.parametrize(
+    "create_fixtures", [create_test_fixtures, create_async_test_fixtures]
+)
+@pytest.mark.parametrize("database", _DECODED_FILE_URI_DATABASES)
+def test_fixture_factories_reject_decoded_file_uri_database_names(
+    monkeypatch, create_fixtures, database
+):
+    monkeypatch.setattr(config, "exec_env", "dev")
+    _patch_make_url_with_decoded_database(monkeypatch, database)
+
+    with pytest.raises(RuntimeError, match="Refusing to create test fixtures"):
+        create_fixtures(
+            db_url="sqlite:///decoded?mode=memory&uri=true", model_loader=lambda: None
+        )
 
 
 # Every form the memory check accepts. Connecting through the fixture must

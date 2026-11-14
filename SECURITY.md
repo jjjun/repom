@@ -551,12 +551,14 @@ Unless a difference is stated below, these contracts apply to both
   only `cache=private` or `cache=shared` may accompany the URI options.
   Malformed URLs, repeated or unsupported URI options, and `:memory:` in a
   filename or unrelated query value do not qualify. A `file:` URI whose name
-  contains `#` or `%` does not qualify either: SQLite ends the URI at `#` and
-  ignores the rest, so `mode=memory` after it never applies and the named file
-  is opened, and SQLite decodes `%` escapes in the name after the check has
-  run. `EXEC_ENV=test` permits
-  any URL. These checks cannot prove a URL names disposable data; consumers
-  must select a dedicated database.
+  contains `?`, `#`, `%`, whitespace, or a control character (NUL included) does
+  not qualify either: SQLite ends the URI at `?` or `#` and ignores the rest, so
+  `mode=memory` after it never applies and the named file is opened, and SQLite
+  decodes `%` escapes in the name after the check has run. SQLAlchemy 2.0 keeps
+  the escapes in the name and 2.1 decodes them; the check rejects the raw `%` on
+  2.0 and the decoded character on 2.1, so both refuse the same URLs.
+  `EXEC_ENV=test` permits any URL. These checks cannot prove a URL names
+  disposable data; consumers must select a dedicated database.
 - `bind_global_manager=True` temporarily binds the fixture engine to the
   corresponding manager; it does not bind every manager operation to the fixture
   transaction. The synchronous and asynchronous factories bind only their

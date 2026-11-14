@@ -64,8 +64,15 @@ def _is_in_memory_sqlite_url(db_url: str) -> bool:
     # "mode=memory" after it never reaches SQLite and the named file is opened.
     # SQLite also decodes "%" escapes in the path, so the name it opens can
     # differ from the one examined here; refuse both instead of reasoning
-    # about decoded names (repom#296).
-    if "#" in url.database or "%" in url.database:
+    # about decoded names (repom#296). SQLAlchemy 2.0 keeps the escapes in
+    # url.database, so the "%" is rejected; 2.1 decodes them, so the decoded
+    # "?" / "#" / "%" is rejected instead (a "?" ends the URI path before
+    # "mode=memory" just like "#"). Whitespace and control characters, NUL
+    # included, are rejected so both versions refuse the same URLs (repom#301).
+    if any(
+        char in "?#%" or char.isspace() or ord(char) < 0x20 or ord(char) == 0x7F
+        for char in url.database
+    ):
         return False
     if not set(query).issubset({"uri", "mode", "cache"}):
         return False

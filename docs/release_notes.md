@@ -239,6 +239,22 @@
 
 ### Fixed
 
+- The in-memory SQLite check behind `create_test_fixtures()` and
+  `create_async_test_fixtures()` no longer accepts a `file:` URI that opens an on-disk file
+  on SQLAlchemy 2.1 (repom#301). The repom#296 check rejected `#` and `%` in the database
+  name, which suited SQLAlchemy 2.0, where `make_url()` keeps percent escapes. 2.1
+  percent-decodes the name, so `sqlite:///file:real%3F.db?mode=memory&uri=true` reached the
+  check as `file:real?.db`, passed it outside `EXEC_ENV=test` without
+  `allow_destructive=True`, and the pysqlite dialect handed SQLite
+  `file:real?.db?mode=memory`. SQLite ends the URI path at the first `?`, ignores
+  `mode=memory`, and creates an on-disk file named `real`, which the session fixture's
+  teardown then dropped every `Base.metadata` table in. The check now rejects a `file:` URI
+  name containing `?`, `#`, `%`, whitespace, or a control character (including NUL), so
+  SQLAlchemy 2.0 and 2.1 refuse the same URLs: the raw `%` of any escape on 2.0, the decoded
+  character on 2.1. This also tightens SQLAlchemy 2.0: a name containing literal
+  whitespace or a control character, such as
+  `sqlite:///file:mem db?mode=memory&uri=true`, was accepted before and is now refused as
+  well. Every other accepted form is unchanged.
 - `secret_env_file()` now writes the env file passed to `docker exec --env-file` as UTF-8
   with LF line endings (repom#300). It used the locale encoding, so on Windows without
   UTF-8 mode a non-ASCII PostgreSQL current password or Redis old password was written in
