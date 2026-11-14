@@ -87,7 +87,7 @@ def test_insert_for_dialect_resolves_connection(db_engine):
 def test_insert_for_dialect_resolves_postgresql_connection():
     engine = Engine(
         StaticPool(creator=lambda: sqlite3.connect(':memory:')),
-        postgresql.dialect(dbapi=sqlite3),
+        postgresql.dialect(),
         make_url('postgresql://'),
     )
     try:

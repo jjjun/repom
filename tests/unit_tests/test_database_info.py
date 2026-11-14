@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
+from sqlalchemy.engine import make_url
 
 from repom.diagnostics import database_info
 import repom.database as database_module
@@ -180,9 +181,12 @@ def test_collect_database_info_sync_sqlite_uri_is_unsupported(tmp_path):
         info = collect_database_info_sync()
 
     assert info.backend == "sqlite"
-    assert info.target.startswith("sqlite:///file:relative.db?")
-    assert "mode=memory" in info.target
-    assert "uri=true" in info.target
+    # SQLAlchemy 2.1 renders the ':' in the database name as '%3A', so compare
+    # the parsed target instead of its text.
+    target = make_url(info.target)
+    assert target.database == "file:relative.db"
+    assert target.query["mode"] == "memory"
+    assert target.query["uri"] == "true"
     assert info.size_bytes is None
     assert info.size_text == "N/A (unsupported)"
     assert info.status == "unsupported"

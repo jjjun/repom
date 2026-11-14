@@ -34,6 +34,26 @@ jobs:
           python -c "import repom, repom.models, repom.repositories"
         if: ${{ !cancelled() }}
 
+  # uv.lock pins SQLAlchemy 2.1; repom still supports 2.0, so run the suite on the
+  # newest 2.0 release too, without a second lock.
+  sqlalchemy-2-0:
+    runs-on: ubuntu-latest
+    env:
+      CONFIG_HOOK: repom.config_hook:hook_config
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv
+      - run: uv sync --all-extras --dev --locked
+      - name: Check that SQLAlchemy 2.0 is the version under test
+        run: >-
+          uv run --locked --with "sqlalchemy[asyncio]<2.1" python -c
+          "import sqlalchemy; assert sqlalchemy.__version__.startswith('2.0.'), sqlalchemy.__version__"
+      - run: uv run --locked --with "sqlalchemy[asyncio]<2.1" pytest
+
   postgres-integration:
     runs-on: ubuntu-latest
     services:

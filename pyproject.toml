@@ -56,7 +56,9 @@ redis_rotate_password = "repom.redis.manage:main_rotate_password"
 dev = [
   "pip-audit>=2.9,<3",
   "pytest>=8.4.2,<10.0.0",
-  "pytest-sqlalchemy>=0.3.0,<0.4.0",
+  # Used by the json_array_length registry regression in test_listjson.py; the
+  # test skips silently when it is not installed. >=0.43.0 loads on SQLAlchemy 2.1.
+  "sqlalchemy-utils>=0.43.0,<0.44.0",
   "pytest-benchmark>=5.1.0,<6.0.0",
   "pytest-asyncio>=0.24.0,<2.0.0",
   "pyyaml>=6.0,<7.0",

@@ -136,9 +136,10 @@ SQLite の file path 変数は `SQLITE_DB_PATH` と `SQLITE_DB_FILE` です。�
 `SQLITE_DB_PATH` はディレクトリ設定なので絶対 path も指定できます。`SQLITE_DB_FILE`（`sqlite.db_file`）と、
 `SQLITE_DB_FILE` を指定しないときにファイル名の元になる `db_name` は、ディレクトリを指さない単なるファイル名に
 限ります。path separator（`/` `\`）、`..`、`:`（Windows の drive 指定や `file:` URI）、`?`、`#`、NUL を含む
-制御文字を含む値は `ValueError` で拒否されます。スペースと非 ASCII 文字は使えます。`SQLITE_DB_PATH` に `?` を含めると
-URL として読み戻せないため、`db_url` を作る時点で `ValueError` になります。PostgreSQL の DB 名にはこの検査は
-適用されません。
+制御文字を含む値は `ValueError` で拒否されます。スペースと非 ASCII 文字は使えます。SQLAlchemy 2.0 では
+`SQLITE_DB_PATH` に `?` を含めると URL として読み戻せないため、`db_url` を作る時点で `ValueError` になります
+（SQLAlchemy 2.1 は `?` を `%3F` にエンコードするためパスがそのまま読み戻され、`ValueError` にはなりません）。
+PostgreSQL の DB 名にはこの検査は適用されません。
 
 `POSTGRES_EXPOSE_TO_LAN` と `PGADMIN_EXPOSE_TO_LAN` が `true` の場合、生成した container port は
 `0.0.0.0` に bind されます。既定では `127.0.0.1` のみへ公開されます。

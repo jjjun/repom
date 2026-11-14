@@ -365,9 +365,14 @@ Unless a difference is stated below, these contracts apply to both
   non-empty and free of path separators, `..`, `:` (a Windows drive prefix or a
   `file:` URI), `?`, `#`, and control characters including NUL; spaces and
   non-ASCII characters are allowed, and an absolute `db_path` is accepted as a
-  directory setting. SQLAlchemy does not percent-encode the SQLite database
+  directory setting. SQLAlchemy 2.0 does not percent-encode the SQLite database
   component, so the generated URL is read back with `make_url()` and rejected
   when the path would not survive unchanged (for example a `?` in `db_path`).
+  SQLAlchemy 2.1 percent-encodes the component (`?` becomes `%3F`), so that
+  path reads back intact and is accepted there; the check still applies on 2.0.
+  `test_db_url_rejects_db_path_that_would_read_back_as_a_query` expects the
+  `ValueError` on 2.0 and the intact read-back on 2.1; its 2.0 branch runs only
+  in the CI job that overlays SQLAlchemy 2.0 on the 2.1 lock.
   Tests: `test_db_url_rejects_unsafe_db_name`,
   `test_db_file_setter_rejects_unsafe_names`,
   `test_apply_sqlite_env_overrides_rejects_unsafe_db_file`, and

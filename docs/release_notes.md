@@ -521,6 +521,30 @@
 
 ### Changed
 
+- `uv.lock` now pins SQLAlchemy 2.1.8 (repom#303). The supported range is unchanged
+  (`sqlalchemy[asyncio]>=2.0.49,<3.0.0`) and SQLAlchemy 2.0 stays supported: a CI job
+  runs the whole suite on the newest 2.0 release by overlaying `sqlalchemy[asyncio]<2.1`
+  on the lock, because a downstream consumer still depends on a package that caps
+  SQLAlchemy below 2.1. Greenlet is installed with a plain `repom` install on both
+  versions and `import repom` needs no extras (repom#302).
+  SQLAlchemy 2.1 percent-decodes the database part of a URL and percent-encodes it when
+  rendering, so `RepomConfig.db_url`, `safe_db_url()`, and the database diagnostics target
+  print `sqlite:///C%3A%5Cdata%5Capp.sqlite3` or `postgresql://u:***@h/db%23name` where
+  2.0 printed the text unchanged. The URL reads back to the same database, and secret
+  masking is unchanged: every secret in the tested URL forms stays masked on 2.1. Code
+  that compares these strings should compare `make_url(url).database` and the other parsed
+  parts instead. `sqlite.db_path` containing `?` still raises `ValueError` on 2.0; on 2.1
+  it is rendered as `%3F` and reads back intact, so it is accepted.
+- `pytest-sqlalchemy` is removed from the development dependencies: no repom test uses
+  its fixtures, and it imports `sqlalchemy_utils` when pytest starts, which failed on
+  SQLAlchemy 2.1 with the previously locked 0.42.1. `sqlalchemy-utils>=0.43.0,<0.44.0`
+  is now an explicit development dependency because the `ListJSON` `json_array_length`
+  regression test skips without it. Consumers that copied `pytest-sqlalchemy` from
+  repom's dev group can drop it when they do not use its fixtures.
+- `CustomJSON.python_type` now raises `NotImplementedError` explicitly. SQLAlchemy 2.1
+  makes `JSON.python_type` answer `object` instead of raising, which would have made
+  `CustomJSON` look like a declared type to schema generators; the repom#256 behavior,
+  undeclared because the column accepts any JSON value, now holds on both versions.
 - Async `get_or_create()` now refreshes internally managed results after commit
   so created, existing, and unique-conflict recovery rows remain readable after
   the session closes.

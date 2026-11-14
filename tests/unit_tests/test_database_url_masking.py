@@ -3,8 +3,33 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from sqlalchemy.engine import make_url
 
 from repom import database
+
+
+def _url_parts(url):
+    parsed = make_url(url)
+    return (
+        parsed.drivername,
+        parsed.username,
+        parsed.password,
+        parsed.host,
+        parsed.port,
+        parsed.database,
+        dict(parsed.query),
+    )
+
+
+def assert_same_url(result, expected):
+    """Compare parsed URL parts instead of the rendered text.
+
+    SQLAlchemy 2.1 percent-encodes the database name when it renders a URL
+    (``#`` as ``%23``, ``:memory:`` as ``%3Amemory%3A``) where 2.0 prints it
+    unchanged. Both read back as the same database, so the masked userinfo
+    password and query values are still checked exactly.
+    """
+    assert _url_parts(result) == _url_parts(expected)
 
 
 @pytest.mark.parametrize(
@@ -18,7 +43,7 @@ from repom import database
     ],
 )
 def test_safe_db_url_handles_urls_without_password(url, expected):
-    assert database.safe_db_url(url) == expected
+    assert_same_url(database.safe_db_url(url), expected)
 
 
 def test_safe_db_url_handles_malformed_values():
@@ -155,8 +180,8 @@ def test_safe_db_url_masks_secret_query_after_hash_in_postgresql_url(
 ):
     result = database.safe_db_url(template.format(driver=driver, key=key))
 
-    assert result == expected.format(driver=driver, key=key)
     assert "known-secret" not in result
+    assert_same_url(result, expected.format(driver=driver, key=key))
 
 
 @pytest.mark.parametrize("key", _SECRET_KEYS)
@@ -166,8 +191,8 @@ def test_safe_db_url_masks_secret_query_after_hash_in_sqlite_url(driver, key):
 
     result = database.safe_db_url(url)
 
-    assert result == f"{driver}:///data#v1.sqlite3?{key}=***"
     assert "known-secret" not in result
+    assert_same_url(result, f"{driver}:///data#v1.sqlite3?{key}=***")
 
 
 @pytest.mark.parametrize(
@@ -184,9 +209,9 @@ def test_safe_db_url_masks_secret_query_after_hash_in_sqlite_url(driver, key):
 def test_safe_db_url_masks_secret_query_variants_after_hash(query, expected_query):
     result = database.safe_db_url(f"postgresql://app:pw@h/my#db?{query}")
 
-    assert result == f"postgresql://app:***@h/my#db?{expected_query}"
     assert "known-secret" not in result
     assert "known-dsn" not in result
+    assert_same_url(result, f"postgresql://app:***@h/my#db?{expected_query}")
 
 
 def test_safe_db_url_masks_secret_query_in_hostless_url():
@@ -208,7 +233,9 @@ def test_safe_db_url_masks_hash_url_with_ambiguous_credentials():
 def test_safe_db_url_keeps_hash_in_names_without_secret_query():
     url = "postgresql://app:pw@h#x/my#db?sslmode=require"
 
-    assert database.safe_db_url(url) == "postgresql://app:***@h#x/my#db?sslmode=require"
+    assert_same_url(
+        database.safe_db_url(url), "postgresql://app:***@h#x/my#db?sslmode=require"
+    )
 
 
 def test_convert_to_async_uri_error_masks_secret_query_after_hash():
@@ -217,8 +244,10 @@ def test_convert_to_async_uri_error_masks_secret_query_after_hash():
     with pytest.raises(ValueError) as excinfo:
         database.convert_to_async_uri(url)
 
-    assert "known-secret" not in str(excinfo.value)
-    assert "app#v1?password=***" in str(excinfo.value)
+    message = str(excinfo.value)
+    assert "known-secret" not in message
+    # SQLAlchemy 2.1 renders the '#' in the database name as '%23'.
+    assert "app#v1?password=***" in message or "app%23v1?password=***" in message
 
 
 def test_safe_db_url_hides_secrets_when_url_is_malformed():

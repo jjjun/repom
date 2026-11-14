@@ -11,6 +11,13 @@ class CustomJSON(TypeDecorator):
     impl = JSON
     cache_ok = True
 
+    @property
+    def python_type(self):
+        # The column holds any JSON value, so no single Python type applies.
+        # SQLAlchemy 2.1 answers ``object`` here where 2.0 raises; raise on both
+        # so consumers keep treating the type as undeclared.
+        raise NotImplementedError("CustomJSON accepts arbitrary JSON values")
+
     def bind_processor(self, dialect) -> Optional[Callable[[Any], Any]]:
         process = self.impl.bind_processor(dialect)
 

@@ -10,7 +10,7 @@
 - **Package Manager**: uv
 - **Build Backend**: hatchling
 - **Shared foundations**: basekit (config, discovery, logging, and Docker utilities)
-- **Database ORM**: SQLAlchemy 2.0+
+- **Database ORM**: SQLAlchemy 2.0 and 2.1 (`uv.lock` pins 2.1; CI also runs the suite on 2.0)
 - **Migration Tool**: Alembic
 - **Testing Framework**: pytest (unit, behavior, and integration tests)
 - **Linting**: Ruff
@@ -251,7 +251,9 @@ when detailed stdout and DEBUG logs are needed.
 
 - **CI**: `.github/workflows/test.yml` runs on pushes to `main`, pull requests,
   and manual dispatch; it runs `uv sync --all-extras --dev --locked`, Ruff, and
-  pytest, plus a PostgreSQL integration job using `postgres:16-alpine` on port
+  pytest, a job that runs pytest on SQLAlchemy 2.0 with
+  `uv run --locked --with "sqlalchemy[asyncio]<2.1" pytest`, plus a PostgreSQL
+  integration job using `postgres:16-alpine` on port
   5433. `.github/workflows/dependency-audit.yml` runs `pip-audit` weekly and
   when dependency lock files change; `.github/dependabot.yml` checks GitHub
   Actions weekly. Actions are
@@ -283,7 +285,7 @@ External projects can use the shared fixture factories. See the
 - **alembic**: Database migration management
 - **pydantic**: Data validation and serialization
 - **inflect**: Pluralization utilities
-- **pytest**, **pytest-sqlalchemy**, **pytest-benchmark**, and **pytest-asyncio**: Development test tools
+- **pytest**, **pytest-benchmark**, and **pytest-asyncio**: Development test tools
 - **ruff**: Development linting
 
 See [`dependency-groups`](pyproject.toml) in `pyproject.toml` for development

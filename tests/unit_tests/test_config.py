@@ -10,6 +10,19 @@ from sqlalchemy.engine import make_url
 from pathlib import Path
 
 
+def assert_sqlite_file_url(url, path):
+    """Check that ``url`` is a query-free SQLite URL for ``path``.
+
+    SQLAlchemy 2.1 percent-encodes the database part when it renders a URL
+    (a Windows drive colon becomes ``%3A``) where 2.0 prints the path
+    unchanged, so compare what the URL reads back as instead of its text.
+    """
+    parsed = make_url(url)
+    assert parsed.drivername == "sqlite"
+    assert parsed.database == str(path)
+    assert parsed.query == {}
+
+
 @pytest.fixture()
 def config_factory(tmp_path):
     """Create a ``RepomConfig`` bound to a temporary root path."""
@@ -80,8 +93,9 @@ def test_db_url_defaults_to_sqlite_uri(config_factory):
 
     config = config_factory()
 
-    expected = f"sqlite:///{Path(config.sqlite.db_path) / config.sqlite.db_file}"
-    assert config.db_url == expected
+    assert_sqlite_file_url(
+        config.db_url, Path(config.sqlite.db_path) / config.sqlite.db_file
+    )
 
     override = "sqlite:////tmp/custom.sqlite3"
     config.db_url = override
@@ -139,19 +153,24 @@ def test_db_url_returns_file_based_when_in_memory_disabled(config_factory):
     config = config_factory(exec_env="test")
 
     config.sqlite.use_in_memory_for_tests = False
-    expected = f"sqlite:///{Path(config.sqlite.db_path) / config.sqlite.db_file}"
-    assert config.db_url == expected
+    assert_sqlite_file_url(
+        config.db_url, Path(config.sqlite.db_path) / config.sqlite.db_file
+    )
 
 
 def test_db_url_returns_file_based_for_non_test_env(config_factory):
     """``db_url`` returns file-based URL for non-test environments regardless of use_in_memory_db_for_tests."""
     # dev 環境
     config_dev = config_factory(exec_env="dev")
-    assert config_dev.db_url == f"sqlite:///{Path(config_dev.sqlite.db_path) / config_dev.sqlite.db_file}"
+    assert_sqlite_file_url(
+        config_dev.db_url, Path(config_dev.sqlite.db_path) / config_dev.sqlite.db_file
+    )
 
     # prod 環境
     config_prod = config_factory(exec_env="prod")
-    assert config_prod.db_url == f"sqlite:///{Path(config_prod.sqlite.db_path) / config_prod.sqlite.db_file}"
+    assert_sqlite_file_url(
+        config_prod.db_url, Path(config_prod.sqlite.db_path) / config_prod.sqlite.db_file
+    )
 
 
 @pytest.mark.parametrize(
@@ -169,8 +188,7 @@ def test_db_url_default_file_names_resolve_to_the_same_files(
     config.sqlite.use_in_memory_for_tests = False
 
     expected_path = tmp_path / "data" / "repom" / file_name
-    assert config.db_url == f"sqlite:///{expected_path}"
-    assert make_url(config.db_url).database == str(expected_path)
+    assert_sqlite_file_url(config.db_url, expected_path)
     assert safe_db_url(config.db_url) == config.db_url
 
 
@@ -223,7 +241,13 @@ def test_db_url_rejects_db_path_that_would_read_back_as_a_query(
     config_factory, tmp_path
 ):
     config = config_factory(exec_env="dev")
-    config.sqlite.db_path = str(tmp_path / "dir?uri=true")
+    db_path = tmp_path / "dir?uri=true"
+    config.sqlite.db_path = str(db_path)
+
+    if make_url("sqlite:///a%3Fb").database == "a?b":
+        # SQLAlchemy 2.1 renders the '?' as '%3F', so the path reads back intact.
+        assert_sqlite_file_url(config.db_url, db_path / "repom_dev.sqlite3")
+        return
 
     with pytest.raises(ValueError, match="URL round trip"):
         config.db_url
@@ -335,7 +359,9 @@ def test_unknown_exec_env_uses_dev_database_defaults_and_warns_once(
     with caplog.at_level(logging.WARNING, logger="repom.exec_env"):
         assert config.postgres_db == "myapp_dev"
         assert config.sqlite.get_default_db_file(exec_env) == "myapp_dev.sqlite3"
-        assert config.db_url == f"sqlite:///{Path(config.sqlite.db_path) / 'myapp_dev.sqlite3'}"
+        assert_sqlite_file_url(
+            config.db_url, Path(config.sqlite.db_path) / "myapp_dev.sqlite3"
+        )
         assert config.postgres_db == "myapp_dev"
 
     warnings = [record for record in caplog.records if record.levelno == logging.WARNING]

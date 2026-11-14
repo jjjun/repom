@@ -68,9 +68,11 @@ def _postgres_url_sslmode(query: Mapping[str, object]) -> Optional[str]:
 def _sqlite_file_url(database: str) -> str:
     """Render a file-based SQLite URL, refusing a path a URL cannot carry.
 
-    SQLAlchemy does not percent-encode the SQLite database component, so a
+    SQLAlchemy 2.0 does not percent-encode the SQLite database component, so a
     ``?`` in the directory would be read back as the start of a query string
-    (for example ``uri=true``) instead of as part of the file path.
+    (for example ``uri=true``) instead of as part of the file path. SQLAlchemy
+    2.1 renders it as ``%3F`` and reads it back intact, so the check passes
+    there.
     """
     rendered = URL.create("sqlite", database=database).render_as_string(
         hide_password=False
@@ -574,8 +576,10 @@ class RepomConfig(Config):
             ファイル名は db_name から作られるか sqlite.db_file で指定され、
             パス区切り・..・:・?・#・制御文字を含む場合は ValueError になります
             （スペースと非 ASCII 文字は使用可）。URL は sqlalchemy.engine.URL で
-            組み立てた後に make_url で読み戻して確認するため、sqlite.db_path に
-            ? を含むと ValueError になります。絶対パスの db_path は使用できます。
+            組み立てた後に make_url で読み戻して確認するため、SQLAlchemy 2.0 では
+            sqlite.db_path に ? を含むと ValueError になります（2.1 は ? を %3F に
+            エンコードするためパスがそのまま読み戻され、ValueError にはなりません）。
+            絶対パスの db_path は使用できます。
 
         テスト環境 (exec_env == 'test') かつ use_in_memory_db_for_tests == True の場合、
         SQLite は自動的に in-memory を使用します。
