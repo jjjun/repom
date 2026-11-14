@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import getpass
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -69,13 +70,20 @@ def reject_default_credential(value: str | None, *, env_var: str) -> str:
 
 CommandRunner = Callable[..., subprocess.CompletedProcess]
 
+# docker/cli rejects an env file that is not valid UTF-8 and echoes the whole
+# offending line as a decimal byte list, which a literal secret match cannot see.
+_INVALID_ENV_FILE_BYTES = re.compile(r"(invalid utf8 bytes at line \d+: )\[[\d ]*\]")
+
 
 def mask_secret(text: str, secrets: Iterable[str | None]) -> str:
     """Mask all non-empty secrets in text."""
 
     masked = text
-    for secret in sorted(filter(None, secrets), key=len, reverse=True):
+    secrets = sorted(filter(None, secrets), key=len, reverse=True)
+    for secret in secrets:
         masked = masked.replace(secret, "***")
+    if secrets:
+        masked = _INVALID_ENV_FILE_BYTES.sub(r"\1[***]", masked)
     return masked
 
 
@@ -98,6 +106,11 @@ def secret_env_file(
     when they contain a newline, carriage return, or NUL byte, since either
     could add a second line (an extra variable, or a bare name that docker
     copies from the host environment) to the env file.
+
+    The file is always UTF-8 with LF line endings, whatever the locale
+    encoding, because ``docker exec --env-file`` rejects other encodings. A
+    value that cannot be encoded as UTF-8 (a lone surrogate) raises
+    ``ValueError`` without echoing the offending character.
     """
 
     if not secret:
@@ -110,8 +123,13 @@ def secret_env_file(
     fd, path = tempfile.mkstemp(prefix=prefix, suffix=".env")
     try:
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
-        with os.fdopen(fd, "w") as handle:
-            handle.write(f"{env_var}={secret}\n")
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            try:
+                handle.write(f"{env_var}={secret}\n")
+            except UnicodeEncodeError:
+                raise ValueError(
+                    f"{env_var} cannot be encoded as UTF-8 for the env file"
+                ) from None
         yield path
     finally:
         try:

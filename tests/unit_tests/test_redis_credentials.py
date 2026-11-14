@@ -21,6 +21,7 @@ from repom.redis.manage import (
     rotate_password,
     rotate_redis_password_cli,
 )
+from tests.pytest_helpers import legacy_windows_text_defaults
 
 
 def test_redis_cli_command_without_env_file():
@@ -280,6 +281,52 @@ def test_redis_rotation_password_not_in_argv():
         assert "sentinel-new-secret" not in joined
     assert "sentinel-old-secret" not in " ".join(result.command)
     assert "sentinel-new-secret" not in " ".join(result.command)
+
+
+def test_redis_rotation_env_file_is_utf8_for_a_non_ascii_old_password():
+    captured = {}
+
+    def fake_runner(command, **kwargs):
+        env_file = command[command.index("--env-file") + 1]
+        with open(env_file, "rb") as handle:
+            captured["contents"] = handle.read()
+        return MagicMock(returncode=0, stdout="OK\n", stderr="")
+
+    plan = RedisCredentialRotationPlan(
+        old_password="dummy-パス",
+        new_password="new-secret",
+        container_name="repom_redis",
+    )
+
+    with legacy_windows_text_defaults():
+        rotate_redis_password(plan, dry_run=False, runner=fake_runner)
+
+    assert captured["contents"] == "REDISCLI_AUTH=dummy-パス\n".encode("utf-8")
+
+
+def test_redis_rotation_failure_masks_the_byte_list_docker_prints_for_an_invalid_env_file():
+    runner = MagicMock(
+        return_value=MagicMock(
+            returncode=1,
+            stdout="",
+            stderr=(
+                "env file /tmp/repom-redis-auth-x.env contains invalid utf8 "
+                "bytes at line 1: [82 69 68 73 83 67 76 73 95 65 85 84 72 61 100 "
+                "117 109 109 121 45 131 112 131 88]\n"
+            ),
+        )
+    )
+    plan = RedisCredentialRotationPlan(
+        old_password="dummy-パス",
+        new_password="new-secret",
+        container_name="repom_redis",
+    )
+
+    with pytest.raises(RedisCredentialRotationError) as excinfo:
+        rotate_redis_password(plan, dry_run=False, runner=runner)
+
+    assert "131 112" not in str(excinfo.value)
+    assert "invalid utf8 bytes at line 1: [***]" in str(excinfo.value)
 
 
 def test_redis_rotation_failure_masks_password():

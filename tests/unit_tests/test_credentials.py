@@ -1,6 +1,7 @@
 from io import StringIO
 import os
 import stat
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,6 +14,7 @@ from repom.credentials import (
     run_masked_command,
     secret_env_file,
 )
+from tests.pytest_helpers import legacy_windows_text_defaults
 
 
 def test_resolve_password_prefers_explicit_password():
@@ -135,6 +137,26 @@ def test_mask_secret_ignores_falsy_secrets():
     assert result == "value=***"
 
 
+def test_mask_secret_masks_the_byte_list_docker_prints_for_an_invalid_env_file():
+    stderr = (
+        "env file /tmp/repom-postgres-auth-x.env contains invalid utf8 bytes at "
+        "line 1: [80 71 80 65 83 83 87 79 82 68 61 100 117 109 109 121 45 131 112 131 88]"
+    )
+
+    result = mask_secret(stderr, ("dummy-パス",))
+
+    assert result == (
+        "env file /tmp/repom-postgres-auth-x.env contains invalid utf8 bytes at "
+        "line 1: [***]"
+    )
+
+
+def test_mask_secret_leaves_a_byte_list_alone_without_secrets():
+    text = "invalid utf8 bytes at line 1: [80 71]"
+
+    assert mask_secret(text, (None, "")) == text
+
+
 def test_secret_env_file_yields_none_for_a_falsy_secret():
     with secret_env_file("PGPASSWORD", None) as path:
         assert path is None
@@ -148,6 +170,41 @@ def test_secret_env_file_writes_a_file_and_removes_it_afterward():
             assert handle.read() == "PGPASSWORD=sentinel-secret\n"
 
     assert not os.path.exists(path)
+
+
+@pytest.mark.parametrize(
+    "secret",
+    ["sentinel-secret", "dummy-パス", "dummy-päss"],
+)
+def test_secret_env_file_writes_utf8_with_lf_whatever_the_locale_encoding(secret):
+    with legacy_windows_text_defaults():
+        with secret_env_file("PGPASSWORD", secret, prefix="repom-test-") as path:
+            with open(path, "rb") as handle:
+                contents = handle.read()
+
+    assert contents == f"PGPASSWORD={secret}\n".encode("utf-8")
+    assert b"\r" not in contents
+
+
+def test_secret_env_file_rejects_an_unencodable_secret_without_echoing_it():
+    created = []
+    real_mkstemp = tempfile.mkstemp
+
+    def recording_mkstemp(*args, **kwargs):
+        fd, path = real_mkstemp(*args, **kwargs)
+        created.append(path)
+        return fd, path
+
+    with patch("repom.credentials.tempfile.mkstemp", side_effect=recording_mkstemp):
+        with pytest.raises(ValueError, match="PGPASSWORD") as excinfo:
+            with secret_env_file("PGPASSWORD", "dummy-\udce4-secret"):
+                pass
+
+    assert "dummy" not in str(excinfo.value)
+    assert "udce4" not in str(excinfo.value)
+    assert excinfo.value.__suppress_context__ is True
+    assert len(created) == 1
+    assert not os.path.exists(created[0])
 
 
 @pytest.mark.parametrize("character", ["\n", "\r", "\x00"])
@@ -230,3 +287,29 @@ def test_run_masked_command_raises_masked_error_type_on_failure():
     assert "sentinel-secret" not in str(excinfo.value)
     assert "***" in str(excinfo.value)
     assert runner.call_args.kwargs["input"] == "payload"
+
+
+def test_run_masked_command_masks_the_byte_list_docker_prints_for_an_invalid_env_file():
+    runner = MagicMock(
+        return_value=MagicMock(
+            returncode=1,
+            stdout="",
+            stderr=(
+                "env file /tmp/repom-postgres-auth-x.env contains invalid utf8 "
+                "bytes at line 1: [80 71 80 65 83 83 87 79 82 68 61 100 117 109 "
+                "109 121 45 131 112 131 88]\n"
+            ),
+        )
+    )
+
+    with pytest.raises(RuntimeError) as excinfo:
+        run_masked_command(
+            ("docker", "exec", "--env-file", "/tmp/repom-postgres-auth-x.env"),
+            runner=runner,
+            secrets=("dummy-パス",),
+            error_type=RuntimeError,
+            action="test command",
+        )
+
+    assert "131 112" not in str(excinfo.value)
+    assert "invalid utf8 bytes at line 1: [***]" in str(excinfo.value)

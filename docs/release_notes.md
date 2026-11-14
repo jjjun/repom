@@ -230,6 +230,14 @@
 
 ### Fixed
 
+- `secret_env_file()` now writes the env file passed to `docker exec --env-file` as UTF-8
+  with LF line endings (repom#300). It used the locale encoding, so on Windows without
+  UTF-8 mode a non-ASCII PostgreSQL current password or Redis old password was written in
+  the ANSI code page (or raised `UnicodeEncodeError`) and PostgreSQL / Redis credential
+  rotation failed before any live change. Docker 20.10.16 reports such a file by printing
+  the whole `PGPASSWORD=...` / `REDISCLI_AUTH=...` line as a decimal byte list, which
+  `mask_secret()` did not match; it now redacts that list. A secret that cannot be encoded
+  as UTF-8 (a lone surrogate) raises `ValueError` without echoing the character.
 - Sync and async `bulk_update()` no longer let a NUL byte through under another spelling
   of a column key (repom#298). The NUL check reads values by ORM attribute key, but
   `update().values()` also resolves the database column name when it differs from the

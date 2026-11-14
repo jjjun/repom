@@ -668,10 +668,19 @@ Unless a difference is stated below, these contracts apply to both
   carriage return, or NUL byte with `ValueError` before it creates the file, and
   the PostgreSQL and Redis rotation functions apply the same check to the
   current / old password before any command is built or run, in dry-run and
-  execute modes. Characters outside those three are not checked. Tests:
+  execute modes. Characters outside those three are not checked. The file is
+  written as UTF-8 with LF line endings whatever the locale encoding, because
+  `docker exec --env-file` rejects other encodings. A secret that cannot be
+  encoded as UTF-8 (a lone surrogate) raises `ValueError` without echoing it.
+  Docker 20.10.16 reports an env file that is not valid UTF-8 by printing the
+  whole line as a decimal byte list, so `mask_secret()` redacts that list when
+  it masks at least one secret; other Docker versions were not checked. Tests:
   `test_secret_env_file_rejects_control_characters_in_the_secret`,
   `test_secret_env_file_rejects_control_characters_in_the_variable_name`,
   `test_secret_env_file_error_does_not_echo_the_secret`,
+  `test_secret_env_file_writes_utf8_with_lf_whatever_the_locale_encoding`,
+  `test_secret_env_file_rejects_an_unencodable_secret_without_echoing_it`,
+  `test_run_masked_command_masks_the_byte_list_docker_prints_for_an_invalid_env_file`,
   `test_postgres_rotation_rejects_control_characters_in_current_password`, and
   `test_redis_rotation_rejects_control_characters_in_old_password`. The pgAdmin
   update command carries its password in argv; Redis rotation's explicit

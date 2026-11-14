@@ -1,5 +1,7 @@
 import os
+from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -60,3 +62,23 @@ def read_standard_sql_literal(sql, start):
             index += 1
         value.append(char)
         index += 1
+
+
+@contextmanager
+def legacy_windows_text_defaults():
+    """Make text-mode ``os.fdopen`` default to cp932 and CRLF.
+
+    This is what a file opened without ``encoding`` / ``newline`` gets on a
+    Japanese Windows host, so a test using it does not depend on the host
+    locale. Explicit ``encoding`` / ``newline`` arguments are kept.
+    """
+    real_fdopen = os.fdopen
+
+    def fdopen(fd, mode="r", *args, **kwargs):
+        if "b" not in mode:
+            kwargs.setdefault("encoding", "cp932")
+            kwargs.setdefault("newline", "\r\n")
+        return real_fdopen(fd, mode, *args, **kwargs)
+
+    with patch("os.fdopen", side_effect=fdopen):
+        yield

@@ -30,7 +30,7 @@ from repom.postgres.credentials import (
     main_pgadmin,
     main_postgres,
 )
-from tests.pytest_helpers import read_standard_sql_literal
+from tests.pytest_helpers import legacy_windows_text_defaults, read_standard_sql_literal
 
 
 def _configure_temp_secret_generation(monkeypatch, tmp_path):
@@ -417,6 +417,62 @@ def test_postgres_rotation_env_file_holds_pgpassword_only_during_the_call(
     assert captured["exists_during_call"] is True
     assert captured["contents"] == "PGPASSWORD=old-secret\n"
     assert not os.path.exists(captured["env_file"])
+
+
+def test_postgres_rotation_env_file_is_utf8_for_a_non_ascii_current_password(
+    monkeypatch, tmp_path
+):
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
+    captured = {}
+
+    def fake_runner(command, **kwargs):
+        env_file = command[command.index("--env-file") + 1]
+        with open(env_file, "rb") as handle:
+            captured["contents"] = handle.read()
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="dummy-パス",
+        new_password="new-secret",
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    with legacy_windows_text_defaults():
+        rotate_postgres_credentials(plan, dry_run=False, runner=fake_runner)
+
+    assert captured["contents"] == "PGPASSWORD=dummy-パス\n".encode("utf-8")
+
+
+def test_postgres_rotation_failure_masks_the_byte_list_docker_prints_for_an_invalid_env_file(
+    monkeypatch, tmp_path
+):
+    _configure_temp_secret_generation(monkeypatch, tmp_path)
+    runner = MagicMock(
+        return_value=MagicMock(
+            returncode=1,
+            stdout="",
+            stderr=(
+                "env file /tmp/repom-postgres-auth-x.env contains invalid utf8 "
+                "bytes at line 1: [80 71 80 65 83 83 87 79 82 68 61 100 117 109 "
+                "109 121 45 131 112 131 88]\n"
+            ),
+        )
+    )
+    plan = PostgresCredentialRotationPlan(
+        current_user="repom",
+        current_password="dummy-パス",
+        new_password="new-secret",
+        databases=(),
+        container_name="repom_postgres",
+    )
+
+    with pytest.raises(PostgresCredentialRotationError) as excinfo:
+        rotate_postgres_credentials(plan, dry_run=False, runner=runner)
+
+    assert "131 112" not in str(excinfo.value)
+    assert "invalid utf8 bytes at line 1: [***]" in str(excinfo.value)
 
 
 def test_postgres_grant_failure_leaves_credentials_and_env_untouched(
