@@ -143,6 +143,8 @@ count = await repo.count(params=params, filters=[Task.priority == "high"])
 これらの式は、該当する `filter_by=` および `ids=` の条件と AND で結合されます。
 `bulk_update()` は既定で論理削除済みの行を対象から除き、含めるには
 `include_deleted=True` を指定します。
+`bulk_update()` の更新辞書のキーはマップされたカラム属性名に限ります。DB のカラム名、
+synonym、hybrid 属性などは `TypeError` を送出します。
 `bulk_permanent_delete()` は、論理削除対応モデルも含め、常に一致する行を物理削除します。
 `get_or_create(lookup, defaults=None)` は `(instance, created)` を返し、一意キーへの同時挿入で
 別の処理が先行した場合は、その行を再検索して返します。

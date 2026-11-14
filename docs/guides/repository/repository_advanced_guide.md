@@ -294,6 +294,9 @@ await repo.get_by('internal_note', value)
 削除 bulk API は `filter_by`、`ids`、`filters` がすべて空の場合にエラーになります。
 `bulk_update()` で `filter_by` を省略し、`filters=` も空の場合は、各更新辞書に `id` が必要です。
 空でない `filters=` を指定すると、各更新辞書の値が条件に一致する行へ適用されます。
+`bulk_update()` の更新辞書のキーはマップされたカラム属性名に限ります。DB のカラム名、
+synonym、hybrid 属性などは `TypeError` を送出します。`allowed_filter_columns` は更新キーには
+適用されません。
 テーブル全体を対象にする操作は意図的な選択であるべきなので、`allow_unfiltered=True` を
 明示的に渡してください。
 

@@ -89,6 +89,8 @@ with get_reusable_sync_transaction() as session:
 空の場合にエラーになります。`bulk_update()` で
 `filter_by` を省略し、`filters=` も空の場合は、更新する各辞書に `id` が必要です。
 空でない `filters=` を指定した場合は、更新内容が条件に一致する各行へ適用されます。
+`bulk_update()` の更新辞書のキーはマップされたカラム属性名に限ります。DB のカラム名、
+synonym、hybrid 属性などは `TypeError` を送出します。
 `bulk_permanent_delete()` は、論理削除対応モデルも含め、常に物理削除を実行します。
 `get_or_create(lookup, defaults=None)` は `(instance, created)` を返し、同時挿入で別の処理が
 一意キーの行を先に作成した場合は、その行を再検索して返します。

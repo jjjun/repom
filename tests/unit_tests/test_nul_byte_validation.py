@@ -3,7 +3,8 @@ from typing import Any
 
 import pytest
 from sqlalchemy import ARRAY, JSON, TEXT, Integer, String, Text, event, inspect, text
-from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import Mapped, mapped_column, sessionmaker, synonym
 from sqlalchemy.types import TypeDecorator
 
 from repom import AsyncBaseRepository, BaseRepository, NulByteError
@@ -86,6 +87,23 @@ class RenamedColumnNulByteModel(BaseModel):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(100))
     body: Mapped[str] = mapped_column('document_body', Text)
+
+
+class AliasedKeyNulByteModel(BaseModel):
+    __tablename__ = 'aliased_key_nul_byte_models'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nick: Mapped[str] = mapped_column('nick_col', String(100))
+    nick_syn = synonym('nick')
+
+    @hybrid_property
+    def nick_hybrid(self):
+        return self.nick
+
+    @nick_hybrid.inplace.update_expression
+    @classmethod
+    def _nick_hybrid_update_expression(cls, value):
+        return [(cls.nick, value)]
 
 
 class NulByteRepository(BaseRepository[NulByteModel]):
@@ -335,6 +353,89 @@ async def test_async_bulk_update_rejects_nul_bytes(async_db_test):
         await repo.bulk_update([{'id': record.id, 'body': 'bad\0value'}])
 
     assert exc_info.value.column_name == 'nul_byte_models.body'
+
+
+async def _insert_aliased_key_record(repository_adapter):
+    repo = repository_adapter.repository_class(
+        AliasedKeyNulByteModel, session=repository_adapter.session
+    )
+    (record,) = await repository_adapter.call(
+        repo.bulk_insert, [AliasedKeyNulByteModel(nick='valid')]
+    )
+    return repo, record.id
+
+
+def _bulk_update_selection(mode, record_id, row):
+    if mode == 'id':
+        return [{'id': record_id, **row}], {}
+    if mode == 'filter_by':
+        return [row], {'filter_by': {'id': record_id}}
+    return [row], {'filters': [AliasedKeyNulByteModel.id == record_id]}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['id', 'filter_by', 'filters'])
+@pytest.mark.parametrize('key', ['nick', 'nick_col', 'nick_syn', 'nick_hybrid'])
+async def test_bulk_update_rejects_nul_bytes_under_every_key_spelling(
+    repository_adapter, key, mode
+):
+    repo, record_id = await _insert_aliased_key_record(repository_adapter)
+    values, options = _bulk_update_selection(mode, record_id, {key: 'bad\0value'})
+
+    if key == 'nick':
+        with pytest.raises(NulByteError) as exc_info:
+            await repository_adapter.call(repo.bulk_update, values, **options)
+        assert exc_info.value.column_name == 'aliased_key_nul_byte_models.nick_col'
+    else:
+        with pytest.raises(TypeError, match=repr(key)):
+            await repository_adapter.call(repo.bulk_update, values, **options)
+
+    record = await repository_adapter.call(repo.get_by_id, record_id)
+    assert record.nick == 'valid'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['id', 'filter_by', 'filters'])
+@pytest.mark.parametrize('key', ['nick_col', 'nick_syn', 'nick_hybrid', 'missing', 1])
+async def test_bulk_update_rejects_keys_that_are_not_mapped_column_attributes(
+    repository_adapter, key, mode
+):
+    repo, record_id = await _insert_aliased_key_record(repository_adapter)
+    values, options = _bulk_update_selection(mode, record_id, {key: 'changed'})
+
+    with pytest.raises(TypeError, match='not a mapped column attribute'):
+        await repository_adapter.call(repo.bulk_update, values, **options)
+
+    record = await repository_adapter.call(repo.get_by_id, record_id)
+    assert record.nick == 'valid'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['id', 'filter_by', 'filters'])
+async def test_bulk_update_accepts_attribute_key_for_renamed_column(
+    repository_adapter, mode
+):
+    repo, record_id = await _insert_aliased_key_record(repository_adapter)
+    values, options = _bulk_update_selection(mode, record_id, {'nick': 'changed'})
+
+    assert await repository_adapter.call(repo.bulk_update, values, **options) == 1
+
+    record = await repository_adapter.call(repo.get_by_id, record_id)
+    assert record.nick == 'changed'
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_keeps_sql_expression_values_unvalidated(repository_adapter):
+    repo, record_id = await _insert_aliased_key_record(repository_adapter)
+
+    rowcount = await repository_adapter.call(
+        repo.bulk_update,
+        [{'id': record_id, 'nick': AliasedKeyNulByteModel.nick + '!'}],
+    )
+
+    assert rowcount == 1
+    record = await repository_adapter.call(repo.get_by_id, record_id)
+    assert record.nick == 'valid!'
 
 
 def test_update_skips_untouched_deferred_string_columns(db_test):

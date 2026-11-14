@@ -401,6 +401,9 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
 
         ``filters`` と ``filter_by`` は AND で結合されます。``filter_by`` を指定せずに
         ``filters`` を指定した場合、各 values 辞書の更新内容は条件に一致する行に適用されます。
+
+        各 values 辞書のキーはマップされたカラム属性名に限ります。DB のカラム名、
+        synonym、hybrid 属性などは ``TypeError`` を送出します。
         """
         if not values:
             return 0
@@ -428,6 +431,7 @@ class AsyncBaseRepository(RepositoryBase[T], AsyncSoftDeleteRepositoryMixin[T], 
                     if not update_values:
                         continue
 
+                    self._validate_bulk_update_keys(update_values)
                     validate_values_no_nul_bytes(self.model, update_values)
 
                     result = await session.execute(

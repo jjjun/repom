@@ -244,6 +244,23 @@ class RepositoryBase(Generic[T]):
         ):
             raise TypeError(f"{parameter_name} must contain plain values, not SQL expressions.")
 
+    def _validate_bulk_update_keys(self, update_values: dict) -> None:
+        """``bulk_update()`` の更新キーがマップされたカラム属性名か検証する。
+
+        ``update().values()`` は ORM 属性名のほかに DB のカラム名、synonym、
+        hybrid の更新式も解決する。NUL バイト検証は ORM 属性キーでしか値を
+        引けないため、``mapper.column_attrs`` にないキーは拒否する。
+
+        Raises:
+            TypeError: キーが文字列でない、またはマップされたカラム属性でない場合。
+        """
+        column_keys = sa_inspect(self.model).column_attrs
+        for key in update_values:
+            if not isinstance(key, str) or key not in column_keys:
+                raise TypeError(
+                    f"bulk_update() key {key!r} is not a mapped column attribute of {self.model.__name__}."
+                )
+
     def _prepare_update_or_create(self, lookup: dict, defaults: dict | None, create_defaults: dict | None):
         if not lookup:
             raise ValueError("update_or_create() requires a non-empty lookup.")

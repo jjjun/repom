@@ -11,7 +11,9 @@ key / value が含まれます。`NulByteError` は column 名と byte offset �
 検証対象の値は `str` と、入れ子になった `dict`、`list`、`tuple` です。更新時は検証だけのために
 deferred column を読み込まないよう、未ロードまたは変更されていない attribute を skip します。
 `BaseRepository.bulk_update` と `AsyncBaseRepository.bulk_update` も plain value を検証しますが、
-SQL expression value は検証しません。
+SQL expression value は検証しません。この 2 つの `bulk_update` は、更新辞書のキーを mapped column の
+attribute 名に限り、DB の column 名、synonym、hybrid 属性などは `TypeError` で拒否します。そのため
+キーの書き方によって検証を回避することはできません。
 
 `session.execute(insert(...))` / `session.execute(update(...))`（ORM bulk parameter list を含む）、
 `bulk_insert_mappings`、`bulk_save_objects` はこの検証を通りません。また、plain

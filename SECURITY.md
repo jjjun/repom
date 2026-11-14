@@ -121,8 +121,10 @@ Unless a difference is stated below, these contracts apply to both
   non-empty lookup fields and resolves lookup/link names to mapped columns,
   but it does not use `allowed_filter_columns` or check lookup values as plain
   values. The `id` values in `bulk_update()` rows bypass the equality resolver
-  when `filter_by` is omitted. Its update keys have no allowlist and can update
-  primary-key columns when `filter_by` or `filters` supplies the row selection.
+  when `filter_by` is omitted. Its update keys must be mapped column attribute
+  names (see "Model mutation and output"), but there is no allowlist among them,
+  so they can update primary-key columns when `filter_by` or `filters` supplies
+  the row selection.
 - `get_by_id()` and the ID-based soft-delete methods validate IDs against
   SQLAlchemy expressions. `find_by_ids()`, `bulk_delete()` and
   `bulk_permanent_delete()` reject expression/ORM-attribute elements in their
@@ -161,8 +163,8 @@ Unless a difference is stated below, these contracts apply to both
   back, but write paths flush. `remove()` may call `merge()`;
   `get_or_create()` and `update_or_create()` open a SAVEPOINT and issue raw
   `BEGIN` on SQLite; sync `bulk_update()` and `bulk_delete()` call `expire_all()`
-  (the async methods do not). Since `bulk_update()` checks NUL bytes row by
-  row, failure partway through can leave earlier statements in the caller's
+  (the async methods do not). Since `bulk_update()` checks update keys and NUL bytes
+  row by row, failure partway through can leave earlier statements in the caller's
   transaction. Async cancellation is shielded for internally owned session
   rollback and close in `DatabaseManager`; repository-level cancellation is
   not tested, and a cancel during commit leaves the outcome unknown.
@@ -211,8 +213,12 @@ Unless a difference is stated below, these contracts apply to both
 - NUL-byte validation runs from `BaseModel` mapper `before_insert` and
   `before_update` listeners during SQLAlchemy unit-of-work flushes, for sync and
   async sessions. Sync and async repository `bulk_update()` also validate plain
-  values. `upsert()`, `insert_ignore()`, `build_upsert()`, and
-  `build_insert_ignore()` validate each row before creating a statement.
+  values. They accept only mapped column attribute names (`mapper.column_attrs`
+  keys) as update keys and raise `TypeError` for any other spelling, such as a
+  differently named database column, a synonym, or a hybrid property, because
+  the check reads values by attribute key only. `upsert()`, `insert_ignore()`,
+  `build_upsert()`, and `build_insert_ignore()` validate each row before creating
+  a statement.
   Validation walks `str`, `dict`, `list`, and `tuple` values before binding.
   These statement helpers bypass model `before_insert`, `before_update`, and
   `after_*` listeners. NUL validation does not cover direct

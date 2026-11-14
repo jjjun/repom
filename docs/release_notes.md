@@ -230,6 +230,16 @@
 
 ### Fixed
 
+- Sync and async `bulk_update()` no longer let a NUL byte through under another spelling
+  of a column key (repom#298). The NUL check reads values by ORM attribute key, but
+  `update().values()` also resolves the database column name when it differs from the
+  attribute key, synonym names, and hybrid properties with an `update_expression`, so
+  `{"nick_col": "a\x00b"}` or `{"nick_syn": "a\x00b"}` was stored (SQLite) instead of
+  raising `NulByteError`. Update keys must now be mapped column attribute names
+  (`mapper.column_attrs`); any other key raises `TypeError` (behavior change). Callers that
+  passed a database column name, a synonym, or a hybrid property must pass the column's
+  attribute name instead. SQL-expression values and `filter_by` / `filters` handling are
+  unchanged.
 - `AlembicSetup.from_ini()` and `AlembicReset.delete_migration_files()` /
   `validate_versions_dir()` now refuse alternate spellings of the project directory
   (repom#297). On Windows, `//?/<project>`, `\\?\<project>`, and
